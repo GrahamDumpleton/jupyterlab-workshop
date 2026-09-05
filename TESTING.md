@@ -54,6 +54,15 @@ extension and JupyterLab.
   `tests/python/test_cli.py`; the ones that need the Node bundle skip
   unless `just build` has run.
 
+- `just selftest-lite [dir...]` runs `jupyter workshop test --lite` on
+  `hello-jupyterlab` (or the directories given): it builds a static
+  JupyterLite site with the workshop and the linked extension, serves it
+  under a sub-path and drives it the same way. The build needs `node`,
+  `npm` and `micromamba` on the path for the terminal, and the browser
+  loads Pyodide from a CDN, so it needs network access. The site builder
+  itself is unit tested in `tests/python/test_lite.py` with a fake build
+  runner; the tests needing the `lite` extra skip when it is missing.
+
 ## Conventions
 
 - Test against real things. The Python tests start a real server and

@@ -14,9 +14,7 @@ import { JupyterFrontEnd } from '@jupyterlab/application';
 import { ICodeCellModel } from '@jupyterlab/cells';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { NotebookPanel } from '@jupyterlab/notebook';
-import { ServerConnection } from '@jupyterlab/services';
 
-import { requestAPI } from '../request';
 import {
   IActionImplementation,
   IActionRequest,
@@ -27,6 +25,7 @@ import { parseDuration } from '../util';
 import { getIfExists, readTextFile } from './contents';
 import { WorkshopKernel, executeInKernel } from './kernel';
 import { INotebookActionContext, openNotebook } from './notebook';
+import { IShellRunner } from './shell';
 import { TerminalSessions } from './terminal';
 
 /** Services the check actions need. */
@@ -37,14 +36,9 @@ export interface ICheckActionContext {
   terminals: TerminalSessions;
   kernel: WorkshopKernel;
   notebooks: INotebookActionContext;
-  serverSettings: ServerConnection.ISettings;
-}
 
-/** What the server returns for a script verify. */
-interface IScriptResult {
-  code: number;
-  stdout: string;
-  stderr: string;
+  /** Runs commands for the `shell` substrate. */
+  shell: IShellRunner;
 }
 
 /**
@@ -70,6 +64,8 @@ export class VerifyAction implements IActionImplementation {
         return this._kernel(request);
       case 'script':
         return this._script(request);
+      case 'shell':
+        return this._shell(request);
       case 'contents':
         return this._contents(request);
       case 'ui':
@@ -118,25 +114,42 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: 'The check names no script' };
     }
 
-    const result = await requestAPI<IScriptResult>(
-      'verify',
-      this._context.serverSettings,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          workshop: manager.workshop?.path ?? '',
-          script,
-          timeout: parseDuration(request.options.timeout, 60000) / 1000,
-          environment: environmentVariables(manager.variables.values)
-        })
-      }
-    );
+    const result = await manager.backend.runScript({
+      workshop: manager.workshop?.path ?? '',
+      script,
+      timeout: parseDuration(request.options.timeout, 60000) / 1000,
+      environment: environmentVariables(manager.variables.values)
+    });
 
     const text = `${result.stdout}${result.stderr}`.trim();
 
     return result.code === 0
       ? { status: 'ok', message: text }
       : { status: 'error', message: text || `Exit code ${result.code}` };
+  }
+
+  private async _shell(request: IActionRequest): Promise<IActionResult> {
+    const command = request.body.trim();
+
+    if (command === '') {
+      return { status: 'error', message: 'The check has no command' };
+    }
+
+    // The command runs in the workshop directory; exit code 0 passes.
+    const manager = this._context.manager;
+    const result = await this._context.shell.run(
+      command,
+      manager.absolutePath(),
+      parseDuration(request.options.timeout, 60000)
+    );
+    const text = result.output.trim();
+
+    return result.code === 0
+      ? { status: 'ok', message: text }
+      : {
+          status: 'error',
+          message: (result.error || text).trim() || `Exit code ${result.code}`
+        };
   }
 
   private async _contents(request: IActionRequest): Promise<IActionResult> {

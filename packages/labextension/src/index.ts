@@ -78,6 +78,7 @@ import {
 import { getIfExists } from './actions/contents';
 import { EnvironmentCreateAction } from './actions/environment';
 import { ActionRegistry } from './actions/registry';
+import { IShellRunner, KernelShell, LiteShell } from './actions/shell';
 import {
   ExecuteAction,
   ExecuteCaptureAction,
@@ -99,12 +100,15 @@ import {
 } from './actions/ui';
 import { AnalyticsRecorder } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
+import { ServerBackend } from './backend';
 import {
   BROWSER_ID,
   IBrowserSettings,
   WorkshopBrowser
 } from './browser/widget';
 import { LayoutManager } from './layout';
+import { LiteBackend } from './lite/backend';
+import { isJupyterLite } from './lite/detect';
 import { WorkshopManager } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { runAll } from './selftest';
@@ -113,13 +117,12 @@ import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { WORKSHOP_STATE_DIR } from './state';
 import {
   CommandIDs,
+  ConflictError,
   IActionRegistry,
   IFetchRequest,
-  IPreflightResult,
   IWorkshopManager,
   errorMessage
 } from './tokens';
-import { requestAPI } from './request';
 import { readSetting, readSettingList } from './settings';
 import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
@@ -168,9 +171,14 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
         });
     }
 
+    // JupyterLite has no server, so its backend does the work in the
+    // browser; everything else talks to the server extension.
+    const backend = isJupyterLite(app)
+      ? new LiteBackend({ app })
+      : new ServerBackend(app.serviceManager.serverSettings);
     const manager = new WorkshopManager({
       contents: app.serviceManager.contents,
-      serverSettings: app.serviceManager.serverSettings,
+      backend,
       stateDB,
       trustStore,
       prompts: trustPrompts,
@@ -178,11 +186,7 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
     });
 
     // Progress events go to the workshop's events file and any sink.
-    new AnalyticsRecorder({
-      manager,
-      serverSettings: app.serviceManager.serverSettings,
-      trustStore
-    });
+    new AnalyticsRecorder({ manager, trustStore });
 
     return manager;
   }
@@ -224,6 +228,13 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     settingRegistry: ISettingRegistry | null
   ): IActionRegistry => {
     const kernel = new WorkshopKernel(app, manager);
+
+    // Commands run without a terminal go through the kernel on a server
+    // and through the terminal extension's headless shell in JupyterLite.
+    const runner: IShellRunner =
+      manager.backend.kind === 'lite'
+        ? new LiteShell(app.commands)
+        : new KernelShell(kernel);
     const layouts = new LayoutManager({
       app,
       shell,
@@ -253,13 +264,13 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       terminals,
       kernel,
       notebooks,
-      serverSettings: app.serviceManager.serverSettings
+      shell: runner
     };
     const registry = new ActionRegistry();
 
     const implementations = [
       new ExecuteAction(terminals, manager),
-      new ExecuteCaptureAction(kernel, manager),
+      new ExecuteCaptureAction(runner, manager),
       new TerminalOpenAction(terminals, shell, manager),
       new TerminalClearAction(terminals, manager),
       new TerminalTypeAction(terminals, manager),
@@ -338,7 +349,7 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
         void kernel.shutdown();
 
         if (workshop) {
-          void runPreflight(app, manager);
+          void runPreflight(manager);
         }
       }
     });
@@ -1017,8 +1028,9 @@ async function fetchWorkshop(
 
     // A conflict means a directory of that name exists already.
     if (
-      error instanceof ServerConnection.ResponseError &&
-      error.response.status === 409
+      error instanceof ConflictError ||
+      (error instanceof ServerConnection.ResponseError &&
+        error.response.status === 409)
     ) {
       const result = await showDialog({
         title: 'Replace existing workshop?',
@@ -1046,12 +1058,9 @@ async function fetchWorkshop(
 }
 
 /**
- * Ask the server which required tools are installed and record the result.
+ * Ask the backend which required tools are installed and record the result.
  */
-async function runPreflight(
-  app: JupyterFrontEnd,
-  manager: IWorkshopManager
-): Promise<void> {
+async function runPreflight(manager: IWorkshopManager): Promise<void> {
   const workshop = manager.workshop;
 
   if (!workshop || workshop.manifest.requires.tools.length === 0) {
@@ -1065,20 +1074,13 @@ async function runPreflight(
 
   try {
     // Running each tool for its version only happens once trusted.
-    const response = await requestAPI<{ tools: IPreflightResult[] }>(
-      'preflight',
-      app.serviceManager.serverSettings,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tools: tools.map(tool => ({
-            name: tool.name,
-            version: tool.version ?? '',
-            optional: tool.optional
-          })),
-          versions: manager.trust === 'trusted'
-        })
-      }
+    const results = await manager.backend.preflight(
+      tools.map(tool => ({
+        name: tool.name,
+        version: tool.version ?? '',
+        optional: tool.optional
+      })),
+      manager.trust === 'trusted'
     );
 
     if (manager.workshop !== workshop) {
@@ -1086,7 +1088,7 @@ async function runPreflight(
     }
 
     manager.setPreflight(
-      response.tools.map(result => {
+      results.map(result => {
         const tool = tools.find(item => item.name === result.name);
 
         return {

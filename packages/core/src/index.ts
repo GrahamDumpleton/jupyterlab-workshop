@@ -10,6 +10,7 @@ export * from './format/page';
 export * from './format/variants';
 export * from './hash';
 export * from './lint';
+export * from './lite';
 export * from './markdown/parser';
 export * from './registry';
 export * from './schema';

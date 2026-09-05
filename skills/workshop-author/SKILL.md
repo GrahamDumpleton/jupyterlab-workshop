@@ -261,6 +261,14 @@ pass, `soft` only shows what is missing.
   `ls`, `cat` or `/` paths, and list `windows` in `platforms` only when
   they are covered. `jupyter workshop lint --platform windows` checks.
 
+- JupyterLite (`lite` in `platforms`): there is no server, `python` or
+  `git` in the terminal, and its shell has no `&&`, `$VAR` or `$(...)`.
+  Add `:lite:` variants (an empty one means nothing to do), avoid
+  `subprocess` in kernel checks and `script` verifies, and keep
+  `execute-capture` bodies to shell commands. `jupyter workshop lint
+--platform lite` checks; `jupyter workshop test --lite` runs the
+  workshop in a JupyterLite build.
+
 ## Reading test output
 
 `jupyter workshop test` prints one line per action:

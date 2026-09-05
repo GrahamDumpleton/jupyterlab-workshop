@@ -2,6 +2,25 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
 
 /**
+ * Whether an error from the contents API means the path does not exist.
+ * Jupyter Server answers 404; the in-browser contents of JupyterLite
+ * throw a plain error saying the content could not be found.
+ */
+export function isNotFound(error: unknown): boolean {
+  if (
+    error instanceof ServerConnection.ResponseError &&
+    error.response.status === 404
+  ) {
+    return true;
+  }
+
+  return (
+    error instanceof Error &&
+    /^Could not find (content|file)\b/.test(error.message)
+  );
+}
+
+/**
  * Fetch a path through the contents API, returning null when it does not
  * exist.
  */
@@ -13,14 +32,42 @@ export async function getIfExists(
   try {
     return await contents.get(path, { content: withContent });
   } catch (error) {
-    if (
-      error instanceof ServerConnection.ResponseError &&
-      error.response.status === 404
-    ) {
+    if (isNotFound(error)) {
       return null;
     }
 
     throw error;
+  }
+}
+
+/**
+ * Delete a directory and everything in it through the contents API. Some
+ * servers refuse non-empty directories, so the children go first.
+ */
+export async function deleteTree(
+  contents: Contents.IManager,
+  path: string
+): Promise<void> {
+  const model = await getIfExists(contents, path, true);
+
+  if (!model) {
+    return;
+  }
+
+  if (model.type === 'directory' && Array.isArray(model.content)) {
+    for (const child of model.content as Contents.IModel[]) {
+      if (child.type === 'directory') {
+        await deleteTree(contents, child.path);
+      } else {
+        await contents.delete(child.path);
+      }
+    }
+  }
+
+  try {
+    await contents.delete(path);
+  } catch (error) {
+    console.warn(`Unable to delete ${path}`, error);
   }
 }
 
@@ -69,10 +116,7 @@ export async function readIfExists(
   try {
     return await readTextFile(contents, path);
   } catch (error) {
-    if (
-      error instanceof ServerConnection.ResponseError &&
-      error.response.status === 404
-    ) {
+    if (isNotFound(error)) {
       return null;
     }
 

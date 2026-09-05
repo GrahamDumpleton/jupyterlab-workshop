@@ -121,12 +121,28 @@ running JupyterLab that has a workshop open in author mode, found
 through `jupyter server list` unless `--url` and `--token` name one. See
 [Writing workshops in JupyterLab](authoring.md).
 
+## lite
+
+```
+jupyter workshop lite my-workshop [other-workshop ...] [--out DIR]
+                                  [--default NAME] [--trust LEVEL]
+                                  [--registry URL] [--no-terminal]
+                                  [--lite-dir DIR] [--serve] [--port PORT]
+```
+
+Builds a static [JupyterLite](lite.md) site carrying the workshops, with
+the extension, the Pyodide kernel and the terminal, that any web host can
+serve. Needs the `lite` extra; the terminal's build step needs `node`,
+`npm` and `micromamba` unless `--no-terminal` is given. `--serve` serves
+the result locally to try it out.
+
 ## test
 
 ```
 jupyter workshop test my-workshop [--junit FILE] [--json FILE] [--in-place]
                                   [--headed] [--timeout SECONDS]
                                   [--trust trusted|restricted|ask]
+                                  [--lite] [--lite-dir DIR]
 ```
 
 Runs the workshop in a real JupyterLab: it copies the workshop to a
@@ -150,4 +166,7 @@ is the point: the self-test is what a workshop's CI runs.
 
 The self-test runs on Windows as well, where terminals are PowerShell
 and `:windows:` command variants are selected; the workflow written by
-`init --ci` covers Linux, macOS and Windows.
+`init --ci` covers Linux, macOS and Windows. `--lite` builds a JupyterLite
+site with the workshop instead of starting a server, serves it from a
+static file server and drives that, with `:lite:` variants selected; see
+[JupyterLite](lite.md) for what it needs.

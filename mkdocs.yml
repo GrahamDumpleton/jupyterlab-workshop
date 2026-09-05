@@ -19,6 +19,7 @@ nav:
       - Actions: actions.md
       - Checks, forms and checkpoints: checks.md
       - Platforms: platforms.md
+      - JupyterLite: lite.md
       - Isolated environments: environment.md
       - Manifest reference: reference/manifest.md
   - Running workshops:

@@ -86,6 +86,17 @@ selftest *args:
     if [ "$#" -eq 0 ]; then set -- examples/git-basics examples/hello-jupyterlab examples/workshop-authoring; fi
     for dir in "$@"; do uv run jupyter workshop test "$dir"; done
 
+# Self-test a workshop in a static JupyterLite build (default: hello-jupyterlab).
+selftest-lite *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$#" -eq 0 ]; then set -- examples/hello-jupyterlab; fi
+    for dir in "$@"; do uv run jupyter workshop test "$dir" --lite; done
+
+# Build a JupyterLite site with the example workshop into lite-site/ and serve it.
+lite *args:
+    uv run jupyter workshop lite examples/hello-jupyterlab --out lite-site --serve "$@"
+
 # Remove build outputs.
 clean:
     uv run jlpm clean

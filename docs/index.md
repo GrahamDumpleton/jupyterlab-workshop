@@ -45,8 +45,11 @@ assert out.strip(), "No commits yet: run git commit"
 - [Checks, forms and checkpoints](checks.md) covers verifying progress,
   quizzes, forms, gating and checkpoints.
 
-- [Platforms](platforms.md) covers command variants for Linux, macOS
-  and Windows, paths and terminal shells.
+- [Platforms](platforms.md) covers command variants for Linux, macOS,
+  Windows and JupyterLite, paths and terminal shells.
+
+- [JupyterLite](lite.md) covers running and publishing workshops as a
+  static site with no server.
 
 - [Isolated environments](environment.md) describes giving a workshop
   its own Python environment and kernel.
@@ -84,4 +87,5 @@ pip install "educates-jupyterlab-workshop[test]"
 playwright install chromium
 ```
 
-The `mcp` extra adds the MCP server for AI agents.
+The `mcp` extra adds the MCP server for AI agents, and the `lite` extra
+the tools to build a JupyterLite site.

@@ -1,7 +1,9 @@
-import { ServerConnection } from '@jupyterlab/services';
-
-import { requestAPI } from './request';
-import { ITrustStore, IWorkshopEvent, IWorkshopManager } from './tokens';
+import {
+  IEventsBatch,
+  ITrustStore,
+  IWorkshopEvent,
+  IWorkshopManager
+} from './tokens';
 
 /** How long to gather events before posting a batch. */
 const FLUSH_DELAY_MS = 2000;
@@ -12,23 +14,14 @@ const IMMEDIATE: ReadonlySet<string> = new Set([
   'workshop-abandon'
 ]);
 
-/** What one batch posts to the server. */
-interface IEventsBatch {
-  workshop: string;
-  events: IWorkshopEvent[];
-  sink: string;
-  identity: 'none' | 'hub';
-}
-
 /**
- * Collects the manager's progress events and posts them to the server in
- * batches, which appends them to the workshop's events file and forwards
- * them to the sink the learner or an administrator chose.
+ * Collects the manager's progress events and hands them to the backend
+ * in batches, which appends them to the workshop's events file and
+ * forwards them to the sink the learner or an administrator chose.
  */
 export class AnalyticsRecorder {
   constructor(options: AnalyticsRecorder.IOptions) {
     this._manager = options.manager;
-    this._serverSettings = options.serverSettings;
     this._trustStore = options.trustStore;
 
     this._manager.events.connect(this._onEvent, this);
@@ -50,10 +43,7 @@ export class AnalyticsRecorder {
 
     for (const batch of batches.values()) {
       try {
-        await requestAPI('events', this._serverSettings, {
-          method: 'POST',
-          body: JSON.stringify(batch)
-        });
+        await this._manager.backend.recordEvents(batch);
       } catch (error) {
         console.warn('Unable to record workshop events', error);
       }
@@ -86,7 +76,6 @@ export class AnalyticsRecorder {
   }
 
   private _manager: IWorkshopManager;
-  private _serverSettings: ServerConnection.ISettings;
   private _trustStore: ITrustStore;
   private _pending = new Map<string, IEventsBatch>();
   private _timer: number | null = null;
@@ -95,7 +84,6 @@ export class AnalyticsRecorder {
 export namespace AnalyticsRecorder {
   export interface IOptions {
     manager: IWorkshopManager;
-    serverSettings: ServerConnection.ISettings;
     trustStore: ITrustStore;
   }
 }

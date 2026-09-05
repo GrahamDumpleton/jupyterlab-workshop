@@ -12,4 +12,6 @@ This page is only shown on the pip track.
 python3 -m pip --version
 :windows:
 py -m pip --version
+:lite:
+echo "JupyterLite installs packages with micropip, not pip"
 ```

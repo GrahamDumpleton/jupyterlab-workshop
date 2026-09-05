@@ -7,7 +7,7 @@ import { JupyterFrontEnd } from '@jupyterlab/application';
 import { NotebookActions } from '@jupyterlab/notebook';
 import { Contents } from '@jupyterlab/services';
 
-import { TerminalSessions } from '../actions/terminal';
+import { OUTPUT_WINDOW, TerminalSessions } from '../actions/terminal';
 import { IWorkshopManager } from '../tokens';
 import { visibleDirectives } from '../util';
 
@@ -118,20 +118,29 @@ export class TriggerBus {
     _: TerminalSessions,
     args: { name: string; text: string }
   ): void {
+    // Output may arrive in pieces, so patterns are matched against the
+    // recent output of the terminal, which is cleared once matched so a
+    // verify does not keep firing on the same text.
+    const recent = (
+      (this._recentOutput.get(args.name) ?? '') + args.text
+    ).slice(-OUTPUT_WINDOW);
     const now = Date.now();
+    let matched = false;
 
     for (const { node, triggers } of this._verifies()) {
       const hit = triggers.some(
         trigger =>
           trigger.kind === 'terminal-output' &&
           (trigger.regex
-            ? new RegExp(trigger.pattern).test(args.text)
-            : args.text.includes(trigger.pattern))
+            ? new RegExp(trigger.pattern).test(recent)
+            : recent.includes(trigger.pattern))
       );
 
       if (!hit) {
         continue;
       }
+
+      matched = true;
 
       // Terminal output arrives in bursts; run once per burst.
       const last = this._lastTerminalRun.get(node.id) ?? 0;
@@ -141,6 +150,8 @@ export class TriggerBus {
         this._run(node);
       }
     }
+
+    this._recentOutput.set(args.name, matched ? '' : recent);
   }
 
   private _onActionChanged(_: IWorkshopManager, id: string): void {
@@ -215,6 +226,7 @@ export class TriggerBus {
   private _pageKey = '';
   private _timers: number[] = [];
   private _lastTerminalRun = new Map<string, number>();
+  private _recentOutput = new Map<string, string>();
 }
 
 export namespace TriggerBus {

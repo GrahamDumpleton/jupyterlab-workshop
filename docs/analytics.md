@@ -73,7 +73,9 @@ example under JupyterHub, through the `analytics` setting in
 
 Batches are posted by the server, not the browser, as
 `application/x-ndjson` bodies to the sink URL, so the sink needs no CORS
-headers. A sink is any endpoint that accepts a POST; a few lines of any
+headers. In [JupyterLite](lite.md) there is no server: the browser posts
+the same bodies itself, so a sink used from there must allow cross-origin
+requests from the site. A sink is any endpoint that accepts a POST; a few lines of any
 web framework that appends the body to a file is enough. Delivery is
 best effort: a sink that is down loses the batch, and the local file
 remains the record.

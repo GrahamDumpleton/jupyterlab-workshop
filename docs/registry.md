@@ -52,7 +52,9 @@ the list through `overrides.json`:
 ```
 
 The server reads the index and hands it to the browser, so the host
-serving it needs no CORS headers.
+serving it needs no CORS headers. In [JupyterLite](lite.md) the browser
+reads it directly, so the host must send them, or the index can be a
+file shipped inside the site and named by a relative path.
 
 ### Index format
 

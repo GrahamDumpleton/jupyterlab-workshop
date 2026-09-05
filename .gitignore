@@ -49,3 +49,9 @@ examples/*/scratch/
 
 # Workshops downloaded through the extension
 workshops/
+
+# JupyterLite site built by `just lite`
+lite-site/
+
+# JupyterLite build state written next to a build
+.jupyterlite.doit.db

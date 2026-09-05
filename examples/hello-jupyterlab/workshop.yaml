@@ -6,7 +6,7 @@ description: A tour of what workshop actions can do with notebooks, kernels, the
 authors: [Graham Dumpleton]
 tags: [jupyterlab, notebooks, demo]
 duration: 20m
-platforms: [linux, macos, windows]
+platforms: [linux, macos, windows, lite]
 capabilities:
   - terminal
   - write-files: [workspace]

@@ -76,7 +76,9 @@ warns about declared capabilities that no page uses.
 
 Opening a workshop shows a dialog with the source, the content hash (the
 archive's SHA-256 for downloads, a hash of the manifest and pages for local
-directories), the capabilities it declares and how many actions use each,
+directories and for downloads made by [JupyterLite](lite.md), which
+fetches files one by one and so cannot check a registry's archive hash),
+the capabilities it declares and how many actions use each,
 the number of automatic actions, and any lint findings, including the
 danger heuristics: piping downloads into a shell, `sudo`, recursive
 deletes outside the workshop, `eval`, executing base64-decoded content,

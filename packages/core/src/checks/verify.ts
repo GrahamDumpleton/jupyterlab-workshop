@@ -4,12 +4,13 @@
 
 /** Where a verify runs. */
 export type VerifySubstrate =
-  'kernel' | 'script' | 'contents' | 'ui' | 'learner-kernel';
+  'kernel' | 'script' | 'shell' | 'contents' | 'ui' | 'learner-kernel';
 
 /** Substrates in the order the documentation lists them. */
 export const VERIFY_SUBSTRATES: readonly VerifySubstrate[] = [
   'kernel',
   'script',
+  'shell',
   'contents',
   'ui',
   'learner-kernel'
@@ -19,6 +20,7 @@ export const VERIFY_SUBSTRATES: readonly VerifySubstrate[] = [
 export const CODE_SUBSTRATES: readonly VerifySubstrate[] = [
   'kernel',
   'script',
+  'shell',
   'learner-kernel'
 ];
 

@@ -1,3 +1,4 @@
+import { environmentVariables } from '@educates/workshop-core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Terminal as TerminalService } from '@jupyterlab/services';
@@ -14,14 +15,25 @@ import {
   IWorkshopManager
 } from '../tokens';
 import { parseDuration, sleep } from '../util';
-import { WorkshopKernel } from './kernel';
 import { requireBody, requireOption } from './registry';
+import { IShellRunner } from './shell';
 
 /** Name of the terminal used when an action does not name one. */
 export const DEFAULT_SESSION = 'workshop';
 
 /** Where a new terminal is placed relative to the main area. */
 export type TerminalArea = 'bottom' | 'right' | 'main';
+
+/** Longest wait for a new terminal's shell to print its prompt. */
+const PROMPT_WAIT_MS = 15000;
+
+/** Quiet time after the last output that counts as the prompt being up. */
+const PROMPT_QUIET_MS = 500;
+
+const PROMPT_POLL_MS = 100;
+
+/** How much recent terminal output is kept for matching. */
+export const OUTPUT_WINDOW = 4096;
 
 const KEY_NAMES: Readonly<Record<string, string>> = {
   enter: '\r',
@@ -150,12 +162,15 @@ export class TerminalSessions {
 
     this._widgets.set(name, widget);
 
-    // Relay what the terminal prints so verifies can react to it.
+    // Relay what the terminal prints so verifies can react to it, and
+    // note when it last printed anything, to tell when the shell is up.
+    let lastOutputAt = 0;
     const onMessage = (
       _: TerminalService.ITerminalConnection,
       message: TerminalService.IMessage
     ): void => {
       if (message.type === 'stdout' && message.content) {
+        lastOutputAt = Date.now();
         this._output.emit({ name, text: message.content.map(String).join('') });
       }
     };
@@ -190,14 +205,45 @@ export class TerminalSessions {
 
     await terminal.ready;
 
+    // Wait for the shell to print its prompt and go quiet before typing
+    // anything. The JupyterLite shell starts by asking the terminal for
+    // its colours, and input sent while that exchange is in flight gets
+    // mixed up with the reply.
+    const started = Date.now();
+
+    while (Date.now() - started < PROMPT_WAIT_MS) {
+      await sleep(PROMPT_POLL_MS);
+
+      if (lastOutputAt > 0 && Date.now() - lastOutputAt >= PROMPT_QUIET_MS) {
+        break;
+      }
+    }
+
     // Expose the workshop variables to the shell.
     const source = envSourceCommand(this._manager);
 
     if (source) {
-      session.send({ type: 'stdin', content: [`${source}\n`] });
+      this._write(session, `${source}\n`);
     }
 
     return widget;
+  }
+
+  /**
+   * Send text to a terminal connection. The JupyterLite terminal's shell
+   * takes a carriage return as Enter, as a keyboard sends, where a pty
+   * accepts a newline as well.
+   */
+  private _write(
+    session: TerminalService.ITerminalConnection,
+    text: string
+  ): void {
+    const content =
+      this._manager.platform?.shell === 'cockle'
+        ? text.replace(/\r?\n/g, '\r')
+        : text;
+
+    session.send({ type: 'stdin', content: [content] });
   }
 
   /**
@@ -208,12 +254,15 @@ export class TerminalSessions {
     const widget = await this.get(name, { cwd });
 
     this._shell.activateById(widget.id);
-    widget.content.session.send({ type: 'stdin', content: [text] });
+    this._write(widget.content.session, text);
   }
 
   /**
    * Resolve to true when a terminal prints the text, or false after the
    * timeout. Call before sending the command that produces the text.
+   * Output is matched across messages, since a terminal may deliver a
+   * line in pieces (the JupyterLite terminal sends one character at a
+   * time).
    */
   waitForOutput(
     name: string,
@@ -221,11 +270,18 @@ export class TerminalSessions {
     timeoutMs: number
   ): Promise<boolean> {
     return new Promise(resolve => {
+      let recent = '';
       const onOutput = (
         _: this,
         args: { name: string; text: string }
       ): void => {
-        if (args.name === name && args.text.includes(text)) {
+        if (args.name !== name) {
+          return;
+        }
+
+        recent = (recent + args.text).slice(-OUTPUT_WINDOW);
+
+        if (recent.includes(text)) {
           finish(true);
         }
       };
@@ -252,10 +308,7 @@ export class TerminalSessions {
 
     for (const widget of this._widgets.values()) {
       if (!widget.isDisposed) {
-        widget.content.session.send({
-          type: 'stdin',
-          content: [`${source}\n`]
-        });
+        this._write(widget.content.session, `${source}\n`);
       }
     }
   }
@@ -313,9 +366,33 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
 
       return `call "${path}"`;
     }
+    case 'cockle':
+      return cockleExports(manager.variables.values);
     default:
       return null;
   }
+}
+
+/**
+ * One line of `export` commands setting the variables, for the JupyterLite
+ * terminal, whose cockle shell cannot source a file. Values are quoted
+ * with whichever quote they do not contain; a value with both is left
+ * out.
+ */
+export function cockleExports(
+  variables: Record<string, string>
+): string | null {
+  const parts: string[] = [];
+
+  for (const [name, value] of Object.entries(environmentVariables(variables))) {
+    if (!value.includes("'")) {
+      parts.push(`export ${name}='${value}'`);
+    } else if (!value.includes('"')) {
+      parts.push(`export ${name}="${value}"`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('; ') : null;
 }
 
 /**
@@ -340,6 +417,10 @@ export function markerCommand(
       // The caret is cmd's escape character and vanishes from the output,
       // so the typed line never contains the marker itself.
       return `echo ${marker.slice(0, 6)}^${marker.slice(6)}`;
+    case 'cockle':
+      // Two echoes, the first without a newline, print the marker in one
+      // piece while the typed line shows it split.
+      return `echo -n ${marker.slice(0, 6)}; echo ${marker.slice(6)}`;
     default:
       return null;
   }
@@ -440,14 +521,16 @@ export class ExecuteAction implements IActionImplementation {
 }
 
 /**
- * The `execute-capture` action: run a command in the workshop kernel and
- * capture its output into a variable.
+ * The `execute-capture` action: run a command without a terminal and
+ * capture its output into a variable. The command goes through the
+ * workshop kernel on a server and through the headless terminal shell in
+ * JupyterLite.
  */
 export class ExecuteCaptureAction implements IActionImplementation {
   readonly type = 'execute-capture';
 
-  constructor(kernel: WorkshopKernel, manager: IWorkshopManager) {
-    this._kernel = kernel;
+  constructor(shell: IShellRunner, manager: IWorkshopManager) {
+    this._shell = shell;
     this._manager = manager;
   }
 
@@ -460,40 +543,24 @@ export class ExecuteCaptureAction implements IActionImplementation {
   async run(request: IActionRequest): Promise<IActionResult> {
     const command = requireBody(request, 'a command');
     const cwd = this._manager.absolutePath(request.options.cwd ?? '');
-    const timeout = parseDuration(request.options.timeout, 60000) / 1000;
-    const code = [
-      'import json, subprocess',
-      `_r = subprocess.run(${JSON.stringify(command)}, shell=True, capture_output=True, text=True, cwd=${JSON.stringify(cwd)}, timeout=${timeout})`,
-      'print(json.dumps({"code": _r.returncode, "out": _r.stdout, "err": _r.stderr}))'
-    ].join('\n');
+    const timeout = parseDuration(request.options.timeout, 60000);
+    const result = await this._shell.run(command, cwd, timeout);
 
-    const output = await this._kernel.execute(code);
-
-    if (output.error) {
-      return { status: 'error', message: output.error };
-    }
-
-    const parsed = JSON.parse(output.text.trim()) as {
-      code: number;
-      out: string;
-      err: string;
-    };
-
-    if (parsed.code !== 0) {
+    if (result.code !== 0) {
       return {
         status: 'error',
-        message: `Exit code ${parsed.code}: ${(parsed.err || parsed.out).trim()}`
+        message: `Exit code ${result.code}: ${(result.error || result.output).trim()}`
       };
     }
 
     const captured = request.options.capture
-      ? { [request.options.capture]: parsed.out.trim() }
+      ? { [request.options.capture]: result.output.trim() }
       : undefined;
 
-    return { status: 'ok', message: parsed.out.trim(), captured };
+    return { status: 'ok', message: result.output.trim(), captured };
   }
 
-  private _kernel: WorkshopKernel;
+  private _shell: IShellRunner;
   private _manager: IWorkshopManager;
 }
 

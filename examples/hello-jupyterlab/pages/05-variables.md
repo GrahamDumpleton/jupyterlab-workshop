@@ -43,11 +43,15 @@ Workshops can set variables directly too.
 Hello from the workshop
 ```
 
-Variables are also exported to terminals as environment variables.
+Variables are also exported to terminals as environment variables. The
+JupyterLite terminal does not expand `$VAR`, so there they are listed
+instead.
 
 ```{execute}
 :session: shell
 echo "$GREETING for $LEARNER on $WORKSHOP_PLATFORM"
 :windows:
 echo "$env:GREETING for $env:LEARNER on $env:WORKSHOP_PLATFORM"
+:lite:
+env | grep -E "^(GREETING|LEARNER|WORKSHOP_PLATFORM)="
 ```

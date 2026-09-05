@@ -21,6 +21,7 @@ import {
 } from '../checks/verify';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
+import { liteShellProblems, usesSubprocess } from '../lite';
 import {
   actionCapability,
   allDirectives,
@@ -319,14 +320,20 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
   }
 }
 
-/** Action types that need a terminal and so cannot run in JupyterLite. */
-const LITE_UNSUPPORTED: ReadonlySet<string> = new Set([
+/** Action types that need the server and so cannot run in JupyterLite. */
+const LITE_UNSUPPORTED: ReadonlySet<string> = new Set(['environment-create']);
+
+/** Action types whose body the JupyterLite terminal runs as a command. */
+const LITE_SHELL_BODIES: ReadonlySet<string> = new Set([
   'execute',
-  'terminal-open',
-  'terminal-clear',
-  'terminal-type',
-  'send-key',
-  'interrupt'
+  'execute-capture',
+  'terminal-type'
+]);
+
+/** Action types whose body Pyodide runs as Python. */
+const LITE_PYTHON_BODIES: ReadonlySet<string> = new Set([
+  'kernel-execute',
+  'cell-insert'
 ]);
 
 function lintVariants(
@@ -352,16 +359,67 @@ function lintVariants(
     }
   }
 
+  if (platforms.includes('lite')) {
+    lintLite(node, where, messages);
+  }
+}
+
+function lintLite(
+  node: IDirectiveNode,
+  where: { path: string; line: number },
+  messages: ILintMessage[]
+): void {
+  const variants = node.variants;
+  const liteBody = variants
+    ? (variants.lite ?? variants.default ?? '')
+    : node.body;
+
+  // An action a when condition hides on Lite, or an empty :lite: variant,
+  // is the author saying it does not apply there.
+  const skipped =
+    /\blite\b/.test(node.options.when ?? '') ||
+    (variants !== undefined && 'lite' in variants && liteBody.trim() === '');
+
+  if (skipped) {
+    return;
+  }
+
+  const substrate =
+    node.name === 'verify' ? verifySubstrate(node.options) : null;
+
+  if (LITE_UNSUPPORTED.has(node.name) || substrate === 'script') {
+    messages.push({
+      level: 'warning',
+      rule: 'lite-unsupported',
+      message:
+        substrate === 'script'
+          ? `verify "${node.id}" uses the script substrate, which needs the server; in JupyterLite use kernel, shell, contents or ui, or add a when condition`
+          : `${node.name} "${node.id}" needs the server, which JupyterLite lacks; add a when condition`,
+      ...where
+    });
+  }
+
+  if (LITE_SHELL_BODIES.has(node.name) || substrate === 'shell') {
+    const problems = liteShellProblems(liteBody);
+
+    if (problems.length > 0) {
+      messages.push({
+        level: 'warning',
+        rule: 'lite-shell-syntax',
+        message: `${node.name} "${node.id}" uses ${problems.join(', ')}, which the JupyterLite terminal does not support; add a :lite: variant`,
+        ...where
+      });
+    }
+  }
+
   if (
-    platforms.includes('lite') &&
-    LITE_UNSUPPORTED.has(node.name) &&
-    !(variants && 'lite' in variants) &&
-    !/\blite\b/.test(node.options.when ?? '')
+    (LITE_PYTHON_BODIES.has(node.name) || substrate === 'kernel') &&
+    usesSubprocess(liteBody)
   ) {
     messages.push({
       level: 'warning',
       rule: 'lite-unsupported',
-      message: `${node.name} "${node.id}" needs a terminal, which JupyterLite lacks; add a :lite: variant or a when condition`,
+      message: `${node.name} "${node.id}" starts a process, which Pyodide cannot do in JupyterLite; add a :lite: variant or a when condition`,
       ...where
     });
   }

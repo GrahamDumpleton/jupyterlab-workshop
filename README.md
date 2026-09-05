@@ -13,7 +13,9 @@ This project is at the proof-of-concept stage. See `docs/demo.md` for how
 to try the example workshop, `docs/actions.md` for the actions a workshop
 page can use, `docs/checks.md` for verifies, quizzes, forms, gating and
 checkpoints, `docs/platforms.md` for Windows and macOS variants of
-commands, `docs/environment.md` for isolated Python environments,
+commands, `docs/lite.md` for running and publishing workshops as a
+static JupyterLite site, `docs/environment.md` for isolated Python
+environments,
 `docs/registry.md` for the workshop browser, registries and launch links,
 `docs/trust.md` for how workshops are loaded from repositories and
 archives, what capabilities they declare, and how the trust levels change

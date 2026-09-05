@@ -401,6 +401,7 @@ function PageBody({
   return (
     <div className="jp-WorkshopPanel-body" ref={container}>
       <h3 className="jp-WorkshopPanel-pageTitle">{page.title}</h3>
+      {manager.pageIndex === 0 ? <PlatformBanner manager={manager} /> : null}
       {manager.pageIndex === 0 ? <PreflightBanner manager={manager} /> : null}
       {manager.pageIndex === 0 ? <ShellBanner manager={manager} /> : null}
       <EnvironmentBanner manager={manager} />
@@ -910,6 +911,44 @@ function PreflightBanner({
   );
 }
 
+/** How the platforms are named to learners. */
+const PLATFORM_LABELS: Readonly<Record<string, string>> = {
+  linux: 'Linux',
+  macos: 'macOS',
+  windows: 'Windows',
+  lite: 'JupyterLite'
+};
+
+function PlatformBanner({
+  manager
+}: {
+  manager: IWorkshopManager;
+}): JSX.Element | null {
+  const platforms = manager.workshop?.manifest.platforms ?? [];
+  const os = manager.platform?.os;
+
+  // The list is advisory: the workshop still opens, with a warning.
+  if (!os || platforms.length === 0 || platforms.includes(os)) {
+    return null;
+  }
+
+  const listed = platforms.map(name => PLATFORM_LABELS[name] ?? name);
+
+  return (
+    <div className="jp-WorkshopPanel-preflight">
+      <div className="jp-WorkshopPanel-preflightTitle">
+        This workshop was written for {listed.join(', ')}, not{' '}
+        {PLATFORM_LABELS[os] ?? os}.
+      </div>
+      <div className="jp-WorkshopPanel-preflightHint">
+        {os === 'lite'
+          ? 'JupyterLite has no server and its terminal runs a small shell, so some actions may not work.'
+          : 'Some commands may need adjusting.'}
+      </div>
+    </div>
+  );
+}
+
 /** Shells that satisfy a `requires.shell` of each family. */
 const SHELL_FAMILIES: Readonly<Record<string, readonly string[]>> = {
   bash: ['bash'],
@@ -936,6 +975,22 @@ function ShellBanner({
 
   if (accepted.includes(platform.shell)) {
     return null;
+  }
+
+  // JupyterLite terminals always run cockle; there is nothing to configure.
+  if (platform.os === 'lite') {
+    return (
+      <div className="jp-WorkshopPanel-preflight">
+        <div className="jp-WorkshopPanel-preflightTitle">
+          This workshop expects a <code>{required}</code> shell but JupyterLite
+          terminals run <code>cockle</code>, a small shell.
+        </div>
+        <div className="jp-WorkshopPanel-preflightHint">
+          Commands that chain with <code>&amp;&amp;</code>, expand variables or
+          substitute commands will not work as written.
+        </div>
+      </div>
+    );
   }
 
   // The terminal shell is a server setting, so the advice names the

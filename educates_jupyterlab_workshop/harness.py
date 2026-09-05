@@ -4,6 +4,10 @@ It starts a JupyterLab server on a free port with the workshop's parent
 directory as its root and trust forced through a settings override, opens
 JupyterLab in a headless browser with Playwright, runs the extension's
 ``workshop:run-all`` command, and reports every action's outcome.
+
+With ``lite`` set it builds a static JupyterLite site carrying the
+workshop instead, serves it from a plain static file server under a
+sub-path (as GitHub Pages would), and drives that the same way.
 """
 
 from __future__ import annotations
@@ -24,7 +28,12 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
+from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
+
 PANEL_PLUGIN = "@educates/jupyterlab-workshop:panel"
+
+#: Sub-path the JupyterLite site is served under during a self-test.
+LITE_PREFIX = "lite"
 
 RUN_ALL_COMMAND = "workshop:run-all"
 
@@ -40,6 +49,12 @@ class SelfTestOptions:
     trust: str = "trusted"
     junit: Path | None = None
     json_out: Path | None = None
+
+    #: Run in a JupyterLite build rather than a JupyterLab server.
+    lite: bool = False
+
+    #: JupyterLite build cache directory; None for the default.
+    lite_dir: Path | None = None
 
 
 @dataclass
@@ -70,34 +85,11 @@ def run_self_test(options: SelfTestOptions) -> int:
 
     with tempfile.TemporaryDirectory(prefix="workshop-test-") as tmp:
         work = Path(tmp)
-        root, name = _prepare_root(options, work)
-        settings = _write_overrides(work, options.trust)
-        port = _free_port()
-        token = secrets.token_hex(16)
-        log = work / "jupyterlab.log"
-        server = _start_server(root, port, token, settings, log)
 
-        try:
-            _wait_for_server(port, token, server, log)
-
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(headless=not options.headed)
-                page = browser.new_page()
-
-                page.goto(f"http://127.0.0.1:{port}/lab?token={token}")
-                page.wait_for_function(
-                    "() => window.jupyterapp !== undefined", timeout=120000
-                )
-                page.evaluate("() => window.jupyterapp.restored")
-
-                raw = page.evaluate(
-                    "([command, path]) => "
-                    "window.jupyterapp.commands.execute(command, { path })",
-                    [RUN_ALL_COMMAND, name],
-                )
-                browser.close()
-        finally:
-            _stop_server(server)
+        if options.lite:
+            raw = _run_lite(options, work, sync_playwright)
+        else:
+            raw = _run_server(options, work, sync_playwright)
 
     report = _to_report(raw)
 
@@ -112,6 +104,90 @@ def run_self_test(options: SelfTestOptions) -> int:
         print(f"wrote {options.json_out}")
 
     return 1 if report.failed > 0 else 0
+
+
+def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> object:
+    root, name = _prepare_root(options, work)
+    settings = _write_overrides(work, options.trust)
+    port = _free_port()
+    token = secrets.token_hex(16)
+    log = work / "jupyterlab.log"
+    server = _start_server(root, port, token, settings, log)
+
+    try:
+        _wait_for_server(port, token, server, log)
+
+        return _drive(
+            sync_playwright,
+            f"http://127.0.0.1:{port}/lab?token={token}",
+            name,
+            options.headed,
+            ready_timeout=120000,
+        )
+    finally:
+        _stop_server(server)
+
+
+def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> object:
+    # The site sits one level down so it is served under a sub-path, which
+    # is how GitHub Pages serves a project site.
+    site = work / "site" / LITE_PREFIX
+    name = options.directory.name
+
+    try:
+        result = build_lite_site(
+            LiteBuildOptions(
+                workshops=(options.directory,),
+                output=site,
+                lite_dir=options.lite_dir,
+                trust=options.trust,
+            )
+        )
+    except LiteError as error:
+        raise SystemExit(f"error: {error}") from error
+
+    name = result.workshops[0]
+    server, port = serve_directory(site.parent)
+
+    try:
+        # Pyodide and the terminal's WebAssembly load from a CDN on first
+        # use, so the application takes longer to be ready than a server.
+        return _drive(
+            sync_playwright,
+            f"http://127.0.0.1:{port}/{LITE_PREFIX}/lab/index.html",
+            name,
+            options.headed,
+            ready_timeout=300000,
+        )
+    finally:
+        server.shutdown()
+
+
+def _drive(
+    sync_playwright: Any,
+    url: str,
+    name: str,
+    headed: bool,
+    ready_timeout: int,
+) -> object:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=not headed)
+        page = browser.new_page()
+
+        page.goto(url)
+        page.wait_for_function(
+            "() => window.jupyterapp !== undefined", timeout=ready_timeout
+        )
+        page.evaluate("() => window.jupyterapp.restored")
+
+        raw = page.evaluate(
+            "([command, path]) => "
+            "window.jupyterapp.commands.execute(command, { path })",
+            [RUN_ALL_COMMAND, name],
+        )
+        browser.close()
+
+    return raw
 
 
 def _prepare_root(options: SelfTestOptions, work: Path) -> tuple[Path, str]:

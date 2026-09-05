@@ -33,6 +33,11 @@ test = [
 mcp = [
     "mcp>=1.0",
 ]
+lite = [
+    "jupyterlite-core>=0.8.3,<0.9",
+    "jupyterlite-pyodide-kernel>=0.8.5,<0.9",
+    "jupyterlite-terminal>=1.6,<2",
+]
 
 [project.scripts]
 jupyter-workshop = "educates_jupyterlab_workshop.cli:main"
@@ -49,6 +54,9 @@ dev = [
     "mkdocs-material>=9.5",
     "playwright>=1.45",
     "mcp>=1.0",
+    "jupyterlite-core>=0.8.3,<0.9",
+    "jupyterlite-pyodide-kernel>=0.8.5,<0.9",
+    "jupyterlite-terminal>=1.6,<2",
 ]
 
 [tool.hatch.version]

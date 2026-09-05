@@ -61,6 +61,36 @@ jobs:
           name: playwright-results
           path: tests/ui-tests/test-results
 
+  lite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: extractions/setup-just@v2
+      - name: Install micromamba for the JupyterLite terminal build
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C "$HOME/.local" bin/micromamba
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install
+        run: just install
+      - name: Install browsers
+        run: uv run playwright install --with-deps chromium
+      - name: Lint the examples for JupyterLite
+        run: uv run jupyter workshop lint examples/hello-jupyterlab --platform lite
+      - name: Workshop self-test in JupyterLite
+        run: uv run jupyter workshop test examples/hello-jupyterlab --lite --junit results-lite.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-lite
+          path: results-lite.xml
+
   windows:
     runs-on: windows-latest
     steps:

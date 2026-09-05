@@ -334,7 +334,6 @@ echo {{ user_name }}
     const page = (body: string) => `\`\`\`{execute}\n${body}\n\`\`\`\n`;
 
     expect(rules(page('ls\n:windows:\ndir'), manifest)).toEqual([
-      'lite-unsupported',
       'unused-capability'
     ]);
     expect(rules(page(':windows:\ndir\n:lite:'), manifest)).toEqual([
@@ -344,6 +343,44 @@ echo {{ user_name }}
     expect(rules(page(':windows:\ndir'), MANIFEST)).toEqual([
       'unused-capability'
     ]);
+  });
+
+  it('warns about what JupyterLite cannot run', () => {
+    const manifest = MANIFEST.replace(
+      'pages:',
+      'platforms: [linux, lite]\npages:'
+    ).replace('  - terminal\n', '  - terminal\n  - kernel-exec\n');
+    const execute = (body: string) => `\`\`\`{execute}\n${body}\n\`\`\`\n`;
+    const verify = (options: string, body: string) =>
+      `\`\`\`{verify}\n${options}\n${body}\n\`\`\`\n`;
+
+    // Syntax cockle lacks is reported unless a lite variant replaces it.
+    expect(rules(execute('mkdir x && cd x'), manifest)).toContain(
+      'lite-shell-syntax'
+    );
+    expect(
+      rules(execute('mkdir x && cd x\n:lite:\nmkdir x'), manifest)
+    ).not.toContain('lite-shell-syntax');
+    expect(rules(execute('mkdir x && cd x\n:lite:'), manifest)).not.toContain(
+      'lite-shell-syntax'
+    );
+    expect(
+      rules(execute(':when: not lite\nmkdir x && cd x'), manifest)
+    ).not.toContain('lite-shell-syntax');
+
+    // Server-only substrates and processes are flagged too.
+    expect(rules(verify(':script: check.py', ''), manifest)).toContain(
+      'lite-unsupported'
+    );
+    expect(
+      rules(verify(':substrate: shell', 'test -f x || false'), manifest)
+    ).toContain('lite-shell-syntax');
+    expect(
+      rules(verify('', 'import subprocess\nsubprocess.run(["ls"])'), manifest)
+    ).toContain('lite-unsupported');
+    expect(rules(verify('', 'assert True'), manifest)).not.toContain(
+      'lite-unsupported'
+    );
   });
 
   it('requires install-packages for an environment', () => {

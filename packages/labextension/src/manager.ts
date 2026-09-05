@@ -24,19 +24,22 @@ import {
   renderEnvSh
 } from '@educates/workshop-core';
 import { PathExt } from '@jupyterlab/coreutils';
-import { Contents, ServerConnection } from '@jupyterlab/services';
+import { Contents } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
 import { PartialJSONValue } from '@lumino/coreutils';
 import { Debouncer } from '@lumino/polling';
 import { ISignal, Signal } from '@lumino/signaling';
 
-import { readIfExists, readTextFile, writeTextFile } from './actions/contents';
-import { requestAPI } from './request';
+import {
+  deleteTree,
+  readIfExists,
+  readTextFile,
+  writeTextFile
+} from './actions/contents';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
-  VariableSource,
   IActionLogEntry,
   IActionRegistry,
   IActionRequest,
@@ -57,6 +60,7 @@ import {
   ITrustStore,
   ITrustSummary,
   IUninstallPlan,
+  IWorkshopBackend,
   IWorkshopEvent,
   IWorkshopManager,
   IWorkshopSource,
@@ -92,7 +96,7 @@ interface IQueued {
 export class WorkshopManager implements IWorkshopManager {
   constructor(options: WorkshopManager.IOptions) {
     this._contents = options.contents;
-    this._serverSettings = options.serverSettings;
+    this._backend = options.backend;
     this._stateDB = options.stateDB;
     this._trustStore = options.trustStore;
     this._prompts = options.prompts;
@@ -106,6 +110,10 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   registry: IActionRegistry | null = null;
+
+  get backend(): IWorkshopBackend {
+    return this._backend;
+  }
 
   get changed(): ISignal<this, void> {
     return this._changed;
@@ -478,23 +486,7 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   async fetch(request: IFetchRequest): Promise<IFetchResult> {
-    const body = {
-      source: request.archive
-        ? { archive: request.url, sha256: request.sha256 ?? '' }
-        : {
-            url: request.url,
-            ref: request.ref ?? '',
-            subdir: request.subdir ?? '',
-            sha256: request.sha256 ?? ''
-          },
-      directory: request.directory,
-      overwrite: request.overwrite ?? false
-    };
-
-    return requestAPI<IFetchResult>('fetch', this._serverSettings, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    });
+    return this._backend.fetch(request);
   }
 
   track(kind: string, data: Record<string, unknown> = {}): void {
@@ -512,9 +504,9 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     try {
-      const status = await requestAPI<IEnvironmentStatus>(
-        `environment?workshop=${encodeURIComponent(workshop.path)}&kernel=${encodeURIComponent(this._environmentName())}`,
-        this._serverSettings
+      const status = await this._backend.environmentStatus(
+        workshop.path,
+        this._environmentName()
       );
 
       if (this._workshop === workshop) {
@@ -544,20 +536,12 @@ export class WorkshopManager implements IWorkshopManager {
     this._changed.emit();
 
     try {
-      const status = await requestAPI<IEnvironmentStatus>(
-        'environment',
-        this._serverSettings,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            workshop: workshop.path,
-            action: 'create',
-            requirements: environment.requirements,
-            kernel,
-            display: `${workshop.manifest.title} (workshop)`
-          })
-        }
-      );
+      const status = await this._backend.createEnvironment({
+        workshop: workshop.path,
+        requirements: environment.requirements,
+        kernel,
+        display: `${workshop.manifest.title} (workshop)`
+      });
 
       if (this._workshop === workshop) {
         this._environment = { ...status, creating: false };
@@ -588,12 +572,7 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   async installed(directory: string): Promise<IInstalledWorkshop[]> {
-    const response = await requestAPI<{ workshops: IInstalledWorkshop[] }>(
-      `workshops?directory=${encodeURIComponent(directory)}`,
-      this._serverSettings
-    );
-
-    return response.workshops;
+    return this._backend.installed(directory);
   }
 
   async removeInstalled(path: string): Promise<void> {
@@ -605,20 +584,11 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
-    await requestAPI<{ removed: string }>(
-      `workshops?path=${encodeURIComponent(target)}`,
-      this._serverSettings,
-      { method: 'DELETE' }
-    );
+    await this._backend.removeInstalled(target);
   }
 
   async fetchRegistry(url: string): Promise<IRegistryIndex> {
-    const response = await requestAPI<{ url: string; index: unknown }>(
-      `registry?url=${encodeURIComponent(url)}`,
-      this._serverSettings
-    );
-
-    return parseRegistryIndex(response.index);
+    return parseRegistryIndex(await this._backend.fetchRegistry(url));
   }
 
   async close(): Promise<void> {
@@ -757,14 +727,7 @@ export class WorkshopManager implements IWorkshopManager {
 
     if (this._environment?.ready) {
       try {
-        await requestAPI('environment', this._serverSettings, {
-          method: 'POST',
-          body: JSON.stringify({
-            workshop: path,
-            action: 'remove',
-            kernel: this._environment.kernel
-          })
-        });
+        await this._backend.removeEnvironment(path, this._environment.kernel);
       } catch (error) {
         console.warn('Unable to remove the workshop environment', error);
       }
@@ -787,13 +750,9 @@ export class WorkshopManager implements IWorkshopManager {
     this._changed.emit();
 
     if (plan.removesDirectory) {
-      await requestAPI<{ removed: string }>(
-        `workshops?path=${encodeURIComponent(path)}`,
-        this._serverSettings,
-        { method: 'DELETE' }
-      );
+      await this._backend.removeInstalled(path);
     } else {
-      await this._deleteTree(stateDir);
+      await deleteTree(this._contents, stateDir);
     }
 
     await this._trustStore.forget(sourceKey);
@@ -812,7 +771,7 @@ export class WorkshopManager implements IWorkshopManager {
     this.stopChain();
     await this._restoreSettings(settings);
     await this._state.unload();
-    await this._deleteTree(PathExt.join(path, WORKSHOP_STATE_DIR));
+    await deleteTree(this._contents, PathExt.join(path, WORKSHOP_STATE_DIR));
 
     this._workshop = null;
     this._currentPageId = '';
@@ -932,14 +891,11 @@ export class WorkshopManager implements IWorkshopManager {
       throw new Error('No workshop is open');
     }
 
-    await requestAPI('checkpoints', this._serverSettings, {
-      method: 'POST',
-      body: JSON.stringify({
-        workshop: workshop.path,
-        name,
-        variables: this._store.persistable()
-      })
-    });
+    await this._backend.checkpoint(
+      workshop.path,
+      name,
+      this._store.persistable()
+    );
 
     if (!state.checkpoints.includes(name)) {
       state.checkpoints.push(name);
@@ -956,12 +912,7 @@ export class WorkshopManager implements IWorkshopManager {
       throw new Error('No workshop is open');
     }
 
-    const record = await requestAPI<{
-      variables?: Record<string, { value: string; source: VariableSource }>;
-    }>('checkpoints', this._serverSettings, {
-      method: 'POST',
-      body: JSON.stringify({ workshop: workshop.path, name, action: 'restore' })
-    });
+    const record = await this._backend.restoreCheckpoint(workshop.path, name);
 
     // Put the learner's values back as they were at the checkpoint.
     for (const entry of this._store.entries()) {
@@ -1604,10 +1555,7 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     try {
-      this._platform = await requestAPI<IPlatformInfo>(
-        'platform',
-        this._serverSettings
-      );
+      this._platform = await this._backend.platform();
     } catch (error) {
       // Without the server extension fall back to generic values.
       console.warn(
@@ -1816,34 +1764,6 @@ export class WorkshopManager implements IWorkshopManager {
     }
   }
 
-  private async _deleteTree(path: string): Promise<void> {
-    // The contents API refuses non-empty directories on some servers, so
-    // delete the files first and then the directory.
-    let model: Contents.IModel | null = null;
-
-    try {
-      model = await this._contents.get(path, { content: true });
-    } catch {
-      return;
-    }
-
-    if (model.type === 'directory' && Array.isArray(model.content)) {
-      for (const child of model.content as Contents.IModel[]) {
-        if (child.type === 'directory') {
-          await this._deleteTree(child.path);
-        } else {
-          await this._contents.delete(child.path);
-        }
-      }
-    }
-
-    try {
-      await this._contents.delete(path);
-    } catch (error) {
-      console.warn(`Unable to delete ${path}`, error);
-    }
-  }
-
   private async _saveStateDB(): Promise<void> {
     if (!this._stateDB) {
       return;
@@ -1866,7 +1786,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _actionFocused = new Signal<this, string>(this);
   private _environmentChanged = new Signal<this, void>(this);
   private _contents: Contents.IManager;
-  private _serverSettings: ServerConnection.ISettings;
+  private _backend: IWorkshopBackend;
   private _stateDB: IStateDB | null;
   private _trustStore: ITrustStore;
   private _prompts: ITrustPrompts;
@@ -1897,7 +1817,9 @@ export class WorkshopManager implements IWorkshopManager {
 export namespace WorkshopManager {
   export interface IOptions {
     contents: Contents.IManager;
-    serverSettings: ServerConnection.ISettings;
+
+    /** Where server-side work goes: the server extension or the browser. */
+    backend: IWorkshopBackend;
     stateDB: IStateDB | null;
 
     /** Where trust decisions and the administrator policy live. */
@@ -1943,8 +1865,8 @@ function buildBuiltins(
     workshop_dir: workshopPath,
     home: platform.home,
     user: platform.user,
-    lite: 'false',
-    hub: 'false'
+    lite: platform.os === 'lite' ? 'true' : 'false',
+    hub: platform.hub_user ? 'true' : 'false'
   };
 }
 

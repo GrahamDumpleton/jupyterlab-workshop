@@ -582,6 +582,15 @@ wheels = [
 ]
 
 [[package]]
+name = "doit"
+version = "0.37.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/f6/3a817d438799bda4d4e5fd136175cf7c328c074fadc1422dec3b374907e7/doit-0.37.0.tar.gz", hash = "sha256:d3c72e0e46a8fa1ddabea8f830762402dee090caf33c30c2295ac7010db8f09c", size = 1450967, upload-time = "2026-02-09T07:02:15.578Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/38/3d6dcbf8379cb86d71a2325210ca3469a33767d8254b74d8c343db26ce87/doit-0.37.0-py3-none-any.whl", hash = "sha256:a9f181566aa90faac515e276f85e6526019554ed7e13c12cf9dc094ffecf3e1b", size = 85780, upload-time = "2026-02-09T07:02:10.155Z" },
+]
+
+[[package]]
 name = "educates-jupyterlab-workshop"
 source = { editable = "." }
 dependencies = [
@@ -590,6 +599,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+lite = [
+    { name = "jupyterlite-core" },
+    { name = "jupyterlite-pyodide-kernel" },
+    { name = "jupyterlite-terminal" },
+]
 mcp = [
     { name = "mcp" },
 ]
@@ -601,6 +615,9 @@ test = [
 dev = [
     { name = "jupyter-builder" },
     { name = "jupyterlab" },
+    { name = "jupyterlite-core" },
+    { name = "jupyterlite-pyodide-kernel" },
+    { name = "jupyterlite-terminal" },
     { name = "mcp" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
@@ -614,16 +631,22 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "jupyter-server", specifier = ">=2.13.0,<3" },
+    { name = "jupyterlite-core", marker = "extra == 'lite'", specifier = ">=0.8.3,<0.9" },
+    { name = "jupyterlite-pyodide-kernel", marker = "extra == 'lite'", specifier = ">=0.8.5,<0.9" },
+    { name = "jupyterlite-terminal", marker = "extra == 'lite'", specifier = ">=1.6,<2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "playwright", marker = "extra == 'test'", specifier = ">=1.45" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
-provides-extras = ["mcp", "test"]
+provides-extras = ["lite", "mcp", "test"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "jupyter-builder", specifier = ">=1.2.0,<2" },
     { name = "jupyterlab", specifier = ">=4.6.0,<5" },
+    { name = "jupyterlite-core", specifier = ">=0.8.3,<0.9" },
+    { name = "jupyterlite-pyodide-kernel", specifier = ">=0.8.5,<0.9" },
+    { name = "jupyterlite-terminal", specifier = ">=1.6,<2" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "mkdocs", specifier = ">=1.6" },
     { name = "mkdocs-material", specifier = ">=9.5" },
@@ -1153,6 +1176,45 @@ wheels = [
 ]
 
 [[package]]
+name = "jupyterlite-core"
+version = "0.8.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "doit" },
+    { name = "jupyter-core" },
+    { name = "pycparser", marker = "platform_python_implementation == 'PyPy'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/31/9b18a4cac1925ca9229c62a0a734554c91f8795b19dc6e2be18084334a56/jupyterlite_core-0.8.3.tar.gz", hash = "sha256:92735e2de4e1f67b411a218094d609b21350327d46454d89de84f113cd8440ae", size = 15791222, upload-time = "2026-08-20T14:27:29.986Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/f1/c527ec3191c1d4f3019c4fdf08697adfdbb4054e31b0282b559cf15d4aa4/jupyterlite_core-0.8.3-py3-none-any.whl", hash = "sha256:f61b1dc434368794850dfeb9089e91bc86a2741dd6966e061edb028c8112c2e3", size = 15803305, upload-time = "2026-08-20T14:27:26.402Z" },
+]
+
+[[package]]
+name = "jupyterlite-pyodide-kernel"
+version = "0.8.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jupyterlite-core" },
+    { name = "pkginfo" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/53/968cf7766ff1454ed3620d7fcddac9d954808e6fc94d575e9cdf3887b272/jupyterlite_pyodide_kernel-0.8.5.tar.gz", hash = "sha256:f9d5b411ae30c6be1be26994597a5b6f0cdf50bdd7bf303e2146bfd370a67ec7", size = 208968, upload-time = "2026-08-21T06:27:51.492Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/8a/bbb03f742128df53b0aff54026918dc6ae7477aa2007e59bca7764f90c68/jupyterlite_pyodide_kernel-0.8.5-py3-none-any.whl", hash = "sha256:97b31147143f27ffd6d1b7fa46da5ec723c457f4a616ebcd7fd33f84117e7474", size = 222447, upload-time = "2026-08-21T06:27:49.206Z" },
+]
+
+[[package]]
+name = "jupyterlite-terminal"
+version = "1.6.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jupyterlite-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/52/2ad79bc4eaa6c24628ecc3eac6bb96eee9e42d1b05374c88ddc32d4bdd57/jupyterlite_terminal-1.6.2.tar.gz", hash = "sha256:fb641596407687c46672c2d9e3b604219c54f3e66baa04a08f4410e55accb9ce", size = 1006893, upload-time = "2026-08-10T11:28:48.849Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/5c/6e52364803615ad034f06e65c60862da9681d5856e7c4790f212d542025f/jupyterlite_terminal-1.6.2-py3-none-any.whl", hash = "sha256:a21eaa0a63ec20b4f0e1ea4c6b39908f21c358bf96f8cc01a80761fc212447bb", size = 295063, upload-time = "2026-08-10T11:28:46.725Z" },
+]
+
+[[package]]
 name = "lark"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1677,6 +1739,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/c3/059298687310d527a58bb01f3b1965787ee3b40dce76752eda8b44e9a2c5/pexpect-4.9.0-py2.py3-none-any.whl", hash = "sha256:7236d1e080e4936be2dc3e326cec0af72acf9212a7e1d060210e70a47e253523", size = 63772, upload-time = "2023-11-25T06:56:14.81Z" },
+]
+
+[[package]]
+name = "pkginfo"
+version = "1.13"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/ad/97538d5a1041d8d3ba155075b0b35248cf8538e1f1ec764f1d117962b01d/pkginfo-1.13.tar.gz", hash = "sha256:4f70471c643f71fe84a06230c0e33c5c5b12a33b2fd21bff14ddaef5a974adb1", size = 453525, upload-time = "2026-08-30T02:45:07.804Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/ad/2e9e8a7bb014758af9453b3d818848d50852592296aceb8817f2a937fa71/pkginfo-1.13-py3-none-any.whl", hash = "sha256:37e1bfb7b5b149829e6f140a225b517c4c8808d8d164f68137b9492023874061", size = 32769, upload-time = "2026-08-30T02:45:06.55Z" },
 ]
 
 [[package]]

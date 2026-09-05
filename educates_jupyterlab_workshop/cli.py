@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from . import __version__ as VERSION
+from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
 from .registry import RegistryError, build_registry, parse_registry
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
@@ -198,7 +199,68 @@ def build_parser() -> argparse.ArgumentParser:
         default="trusted",
         help="trust level to run under (default trusted)",
     )
+    test.add_argument(
+        "--lite",
+        action="store_true",
+        help="run in a static JupyterLite build instead of a JupyterLab server",
+    )
+    test.add_argument(
+        "--lite-dir",
+        type=Path,
+        help="JupyterLite build cache directory (default: under the Jupyter "
+        "data directory)",
+    )
     test.set_defaults(func=command_test)
+
+    lite = commands.add_parser(
+        "lite", help="build a static JupyterLite site carrying workshops"
+    )
+    lite.add_argument("workshops", nargs="+", type=Path, help="workshop directories")
+    lite.add_argument(
+        "--out",
+        type=Path,
+        default=Path("lite-site"),
+        help="directory to build the site into (default lite-site)",
+    )
+    lite.add_argument(
+        "--lite-dir",
+        type=Path,
+        help="JupyterLite build cache directory (default: under the Jupyter "
+        "data directory)",
+    )
+    lite.add_argument(
+        "--default",
+        dest="default_workshop",
+        default="",
+        help="name of the workshop to open on start (default: the only one)",
+    )
+    lite.add_argument(
+        "--trust",
+        choices=["trusted", "restricted", "ask"],
+        default="",
+        help="apply a trust level without asking (default: show the dialog)",
+    )
+    lite.add_argument(
+        "--registry",
+        action="append",
+        default=[],
+        help="registry index URL to list in the workshop browser",
+    )
+    lite.add_argument(
+        "--no-terminal",
+        dest="terminal",
+        action="store_false",
+        help="leave the terminal out, so node, npm and micromamba are not needed",
+    )
+    lite.add_argument(
+        "--serve",
+        action="store_true",
+        help="serve the site on a local port after building",
+    )
+    lite.add_argument(
+        "--port", type=int, default=8000, help="port for --serve (default 8000)"
+    )
+    lite.set_defaults(func=command_lite)
 
     record = commands.add_parser(
         "record", help="write draft pages from a recording saved in JupyterLab"
@@ -400,9 +462,56 @@ def command_test(args: argparse.Namespace) -> int:
         trust=args.trust,
         junit=args.junit,
         json_out=args.json_out,
+        lite=args.lite,
+        lite_dir=args.lite_dir,
     )
 
     return run_self_test(options)
+
+
+def command_lite(args: argparse.Namespace) -> int:
+    """Build a JupyterLite site carrying workshops, optionally serving it."""
+
+    workshops = tuple(_workshop_dir(directory) for directory in args.workshops)
+    options = LiteBuildOptions(
+        workshops=workshops,
+        output=args.out,
+        lite_dir=args.lite_dir,
+        default_workshop=args.default_workshop,
+        trust=args.trust,
+        terminal=args.terminal,
+        registries=tuple(args.registry),
+    )
+
+    try:
+        result = build_lite_site(options)
+    except LiteError as error:
+        raise CliError(str(error)) from error
+
+    print(f"built {result.output} with {', '.join(result.workshops)}")
+
+    if not result.terminal:
+        print("the terminal was left out, so terminal actions will not run")
+
+    if not args.serve:
+        return 0
+
+    # The site is served under a sub-path, as GitHub Pages serves project
+    # sites, so anything that assumed the root would show up here.
+    root = result.output.resolve().parent
+    server, port = serve_directory(root, args.port)
+    url = f"http://127.0.0.1:{port}/{result.output.resolve().name}/lab/index.html"
+
+    print(f"serving at {url} (press Ctrl-C to stop)")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
+
+    return 0
 
 
 def command_record(args: argparse.Namespace) -> int:

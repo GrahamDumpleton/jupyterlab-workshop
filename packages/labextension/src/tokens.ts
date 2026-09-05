@@ -464,6 +464,9 @@ export interface IWorkshopManager {
   /** The registry actions run through; set by the actions plugin. */
   registry: IActionRegistry | null;
 
+  /** Where server-side work goes: the server extension or the browser. */
+  readonly backend: IWorkshopBackend;
+
   /** Open the workshop in a directory relative to the JupyterLab root. */
   open(path: string, options?: IOpenOptions): Promise<void>;
 
@@ -608,6 +611,132 @@ export interface IFetchResult {
   path: string;
   name: string;
   sha256: string;
+}
+
+/** What a checkpoint records besides the files. */
+export interface ICheckpointRecord {
+  name: string;
+  createdAt: string;
+
+  /** The learner's variable values at the time, to put back on restore. */
+  variables: Record<string, { value: string; source: VariableSource }>;
+}
+
+/** What running a verify script produced. */
+export interface IScriptResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+/** What running a command through a shell produced. */
+export interface IShellResult {
+  /** Exit code; non-zero when the command failed or timed out. */
+  code: number;
+
+  /** Everything the command printed. */
+  output: string;
+
+  /** Why the run failed when there is more to say than the output. */
+  error: string;
+}
+
+/** A batch of progress events to record. */
+export interface IEventsBatch {
+  workshop: string;
+  events: IWorkshopEvent[];
+
+  /** URL to forward the events to, or an empty string. */
+  sink: string;
+
+  /** Whether the JupyterHub user name is attached to each event. */
+  identity: 'none' | 'hub';
+}
+
+/** A tool the preflight looks for. */
+export interface IToolRequest {
+  name: string;
+  version: string;
+  optional: boolean;
+}
+
+/** What creating an isolated environment needs. */
+export interface IEnvironmentRequest {
+  workshop: string;
+  requirements: string;
+  kernel: string;
+  display: string;
+}
+
+/** What running a verify script needs. */
+export interface IScriptRequest {
+  workshop: string;
+  script: string;
+
+  /** Seconds to allow. */
+  timeout: number;
+  environment: Record<string, string>;
+}
+
+/**
+ * The work the frontend hands to the server extension, behind an interface
+ * so that JupyterLite, which has no server, can do it in the browser.
+ */
+export interface IWorkshopBackend {
+  /** `server` for the jupyter_server extension, `lite` for the browser. */
+  readonly kind: 'server' | 'lite';
+
+  /** Describe the platform workshops run on. */
+  platform(): Promise<IPlatformInfo>;
+
+  /** Download a workshop into a directory under the root. */
+  fetch(request: IFetchRequest): Promise<IFetchResult>;
+
+  /** Read a registry index; the manager validates it. */
+  fetchRegistry(url: string): Promise<unknown>;
+
+  /** List the workshop directories directly under a directory. */
+  installed(directory: string): Promise<IInstalledWorkshop[]>;
+
+  /** Delete a workshop directory. */
+  removeInstalled(path: string): Promise<void>;
+
+  /** Snapshot a workshop's files and variables under a name. */
+  checkpoint(
+    workshop: string,
+    name: string,
+    variables: ICheckpointRecord['variables']
+  ): Promise<void>;
+
+  /** Put a checkpoint's files back and return its record. */
+  restoreCheckpoint(workshop: string, name: string): Promise<ICheckpointRecord>;
+
+  environmentStatus(
+    workshop: string,
+    kernel: string
+  ): Promise<IEnvironmentStatus>;
+  createEnvironment(request: IEnvironmentRequest): Promise<IEnvironmentStatus>;
+  removeEnvironment(workshop: string, kernel: string): Promise<void>;
+
+  /** Run a verify script shipped with the workshop. */
+  runScript(request: IScriptRequest): Promise<IScriptResult>;
+
+  /** Look for the tools a workshop requires; `versions` runs them too. */
+  preflight(
+    tools: IToolRequest[],
+    versions: boolean
+  ): Promise<IPreflightResult[]>;
+
+  /** Append events to the workshop's events file and forward them. */
+  recordEvents(batch: IEventsBatch): Promise<void>;
+}
+
+/** Thrown when a download would replace a directory that exists. */
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
 }
 
 /** What uninstalling a workshop would do. */

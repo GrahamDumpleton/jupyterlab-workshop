@@ -4,6 +4,7 @@ import { Kernel, KernelMessage, Session } from '@jupyterlab/services';
 
 import { WORKSHOP_STATE_DIR } from '../state';
 import { IWorkshopManager } from '../tokens';
+import { ensureDirectory } from './contents';
 
 /** Output collected from running code in a kernel. */
 export interface IKernelOutput {
@@ -110,8 +111,14 @@ export class WorkshopKernel {
       throw new Error('No kernel is available');
     }
 
+    // The session's directory must exist: the Pyodide kernel of JupyterLite
+    // starts in it and never becomes ready when it is missing.
+    const directory = PathExt.join(workshop.path, WORKSHOP_STATE_DIR);
+
+    await ensureDirectory(this._app.serviceManager.contents, directory);
+
     const session = await sessions.startNew({
-      path: PathExt.join(workshop.path, WORKSHOP_STATE_DIR, 'kernel'),
+      path: PathExt.join(directory, 'kernel'),
       name: `workshop-${workshop.manifest.name}`,
       type: 'workshop',
       kernel: { name }

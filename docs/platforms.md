@@ -1,23 +1,25 @@
 # Platforms
 
-A workshop runs wherever JupyterLab runs: Linux, macOS and Windows, with
-[JupyterLite](https://jupyterlite.readthedocs.io) planned. The manifest
-lists the platforms a workshop has been written for:
+A workshop runs wherever JupyterLab runs: Linux, macOS, Windows and
+[JupyterLite](lite.md) in the browser. The manifest lists the platforms a
+workshop has been written for:
 
 ```yaml
-platforms: [linux, macos, windows]
+platforms: [linux, macos, windows, lite]
 ```
 
 The list is advisory: the browser dims workshops that do not list the
-current platform, and the linter uses it to check that every command has
-a version for each listed platform.
+current platform, the panel shows a banner when a workshop is opened on
+a platform it does not list, and the linter uses it to check that every
+command has a version for each listed platform.
 
 ## Variables
 
 The built-in variables `platform` (`linux`, `macos`, `windows` or
-`lite`), `shell` (`bash`, `zsh`, `sh`, `fish`, `powershell` or `cmd`),
-`path_sep`, `home` and `user` describe the machine, and `when`
-conditions can test them:
+`lite`), `shell` (`bash`, `zsh`, `sh`, `fish`, `powershell`, `cmd` or
+`cockle` in JupyterLite), `path_sep`, `home` and `user` describe the
+machine, `lite` and `hub` are `true` in JupyterLite and under JupyterHub,
+and `when` conditions can test them:
 
 ````markdown
 ```{when} platform == "windows"
@@ -48,11 +50,12 @@ directives with command or text bodies (`execute`, `file-write`,
 `kernel-execute` and so on), not to YAML or Markdown bodies.
 
 The linter reports `missing-variant` when a body has variants but no
-default and misses a platform the manifest lists, and `lite-unsupported`
-when a manifest listing `lite` has terminal actions without a `:lite:`
-variant or a `when` condition. `jupyter workshop lint --platform
+default and misses a platform the manifest lists. For a manifest listing
+`lite` it also reports `lite-shell-syntax` and `lite-unsupported`, which
+[JupyterLite](lite.md) describes. `jupyter workshop lint --platform
 windows` renders the pages as Windows would see them, which is how CI on
-Linux checks the Windows variants.
+Linux checks the Windows variants; `--platform lite` does the same for
+JupyterLite.
 
 ## Paths
 
@@ -76,6 +79,9 @@ environment variable on Linux and macOS, and PowerShell on Windows, unless
 shell to load the environment file with the right syntax (`env.sh`,
 `env.ps1` or `env.cmd`) and to print the marker that `execute` waits for
 with `:wait: prompt`.
+
+In JupyterLite terminals run cockle, a small shell described in
+[JupyterLite](lite.md); variables reach it through `export` commands.
 
 A manifest may require a shell:
 
