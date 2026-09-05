@@ -97,7 +97,18 @@ selftest-lite *args:
 lite *args:
     uv run jupyter workshop lite examples/hello-jupyterlab --out lite-site --serve "$@"
 
-# Remove build outputs.
+# Remove build outputs (compiled TypeScript, the labextension bundle, lint caches).
 clean:
     uv run jlpm clean
     uv run jlpm clean:lintcache
+
+# Return to a fresh checkout: also removes node_modules, .venv, caches, built docs and sites.
+distclean:
+    rm -rf packages/core/lib packages/labextension/lib packages/*/tsconfig.tsbuildinfo
+    rm -rf educates_jupyterlab_workshop/labextension educates_jupyterlab_workshop/nodejs educates_jupyterlab_workshop/schema
+    rm -rf .eslintcache .stylelintcache packages/core/coverage
+    rm -rf node_modules packages/*/node_modules tests/ui-tests/node_modules .venv
+    rm -rf site docs/reference build dist lite-site .jupyterlite.doit.db .coverage htmlcov
+    rm -rf tests/ui-tests/test-results tests/ui-tests/playwright-report
+    rm -rf examples/*/_workshop examples/*/scratch examples/*/demo workshops
+    find . -type d \( -name __pycache__ -o -name .ipynb_checkpoints -o -name '*.egg-info' -o -name .yarn -o -name .mypy_cache -o -name .ruff_cache -o -name .pytest_cache \) -prune -exec rm -rf {} +

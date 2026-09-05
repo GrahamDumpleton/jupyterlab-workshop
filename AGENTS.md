@@ -108,6 +108,11 @@ underlying commands yourself; run `just --list` to see everything.
   incremental build after structural changes such as renamed or removed
   pages.
 
+- `just clean` removes build outputs only. `just distclean` also removes
+  `node_modules`, `.venv`, caches, built docs and sites, and files left
+  by running the examples, returning the tree to a fresh checkout; run
+  `just install` afterwards.
+
 ## Style
 
 - Do not use emdashes in any files in this project. Rephrase with commas,
