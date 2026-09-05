@@ -12,8 +12,14 @@ import {
   showDialog,
   showErrorMessage
 } from '@jupyterlab/apputils';
-import { ServerConnection } from '@jupyterlab/services';
+import { Contents, ServerConnection } from '@jupyterlab/services';
+import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
+import {
+  FileBrowser,
+  FileDialog,
+  IDefaultFileBrowser
+} from '@jupyterlab/filebrowser';
 import { IEditorTracker } from '@jupyterlab/fileeditor';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
@@ -66,6 +72,7 @@ import {
   NotebookOpenAction,
   OutputClearAction
 } from './actions/notebook';
+import { getIfExists } from './actions/contents';
 import { ActionRegistry } from './actions/registry';
 import {
   ExecuteAction,
@@ -306,16 +313,23 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
   id: `${PLUGIN_PREFIX}:panel`,
   description: 'Shows workshop instructions in the left sidebar.',
   autoStart: true,
-  requires: [IWorkshopManager, IActionRegistry, ILabShell],
-  optional: [ISettingRegistry, ICommandPalette, ILayoutRestorer],
+  requires: [IWorkshopManager, IActionRegistry, ILabShell, IDocumentManager],
+  optional: [
+    ISettingRegistry,
+    ICommandPalette,
+    ILayoutRestorer,
+    IDefaultFileBrowser
+  ],
   activate: (
     app: JupyterFrontEnd,
     manager: IWorkshopManager,
     registry: IActionRegistry,
     shell: ILabShell,
+    docManager: IDocumentManager,
     settingRegistry: ISettingRegistry | null,
     palette: ICommandPalette | null,
-    restorer: ILayoutRestorer | null
+    restorer: ILayoutRestorer | null,
+    fileBrowser: FileBrowser | null
   ): void => {
     const panel = new WorkshopPanel({ manager, commands: app.commands });
 
@@ -333,29 +347,101 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Commands.
+    const openWorkshopAt = async (path: string): Promise<void> => {
+      // Refuse early with a clear message rather than a parse error.
+      const manifest = await getIfExists(
+        app.serviceManager.contents,
+        PathExt.join(path, 'workshop.yaml'),
+        false
+      );
+
+      if (!manifest) {
+        await showErrorMessage(
+          'Not a workshop',
+          `${path || 'The JupyterLab root'} has no workshop.yaml file.`
+        );
+
+        return;
+      }
+
+      await manager.open(path);
+      shell.activateById(panel.id);
+    };
+
     app.commands.addCommand(CommandIDs.open, {
       label: 'Open Workshop…',
-      caption: 'Open a workshop directory relative to the JupyterLab root',
+      caption: 'Choose a workshop directory to open',
       execute: async (args): Promise<void> => {
         let path = typeof args.path === 'string' ? args.path : '';
 
         if (!path) {
-          const result = await InputDialog.getText({
+          const result = await FileDialog.getExistingDirectory({
+            manager: docManager,
             title: 'Open Workshop',
-            label: 'Workshop directory (relative to the JupyterLab root)',
-            text: manager.workshop?.path ?? ''
+            label: 'Choose a directory containing a workshop.yaml file',
+            defaultPath: manager.workshop?.path
           });
+          const chosen = result.value?.[0];
 
-          if (!result.button.accept || !result.value) {
+          if (!result.button.accept || !chosen) {
             return;
           }
 
-          path = result.value;
+          path = chosen.path;
         }
 
-        await manager.open(path);
-        shell.activateById(panel.id);
+        await openWorkshopAt(path);
       }
+    });
+
+    app.commands.addCommand(CommandIDs.openPath, {
+      label: 'Open Workshop Path…',
+      caption: 'Open a workshop directory by typing its path',
+      execute: async (): Promise<void> => {
+        const result = await InputDialog.getText({
+          title: 'Open Workshop',
+          label: 'Workshop directory (relative to the JupyterLab root)',
+          text: manager.workshop?.path ?? ''
+        });
+
+        if (!result.button.accept || result.value === null) {
+          return;
+        }
+
+        await openWorkshopAt(result.value.trim());
+      }
+    });
+
+    // Right-clicking a directory in the file browser offers to open it.
+    const selectedDirectory = (): Contents.IModel | null => {
+      if (!fileBrowser) {
+        return null;
+      }
+
+      for (const item of fileBrowser.selectedItems()) {
+        return item.type === 'directory' ? item : null;
+      }
+
+      return null;
+    };
+
+    app.commands.addCommand(CommandIDs.openSelected, {
+      label: 'Open as Workshop',
+      caption: 'Open the selected directory as a workshop',
+      isVisible: () => selectedDirectory() !== null,
+      execute: async (): Promise<void> => {
+        const item = selectedDirectory();
+
+        if (item) {
+          await openWorkshopAt(item.path);
+        }
+      }
+    });
+
+    app.contextMenu.addItem({
+      command: CommandIDs.openSelected,
+      selector: '.jp-DirListing-item[data-isdir="true"]',
+      rank: 5
     });
 
     app.commands.addCommand(CommandIDs.openUrl, {
@@ -520,7 +606,10 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     if (palette) {
       for (const command of Object.values(CommandIDs)) {
-        palette.addItem({ command, category: PALETTE_CATEGORY });
+        // The context menu command only makes sense with a selection.
+        if (command !== CommandIDs.openSelected) {
+          palette.addItem({ command, category: PALETTE_CATEGORY });
+        }
       }
     }
 

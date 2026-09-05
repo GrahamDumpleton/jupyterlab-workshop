@@ -488,6 +488,8 @@ export namespace CommandIDs {
   export const variables = 'workshop:variables';
   export const showLog = 'workshop:show-log';
   export const stopChain = 'workshop:stop-chain';
+  export const openPath = 'workshop:open-path';
+  export const openSelected = 'workshop:open-selected';
   export const openUrl = 'workshop:open-url';
   export const trust = 'workshop:trust';
   export const uninstall = 'workshop:uninstall';

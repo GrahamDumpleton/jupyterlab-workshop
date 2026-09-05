@@ -27,8 +27,9 @@ terminal and refresh the browser after each rebuild.
    Workshop panel (the `panelSide` setting moves it to the left, and
    JupyterLab remembers a tab you drag to the other side). The `examples/git-basics` workshop loads automatically
    (the path is the `defaultWorkshop` setting of the extension; change it
-   under Settings, or use the folder icon in the panel header to open a
-   different workshop directory, given relative to the JupyterLab root).
+   under Settings, use the folder icon in the panel header to pick a
+   different workshop directory, or right-click a directory in the file
+   browser and choose "Open as Workshop").
 
 2. On page one, click each command block in turn. The first click starts a
    terminal named `git` in a split beneath the main area and runs the
