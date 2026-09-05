@@ -38,3 +38,5 @@ htmlcov/
 
 # Files created by running the example workshops
 examples/*/demo/
+examples/*/_workshop/
+examples/*/scratch/

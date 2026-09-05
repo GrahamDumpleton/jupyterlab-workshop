@@ -16,6 +16,13 @@ export type Variables = Record<string, string>;
 export interface ISubstituteOptions {
   /** Path separator used by the `path` filter. Defaults to `/`. */
   pathSep?: string;
+
+  /**
+   * Names that the workshop can set later, such as capture targets. A
+   * reference to one of these that has no value yet renders as empty text
+   * without a warning.
+   */
+  declared?: ReadonlySet<string>;
 }
 
 /** Result of substituting variables into a piece of text. */
@@ -57,6 +64,10 @@ export function substitute(
       }
 
       if (!(name in variables)) {
+        if (options.declared?.has(name)) {
+          return '';
+        }
+
         warnings.push(`Unknown variable "${name}"`);
         return match;
       }

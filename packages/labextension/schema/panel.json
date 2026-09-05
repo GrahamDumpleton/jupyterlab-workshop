@@ -9,6 +9,26 @@
       "title": "Default workshop",
       "description": "Directory of the workshop to open when JupyterLab starts and no workshop was open before, relative to the JupyterLab root directory. Leave empty to open nothing.",
       "default": "examples/git-basics"
+    },
+    "workshopsDirectory": {
+      "type": "string",
+      "title": "Workshops directory",
+      "description": "Directory, relative to the JupyterLab root, into which downloaded workshops are placed.",
+      "default": "workshops"
+    },
+    "defaultTrustLevel": {
+      "type": "string",
+      "title": "Default trust level",
+      "description": "Trust level applied to workshops from sources without a stored decision.",
+      "enum": ["trusted", "restricted", "ask"],
+      "default": "restricted"
+    },
+    "registries": {
+      "type": "array",
+      "title": "Workshop registries",
+      "description": "URLs of registry index files listing workshops that can be installed.",
+      "items": { "type": "string" },
+      "default": []
     }
   },
   "additionalProperties": false

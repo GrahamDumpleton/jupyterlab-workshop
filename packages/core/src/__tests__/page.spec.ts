@@ -42,6 +42,7 @@ describe('parsePage', () => {
     expect(page.title).toBe('Your first commit');
     expect(page.id).toBe('02-first-commit');
     expect(page.frontmatter.optional).toBe(true);
+    expect(page.frontmatter.requires).toEqual([]);
   });
 
   it('splits prose and directives in document order', () => {

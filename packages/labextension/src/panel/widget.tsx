@@ -3,7 +3,7 @@ import { CommandRegistry } from '@lumino/commands';
 import React from 'react';
 
 import { workshopIcon } from '../icons';
-import { IActionRegistry, IWorkshopManager } from '../tokens';
+import { IWorkshopManager } from '../tokens';
 import { WorkshopPanelComponent } from './components';
 
 /** Id of the panel widget, also used for layout restoration. */
@@ -17,7 +17,6 @@ export class WorkshopPanel extends ReactWidget {
     super();
 
     this._manager = options.manager;
-    this._registry = options.registry;
     this._commands = options.commands;
 
     this.id = PANEL_ID;
@@ -30,21 +29,18 @@ export class WorkshopPanel extends ReactWidget {
     return (
       <WorkshopPanelComponent
         manager={this._manager}
-        registry={this._registry}
         commands={this._commands}
       />
     );
   }
 
   private _manager: IWorkshopManager;
-  private _registry: IActionRegistry;
   private _commands: CommandRegistry;
 }
 
 export namespace WorkshopPanel {
   export interface IOptions {
     manager: IWorkshopManager;
-    registry: IActionRegistry;
     commands: CommandRegistry;
   }
 }

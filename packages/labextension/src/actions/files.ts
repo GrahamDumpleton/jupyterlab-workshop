@@ -1,9 +1,10 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
+import { Notification } from '@jupyterlab/apputils';
+import { CodeEditor } from '@jupyterlab/codeeditor';
 import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { DocumentRegistry, IDocumentWidget } from '@jupyterlab/docregistry';
 import { FileEditor, IEditorTracker } from '@jupyterlab/fileeditor';
-import { Contents, ServerConnection } from '@jupyterlab/services';
 
 import {
   IActionImplementation,
@@ -11,6 +12,9 @@ import {
   IActionResult,
   IWorkshopManager
 } from '../tokens';
+import { parseDuration } from '../util';
+import { ensureDirectory, getIfExists, readTextFile } from './contents';
+import { requireOption } from './registry';
 import { TerminalSessions } from './terminal';
 
 /** Widget factory name of the JupyterLab text editor. */
@@ -20,13 +24,20 @@ const EDITOR_FACTORY = 'Editor';
 export interface IFileActionContext {
   app: JupyterFrontEnd;
   docManager: IDocumentManager;
-  editorTracker: IEditorTracker;
+  editorTracker: IEditorTracker | null;
   manager: IWorkshopManager;
   terminals: TerminalSessions;
 }
 
+/** A located piece of text in a document. */
+interface ITextSpan {
+  start: number;
+  end: number;
+}
+
 /**
- * The `file-write` action: write the body to a file inside the workshop.
+ * The `file-write` action: write the body, or a file shipped with the
+ * workshop, to a file inside the workshop.
  */
 export class FileWriteAction implements IActionImplementation {
   readonly type = 'file-write';
@@ -47,7 +58,18 @@ export class FileWriteAction implements IActionImplementation {
     const serverPath = this._context.manager.resolvePath(path);
     const mode = request.options.mode ?? 'overwrite';
     const contents = this._context.app.serviceManager.contents;
-    let content = withTrailingNewline(request.body);
+
+    // The content comes from the body or from a file in the workshop.
+    let content: string;
+
+    if (request.options.from) {
+      content = await readTextFile(
+        contents,
+        this._context.manager.resolvePath(request.options.from)
+      );
+    } else {
+      content = withTrailingNewline(request.body);
+    }
 
     // Honour the write mode against what is already on disk.
     const existing = await getIfExists(contents, serverPath, mode === 'append');
@@ -110,7 +132,8 @@ export class FileOpenAction implements IActionImplementation {
     const path = requireOption(request, 'path');
     const widget = await openEditor(
       this._context,
-      this._context.manager.resolvePath(path)
+      this._context.manager.resolvePath(path),
+      request.options.split
     );
 
     if (request.options.line) {
@@ -158,7 +181,6 @@ export class EditorInsertAction implements IActionImplementation {
       this._context,
       this._context.manager.resolvePath(path)
     );
-
     const editor = widget.content.editor;
     const sharedModel = widget.content.model.sharedModel;
     const source = sharedModel.getSource();
@@ -184,18 +206,234 @@ export class EditorInsertAction implements IActionImplementation {
       const separator = source.length > 0 && !source.endsWith('\n') ? '\n' : '';
 
       sharedModel.updateSource(source.length, source.length, separator + text);
-      lineIndex = editor.lineCount - 1 - countLines(text) + 1;
+      lineIndex = editor.lineCount - countLines(text);
     } else {
       const offset = editor.getOffsetAt({ line: lineIndex, column: 0 });
 
       sharedModel.updateSource(offset, offset, text);
     }
 
-    if (request.options.save !== 'false') {
-      await widget.context.save();
+    await saveIfWanted(widget, request);
+    revealLine(widget, Math.max(0, lineIndex));
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `editor-replace` action: replace text matching a pattern with the
+ * body, through the editor, and save.
+ */
+export class EditorReplaceAction implements IActionImplementation {
+  readonly type = 'editor-replace';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Replace "${request.options.match ?? ''}" in ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+    const match = requireOption(request, 'match');
+    const widget = await openEditor(
+      this._context,
+      this._context.manager.resolvePath(path)
+    );
+    const sharedModel = widget.content.model.sharedModel;
+    const spans = findSpans(sharedModel.getSource(), match, request.options);
+
+    if (spans.length === 0) {
+      return {
+        status: 'error',
+        message: `"${match}" was not found in ${path}`
+      };
     }
 
-    revealLine(widget, Math.max(0, lineIndex));
+    // Replace from the end so earlier offsets stay valid.
+    const replacement = request.body.replace(/\r\n/g, '\n').replace(/\n$/, '');
+    const targets = request.options.all === 'true' ? spans : spans.slice(0, 1);
+
+    for (const span of [...targets].reverse()) {
+      sharedModel.updateSource(span.start, span.end, replacement);
+    }
+
+    await saveIfWanted(widget, request);
+    revealOffset(widget, targets[0].start);
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `editor-select` action: select matching text or a line.
+ */
+export class EditorSelectAction implements IActionImplementation {
+  readonly type = 'editor-select';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Select in ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const widget = await openEditor(
+      this._context,
+      this._context.manager.resolvePath(requireOption(request, 'path'))
+    );
+    const range = findRange(widget, request);
+
+    if (!range) {
+      return { status: 'error', message: 'Nothing to select was found' };
+    }
+
+    widget.content.editor.setSelection(range);
+    widget.content.editor.revealPosition(range.start);
+    widget.content.editor.focus();
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `editor-highlight` action: select matching text briefly.
+ */
+export class EditorHighlightAction implements IActionImplementation {
+  readonly type = 'editor-highlight';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Highlight in ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const widget = await openEditor(
+      this._context,
+      this._context.manager.resolvePath(requireOption(request, 'path'))
+    );
+    const range = findRange(widget, request);
+
+    if (!range) {
+      return { status: 'error', message: 'Nothing to highlight was found' };
+    }
+
+    const editor = widget.content.editor;
+
+    editor.setSelection(range);
+    editor.revealPosition(range.start);
+
+    window.setTimeout(
+      () => {
+        if (!widget.isDisposed) {
+          editor.setCursorPosition(range.start);
+        }
+      },
+      parseDuration(request.options.duration, 3000)
+    );
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `file-browser-reveal` action: show a path in the file browser.
+ */
+export class FileBrowserRevealAction implements IActionImplementation {
+  readonly type = 'file-browser-reveal';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Show ${request.options.path ?? '(no path)'} in the file browser`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = this._context.manager.resolvePath(request.options.path ?? '.');
+
+    await this._context.app.commands.execute('filebrowser:go-to-path', {
+      path
+    });
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `download` action: download a workshop file to the learner's machine.
+ */
+export class DownloadAction implements IActionImplementation {
+  readonly type = 'download';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Download ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = this._context.manager.resolvePath(
+      requireOption(request, 'path')
+    );
+    const url =
+      await this._context.app.serviceManager.contents.getDownloadUrl(path);
+
+    window.open(url, '_blank', 'noopener');
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `upload-prompt` action: show a directory and ask the learner to use
+ * the file browser's upload button.
+ */
+export class UploadPromptAction implements IActionImplementation {
+  readonly type = 'upload-prompt';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Ask for an upload into ${request.options.path ?? '.'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = this._context.manager.resolvePath(request.options.path ?? '.');
+
+    await this._context.app.commands.execute('filebrowser:go-to-path', {
+      path
+    });
+    Notification.info(
+      `Use the upload button in the file browser to add files to ${path}`,
+      {
+        autoClose: 6000
+      }
+    );
 
     return { status: 'ok' };
   }
@@ -212,10 +450,11 @@ export class EditorInsertAction implements IActionImplementation {
  */
 export async function openEditor(
   context: IFileActionContext,
-  serverPath: string
+  serverPath: string,
+  split?: string
 ): Promise<IDocumentWidget<FileEditor>> {
   const existing = findEditor(context.docManager, serverPath);
-  const options = existing ? undefined : placementFor(context);
+  const options = existing ? undefined : placementFor(context, split);
   const widget = context.docManager.openOrReveal(
     serverPath,
     EDITOR_FACTORY,
@@ -241,10 +480,17 @@ export async function openEditor(
 }
 
 function placementFor(
-  context: IFileActionContext
+  context: IFileActionContext,
+  split?: string
 ): DocumentRegistry.IOpenOptions | undefined {
+  const current = context.app.shell.currentWidget;
+
+  if ((split === 'right' || split === 'bottom') && current) {
+    return { mode: `split-${split}`, ref: current.id };
+  }
+
   // Keep documents together as tabs, above the first workshop terminal.
-  const editor = context.editorTracker.currentWidget;
+  const editor = context.editorTracker?.currentWidget;
 
   if (editor && !editor.isDisposed) {
     return { mode: 'tab-after', ref: editor.id };
@@ -285,67 +531,92 @@ function revealLine(
   editor.revealPosition({ line, column: 0 });
 }
 
-async function getIfExists(
-  contents: Contents.IManager,
-  path: string,
-  withContent: boolean
-): Promise<Contents.IModel | null> {
-  try {
-    return await contents.get(path, { content: withContent });
-  } catch (error) {
-    if (
-      error instanceof ServerConnection.ResponseError &&
-      error.response.status === 404
-    ) {
-      return null;
-    }
+function revealOffset(
+  widget: IDocumentWidget<FileEditor>,
+  offset: number
+): void {
+  const editor = widget.content.editor;
+  const position = editor.getPositionAt(offset);
 
-    throw error;
+  if (position) {
+    editor.setCursorPosition(position);
+    editor.revealPosition(position);
   }
 }
 
-/**
- * Create a directory and any missing parents through the contents API.
- */
-export async function ensureDirectory(
-  contents: Contents.IManager,
-  path: string
+async function saveIfWanted(
+  widget: IDocumentWidget<FileEditor>,
+  request: IActionRequest
 ): Promise<void> {
-  if (path === '' || path === '.') {
-    return;
+  if (request.options.save !== 'false') {
+    await widget.context.save();
   }
-
-  const existing = await getIfExists(contents, path, false);
-
-  if (existing) {
-    if (existing.type !== 'directory') {
-      throw new Error(`${path} exists and is not a directory`);
-    }
-
-    return;
-  }
-
-  const parent = PathExt.dirname(path);
-
-  await ensureDirectory(contents, parent);
-
-  // The contents API only creates untitled directories, so rename one.
-  const created = await contents.newUntitled({
-    type: 'directory',
-    path: parent
-  });
-
-  await contents.rename(created.path, path);
 }
 
-function requireOption(request: IActionRequest, name: string): string {
-  const value = request.options[name];
+function findSpans(
+  source: string,
+  match: string,
+  options: Record<string, string>
+): ITextSpan[] {
+  const spans: ITextSpan[] = [];
 
-  if (!value) {
-    throw new Error(`The ${request.type} action needs a "${name}" option`);
+  if (options.regex === 'true') {
+    const pattern = new RegExp(match, 'g');
+    let found: RegExpExecArray | null;
+
+    while ((found = pattern.exec(source)) !== null) {
+      spans.push({ start: found.index, end: found.index + found[0].length });
+
+      if (found[0].length === 0) {
+        pattern.lastIndex += 1;
+      }
+    }
+
+    return spans;
   }
 
-  return value;
+  let index = source.indexOf(match);
+
+  while (index >= 0) {
+    spans.push({ start: index, end: index + match.length });
+    index = source.indexOf(match, index + Math.max(match.length, 1));
+  }
+
+  return spans;
+}
+
+function findRange(
+  widget: IDocumentWidget<FileEditor>,
+  request: IActionRequest
+): CodeEditor.IRange | undefined {
+  const editor = widget.content.editor;
+
+  if (request.options.match) {
+    const source = widget.content.model.sharedModel.getSource();
+    const [span] = findSpans(source, request.options.match, request.options);
+
+    if (!span) {
+      return undefined;
+    }
+
+    const start = editor.getPositionAt(span.start);
+    const end = editor.getPositionAt(span.end);
+
+    return start && end ? { start, end } : undefined;
+  }
+
+  const line = parseLine(request.options.line ?? '');
+
+  if (line === undefined || line > editor.lineCount) {
+    return undefined;
+  }
+
+  const text = editor.getLine(line - 1) ?? '';
+
+  return {
+    start: { line: line - 1, column: 0 },
+    end: { line: line - 1, column: text.length }
+  };
 }
 
 function parseLine(value: string): number | undefined {

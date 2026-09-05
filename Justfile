@@ -44,9 +44,9 @@ test-core *args:
 test-python *args:
     uv run pytest "$@"
 
-# Run the Galata browser tests against a real JupyterLab (slow).
+# Run the Galata browser tests against a real JupyterLab on port 8890 (slow).
 test-ui *args:
-    cd tests/ui-tests && uv run jlpm install && uv run jlpm playwright test "$@"
+    cd tests/ui-tests && uv run jlpm install && JUPYTER_PORT=8890 uv run jlpm playwright test "$@"
 
 # Check TypeScript with eslint and prettier, and Python with ruff.
 lint:

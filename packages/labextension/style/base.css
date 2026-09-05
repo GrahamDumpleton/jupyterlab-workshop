@@ -264,3 +264,156 @@
   box-shadow: var(--jp-elevation-z4);
   pointer-events: none;
 }
+
+/* Phase 1 additions: badges, pulse, hints, choices, dialogs and log. */
+
+.jp-WorkshopPanel-badge {
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+  text-transform: uppercase;
+}
+
+.jp-WorkshopPanel-action.jp-mod-pulse {
+  animation: jp-workshop-pulse 1.5s ease;
+}
+
+@keyframes jp-workshop-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--jp-brand-color1);
+  }
+
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+.jp-WorkshopPanel-actionOutput {
+  margin: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--jp-border-color3);
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color2);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  white-space: pre-wrap;
+}
+
+.jp-WorkshopPanel-hint {
+  margin: 0 0 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-info-color1);
+  border-radius: 3px;
+}
+
+.jp-WorkshopPanel-hint summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.jp-WorkshopPanel-choice {
+  cursor: default;
+}
+
+.jp-WorkshopPanel-choiceText {
+  padding: 6px 8px;
+}
+
+.jp-WorkshopPanel-choiceOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.jp-WorkshopPanel-doneButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jp-WorkshopPanel-doneButton.jp-mod-done {
+  color: var(--jp-success-color1);
+}
+
+.jp-Workshop-callout.jp-mod-interactive {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jp-Workshop-calloutButton {
+  padding: 2px 8px;
+  border: 1px solid var(--jp-ui-inverse-font-color1);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--jp-ui-inverse-font-color1);
+  cursor: pointer;
+}
+
+/* Variables dialog. */
+
+.jp-WorkshopVariables-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.jp-WorkshopVariables-row label {
+  display: flex;
+  flex-direction: column;
+}
+
+.jp-WorkshopVariables-description,
+.jp-WorkshopVariables-value {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopVariables-builtins {
+  margin-top: 8px;
+}
+
+/* Action log. */
+
+.jp-WorkshopLog {
+  padding: 12px;
+  overflow: auto;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopLog-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.jp-WorkshopLog-table th,
+.jp-WorkshopLog-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--jp-border-color2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.jp-WorkshopLog-table tr.jp-mod-error td {
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopLog-message {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+  white-space: pre-wrap;
+}
+
+.jp-Workshop-role-var.jp-mod-unset {
+  color: var(--jp-ui-font-color3);
+  font-style: italic;
+}

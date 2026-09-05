@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
 
+import { ACTION_TYPES, STRUCTURE_DIRECTIVES } from '../actions/catalog';
 import {
   parseDirectiveContent,
   parseDirectiveInfo
@@ -27,6 +28,9 @@ export interface IRenderEnv {
   /** Path separator used by the `path` filter. */
   pathSep: string;
 
+  /** Names the workshop can set later; see `ISubstituteOptions.declared`. */
+  declared: ReadonlySet<string>;
+
   /** Problems found while parsing, in page order. */
   warnings: string[];
 
@@ -37,6 +41,7 @@ export interface IRenderEnv {
 /** Metadata attached to a directive token. */
 export interface IDirectiveMeta {
   name: string;
+  argument: string;
   id: string;
   options: Record<string, string>;
   body: string;
@@ -79,9 +84,17 @@ export function createMarkdownParser(): MarkdownIt {
 export function createRenderEnv(
   pageId: string,
   variables: Variables,
-  pathSep = '/'
+  pathSep = '/',
+  declared: ReadonlySet<string> = new Set()
 ): IRenderEnv {
-  return { pageId, variables, pathSep, warnings: [], directiveCount: 0 };
+  return {
+    pageId,
+    variables,
+    pathSep,
+    declared,
+    warnings: [],
+    directiveCount: 0
+  };
 }
 
 function directiveRule(state: MarkdownIt.StateCore): void {
@@ -92,27 +105,28 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       continue;
     }
 
-    const name = parseDirectiveInfo(token.info);
+    const info = parseDirectiveInfo(token.info);
 
-    if (name === null) {
+    if (info === null) {
       continue;
     }
 
     // Directives nested inside lists or quotes are left as code blocks.
     if (token.level !== 0) {
       env.warnings.push(
-        `Line ${lineOf(token)}: directive "${name}" is nested inside other content and was not recognised`
+        `Line ${lineOf(token)}: directive "${info.name}" is nested inside other content and was not recognised`
       );
       continue;
     }
 
     const { options, body } = parseDirectiveContent(token.content);
 
-    env.directiveCount += 1;
-
+    // Ids are assigned later, in document order, once nested content has
+    // been parsed; see `assignDirectiveId`.
     const meta: IDirectiveMeta = {
-      name,
-      id: options.id ?? `${env.pageId}-${env.directiveCount}`,
+      name: info.name,
+      argument: info.argument,
+      id: options.id ?? '',
       options,
       body
     };
@@ -120,6 +134,23 @@ function directiveRule(state: MarkdownIt.StateCore): void {
     token.type = DIRECTIVE_TOKEN;
     token.meta = meta;
   }
+}
+
+/**
+ * Give a directive its stable id: the explicit `:id:` option, or the page
+ * id followed by the directive's position on the page. Structural
+ * directives such as `when` do not consume positions.
+ */
+export function assignDirectiveId(
+  meta: IDirectiveMeta,
+  env: IRenderEnv
+): string {
+  if (meta.id === '' && !STRUCTURE_DIRECTIVES.has(meta.name)) {
+    env.directiveCount += 1;
+    meta.id = `${env.pageId}-${env.directiveCount}`;
+  }
+
+  return meta.id;
 }
 
 function roleRule(state: MarkdownIt.StateInline, silent: boolean): boolean {
@@ -173,7 +204,10 @@ function substituteRule(state: MarkdownIt.StateCore): void {
   const env = state.env as IRenderEnv;
 
   const apply = (text: string): string => {
-    const result = substitute(text, env.variables, { pathSep: env.pathSep });
+    const result = substitute(text, env.variables, {
+      pathSep: env.pathSep,
+      declared: env.declared
+    });
 
     env.warnings.push(...result.warnings);
 
@@ -183,7 +217,17 @@ function substituteRule(state: MarkdownIt.StateCore): void {
   for (const token of state.tokens) {
     if (token.type === 'inline' && token.children) {
       for (const child of token.children) {
-        if (
+        if (child.type === ROLE_TOKEN && child.meta.name === 'var') {
+          // The var role shows a variable's value rather than its name. A
+          // declared variable with no value yet shows its name, muted.
+          const name = child.content;
+
+          if (!(name in env.variables) && env.declared.has(name)) {
+            child.meta = { name: 'var', unset: true };
+          } else {
+            child.content = apply(`{{ ${name} }}`);
+          }
+        } else if (
           child.type === 'text' ||
           child.type === 'code_inline' ||
           child.type === ROLE_TOKEN
@@ -204,7 +248,10 @@ function substituteRule(state: MarkdownIt.StateCore): void {
         meta.options[key] = apply(meta.options[key]);
       }
 
-      meta.body = apply(meta.body);
+      // Markdown bodies are substituted when they are rendered.
+      if (ACTION_TYPES[meta.name]?.body !== 'markdown') {
+        meta.body = apply(meta.body);
+      }
     }
   }
 }
@@ -213,6 +260,13 @@ const renderRole: MarkdownIt.Renderer.RenderRule = (tokens, idx) => {
   const token = tokens[idx];
   const name = escapeHtml(String((token.meta as { name: string }).name));
   const value = escapeHtml(token.content);
+
+  if (name === 'var') {
+    const unset = (token.meta as { unset?: boolean }).unset === true;
+    const modifier = unset ? ' jp-mod-unset" title="Not set yet' : '';
+
+    return `<code class="${ROLE_CLASS} ${ROLE_CLASS}-var${modifier}">${value}</code>`;
+  }
 
   return (
     `<button type="button" class="${ROLE_CLASS} ${ROLE_CLASS}-${name}" ` +

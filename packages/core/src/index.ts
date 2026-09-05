@@ -5,4 +5,6 @@ export * from './format/frontmatter';
 export * from './format/manifest';
 export * from './format/page';
 export * from './markdown/parser';
+export * from './variables/expressions';
 export * from './variables/substitute';
+export * from './variables/envfile';

@@ -7,10 +7,38 @@ name: git-basics
 title: Git from the command line
 version: 1.2.0
 tags: [git, cli]
+capabilities:
+  - terminal
+  - write-files: [workspace]
+  - network: [github.com, pypi.org]
+requires:
+  tools:
+    - { name: git, version: ">=2.30", hint: { macos: "brew install git" } }
+    - { name: python, optional: true }
+  shell: bash
+environment:
+  requirements: requirements.txt
+  kernel: workshop-git
+layout: default
+layouts:
+  default:
+    left: instructions
+    main:
+      - { area: top, widgets: [editor] }
+      - { area: bottom, widgets: ["terminal:workshop"], size: 0.35 }
+gating: soft
+tracks:
+  - { id: pip, label: pip }
+  - { id: conda }
+defaults:
+  actions:
+    delay: 1s
 pages:
   - pages/01-init.md
 variables:
   - { name: repo_dir, type: path, default: demo }
+  - { name: token, type: secret, required: true }
+  - { name: pkg, type: select, options: [pip, conda] }
 `;
 
 describe('parseManifest', () => {
@@ -23,6 +51,41 @@ describe('parseManifest', () => {
     expect(manifest.tags).toEqual(['git', 'cli']);
     expect(manifest.authors).toEqual([]);
     expect(manifest.pages).toEqual(['pages/01-init.md']);
+    expect(manifest.capabilities).toEqual([
+      'terminal',
+      'write-files:workspace',
+      'network:github.com',
+      'network:pypi.org'
+    ]);
+    expect(manifest.requires.shell).toBe('bash');
+    expect(manifest.requires.tools).toEqual([
+      {
+        name: 'git',
+        version: '>=2.30',
+        optional: false,
+        hint: { macos: 'brew install git' }
+      },
+      { name: 'python', version: undefined, optional: true, hint: {} }
+    ]);
+    expect(manifest.environment).toEqual({
+      requirements: 'requirements.txt',
+      kernel: 'workshop-git'
+    });
+    expect(manifest.layout).toBe('default');
+    expect(manifest.layouts.default).toEqual({
+      left: 'instructions',
+      right: undefined,
+      main: [
+        { area: 'top', widgets: ['editor'], size: undefined },
+        { area: 'bottom', widgets: ['terminal:workshop'], size: 0.35 }
+      ]
+    });
+    expect(manifest.gating).toBe('soft');
+    expect(manifest.tracks).toEqual([
+      { id: 'pip', label: 'pip' },
+      { id: 'conda', label: 'conda' }
+    ]);
+    expect(manifest.defaults).toEqual({ delay: '1s' });
     expect(manifest.variables).toEqual([
       {
         name: 'repo_dir',
@@ -30,9 +93,42 @@ describe('parseManifest', () => {
         description: undefined,
         default: 'demo',
         required: false,
-        readonly: false
+        readonly: false,
+        secret: false,
+        options: []
+      },
+      {
+        name: 'token',
+        type: 'secret',
+        description: undefined,
+        default: undefined,
+        required: true,
+        readonly: false,
+        secret: true,
+        options: []
+      },
+      {
+        name: 'pkg',
+        type: 'select',
+        description: undefined,
+        default: undefined,
+        required: false,
+        readonly: false,
+        secret: false,
+        options: ['pip', 'conda']
       }
     ]);
+  });
+
+  it('fills defaults for a minimal manifest', () => {
+    const manifest = parseManifest(
+      'apiVersion: workshop.educates.dev/v1alpha1\nname: x\ntitle: X\npages: [a.md]\n'
+    );
+
+    expect(manifest.gating).toBe('off');
+    expect(manifest.layouts).toEqual({});
+    expect(manifest.requires).toEqual({ tools: [] });
+    expect(manifest.environment).toBeUndefined();
   });
 
   it('rejects missing or invalid fields', () => {
@@ -46,5 +142,14 @@ describe('parseManifest', () => {
     expect(() =>
       parseManifest(VALID.replace('  - pages/01-init.md\n', ''))
     ).toThrow(/pages/);
+    expect(() =>
+      parseManifest(VALID.replace('gating: soft', 'gating: maybe'))
+    ).toThrow(/gating/);
+    expect(() =>
+      parseManifest(VALID.replace('type: path', 'type: colour'))
+    ).toThrow(/unknown type/);
+    expect(() =>
+      parseManifest(VALID.replace('area: top', 'area: middle'))
+    ).toThrow(/Layout/);
   });
 });

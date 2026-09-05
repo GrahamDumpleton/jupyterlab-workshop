@@ -25,6 +25,16 @@ interface IExposedApp {
 test.describe('workshop panel', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
     await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+
+    // A development session may have left runtime directories in the
+    // example; they must not leak into the test.
+    for (const name of ['_workshop', 'scratch', 'demo']) {
+      const directory = `${tmpPath}/${WORKSHOP}/${name}`;
+
+      if (await page.contents.directoryExists(directory)) {
+        await page.contents.deleteDirectory(directory);
+      }
+    }
   });
 
   test('walks through the start of git-basics', async ({ page, tmpPath }) => {
@@ -56,7 +66,7 @@ test.describe('workshop panel', () => {
     await expect(actions.first()).toContainText('git --version');
     await actions.first().click();
     await expect(actions.first()).toHaveClass(/jp-mod-status-ok/);
-    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    await expect(page.locator('.jp-Terminal').first()).toBeVisible();
 
     await expect(actions.nth(1)).toContainText('git init -b main demo');
     await actions.nth(1).click();

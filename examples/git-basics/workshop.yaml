@@ -7,6 +7,19 @@ authors: [Graham Dumpleton]
 tags: [git, cli, beginner]
 duration: 30m
 platforms: [linux, macos]
+capabilities:
+  - terminal
+  - write-files: [workspace]
+requires:
+  tools:
+    - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git" } }
+  shell: bash
+layout: default
+layouts:
+  default:
+    left: instructions
+    main:
+      - { area: bottom, widgets: ["terminal:git"] }
 variables:
   - name: repo_dir
     type: path

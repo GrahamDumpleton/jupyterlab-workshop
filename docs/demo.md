@@ -48,11 +48,20 @@ terminal and refresh the browser after each rebuild.
 6. Use the arrows or the page dropdown to move between pages. Reload the
    browser tab: the panel reopens on the same page.
 
+## The hello-jupyterlab workshop
+
+Use the folder icon in the panel header and enter `examples/hello-jupyterlab`
+to open the second example. It exercises notebooks, kernels, the interface,
+files, variables, tracks and automatic runs, and its files land in
+`examples/hello-jupyterlab/scratch`, which git ignores.
+
 ## Reset
 
-The workshop creates `examples/git-basics/demo`, which is ignored by git.
-Delete it to start again:
+The workshop creates `examples/git-basics/demo`, and the extension keeps
+its progress, action log and environment files in
+`examples/git-basics/_workshop`. Both are ignored by git. Delete them to
+start again:
 
 ```
-rm -rf examples/git-basics/demo
+rm -rf examples/git-basics/demo examples/git-basics/_workshop
 ```

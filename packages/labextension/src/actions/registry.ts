@@ -47,23 +47,25 @@ export class ActionRegistry implements IActionRegistry {
 }
 
 /**
- * Parse a duration such as `1500ms`, `2s` or `3` (seconds) into milliseconds.
+ * Return a required option or throw a readable error.
  */
-export function parseDuration(
-  value: string | undefined,
-  fallbackMs: number
-): number {
-  if (value === undefined || value.trim() === '') {
-    return fallbackMs;
+export function requireOption(request: IActionRequest, name: string): string {
+  const value = request.options[name];
+
+  if (!value) {
+    throw new Error(`The ${request.type} action needs a "${name}" option`);
   }
 
-  const match = /^(\d+(?:\.\d+)?)\s*(ms|s)?$/.exec(value.trim());
+  return value;
+}
 
-  if (!match) {
-    return fallbackMs;
+/**
+ * Return the request body or throw when it is empty.
+ */
+export function requireBody(request: IActionRequest, what = 'a body'): string {
+  if (request.body.trim() === '') {
+    throw new Error(`The ${request.type} action needs ${what}`);
   }
 
-  const amount = Number(match[1]);
-
-  return match[2] === 'ms' ? amount : amount * 1000;
+  return request.body;
 }

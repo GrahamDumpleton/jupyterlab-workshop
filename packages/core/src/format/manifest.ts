@@ -6,15 +6,72 @@ import { isRecord, isStringArray } from '../util';
 /** The manifest API version this package understands. */
 export const MANIFEST_API_VERSION = 'workshop.educates.dev/v1alpha1';
 
+/** Field types a variable may declare. */
+export type VariableType =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'multiselect'
+  | 'secret'
+  | 'path'
+  | 'url'
+  | 'email';
+
 /** A variable declared in the workshop manifest. */
 export interface IVariableDefinition {
   name: string;
-  type?: string;
+  type: VariableType;
   description?: string;
   default?: string;
-  required?: boolean;
-  readonly?: boolean;
+  required: boolean;
+  readonly: boolean;
+  secret: boolean;
+  options: string[];
 }
+
+/** A track learners can choose between. */
+export interface ITrack {
+  id: string;
+  label: string;
+}
+
+/** A tool the workshop needs on the machine. */
+export interface IToolRequirement {
+  name: string;
+  version?: string;
+  optional: boolean;
+  hint: Record<string, string>;
+}
+
+/** Preflight requirements. */
+export interface IRequirements {
+  tools: IToolRequirement[];
+  shell?: string;
+}
+
+/** Optional isolated environment. */
+export interface IEnvironment {
+  requirements?: string;
+  kernel?: string;
+}
+
+/** One region of a named layout. */
+export interface ILayoutArea {
+  area: 'top' | 'bottom' | 'left' | 'right';
+  widgets: string[];
+  size?: number;
+}
+
+/** A named arrangement of JupyterLab panels. */
+export interface ILayoutSpec {
+  left?: string;
+  right?: string;
+  main: ILayoutArea[];
+}
+
+/** Gating policy for moving between pages. */
+export type GatingPolicy = 'off' | 'soft' | 'strict';
 
 /** The parsed contents of a `workshop.yaml` manifest. */
 export interface IWorkshopManifest {
@@ -27,11 +84,40 @@ export interface IWorkshopManifest {
   authors: string[];
   tags: string[];
   platforms: string[];
-  pages: string[];
+  capabilities: string[];
+  requires: IRequirements;
+  environment?: IEnvironment;
   variables: IVariableDefinition[];
+  layout?: string;
+  layouts: Record<string, ILayoutSpec>;
+  gating: GatingPolicy;
+  tracks: ITrack[];
+  pages: string[];
+
+  /** Default option values for action directives, keyed by option name. */
+  defaults: Record<string, string>;
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
+
+const VARIABLE_TYPES: ReadonlySet<string> = new Set([
+  'text',
+  'number',
+  'boolean',
+  'select',
+  'multiselect',
+  'secret',
+  'path',
+  'url',
+  'email'
+]);
+
+const LAYOUT_AREAS: ReadonlySet<string> = new Set([
+  'top',
+  'bottom',
+  'left',
+  'right'
+]);
 
 /**
  * Parse and validate the YAML source of a workshop manifest.
@@ -75,6 +161,15 @@ export function parseManifest(
     );
   }
 
+  const gating = optionalString(data, 'gating', path) ?? 'off';
+
+  if (gating !== 'off' && gating !== 'soft' && gating !== 'strict') {
+    throw new WorkshopFormatError(
+      `Field "gating" must be one of off, soft or strict, not "${gating}"`,
+      path
+    );
+  }
+
   return {
     apiVersion,
     name,
@@ -85,8 +180,16 @@ export function parseManifest(
     authors: optionalStringList(data, 'authors', path),
     tags: optionalStringList(data, 'tags', path),
     platforms: optionalStringList(data, 'platforms', path),
+    capabilities: parseCapabilities(data.capabilities, path),
+    requires: parseRequirements(data.requires, path),
+    environment: parseEnvironment(data.environment, path),
+    variables: parseVariables(data.variables, path),
+    layout: optionalString(data, 'layout', path),
+    layouts: parseLayouts(data.layouts, path),
+    gating,
+    tracks: parseTracks(data.tracks, path),
     pages,
-    variables: parseVariables(data.variables, path)
+    defaults: parseDefaults(data.defaults, path)
   };
 }
 
@@ -146,6 +249,111 @@ function optionalStringList(
   return value;
 }
 
+function parseCapabilities(value: unknown, path: string): string[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new WorkshopFormatError('Field "capabilities" must be a list', path);
+  }
+
+  // Entries are either `name` or `{ name: [scopes] }`, flattened to
+  // `name:scope` strings.
+  const capabilities: string[] = [];
+
+  for (const item of value) {
+    if (typeof item === 'string') {
+      capabilities.push(item);
+    } else if (isRecord(item) && Object.keys(item).length === 1) {
+      const [key, scopes] = Object.entries(item)[0];
+      const list = Array.isArray(scopes) ? scopes : [scopes];
+
+      for (const scope of list) {
+        capabilities.push(`${key}:${String(scope)}`);
+      }
+    } else {
+      throw new WorkshopFormatError(
+        'Each capability must be a name or a single-key mapping of name to scopes',
+        path
+      );
+    }
+  }
+
+  return capabilities;
+}
+
+function parseRequirements(value: unknown, path: string): IRequirements {
+  if (value === undefined || value === null) {
+    return { tools: [] };
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "requires" must be a mapping', path);
+  }
+
+  const tools: IToolRequirement[] = [];
+  const rawTools = value.tools;
+
+  if (rawTools !== undefined && rawTools !== null) {
+    if (!Array.isArray(rawTools)) {
+      throw new WorkshopFormatError(
+        'Field "requires.tools" must be a list',
+        path
+      );
+    }
+
+    for (const item of rawTools) {
+      if (!isRecord(item) || typeof item.name !== 'string') {
+        throw new WorkshopFormatError(
+          'Each entry of "requires.tools" needs a "name"',
+          path
+        );
+      }
+
+      const hint: Record<string, string> = {};
+
+      if (isRecord(item.hint)) {
+        for (const [key, text] of Object.entries(item.hint)) {
+          hint[key] = String(text);
+        }
+      } else if (typeof item.hint === 'string') {
+        hint.default = item.hint;
+      }
+
+      tools.push({
+        name: item.name,
+        version: typeof item.version === 'string' ? item.version : undefined,
+        optional: item.optional === true,
+        hint
+      });
+    }
+  }
+
+  return { tools, shell: optionalString(value, 'shell', path) };
+}
+
+function parseEnvironment(
+  value: unknown,
+  path: string
+): IEnvironment | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError(
+      'Field "environment" must be a mapping',
+      path
+    );
+  }
+
+  return {
+    requirements: optionalString(value, 'requirements', path),
+    kernel: optionalString(value, 'kernel', path)
+  };
+}
+
 function parseVariables(value: unknown, path: string): IVariableDefinition[] {
   if (value === undefined || value === null) {
     return [];
@@ -163,14 +371,138 @@ function parseVariables(value: unknown, path: string): IVariableDefinition[] {
       );
     }
 
+    const type = typeof item.type === 'string' ? item.type : 'text';
+
+    if (!VARIABLE_TYPES.has(type)) {
+      throw new WorkshopFormatError(
+        `Variable "${item.name}" has unknown type "${type}"`,
+        path
+      );
+    }
+
     return {
       name: item.name,
-      type: typeof item.type === 'string' ? item.type : undefined,
+      type: type as VariableType,
       description:
         typeof item.description === 'string' ? item.description : undefined,
-      default: item.default === undefined ? undefined : String(item.default),
+      default:
+        item.default === undefined || item.default === null
+          ? undefined
+          : String(item.default),
       required: item.required === true,
-      readonly: item.readonly === true
+      readonly: item.readonly === true,
+      secret: item.secret === true || type === 'secret',
+      options: isStringArray(item.options) ? item.options : []
     };
   });
+}
+
+function parseLayouts(
+  value: unknown,
+  path: string
+): Record<string, ILayoutSpec> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "layouts" must be a mapping', path);
+  }
+
+  const layouts: Record<string, ILayoutSpec> = {};
+
+  for (const [name, spec] of Object.entries(value)) {
+    if (!isRecord(spec)) {
+      throw new WorkshopFormatError(`Layout "${name}" must be a mapping`, path);
+    }
+
+    const main: ILayoutArea[] = [];
+    const rawMain = spec.main;
+
+    if (rawMain !== undefined && rawMain !== null) {
+      if (!Array.isArray(rawMain)) {
+        throw new WorkshopFormatError(
+          `Layout "${name}": "main" must be a list`,
+          path
+        );
+      }
+
+      for (const item of rawMain) {
+        if (
+          !isRecord(item) ||
+          typeof item.area !== 'string' ||
+          !LAYOUT_AREAS.has(item.area) ||
+          !isStringArray(item.widgets)
+        ) {
+          throw new WorkshopFormatError(
+            `Layout "${name}": each main entry needs an "area" of top, bottom, left or right and a "widgets" list`,
+            path
+          );
+        }
+
+        main.push({
+          area: item.area as ILayoutArea['area'],
+          widgets: item.widgets,
+          size: typeof item.size === 'number' ? item.size : undefined
+        });
+      }
+    }
+
+    layouts[name] = {
+      left: optionalString(spec, 'left', path),
+      right: optionalString(spec, 'right', path),
+      main
+    };
+  }
+
+  return layouts;
+}
+
+function parseTracks(value: unknown, path: string): ITrack[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new WorkshopFormatError('Field "tracks" must be a list', path);
+  }
+
+  return value.map((item: unknown) => {
+    if (!isRecord(item) || typeof item.id !== 'string') {
+      throw new WorkshopFormatError('Each track needs an "id"', path);
+    }
+
+    return {
+      id: item.id,
+      label: typeof item.label === 'string' ? item.label : item.id
+    };
+  });
+}
+
+function parseDefaults(value: unknown, path: string): Record<string, string> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "defaults" must be a mapping', path);
+  }
+
+  const defaults: Record<string, string> = {};
+  const actions = value.actions;
+
+  if (actions !== undefined && actions !== null) {
+    if (!isRecord(actions)) {
+      throw new WorkshopFormatError(
+        'Field "defaults.actions" must be a mapping',
+        path
+      );
+    }
+
+    for (const [key, item] of Object.entries(actions)) {
+      defaults[key] = String(item);
+    }
+  }
+
+  return defaults;
 }

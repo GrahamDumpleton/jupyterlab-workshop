@@ -37,7 +37,9 @@ extension and JupyterLab.
 - `just test-ui` installs the UI test dependencies (the first run also
   needs `uv run jlpm playwright install chromium` from `tests/ui-tests`)
   and runs the Galata tests. Build the extension first with `just build`;
-  the tests use whatever is linked into JupyterLab.
+  the tests use whatever is linked into JupyterLab. The test server runs
+  on port 8890 so it never collides with a JupyterLab started by
+  `just lab`; set `JUPYTER_PORT` to change it.
 
 ## Conventions
 

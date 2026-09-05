@@ -5,14 +5,23 @@ import {
 
 describe('parseDirectiveInfo', () => {
   it('recognises directive names in braces', () => {
-    expect(parseDirectiveInfo('{execute}')).toBe('execute');
-    expect(parseDirectiveInfo(' {file-write} ')).toBe('file-write');
+    expect(parseDirectiveInfo('{execute}')).toEqual({
+      name: 'execute',
+      argument: ''
+    });
+    expect(parseDirectiveInfo(' {file-write} ')).toEqual({
+      name: 'file-write',
+      argument: ''
+    });
+    expect(parseDirectiveInfo('{when} track == "pip" ')).toEqual({
+      name: 'when',
+      argument: 'track == "pip"'
+    });
   });
 
   it('rejects ordinary code fence info strings', () => {
     expect(parseDirectiveInfo('python')).toBeNull();
     expect(parseDirectiveInfo('{Execute}')).toBeNull();
-    expect(parseDirectiveInfo('{execute} extra')).toBeNull();
   });
 });
 

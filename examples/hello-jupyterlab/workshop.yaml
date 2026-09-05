@@ -1,0 +1,41 @@
+apiVersion: workshop.educates.dev/v1alpha1
+name: hello-jupyterlab
+title: Hello JupyterLab
+version: 0.1.0
+description: A tour of what workshop actions can do with notebooks, kernels, the interface and variables.
+authors: [Graham Dumpleton]
+tags: [jupyterlab, notebooks, demo]
+duration: 20m
+platforms: [linux, macos, windows]
+capabilities:
+  - terminal
+  - write-files: [workspace]
+  - kernel-exec
+  - auto-run
+layout: notebook
+gating: off
+tracks:
+  - { id: pip, label: pip }
+  - { id: conda, label: conda }
+variables:
+  - name: learner
+    type: text
+    default: Learner
+    description: The name used in greetings
+  - name: mood
+    type: select
+    options: [great, fine, tired]
+    description: How you are feeling today
+defaults:
+  actions:
+    delay: 1s
+pages:
+  - pages/01-welcome.md
+  - pages/02-notebooks.md
+  - pages/03-kernels.md
+  - pages/04-files.md
+  - pages/05-variables.md
+  - pages/06-pip.md
+  - pages/06-conda.md
+  - pages/07-automation.md
+  - pages/08-finish.md

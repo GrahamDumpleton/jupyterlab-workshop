@@ -11,15 +11,67 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
 
 import {
+  DownloadAction,
+  EditorHighlightAction,
   EditorInsertAction,
+  EditorReplaceAction,
+  EditorSelectAction,
+  FileBrowserRevealAction,
   FileOpenAction,
   FileWriteAction,
-  IFileActionContext
+  IFileActionContext,
+  UploadPromptAction
 } from './actions/files';
-import { CopyAction, HighlightAction, ToastAction } from './actions/guidance';
+import {
+  ChoiceAction,
+  EnvSetAction,
+  MarkDoneAction,
+  NextPageAction
+} from './actions/flow';
+import {
+  CopyAction,
+  DialogAction,
+  HighlightAction,
+  ToastAction,
+  TooltipAction,
+  TourAction
+} from './actions/guidance';
+import { WorkshopKernel } from './actions/kernel';
+import {
+  CellInsertAction,
+  CellRunAction,
+  CellSelectAction,
+  ConsoleOpenAction,
+  INotebookActionContext,
+  KernelControlAction,
+  KernelExecuteAction,
+  NotebookCreateAction,
+  NotebookOpenAction,
+  OutputClearAction
+} from './actions/notebook';
 import { ActionRegistry } from './actions/registry';
-import { ExecuteAction, TerminalSessions } from './actions/terminal';
+import {
+  ExecuteAction,
+  ExecuteCaptureAction,
+  InterruptAction,
+  SendKeyAction,
+  TerminalClearAction,
+  TerminalOpenAction,
+  TerminalSessions,
+  TerminalTypeAction
+} from './actions/terminal';
+import {
+  ActivateAction,
+  CommandAction,
+  LauncherOpenAction,
+  LayoutAction,
+  PanelCloseAction,
+  SettingsSetAction
+} from './actions/ui';
+import { LayoutManager } from './layout';
 import { WorkshopManager } from './manager';
+import { ActionLogWidget, LOG_ID } from './panel/log';
+import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { CommandIDs, IActionRegistry, IWorkshopManager } from './tokens';
 
@@ -58,31 +110,112 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
   description: 'Implements workshop actions against JupyterLab.',
   autoStart: true,
   provides: IActionRegistry,
-  requires: [IWorkshopManager, ILabShell, IDocumentManager, IEditorTracker],
+  requires: [IWorkshopManager, ILabShell, IDocumentManager],
+  optional: [IEditorTracker, ISettingRegistry],
   activate: (
     app: JupyterFrontEnd,
     manager: IWorkshopManager,
     shell: ILabShell,
     docManager: IDocumentManager,
-    editorTracker: IEditorTracker
+    editorTracker: IEditorTracker | null,
+    settingRegistry: ISettingRegistry | null
   ): IActionRegistry => {
-    const terminals = new TerminalSessions({ app, shell });
-    const context: IFileActionContext = {
+    const terminals = new TerminalSessions({ app, shell, manager });
+    const kernel = new WorkshopKernel(app, manager);
+    const layouts = new LayoutManager({
+      app,
+      shell,
+      manager,
+      terminals,
+      docManager,
+      panelId: PANEL_ID
+    });
+    const files: IFileActionContext = {
       app,
       docManager,
       editorTracker,
       manager,
       terminals
     };
+    const notebooks: INotebookActionContext = {
+      app,
+      docManager,
+      manager,
+      terminals,
+      kernel
+    };
     const registry = new ActionRegistry();
 
-    registry.register(new ExecuteAction(terminals, manager));
-    registry.register(new FileWriteAction(context));
-    registry.register(new FileOpenAction(context));
-    registry.register(new EditorInsertAction(context));
-    registry.register(new HighlightAction());
-    registry.register(new ToastAction());
-    registry.register(new CopyAction());
+    const implementations = [
+      new ExecuteAction(terminals, manager),
+      new ExecuteCaptureAction(kernel, manager),
+      new TerminalOpenAction(terminals, shell, manager),
+      new TerminalClearAction(terminals, manager),
+      new TerminalTypeAction(terminals, manager),
+      new SendKeyAction(terminals, manager),
+      new InterruptAction(terminals, manager),
+      new FileWriteAction(files),
+      new FileOpenAction(files),
+      new EditorInsertAction(files),
+      new EditorReplaceAction(files),
+      new EditorSelectAction(files),
+      new EditorHighlightAction(files),
+      new FileBrowserRevealAction(files),
+      new DownloadAction(files),
+      new UploadPromptAction(files),
+      new NotebookOpenAction(notebooks),
+      new NotebookCreateAction(notebooks),
+      new CellInsertAction(notebooks),
+      new CellRunAction(notebooks, 'one'),
+      new CellRunAction(notebooks, 'all'),
+      new CellRunAction(notebooks, 'to'),
+      new CellSelectAction(notebooks, false),
+      new CellSelectAction(notebooks, true),
+      new KernelControlAction(notebooks, 'restart'),
+      new KernelControlAction(notebooks, 'interrupt'),
+      new KernelControlAction(notebooks, 'select'),
+      new KernelExecuteAction(notebooks),
+      new ConsoleOpenAction(notebooks),
+      new OutputClearAction(notebooks),
+      new CommandAction(app),
+      new LayoutAction(layouts),
+      new ActivateAction(shell, 'panel-open'),
+      new ActivateAction(shell, 'focus'),
+      new PanelCloseAction(shell),
+      new SettingsSetAction(settingRegistry),
+      new LauncherOpenAction(app),
+      new HighlightAction(),
+      new TooltipAction(),
+      new TourAction(),
+      new ToastAction(),
+      new DialogAction(),
+      new CopyAction(),
+      new ChoiceAction(manager),
+      new EnvSetAction(manager),
+      new MarkDoneAction(manager),
+      new NextPageAction(manager)
+    ];
+
+    for (const implementation of implementations) {
+      registry.register(implementation);
+    }
+
+    manager.registry = registry;
+
+    // Keep open terminals in step with the variables.
+    manager.environmentChanged.connect(() => terminals.refreshEnvironment());
+
+    // Shut the hidden kernel down when the workshop closes.
+    let openPath: string | null = null;
+
+    manager.changed.connect(() => {
+      const path = manager.workshop?.path ?? null;
+
+      if (path !== openPath) {
+        openPath = path;
+        void kernel.shutdown();
+      }
+    });
 
     return registry;
   }
@@ -107,11 +240,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     palette: ICommandPalette | null,
     restorer: ILayoutRestorer | null
   ): void => {
-    const panel = new WorkshopPanel({
-      manager,
-      registry,
-      commands: app.commands
-    });
+    const panel = new WorkshopPanel({ manager, commands: app.commands });
 
     shell.add(panel, 'left', { rank: 600 });
 
@@ -163,11 +292,70 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       execute: () => manager.previous()
     });
 
+    app.commands.addCommand(CommandIDs.markDone, {
+      label: 'Workshop: Mark Page Done',
+      isEnabled: () => manager.currentPage !== null,
+      execute: () => manager.markDone()
+    });
+
+    app.commands.addCommand(CommandIDs.variables, {
+      label: 'Workshop: Variables…',
+      isEnabled: () => manager.workshop !== null,
+      execute: () => showVariablesDialog(manager)
+    });
+
+    app.commands.addCommand(CommandIDs.stopChain, {
+      label: 'Workshop: Stop Running Actions',
+      isEnabled: () => manager.chainRunning,
+      execute: () => manager.stopChain()
+    });
+
+    let logWidget: ActionLogWidget | null = null;
+
+    app.commands.addCommand(CommandIDs.showLog, {
+      label: 'Workshop: Show Action Log',
+      execute: () => {
+        if (!logWidget || logWidget.isDisposed) {
+          logWidget = new ActionLogWidget(manager);
+        }
+
+        if (!logWidget.isAttached) {
+          shell.add(logWidget, 'main', { mode: 'split-right' });
+        }
+
+        shell.activateById(LOG_ID);
+      }
+    });
+
     if (palette) {
       for (const command of Object.values(CommandIDs)) {
         palette.addItem({ command, category: PALETTE_CATEGORY });
       }
     }
+
+    // Apply the manifest's layout whenever a workshop is opened.
+    let openPath: string | null = null;
+
+    manager.changed.connect(() => {
+      const workshop = manager.workshop;
+      const path = workshop?.path ?? null;
+
+      if (path === openPath) {
+        return;
+      }
+
+      openPath = path;
+
+      if (workshop?.manifest.layout) {
+        void registry.run({
+          type: 'layout',
+          id: 'layout',
+          argument: '',
+          options: { name: workshop.manifest.layout },
+          body: ''
+        });
+      }
+    });
 
     // Once JupyterLab has restored its layout, reopen the previous workshop
     // or fall back to the configured default.
