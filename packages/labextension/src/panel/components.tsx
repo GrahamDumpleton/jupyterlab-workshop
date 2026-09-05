@@ -3,6 +3,7 @@ import {
   ActionDisposition,
   IDirectiveNode,
   IFormField,
+  ILintMessage,
   IPage,
   IProseNode,
   PageNode,
@@ -21,6 +22,7 @@ import {
   checkIcon,
   closeIcon,
   downloadIcon,
+  editIcon,
   folderIcon,
   launcherIcon,
   listIcon,
@@ -138,6 +140,13 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
             onClick={() => run(CommandIDs.showLog)}
           />
           <IconButton
+            icon={editIcon}
+            title={
+              manager.authoring ? 'Leave author mode' : 'Edit this workshop'
+            }
+            onClick={() => run(CommandIDs.authorMode)}
+          />
+          <IconButton
             icon={launcherIcon}
             title="Browse workshops"
             onClick={() => run(CommandIDs.browse)}
@@ -167,6 +176,9 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
             style={{ width: `${count > 0 ? (doneCount / count) * 100 : 0}%` }}
           />
         </div>
+        {manager.authoring ? (
+          <AuthorToolbar manager={manager} commands={commands} />
+        ) : null}
         <div className="jp-WorkshopPanel-nav">
           <IconButton
             icon={caretLeftIcon}
@@ -199,6 +211,7 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
         key={`${workshop.path}:${page.id}`}
         page={page}
         manager={manager}
+        commands={commands}
       />
       {gate.unmet.length > 0 ? (
         <div
@@ -329,10 +342,12 @@ function TrustBadge({
 
 function PageBody({
   page,
-  manager
+  manager,
+  commands
 }: {
   page: IPage;
   manager: IWorkshopManager;
+  commands: CommandRegistry;
 }): JSX.Element {
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   const container = useRef<HTMLDivElement>(null);
@@ -389,6 +404,7 @@ function PageBody({
       {manager.pageIndex === 0 ? <PreflightBanner manager={manager} /> : null}
       {manager.pageIndex === 0 ? <ShellBanner manager={manager} /> : null}
       <EnvironmentBanner manager={manager} />
+      {manager.authoring ? <PageLint page={page} manager={manager} /> : null}
       {page.warnings.length > 0 ? (
         <div className="jp-WorkshopPanel-warnings">
           {page.warnings.map((warning, position) => (
@@ -396,7 +412,12 @@ function PageBody({
           ))}
         </div>
       ) : null}
-      <Nodes nodes={page.nodes} manager={manager} onProseClick={onProseClick} />
+      <Nodes
+        nodes={page.nodes}
+        manager={manager}
+        commands={commands}
+        onProseClick={onProseClick}
+      />
     </div>
   );
 }
@@ -404,10 +425,12 @@ function PageBody({
 function Nodes({
   nodes,
   manager,
+  commands,
   onProseClick
 }: {
   nodes: PageNode[];
   manager: IWorkshopManager;
+  commands: CommandRegistry;
   onProseClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   return (
@@ -425,6 +448,7 @@ function Nodes({
               key={position}
               nodes={node.nodes}
               manager={manager}
+              commands={commands}
               onProseClick={onProseClick}
             />
           ) : null;
@@ -434,9 +458,188 @@ function Nodes({
           return null;
         }
 
+        if (manager.authoring) {
+          return (
+            <AuthorGutter
+              key={node.id}
+              node={node}
+              manager={manager}
+              commands={commands}
+            >
+              <DirectiveBlock node={node} manager={manager} />
+            </AuthorGutter>
+          );
+        }
+
         return <DirectiveBlock key={node.id} node={node} manager={manager} />;
       })}
     </>
+  );
+}
+
+/** The author toolbar's buttons: label, command and tooltip. */
+const AUTHOR_BUTTONS: readonly [string, string, string][] = [
+  ['Edit page', CommandIDs.editPage, 'Open the page source in the editor'],
+  ['New page', CommandIDs.newPage, 'Add a page after the last one'],
+  ['Pages', CommandIDs.managePages, 'Reorder, rename, add and remove pages'],
+  ['Manifest', CommandIDs.editManifest, 'Open workshop.yaml in the editor'],
+  ['Insert', CommandIDs.insertAction, 'Insert an action into the page'],
+  ['Capture', CommandIDs.capture, 'Add what was just done in the session'],
+  ['Run actions', CommandIDs.runPageActions, 'Run the actions of this page'],
+  ['Run checks', CommandIDs.runPageChecks, 'Run the checks of this page'],
+  ['Trust', CommandIDs.trustPreview, 'Preview the trust dialog'],
+  ['Publish', CommandIDs.publish, 'Build the archive and registry entry']
+];
+
+function AuthorToolbar({
+  manager,
+  commands
+}: {
+  manager: IWorkshopManager;
+  commands: CommandRegistry;
+}): JSX.Element {
+  const errors = manager.lint.filter(item => item.level === 'error').length;
+  const warnings = manager.lint.length - errors;
+  const recording = commands.isToggled(CommandIDs.record);
+  const run = (command: string, args = {}): void =>
+    void commands.execute(command, args);
+
+  return (
+    <div className="jp-WorkshopPanel-author">
+      <div className="jp-WorkshopPanel-authorRow">
+        {AUTHOR_BUTTONS.map(([label, command, title]) => (
+          <button
+            key={command}
+            type="button"
+            className="jp-WorkshopPanel-authorButton"
+            title={title}
+            onClick={() => run(command)}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`jp-WorkshopPanel-authorButton${errors > 0 ? ' jp-mod-error' : warnings > 0 ? ' jp-mod-warning' : ''}`}
+          title="Show the lint findings"
+          onClick={() => run(CommandIDs.showLint)}
+        >
+          Lint
+          {manager.lint.length > 0 ? ` (${manager.lint.length})` : ''}
+        </button>
+        <button
+          type="button"
+          className={`jp-WorkshopPanel-authorButton jp-WorkshopPanel-record${recording ? ' jp-mod-recording' : ''}`}
+          title={
+            recording
+              ? 'Stop recording and write draft pages'
+              : 'Record the session into draft pages'
+          }
+          onClick={() => run(CommandIDs.record)}
+        >
+          {recording ? '■ Stop' : '● Record'}
+        </button>
+        {recording ? (
+          <button
+            type="button"
+            className="jp-WorkshopPanel-authorButton"
+            title="Start a new page in the recording"
+            onClick={() => run(CommandIDs.recordPageBreak)}
+          >
+            + Page
+          </button>
+        ) : null}
+      </div>
+      {manager.error ? (
+        <div className="jp-WorkshopPanel-authorError">{manager.error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function PageLint({
+  page,
+  manager
+}: {
+  page: IPage;
+  manager: IWorkshopManager;
+}): JSX.Element | null {
+  // Findings without a line belong to the page as a whole; the rest are
+  // shown under the directive they refer to.
+  const messages = manager.lint.filter(
+    item => item.path === page.path && !item.line
+  );
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="jp-WorkshopPanel-lintList">
+      {messages.map((message, index) => (
+        <LintMarker key={index} message={message} />
+      ))}
+    </div>
+  );
+}
+
+function LintMarker({ message }: { message: ILintMessage }): JSX.Element {
+  return (
+    <div className={`jp-WorkshopPanel-lint jp-mod-${message.level}`}>
+      <code>{message.rule}</code> {message.message}
+    </div>
+  );
+}
+
+function AuthorGutter({
+  node,
+  manager,
+  commands,
+  children
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+  commands: CommandRegistry;
+  children: React.ReactNode;
+}): JSX.Element {
+  const page = manager.currentPage;
+  const messages = manager.lint.filter(
+    item => item.path === page?.path && item.line === node.line
+  );
+  const edit = (command: string): void => {
+    if (page) {
+      void commands.execute(command, { page: page.path, line: node.line });
+    }
+  };
+
+  return (
+    <div className="jp-WorkshopPanel-gutterBlock">
+      {children}
+      <div className="jp-WorkshopPanel-gutter">
+        <span className="jp-WorkshopPanel-gutterInfo">
+          {node.name} · line {node.line}
+        </span>
+        <button
+          type="button"
+          className="jp-WorkshopPanel-gutterButton"
+          title="Edit this action"
+          onClick={() => edit(CommandIDs.editAction)}
+        >
+          edit
+        </button>
+        <button
+          type="button"
+          className="jp-WorkshopPanel-gutterButton"
+          title="Delete this action"
+          onClick={() => edit(CommandIDs.deleteAction)}
+        >
+          delete
+        </button>
+      </div>
+      {messages.map((message, index) => (
+        <LintMarker key={index} message={message} />
+      ))}
+    </div>
   );
 }
 

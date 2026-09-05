@@ -9,20 +9,17 @@ the core package's Node bundle shipped inside this package, so they need
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import subprocess
 import sys
-import tarfile
 from collections.abc import Sequence
 from pathlib import Path
 
-import yaml
-
 from . import __version__ as VERSION
+from .publish import PublishError, publish_workshop
 from .registry import RegistryError, build_registry, parse_registry
-from .scaffold import slug, write_scaffold
+from .scaffold import GATING, TEMPLATES, slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -34,7 +31,17 @@ REGISTRY_SCHEMA_FILE = PACKAGE_DIR / "schema" / "registry.schema.json"
 
 PLATFORMS = ["linux", "macos", "windows", "lite"]
 
-PUBLISH_EXCLUDES = {"_workshop", ".git", ".github", "scratch", "dist", "node_modules"}
+CAPABILITIES = [
+    "terminal",
+    "write-files:workspace",
+    "write-files:home",
+    "write-files:any",
+    "network",
+    "install-packages",
+    "kernel-exec",
+    "auto-run",
+    "ui-settings",
+]
 
 
 class CliError(Exception):
@@ -76,6 +83,30 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--title", help="workshop title (default: from the name)")
     init.add_argument(
         "--ci", action="store_true", help="also write a GitHub Actions workflow"
+    )
+    init.add_argument(
+        "--template",
+        choices=TEMPLATES,
+        default="starter",
+        help="starter (terminal, file and quiz), blank, or notebook",
+    )
+    init.add_argument(
+        "--platform",
+        action="append",
+        dest="platforms",
+        choices=PLATFORMS,
+        help="platform the workshop supports; repeat for several "
+        "(default linux, macos)",
+    )
+    init.add_argument(
+        "--capability",
+        action="append",
+        dest="capabilities",
+        choices=CAPABILITIES,
+        help="capability to declare; repeat for several (default: the template's)",
+    )
+    init.add_argument(
+        "--gating", choices=GATING, default="soft", help="page gating (default soft)"
     )
     init.set_defaults(func=command_init)
 
@@ -169,6 +200,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     test.set_defaults(func=command_test)
 
+    record = commands.add_parser(
+        "record", help="write draft pages from a recording saved in JupyterLab"
+    )
+    record.add_argument("recording", type=Path, help="recording JSON file")
+    record.add_argument(
+        "directory",
+        type=Path,
+        help="workshop to add pages to, or a new directory to create",
+    )
+    record.add_argument("--name", help="name for a new workshop")
+    record.add_argument("--title", help="title for a new workshop")
+    record.set_defaults(func=command_record)
+
+    mcp = commands.add_parser(
+        "mcp", help="serve the workshop tools to AI agents over MCP (stdio)"
+    )
+    mcp.add_argument(
+        "--url", default="", help="URL of the JupyterLab server for live tools"
+    )
+    mcp.add_argument("--token", default="", help="token of that server")
+    mcp.set_defaults(func=command_mcp)
+
     return parser
 
 
@@ -180,8 +233,17 @@ def command_init(args: argparse.Namespace) -> int:
     title = args.title or name.replace("-", " ").capitalize()
 
     try:
-        written = write_scaffold(directory, name, title, ci=args.ci)
-    except FileExistsError as error:
+        written = write_scaffold(
+            directory,
+            name,
+            title,
+            ci=args.ci,
+            template=args.template,
+            platforms=args.platforms,
+            capabilities=args.capabilities,
+            gating=args.gating,
+        )
+    except (FileExistsError, ValueError) as error:
         raise CliError(str(error)) from error
 
     for path in written:
@@ -312,55 +374,14 @@ def command_registry(args: argparse.Namespace) -> int:
 def command_publish(args: argparse.Namespace) -> int:
     """Archive a workshop for distribution."""
 
-    directory = _workshop_dir(args.directory)
-    manifest = _read_manifest(directory)
-    name = str(manifest.get("name") or "")
-    version = str(manifest.get("version") or "0.0.0")
+    try:
+        result = publish_workshop(_workshop_dir(args.directory), args.out, args.url)
+    except PublishError as error:
+        raise CliError(str(error)) from error
 
-    if not name:
-        raise CliError("The manifest has no name")
-
-    out: Path = args.out
-    out.mkdir(parents=True, exist_ok=True)
-
-    archive = out / f"{name}-{version}.tar.gz"
-
-    with tarfile.open(archive, "w:gz") as tar:
-        for entry in sorted(directory.iterdir()):
-            if entry.name in PUBLISH_EXCLUDES:
-                continue
-
-            tar.add(entry, arcname=f"{name}-{version}/{entry.name}", filter=_clean_tar)
-
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-
-    (out / f"{archive.name}.sha256").write_text(f"{digest}  {archive.name}\n")
-
-    registry_entry = {
-        "name": name,
-        "title": manifest.get("title", name),
-        "description": manifest.get("description", ""),
-        "tags": manifest.get("tags", []),
-        "platforms": manifest.get("platforms", []),
-        "capabilities": _flatten_capabilities(manifest.get("capabilities")),
-        "duration": manifest.get("duration", ""),
-        "authors": manifest.get("authors", []),
-        "versions": [
-            {
-                "version": version,
-                "source": {"archive": args.url or f"<url of {archive.name}>"},
-                "sha256": digest,
-            }
-        ],
-    }
-
-    (out / f"{name}-{version}.registry.json").write_text(
-        json.dumps(registry_entry, indent=2) + "\n"
-    )
-
-    print(f"wrote {archive}")
-    print(f"sha256 {digest}")
-    print(f"wrote {out / f'{name}-{version}.registry.json'}")
+    print(f"wrote {result.archive}")
+    print(f"sha256 {result.sha256}")
+    print(f"wrote {result.entry_path}")
 
     return 0
 
@@ -382,6 +403,47 @@ def command_test(args: argparse.Namespace) -> int:
     )
 
     return run_self_test(options)
+
+
+def command_record(args: argparse.Namespace) -> int:
+    """Draft pages from a recording through the Node bundle."""
+
+    recording: Path = args.recording
+
+    if not recording.is_file():
+        raise CliError(f"{recording} does not exist")
+
+    command = ["draft", str(recording), str(args.directory)]
+
+    if args.name:
+        command += ["--name", args.name]
+
+    if args.title:
+        command += ["--title", args.title]
+
+    completed = run_node(command)
+
+    sys.stdout.write(completed.stdout)
+    sys.stderr.write(completed.stderr)
+
+    if completed.returncode == 0:
+        print(f"\nNext: jupyter workshop lint {args.directory}")
+
+    return completed.returncode
+
+
+def command_mcp(args: argparse.Namespace) -> int:
+    """Serve the tools over MCP."""
+
+    try:
+        from .mcp import serve
+    except ImportError as error:
+        raise CliError(
+            "The MCP server needs the mcp extra: pip install "
+            '"educates-jupyterlab-workshop[mcp]"'
+        ) from error
+
+    return serve(url=args.url, token=args.token)
 
 
 def run_node(arguments: list[str]) -> subprocess.CompletedProcess[str]:
@@ -415,53 +477,6 @@ def _workshop_dir(directory: Path) -> Path:
         raise CliError(f"{directory} has no workshop.yaml")
 
     return resolved
-
-
-def _read_manifest(directory: Path) -> dict[str, object]:
-    try:
-        data = yaml.safe_load((directory / "workshop.yaml").read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        raise CliError(f"workshop.yaml is not valid YAML: {error}") from error
-
-    if not isinstance(data, dict):
-        raise CliError("workshop.yaml must be a mapping")
-
-    return data
-
-
-def _flatten_capabilities(value: object) -> list[str]:
-    # The manifest writes scoped capabilities as single-key mappings; the
-    # registry lists them as name:scope strings.
-    names: list[str] = []
-
-    if not isinstance(value, list):
-        return names
-
-    for item in value:
-        if isinstance(item, str):
-            names.append(item)
-        elif isinstance(item, dict):
-            for key, scopes in item.items():
-                listed = scopes if isinstance(scopes, list) else [scopes]
-
-                names.extend(f"{key}:{scope}" for scope in listed)
-
-    return names
-
-
-def _clean_tar(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
-    # Leave out editor and OS droppings and normalise ownership so the
-    # archive hash is stable across machines.
-    base = Path(info.name).name
-
-    if base in {".DS_Store", "Thumbs.db"} or base.endswith("~"):
-        return None
-
-    info.uid = info.gid = 0
-    info.uname = info.gname = ""
-    info.mtime = 0
-
-    return info
 
 
 if __name__ == "__main__":

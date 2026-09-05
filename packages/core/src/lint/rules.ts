@@ -313,7 +313,8 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
       rule: 'undeclared-capability',
       message:
         'The manifest declares an environment with requirements but not the "install-packages" capability it needs',
-      path: input.manifestPath ?? 'workshop.yaml'
+      path: input.manifestPath ?? 'workshop.yaml',
+      fix: { kind: 'add-capability', capability: 'install-packages' }
     });
   }
 }
@@ -379,6 +380,7 @@ function lintOptions(
         level: 'warning',
         rule: 'unknown-option',
         message: `Option "${option}" is not used by the ${node.name} directive`,
+        fix: { kind: 'remove-option', option },
         ...where
       });
     }
@@ -499,7 +501,14 @@ function lintCapabilities(
         level: 'error',
         rule: 'undeclared-capability',
         message: `Pages use the "${use.capability}" capability (${use.count} ${use.count === 1 ? 'action' : 'actions'}) but the manifest does not declare it`,
-        path: manifestPath
+        path: manifestPath,
+        fix: {
+          kind: 'add-capability',
+          capability:
+            use.capability === 'write-files'
+              ? 'write-files:workspace'
+              : use.capability
+        }
       });
     }
   }
@@ -522,7 +531,8 @@ function lintCapabilities(
         level: 'warning',
         rule: 'unused-capability',
         message: `The manifest declares the "${name}" capability but no page uses it`,
-        path: manifestPath
+        path: manifestPath,
+        fix: { kind: 'remove-capability', capability: name }
       });
     }
   }

@@ -1,9 +1,23 @@
-"""Files written by ``jupyter workshop init``."""
+"""Files written by ``jupyter workshop init`` and the new workshop wizard."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+TEMPLATES = ("starter", "blank", "notebook")
+
+PLATFORMS = ("linux", "macos", "windows", "lite")
+
+GATING = ("off", "soft", "strict")
+
+DEFAULT_PLATFORMS = ["linux", "macos"]
+
+DEFAULT_CAPABILITIES: dict[str, list[str]] = {
+    "starter": ["terminal", "write-files:workspace"],
+    "blank": [],
+    "notebook": ["write-files:workspace", "kernel-exec"],
+}
 
 
 def slug(text: str) -> str:
@@ -14,8 +28,47 @@ def slug(text: str) -> str:
     return cleaned or "workshop"
 
 
-def manifest(name: str, title: str) -> str:
+def capability_lines(capabilities: list[str]) -> list[str]:
+    """Manifest list lines for capabilities given as ``name`` or ``name:scope``."""
+
+    grouped: dict[str, list[str]] = {}
+
+    for item in capabilities:
+        name, _, scope = item.partition(":")
+        scopes = grouped.setdefault(name, [])
+
+        if scope and scope not in scopes:
+            scopes.append(scope)
+
+    lines = []
+
+    for name, scopes in grouped.items():
+        lines.append(f"  - {name}: [{', '.join(scopes)}]" if scopes else f"  - {name}")
+
+    return lines
+
+
+def manifest(
+    name: str,
+    title: str,
+    *,
+    platforms: list[str] | None = None,
+    capabilities: list[str] | None = None,
+    gating: str = "soft",
+    variables: str = "",
+    pages: list[str] | None = None,
+    requires: str = "  tools: []\n",
+) -> str:
     """The starting ``workshop.yaml``."""
+
+    listed = platforms or DEFAULT_PLATFORMS
+    capability_block = capability_lines(capabilities or [])
+    capability_text = (
+        "capabilities:\n" + "\n".join(capability_block) + "\n"
+        if capability_block
+        else "capabilities: []\n"
+    )
+    page_text = "\n".join(f"  - {page}" for page in pages or [])
 
     return f"""apiVersion: workshop.educates.dev/v1alpha1
 name: {name}
@@ -25,27 +78,39 @@ description: Describe what the learner will do in a sentence or two.
 authors: []
 tags: []
 duration: 30m
-platforms: [linux, macos]
-capabilities:
-  - terminal
-  - write-files: [workspace]
-requires:
-  tools: []
-layout: default
-gating: soft
-variables:
+platforms: [{", ".join(listed)}]
+{capability_text}requires:
+{requires}layout: default
+gating: {gating}
+{variables}pages:
+{page_text}
+"""
+
+
+def starter_variables() -> str:
+    """Variables declared by the starter template."""
+
+    return """variables:
   - name: work_dir
     type: path
     default: work
     description: Directory the exercises are done in
-pages:
-  - pages/01-welcome.md
-  - pages/02-first-steps.md
+"""
+
+
+def notebook_variables() -> str:
+    """Variables declared by the notebook template."""
+
+    return """variables:
+  - name: notebook
+    type: path
+    default: exercise.ipynb
+    description: The notebook the exercises are done in
 """
 
 
 def welcome_page(title: str) -> str:
-    """The first page, introducing the panel."""
+    """The first page of the starter template, introducing the panel."""
 
     return f"""---
 title: Welcome
@@ -84,7 +149,7 @@ exists {{{{ work_dir }}}}
 
 
 def first_steps_page() -> str:
-    """A second page showing a file write and a quiz."""
+    """The second page of the starter template: a file write and a quiz."""
 
     return """---
 title: First steps
@@ -115,6 +180,108 @@ options:
     explanation: Copying is what the copy role does.
   - { text: Nothing }
 explanation: Command blocks run in a workshop terminal.
+```
+"""
+
+
+def blank_page(title: str) -> str:
+    """The only page of the blank template."""
+
+    return f"""---
+title: Welcome
+---
+
+# {title}
+
+Describe what the learner will do. Add actions with the author toolbar,
+or write directives such as the one below by hand:
+
+```{{hint}}
+:title: Writing pages
+Pages are Markdown with fenced directives. See the documentation for the
+actions, checks, quizzes and forms a page can use.
+```
+"""
+
+
+def notebook_page(title: str) -> str:
+    """The first page of the notebook template."""
+
+    return f"""---
+title: Welcome
+requires: [verify:total-computed]
+---
+
+# {title}
+
+This workshop works in a notebook. The action below creates it with a few
+cells and opens it in the main area.
+
+```{{notebook-create}}
+:path: {{{{ notebook }}}}
+:open: true
+- markdown: |
+    # Exercise
+    Run the cells below.
+- code: |
+    numbers = list(range(1, 11))
+    numbers
+- code: |
+    total = sum(numbers)
+    total
+  tags: [total]
+```
+
+Run every cell. The kernel starts if it has not already.
+
+```{{cell-run-all}}
+:id: run-all
+:path: {{{{ notebook }}}}
+```
+
+The check below asks the notebook's kernel for the value of `total`. It
+runs again whenever the tagged cell is executed.
+
+```{{verify}}
+:id: total-computed
+:label: The total has been computed
+:substrate: learner-kernel
+:path: {{{{ notebook }}}}
+:trigger: after:run-all; cell-executed total
+total == 55
+```
+"""
+
+
+def notebook_explore_page() -> str:
+    """The second page of the notebook template: insert a cell and a quiz."""
+
+    return """---
+title: Explore
+requires: [quiz:cells-quiz]
+---
+
+# Explore
+
+Insert a new cell after the one tagged `total` and run it.
+
+```{cell-insert}
+:path: {{ notebook }}
+:at: after:total
+:tags: [average]
+:run: true
+average = total / len(numbers)
+average
+```
+
+```{quiz}
+:id: cells-quiz
+:title: Cells
+question: Which action runs every cell of a notebook?
+options:
+  - { text: cell-run-all, correct: true }
+  - { text: cell-run, explanation: cell-run runs one cell. }
+  - { text: kernel-restart }
 ```
 """
 
@@ -159,6 +326,9 @@ def gitignore() -> str:
 
     return """# Runtime state written by the workshop extension
 _workshop/
+
+# Published archives
+dist/
 
 # Exercise output
 work/
@@ -210,20 +380,94 @@ jobs:
 """
 
 
-def write_scaffold(directory: Path, name: str, title: str, ci: bool) -> list[Path]:
-    """Write the starting files, refusing to overwrite any that exist."""
+def scaffold_files(
+    directory: Path,
+    name: str,
+    title: str,
+    ci: bool,
+    template: str = "starter",
+    platforms: list[str] | None = None,
+    capabilities: list[str] | None = None,
+    gating: str = "soft",
+) -> dict[Path, str]:
+    """The files a template writes, keyed by path."""
+
+    if template not in TEMPLATES:
+        raise ValueError(f'Unknown template "{template}"; expected one of {TEMPLATES}')
+
+    if gating not in GATING:
+        raise ValueError(f'Unknown gating "{gating}"; expected one of {GATING}')
+
+    for platform in platforms or []:
+        if platform not in PLATFORMS:
+            raise ValueError(f'Unknown platform "{platform}"')
+
+    listed = DEFAULT_CAPABILITIES[template] if capabilities is None else capabilities
+
+    # Each template contributes its pages and variables; the manifest,
+    # README and ignore file are shared.
+    if template == "starter":
+        pages = {
+            "pages/01-welcome.md": welcome_page(title),
+            "pages/02-first-steps.md": first_steps_page(),
+        }
+        variables = starter_variables()
+    elif template == "notebook":
+        pages = {
+            "pages/01-welcome.md": notebook_page(title),
+            "pages/02-explore.md": notebook_explore_page(),
+        }
+        variables = notebook_variables()
+    else:
+        pages = {"pages/01-welcome.md": blank_page(title)}
+        variables = ""
 
     files: dict[Path, str] = {
-        directory / "workshop.yaml": manifest(name, title),
-        directory / "pages" / "01-welcome.md": welcome_page(title),
-        directory / "pages" / "02-first-steps.md": first_steps_page(),
-        directory / "README.md": readme(name, title),
-        directory / ".gitignore": gitignore(),
+        directory / "workshop.yaml": manifest(
+            name,
+            title,
+            platforms=platforms,
+            capabilities=listed,
+            gating=gating,
+            variables=variables,
+            pages=list(pages),
+        )
     }
+
+    for relative, content in pages.items():
+        files[directory / relative] = content
+
+    files[directory / "README.md"] = readme(name, title)
+    files[directory / ".gitignore"] = gitignore()
 
     if ci:
         files[directory / ".github" / "workflows" / "workshop.yml"] = ci_workflow()
 
+    return files
+
+
+def write_scaffold(
+    directory: Path,
+    name: str,
+    title: str,
+    ci: bool,
+    template: str = "starter",
+    platforms: list[str] | None = None,
+    capabilities: list[str] | None = None,
+    gating: str = "soft",
+) -> list[Path]:
+    """Write the starting files, refusing to overwrite any that exist."""
+
+    files = scaffold_files(
+        directory,
+        name,
+        title,
+        ci,
+        template=template,
+        platforms=platforms,
+        capabilities=capabilities,
+        gating=gating,
+    )
     existing = [path for path in files if path.exists()]
 
     if existing:

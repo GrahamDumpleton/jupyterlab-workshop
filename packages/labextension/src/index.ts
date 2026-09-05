@@ -81,6 +81,7 @@ import { ActionRegistry } from './actions/registry';
 import {
   ExecuteAction,
   ExecuteCaptureAction,
+  ITerminalSessions,
   InterruptAction,
   SendKeyAction,
   TerminalClearAction,
@@ -97,6 +98,7 @@ import {
   SettingsSetAction
 } from './actions/ui';
 import { AnalyticsRecorder } from './analytics';
+import { authoringPlugin } from './authoring/plugin';
 import {
   BROWSER_ID,
   IBrowserSettings,
@@ -118,6 +120,7 @@ import {
   errorMessage
 } from './tokens';
 import { requestAPI } from './request';
+import { readSetting, readSettingList } from './settings';
 import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
 import { TriggerBus } from './verify/triggers';
@@ -186,6 +189,22 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
 };
 
 /**
+ * Provides the workshop terminals, shared by the actions and the recorder.
+ */
+const terminalsPlugin: JupyterFrontEndPlugin<TerminalSessions> = {
+  id: `${PLUGIN_PREFIX}:terminals`,
+  description: 'Manages the terminals workshop actions run in.',
+  autoStart: true,
+  provides: ITerminalSessions,
+  requires: [IWorkshopManager, ILabShell],
+  activate: (
+    app: JupyterFrontEnd,
+    manager: IWorkshopManager,
+    shell: ILabShell
+  ): TerminalSessions => new TerminalSessions({ app, shell, manager })
+};
+
+/**
  * Provides the action registry with the built-in actions registered.
  */
 const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
@@ -193,17 +212,17 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
   description: 'Implements workshop actions against JupyterLab.',
   autoStart: true,
   provides: IActionRegistry,
-  requires: [IWorkshopManager, ILabShell, IDocumentManager],
+  requires: [IWorkshopManager, ILabShell, IDocumentManager, ITerminalSessions],
   optional: [IEditorTracker, ISettingRegistry],
   activate: (
     app: JupyterFrontEnd,
     manager: IWorkshopManager,
     shell: ILabShell,
     docManager: IDocumentManager,
+    terminals: TerminalSessions,
     editorTracker: IEditorTracker | null,
     settingRegistry: ISettingRegistry | null
   ): IActionRegistry => {
-    const terminals = new TerminalSessions({ app, shell, manager });
     const kernel = new WorkshopKernel(app, manager);
     const layouts = new LayoutManager({
       app,
@@ -890,28 +909,6 @@ async function readDefaultWorkshop(
   return readSetting(settingRegistry, 'defaultWorkshop', '');
 }
 
-async function readSettingList(
-  settingRegistry: ISettingRegistry | null,
-  key: string
-): Promise<string[]> {
-  if (!settingRegistry) {
-    return [];
-  }
-
-  try {
-    const settings = await settingRegistry.load(panelPlugin.id);
-    const value = settings.get(key).composite;
-
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string')
-      : [];
-  } catch (error) {
-    console.error('Failed to load workshop settings', error);
-
-    return [];
-  }
-}
-
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     typeof value === 'object' &&
@@ -987,27 +984,6 @@ function stripLaunchParams(search: string): string {
   }
 
   return Object.keys(kept).length > 0 ? URLExt.objectToQueryString(kept) : '';
-}
-
-async function readSetting(
-  settingRegistry: ISettingRegistry | null,
-  key: string,
-  fallback: string
-): Promise<string> {
-  if (!settingRegistry) {
-    return fallback;
-  }
-
-  try {
-    const settings = await settingRegistry.load(panelPlugin.id);
-    const value = settings.get(key).composite;
-
-    return typeof value === 'string' ? value : fallback;
-  } catch (error) {
-    console.error('Failed to load workshop settings', error);
-
-    return fallback;
-  }
 }
 
 /**
@@ -1144,4 +1120,10 @@ class UninstallBody extends Widget {
   }
 }
 
-export default [managerPlugin, actionsPlugin, panelPlugin];
+export default [
+  managerPlugin,
+  terminalsPlugin,
+  actionsPlugin,
+  panelPlugin,
+  authoringPlugin
+];

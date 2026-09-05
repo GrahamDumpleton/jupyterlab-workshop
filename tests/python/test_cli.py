@@ -222,3 +222,89 @@ def test_registry_command_builds_an_index_from_entries(
     entry.write_text("[]")
 
     assert cli.main(["registry", str(index), str(entry)]) == 2
+
+
+def test_init_templates_and_options(tmp_path: Path) -> None:
+    target = tmp_path / "nb"
+
+    assert (
+        cli.main(
+            [
+                "init",
+                str(target),
+                "--template",
+                "notebook",
+                "--platform",
+                "linux",
+                "--platform",
+                "windows",
+                "--capability",
+                "kernel-exec",
+                "--gating",
+                "strict",
+            ]
+        )
+        == 0
+    )
+
+    manifest = (target / "workshop.yaml").read_text()
+
+    assert "platforms: [linux, windows]" in manifest
+    assert "capabilities:\n  - kernel-exec\n" in manifest
+    assert "gating: strict" in manifest
+    assert "name: notebook" in manifest
+    assert (target / "pages" / "02-explore.md").exists()
+
+    blank = tmp_path / "blank"
+
+    assert cli.main(["init", str(blank), "--template", "blank"]) == 0
+    assert "capabilities: []" in (blank / "workshop.yaml").read_text()
+
+
+@needs_node
+def test_record_drafts_pages_from_a_recording(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    recording = tmp_path / "session.json"
+
+    recording.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "started": "2026-09-05T10:00:00Z",
+                "events": [
+                    {
+                        "kind": "terminal",
+                        "ts": "",
+                        "session": "workshop",
+                        "command": "mkdir demo",
+                    },
+                    {"kind": "page-break", "ts": "", "title": "Write a file"},
+                    {
+                        "kind": "file-saved",
+                        "ts": "",
+                        "path": "demo/a.txt",
+                        "content": "hello\n",
+                        "previous": None,
+                    },
+                ],
+            }
+        )
+    )
+
+    target = tmp_path / "recorded"
+
+    assert cli.main(["record", str(recording), str(target), "--title", "Rec"]) == 0
+    assert "wrote" in capsys.readouterr().out
+
+    manifest = (target / "workshop.yaml").read_text()
+
+    assert "title: Rec" in manifest
+    assert "pages/01-getting-started.md" in manifest
+    assert "pages/02-write-a-file.md" in manifest
+    assert cli.main(["lint", str(target)]) == 0
+
+    # Recording into an existing workshop appends pages.
+    assert cli.main(["record", str(recording), str(target)]) == 0
+    assert "pages/04-write-a-file.md" in (target / "workshop.yaml").read_text()
+    assert cli.main(["record", str(tmp_path / "missing.json"), str(target)]) == 2

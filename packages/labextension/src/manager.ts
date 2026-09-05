@@ -2,6 +2,7 @@ import {
   ActionDisposition,
   Capability,
   IDirectiveNode,
+  ILintMessage,
   IPage,
   IRegistryIndex,
   IWorkshopManifest,
@@ -98,8 +99,10 @@ export class WorkshopManager implements IWorkshopManager {
     this._settings = options.settings ?? null;
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
+    this._reloader = new Debouncer(() => this.reload(), 300);
 
     this._store.changed.connect(this._onVariablesChanged, this);
+    this._contents.fileChanged.connect(this._onFileChanged, this);
   }
 
   registry: IActionRegistry | null = null;
@@ -166,6 +169,14 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     return this._trustStore.policy.analyticsSink;
+  }
+
+  get authoring(): boolean {
+    return this._authoring;
+  }
+
+  get lint(): ILintMessage[] {
+    return this._workshop?.trust.lint ?? [];
   }
 
   get visiblePages(): IPage[] {
@@ -274,12 +285,16 @@ export class WorkshopManager implements IWorkshopManager {
         this._workshop = null;
         this._currentPageId = '';
         this._decision = null;
+        this._authoring = false;
         this._loading = false;
         await this._saveStateDB();
         this._changed.emit();
 
         return;
       }
+
+      // A workshop marked as the learner's own reopens in author mode.
+      this._authoring = await this._trustStore.isAuthored(trust.sourceKey);
 
       const state = await this._state.load(
         workshopPath,
@@ -342,12 +357,123 @@ export class WorkshopManager implements IWorkshopManager {
       this._workshop = null;
       this._currentPageId = '';
       this._decision = null;
+      this._authoring = false;
       this._error = `Unable to open workshop "${workshopPath}": ${errorMessage(error)}`;
     }
 
     this._loading = false;
     void this._envWriter.invoke();
     await this._saveStateDB();
+    this._changed.emit();
+  }
+
+  async setAuthoring(on: boolean): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop || this._authoring === on) {
+      return;
+    }
+
+    // The author's own workshop is trusted at every hash from now on, so
+    // saving a page never brings the trust dialog back.
+    if (on) {
+      await this._trustStore.setAuthored(workshop.trust.sourceKey, true);
+
+      if (this._decision?.level !== 'trusted') {
+        await this.setTrust('trusted');
+      }
+    }
+
+    this._authoring = on;
+    this._changed.emit();
+  }
+
+  async reload(): Promise<void> {
+    const workshop = this._workshop;
+    const platform = this._platform;
+
+    if (!workshop || !platform || this._loading) {
+      return;
+    }
+
+    try {
+      const manifestPath = PathExt.join(workshop.path, MANIFEST_FILE);
+      const manifestSource = await readTextFile(this._contents, manifestPath);
+      const manifest = parseManifest(manifestSource, manifestPath);
+      const sources: Record<string, string> = {};
+
+      await Promise.all(
+        manifest.pages.map(async pagePath => {
+          sources[pagePath] = await readTextFile(
+            this._contents,
+            PathExt.join(workshop.path, pagePath)
+          );
+        })
+      );
+
+      // The trust summary carries the lint findings and the content hash,
+      // so it is rebuilt; the decision itself stands.
+      const declared = this._collectDeclared(manifest, sources);
+      const defaults: Variables = { ...buildBuiltins(workshop.path, platform) };
+
+      for (const definition of manifest.variables) {
+        if (definition.default !== undefined) {
+          defaults[definition.name] = definition.default;
+        }
+      }
+
+      const preview = manifest.pages.map(pagePath =>
+        parsePage(sources[pagePath], {
+          path: pagePath,
+          variables: defaults,
+          pathSep: platform.path_sep,
+          declared,
+          platform: platform.os
+        })
+      );
+
+      if (this._workshop !== workshop) {
+        return;
+      }
+
+      workshop.manifest = manifest;
+      workshop.sources = sources;
+      workshop.trust = buildTrustSummary({
+        manifest,
+        manifestSource,
+        pages: preview,
+        sources,
+        source: workshop.source,
+        hash: workshop.source.kind === 'local' ? undefined : workshop.trust.hash
+      });
+
+      const state = this._state.state;
+
+      if (state) {
+        state.workshop.hash = workshop.trust.hash;
+      }
+
+      this._store.load(
+        buildBuiltins(workshop.path, platform),
+        manifest.variables,
+        this._store.persistable()
+      );
+      this._renderPages();
+      this._error = null;
+
+      // Keep the page the author is looking at, unless it went away.
+      if (!this.visiblePages.some(page => page.id === this._currentPageId)) {
+        const first = this.visiblePages[0];
+
+        if (first) {
+          this._enterPage(first.id, false);
+        }
+      }
+    } catch (error) {
+      this._error = `Unable to reload workshop "${workshop.path}": ${errorMessage(error)}`;
+    }
+
+    void this._envWriter.invoke();
     this._changed.emit();
   }
 
@@ -506,6 +632,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._decision = null;
     this._environment = null;
     this._error = null;
+    this._authoring = false;
     this._store.load({}, []);
 
     await this._saveStateDB();
@@ -653,6 +780,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._decision = null;
     this._environment = null;
     this._error = null;
+    this._authoring = false;
     this._store.load({}, []);
 
     await this._saveStateDB();
@@ -1392,6 +1520,34 @@ export class WorkshopManager implements IWorkshopManager {
     );
   }
 
+  private _onFileChanged(
+    _: Contents.IManager,
+    change: Contents.IChangedArgs
+  ): void {
+    const workshop = this._workshop;
+
+    // Saving the manifest or a page while authoring re-renders the panel.
+    if (!workshop || !this._authoring || change.type !== 'save') {
+      return;
+    }
+
+    const saved = change.newValue?.path ?? '';
+    const prefix = workshop.path === '' ? '' : `${workshop.path}/`;
+
+    if (!saved.startsWith(prefix)) {
+      return;
+    }
+
+    const relative = saved.slice(prefix.length);
+
+    if (
+      relative === MANIFEST_FILE ||
+      workshop.manifest.pages.includes(relative)
+    ) {
+      void this._reloader.invoke();
+    }
+  }
+
   private _onVariablesChanged(): void {
     // While opening, the caller renders pages and writes files itself.
     if (!this._workshop || this._loading) {
@@ -1613,6 +1769,12 @@ export class WorkshopManager implements IWorkshopManager {
       return decision('trusted');
     }
 
+    // The learner's own workshop changes with every edit; its hash is not
+    // what makes it trustworthy.
+    if (await this._trustStore.isAuthored(summary.sourceKey)) {
+      return decision('trusted');
+    }
+
     if (stored) {
       return stored;
     }
@@ -1718,6 +1880,8 @@ export class WorkshopManager implements IWorkshopManager {
   private _state: StateStore;
   private _store = new VariableStore();
   private _envWriter: Debouncer;
+  private _reloader: Debouncer;
+  private _authoring = false;
   private _workshop: ILoadedWorkshop | null = null;
   private _currentPageId = '';
   private _platform: IPlatformInfo | null = null;

@@ -6,6 +6,8 @@ import { ITrustDecision, ITrustPolicy, ITrustStore } from '../tokens';
 
 const DECISIONS_KEY = '@educates/jupyterlab-workshop:trust';
 
+const AUTHORED_KEY = '@educates/jupyterlab-workshop:authored';
+
 /** The policy applied when settings are unavailable. */
 export const DEFAULT_POLICY: ITrustPolicy = {
   defaultLevel: 'restricted',
@@ -61,6 +63,59 @@ export class TrustStore implements ITrustStore {
     }
 
     await this._save(decisions);
+    await this.setAuthored(sourceKey, false);
+  }
+
+  async isAuthored(sourceKey: string): Promise<boolean> {
+    const authored = await this._loadAuthored();
+
+    return authored.includes(sourceKey);
+  }
+
+  async setAuthored(sourceKey: string, authored: boolean): Promise<void> {
+    const current = await this._loadAuthored();
+    const next = current.filter(key => key !== sourceKey);
+
+    if (authored) {
+      next.push(sourceKey);
+    }
+
+    this._authored = next;
+
+    if (!this._stateDB) {
+      return;
+    }
+
+    try {
+      await this._stateDB.save(AUTHORED_KEY, { authored: next });
+    } catch (error) {
+      console.warn('Unable to save the authored workshops', error);
+    }
+  }
+
+  private async _loadAuthored(): Promise<string[]> {
+    if (this._authored) {
+      return this._authored;
+    }
+
+    this._authored = [];
+
+    if (this._stateDB) {
+      try {
+        const stored = await this._stateDB.fetch(AUTHORED_KEY);
+        const list = (stored as { authored?: unknown } | undefined)?.authored;
+
+        if (Array.isArray(list)) {
+          this._authored = list.filter(
+            (item): item is string => typeof item === 'string'
+          );
+        }
+      } catch (error) {
+        console.warn('Unable to read the authored workshops', error);
+      }
+    }
+
+    return this._authored;
   }
 
   private async _load(): Promise<Record<string, ITrustDecision>> {
@@ -109,6 +164,7 @@ export class TrustStore implements ITrustStore {
   private _stateDB: IStateDB | null;
   private _policy: ITrustPolicy = DEFAULT_POLICY;
   private _cache: Record<string, ITrustDecision> | null = null;
+  private _authored: string[] | null = null;
 }
 
 function decisionKey(sourceKey: string, hash: string): string {

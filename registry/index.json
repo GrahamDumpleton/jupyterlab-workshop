@@ -46,6 +46,26 @@
           }
         }
       ]
+    },
+    {
+      "name": "workshop-authoring",
+      "title": "Writing your first workshop",
+      "description": "Scaffold, edit, lint and publish a workshop of your own with the jupyter workshop command and author mode.",
+      "tags": ["authoring", "cli", "meta"],
+      "platforms": ["linux", "macos", "windows"],
+      "capabilities": ["terminal", "write-files:workspace", "kernel-exec"],
+      "duration": "25m",
+      "authors": ["Graham Dumpleton"],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "source": {
+            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "ref": "main",
+            "subdir": "examples/workshop-authoring"
+          }
+        }
+      ]
     }
   ]
 }

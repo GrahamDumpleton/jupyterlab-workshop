@@ -65,6 +65,10 @@ assert out.strip(), "No commits yet: run git commit"
 - [Command line](cli.md) covers `jupyter workshop` for creating,
   checking, self-testing and publishing workshops.
 
+- [Writing workshops in JupyterLab](authoring.md) covers author mode,
+  recording a session into pages, and the MCP server and skill for AI
+  agents.
+
 ## Install
 
 ```
@@ -79,3 +83,5 @@ browser to self-test workshops:
 pip install "educates-jupyterlab-workshop[test]"
 playwright install chromium
 ```
+
+The `mcp` extra adds the MCP server for AI agents.

@@ -14,7 +14,8 @@ extension and JupyterLab.
 
 - `tests/python/` holds the pytest suite for the Python package: the
   server extension handlers, platform detection, fetching, checks,
-  registries, events, environments and the CLI. It uses `pytest-jupyter`
+  registries, events, environments, the bridge, the MCP server (through
+  an in-memory client) and the CLI. It uses `pytest-jupyter`
   to start a real Jupyter Server in a temporary directory and talks to
   the handlers over HTTP with the `jp_fetch` fixture. Anything that
   needs a remote (archives, registries, event sinks) is served by a
@@ -23,7 +24,8 @@ extension and JupyterLab.
 - `tests/ui-tests/` holds Galata (Playwright) tests that start a real
   JupyterLab with the built extension, upload an example workshop into the
   test server's root directory and drive the panel and its actions in a
-  browser.
+  browser. The author mode test drives the editing commands with explicit
+  arguments (`draft`, `title`) so no dialog needs answering.
 
 - `examples/` are the workshops used as fixtures by the UI tests. Keep
   them working; they are also the demo.
@@ -44,8 +46,8 @@ extension and JupyterLab.
   on port 8890 so it never collides with a JupyterLab started by
   `just lab`; set `JUPYTER_PORT` to change it.
 
-- `just selftest [dir...]` runs `jupyter workshop test` on the example
-  workshops (or the directories given): a real JupyterLab driven by
+- `just selftest [dir...]` runs `jupyter workshop test` on the three
+  example workshops (or the directories given): a real JupyterLab driven by
   Playwright runs every action, check, quiz and form in order. It needs
   `uv run playwright install chromium` once. CI runs it after the Galata
   tests. The Python tests for the CLI itself live in

@@ -51,6 +51,9 @@ export interface IDirectiveNode {
 
   /** One-based line of the directive within the page source. */
   line: number;
+
+  /** One-based line of the directive's closing fence, when known. */
+  endLine?: number;
 }
 
 /** Content shown only when a condition holds. */
@@ -222,6 +225,7 @@ function tokensToNodes(
 
     const meta = token.meta as IDirectiveMeta;
     const line = (token.map ? token.map[0] : 0) + lineOffset + 1;
+    const endLine = token.map ? token.map[1] + lineOffset : undefined;
 
     if (meta.name === 'when') {
       nodes.push(whenNode(meta, md, env, line));
@@ -235,7 +239,8 @@ function tokensToNodes(
       id: assignDirectiveId(meta, env),
       options: meta.options,
       body: meta.body,
-      line
+      line,
+      endLine
     };
 
     if (meta.variants) {

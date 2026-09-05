@@ -26,3 +26,4 @@ nav:
       - Loading and trust: trust.md
       - Progress events: analytics.md
   - Command line: cli.md
+  - Writing workshops in JupyterLab: authoring.md

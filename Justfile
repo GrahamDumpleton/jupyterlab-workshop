@@ -79,11 +79,11 @@ docs-serve:
 docs-clean:
     rm -rf site docs/reference
 
-# Self-test a workshop directory in a real JupyterLab (default: both examples).
+# Self-test a workshop directory in a real JupyterLab (default: every example).
 selftest *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "$#" -eq 0 ]; then set -- examples/git-basics examples/hello-jupyterlab; fi
+    if [ "$#" -eq 0 ]; then set -- examples/git-basics examples/hello-jupyterlab examples/workshop-authoring; fi
     for dir in "$@"; do uv run jupyter workshop test "$dir"; done
 
 # Remove build outputs.

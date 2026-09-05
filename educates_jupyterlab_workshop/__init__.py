@@ -10,6 +10,7 @@ except ImportError:
     # The version file is generated when the package is built or installed.
     __version__ = "dev"
 
+from .bridge import setup_bridge
 from .handlers import setup_handlers
 
 
@@ -28,6 +29,7 @@ def _jupyter_server_extension_points() -> list[dict[str, str]]:
 def _load_jupyter_server_extension(server_app: Any) -> None:
     """Register the HTTP handlers that the frontend extension talks to."""
 
+    setup_bridge(server_app)
     setup_handlers(server_app)
     server_app.log.info("Registered educates_jupyterlab_workshop server extension")
 

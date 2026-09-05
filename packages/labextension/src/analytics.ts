@@ -61,6 +61,11 @@ export class AnalyticsRecorder {
   }
 
   private _onEvent(_: IWorkshopManager, event: IWorkshopEvent): void {
+    // An author trying pages out is not a learner; nothing is recorded.
+    if (this._manager.authoring) {
+      return;
+    }
+
     // Each open workshop gets its own batch, since the file the events go
     // to belongs to the workshop that produced them.
     const batch = this._pending.get(event.workshop) ?? {

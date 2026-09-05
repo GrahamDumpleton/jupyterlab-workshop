@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { lintWorkshop } from '../lint/rules';
 import { ILintMessage, formatLintMessage } from '../lint/types';
 import { REGISTRY_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
+import { draftToDirectory } from './draft';
 import { renderWorkshopHtml } from './render';
 import { ILoadOptions, loadWorkshopFiles } from './workshop';
 
@@ -52,7 +53,9 @@ function usage(): string {
     '  render <dir> [page] [--out <file>] [--platform <name>]',
     '                             Render pages to standalone HTML',
     '  schema [--registry]        Print the manifest (or registry) JSON schema',
-    '  pages <dir>                List page ids and titles as JSON'
+    '  pages <dir>                List page ids and titles as JSON',
+    '  draft <recording> <dir> [--name <name>] [--title <title>] [--json]',
+    '                             Write draft pages from a recorded session'
   ].join('\n');
 }
 
@@ -64,11 +67,9 @@ export function main(argv: string[]): number {
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
   const out = valueOf(rest, '--out');
   const platform = valueOf(rest, '--platform');
+  const valued = ['--out', '--platform', '--name', '--title'];
   const positional = rest.filter(
-    (arg, index) =>
-      !arg.startsWith('--') &&
-      rest[index - 1] !== '--out' &&
-      rest[index - 1] !== '--platform'
+    (arg, index) => !arg.startsWith('--') && !valued.includes(rest[index - 1])
   );
   const options: ILoadOptions = { platform };
 
@@ -144,6 +145,27 @@ export function main(argv: string[]): number {
             2
           )}\n`
         );
+
+        return 0;
+      }
+
+      case 'draft': {
+        if (!positional[0] || !positional[1]) {
+          throw new Error('draft needs a recording file and a directory');
+        }
+
+        const report = draftToDirectory(positional[0], positional[1], {
+          name: valueOf(rest, '--name'),
+          title: valueOf(rest, '--title')
+        });
+
+        if (flags.has('--json')) {
+          process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+        } else {
+          for (const file of report.files) {
+            process.stdout.write(`wrote ${report.directory}/${file}\n`);
+          }
+        }
 
         return 0;
       }

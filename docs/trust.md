@@ -83,6 +83,11 @@ deletes outside the workshop, `eval`, executing base64-decoded content,
 home directory paths, absolute paths in file actions, and hosts that are
 not in the declared `network` list.
 
+A workshop opened in author mode (see [Writing workshops in
+JupyterLab](authoring.md)) is marked as the learner's own and is trusted
+at every hash from then on, so editing it never brings the dialog back.
+"Workshop: Remove…" forgets the mark along with the decision.
+
 The learner picks a level:
 
 | Level         | Behaviour                                                                                                                                                                                                                                                                                        |

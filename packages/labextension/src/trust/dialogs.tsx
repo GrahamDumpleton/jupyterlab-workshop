@@ -200,10 +200,13 @@ class ConfirmBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
 
 /**
  * Show the trust dialog and return the chosen level, or null to cancel.
+ * In preview mode the dialog is titled as a preview and the choice is
+ * still returned, for the caller to ignore.
  */
 export async function showTrustDialog(
   summary: ITrustSummary,
-  defaultLevel: TrustLevel
+  defaultLevel: TrustLevel,
+  preview = false
 ): Promise<ITrustChoice | null> {
   const buttons: Dialog.IButton[] = [
     Dialog.cancelButton({ label: 'Cancel' }),
@@ -224,7 +227,9 @@ export async function showTrustDialog(
   const defaultButton = levels.indexOf(defaultLevel);
 
   const result = await showDialog<boolean>({
-    title: `Open workshop "${summary.title}"?`,
+    title: preview
+      ? `Preview: Open workshop "${summary.title}"?`
+      : `Open workshop "${summary.title}"?`,
     body: new TrustBody(summary),
     buttons,
     defaultButton: defaultButton < 0 ? 2 : defaultButton,

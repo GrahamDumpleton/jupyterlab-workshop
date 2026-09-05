@@ -80,6 +80,7 @@ jobs:
         run: |
           uv run jupyter workshop lint examples/git-basics --platform windows
           uv run jupyter workshop lint examples/hello-jupyterlab --platform windows
+          uv run jupyter workshop lint examples/workshop-authoring --platform windows
       - name: Install browsers
         run: uv run playwright install chromium
       - name: Workshop self-test

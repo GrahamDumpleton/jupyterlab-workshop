@@ -18,8 +18,10 @@ commands, `docs/environment.md` for isolated Python environments,
 `docs/trust.md` for how workshops are loaded from repositories and
 archives, what capabilities they declare, and how the trust levels change
 what actions do, `docs/analytics.md` for the progress events a workshop
-records, and `docs/cli.md` for the `jupyter workshop` command line tool
-that creates, lints, renders, self-tests and publishes workshops.
+records, `docs/cli.md` for the `jupyter workshop` command line tool
+that creates, lints, renders, self-tests and publishes workshops, and
+`docs/authoring.md` for author mode in JupyterLab, session recording,
+and the MCP server and `skills/workshop-author` skill for AI agents.
 `just docs` builds these into a site.
 
 ## Writing a workshop
@@ -33,7 +35,10 @@ jupyter workshop test my-workshop
 ```
 
 `lint` needs Node.js on the path; `test` runs every action of the
-workshop in a real JupyterLab and reports each one.
+workshop in a real JupyterLab and reports each one. Inside JupyterLab,
+"Workshop: Author Mode" adds an editing toolbar to the panel, and
+`jupyter workshop mcp` (with the `mcp` extra) serves the same tools to AI
+agents.
 
 ## Development
 

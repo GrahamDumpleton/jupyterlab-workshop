@@ -942,3 +942,246 @@
   color: var(--jp-error-color1);
   font-size: var(--jp-ui-font-size0);
 }
+
+/* Author mode. */
+
+.jp-WorkshopPanel-author {
+  margin-top: 6px;
+  padding: 6px 0 2px;
+  border-top: 1px dashed var(--jp-border-color2);
+}
+
+.jp-WorkshopPanel-authorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jp-WorkshopPanel-authorButton {
+  padding: 1px 7px;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 3px;
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size0);
+  cursor: pointer;
+}
+
+.jp-WorkshopPanel-authorButton:hover {
+  background: var(--jp-layout-color3);
+}
+
+.jp-WorkshopPanel-authorButton.jp-mod-error {
+  border-color: var(--jp-error-color1);
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopPanel-authorButton.jp-mod-warning {
+  border-color: var(--jp-warn-color1);
+  color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-record.jp-mod-recording {
+  background: var(--jp-error-color1);
+  border-color: var(--jp-error-color1);
+  color: var(--jp-ui-inverse-font-color1);
+}
+
+.jp-WorkshopPanel-authorError {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--jp-error-color1);
+  background: var(--jp-error-color3);
+  font-size: var(--jp-ui-font-size0);
+  white-space: pre-wrap;
+}
+
+.jp-WorkshopPanel-gutterBlock {
+  margin-bottom: 4px;
+}
+
+.jp-WorkshopPanel-gutter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 8px;
+  padding: 0 4px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-gutterInfo {
+  flex: 1 1 auto;
+}
+
+.jp-WorkshopPanel-gutterButton {
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--jp-brand-color1);
+  font-size: var(--jp-ui-font-size0);
+  cursor: pointer;
+}
+
+.jp-WorkshopPanel-gutterButton:hover {
+  text-decoration: underline;
+}
+
+.jp-WorkshopPanel-lintList {
+  margin-bottom: 8px;
+}
+
+.jp-WorkshopPanel-lint {
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border-left: 3px solid var(--jp-warn-color1);
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-lint.jp-mod-error {
+  border-left-color: var(--jp-error-color1);
+}
+
+/* Lint widget. */
+
+.jp-WorkshopLint {
+  overflow: auto;
+  padding: 8px 12px;
+  color: var(--jp-ui-font-color1);
+  background: var(--jp-layout-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopLint-summary {
+  margin-bottom: 8px;
+}
+
+.jp-WorkshopLint-error {
+  margin-top: 4px;
+  color: var(--jp-error-color1);
+  white-space: pre-wrap;
+}
+
+.jp-WorkshopLint-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.jp-WorkshopLint-cell {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--jp-border-color2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.jp-WorkshopLint-level.jp-mod-error {
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopLint-level.jp-mod-warning {
+  color: var(--jp-warn-color1);
+}
+
+/* Authoring dialogs. */
+
+.jp-WorkshopAuthor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 420px;
+}
+
+.jp-WorkshopAuthor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jp-WorkshopAuthor-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 2px;
+  background: var(--jp-input-background);
+  color: var(--jp-ui-font-color0);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopAuthor-textarea {
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+}
+
+.jp-WorkshopAuthor-fieldLabel {
+  font-weight: 600;
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAuthor-fieldHint {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAuthor-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.jp-WorkshopAuthor-check {
+  display: block;
+}
+
+.jp-WorkshopAuthor-commonSummary {
+  cursor: pointer;
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAuthor-pages {
+  min-width: 620px;
+}
+
+.jp-WorkshopAuthor-pageTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.jp-WorkshopAuthor-pageCell {
+  padding: 2px 4px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.jp-WorkshopAuthor-pageRow.jp-mod-removed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.jp-WorkshopAuthor-pageButtons {
+  white-space: nowrap;
+}
+
+.jp-WorkshopAuthor-pageButton {
+  padding: 0 4px;
+  border: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  cursor: pointer;
+}
+
+.jp-WorkshopAuthor-addPage {
+  display: flex;
+  gap: 6px;
+}
+
+.jp-WorkshopAuthor-facts dt {
+  font-weight: 600;
+}
+
+.jp-WorkshopAuthor-facts dd {
+  margin: 0 0 6px;
+  word-break: break-all;
+}

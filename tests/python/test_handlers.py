@@ -278,3 +278,147 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
     )
 
     assert json.loads(response.body)["ready"] is False
+
+
+async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
+    response = await jp_fetch(
+        "educates-workshop",
+        "init",
+        method="POST",
+        body=json.dumps(
+            {
+                "directory": "authored/my-workshop",
+                "title": "My Workshop",
+                "template": "notebook",
+                "platforms": ["linux", "windows"],
+                "gating": "strict",
+            }
+        ),
+    )
+    payload = json.loads(response.body)
+
+    assert payload["path"] == "authored/my-workshop"
+    assert "authored/my-workshop/pages/01-welcome.md" in payload["files"]
+
+    manifest = (jp_root_dir / "authored" / "my-workshop" / "workshop.yaml").read_text()
+
+    assert "name: my-workshop\ntitle: My Workshop\n" in manifest
+    assert "platforms: [linux, windows]" in manifest
+    assert "gating: strict" in manifest
+    assert (
+        "notebook-create"
+        in (
+            jp_root_dir / "authored" / "my-workshop" / "pages" / "01-welcome.md"
+        ).read_text()
+    )
+
+    # A second init of the same directory is a conflict, and a directory
+    # outside the root is refused.
+    with pytest.raises(Exception) as conflict:
+        await jp_fetch(
+            "educates-workshop",
+            "init",
+            method="POST",
+            body=json.dumps({"directory": "authored/my-workshop"}),
+        )
+
+    assert conflict.value.code == 409
+
+    with pytest.raises(Exception) as outside:
+        await jp_fetch(
+            "educates-workshop",
+            "init",
+            method="POST",
+            body=json.dumps({"directory": "../elsewhere"}),
+        )
+
+    assert outside.value.code == 400
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "publish",
+        method="POST",
+        body=json.dumps(
+            {"workshop": "authored/my-workshop", "url": "https://h/mw.tar.gz"}
+        ),
+    )
+    published = json.loads(response.body)
+
+    assert published["archive"] == "authored/my-workshop/dist/my-workshop-0.1.0.tar.gz"
+    assert (jp_root_dir / published["archive"]).is_file()
+    assert published["entry"]["versions"][0]["source"] == {
+        "archive": "https://h/mw.tar.gz"
+    }
+    assert len(published["sha256"]) == 64
+
+
+async def test_bridge_round_trip_and_timeout(jp_fetch):
+    import asyncio
+
+    # Nothing is listening, so the request appears as pending until a
+    # result is posted for it, as the frontend would do.
+    request = asyncio.ensure_future(
+        jp_fetch(
+            "educates-workshop",
+            "bridge",
+            method="POST",
+            body=json.dumps(
+                {"command": "workshop:bridge-status", "args": {}, "timeout": 5}
+            ),
+        )
+    )
+
+    pending: list[dict] = []
+
+    for _ in range(50):
+        listing = await jp_fetch("educates-workshop", "bridge")
+        pending = json.loads(listing.body)["pending"]
+
+        if pending:
+            break
+
+        await asyncio.sleep(0.05)
+
+    assert pending and pending[0]["command"] == "workshop:bridge-status"
+
+    answer = await jp_fetch(
+        "educates-workshop",
+        "bridge",
+        "result",
+        method="POST",
+        body=json.dumps({"request_id": pending[0]["request_id"], "result": {"ok": 1}}),
+    )
+
+    assert json.loads(answer.body) == {"resolved": True}
+    assert json.loads((await request).body) == {"result": {"ok": 1}}
+
+    # Answering again finds nothing to resolve.
+    again = await jp_fetch(
+        "educates-workshop",
+        "bridge",
+        "result",
+        method="POST",
+        body=json.dumps({"request_id": pending[0]["request_id"], "result": 2}),
+    )
+
+    assert json.loads(again.body) == {"resolved": False}
+
+    with pytest.raises(Exception) as timeout:
+        await jp_fetch(
+            "educates-workshop",
+            "bridge",
+            method="POST",
+            body=json.dumps({"command": "workshop:x", "args": {}, "timeout": 0.2}),
+        )
+
+    assert timeout.value.code == 504
+
+    with pytest.raises(Exception) as refused:
+        await jp_fetch(
+            "educates-workshop",
+            "bridge",
+            method="POST",
+            body=json.dumps({"command": "filebrowser:delete", "args": {}}),
+        )
+
+    assert refused.value.code == 400

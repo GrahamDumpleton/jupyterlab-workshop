@@ -1,0 +1,34 @@
+apiVersion: workshop.educates.dev/v1alpha1
+name: workshop-authoring
+title: Writing your first workshop
+version: 0.1.0
+description: Scaffold, edit, lint and publish a workshop of your own with the jupyter workshop command and author mode.
+authors: [Graham Dumpleton]
+tags: [authoring, cli, meta]
+duration: 25m
+platforms: [linux, macos, windows]
+capabilities:
+  - terminal
+  - write-files: [workspace]
+  - kernel-exec
+requires:
+  tools:
+    - { name: jupyter, hint: { default: "pip install educates-jupyterlab-workshop" } }
+    - { name: node, optional: true, hint: { default: "Install Node.js 18 or newer; jupyter workshop lint needs it" } }
+layout: default
+gating: strict
+layouts:
+  default:
+    main:
+      - { area: bottom, widgets: ["terminal:author"] }
+variables:
+  - name: workshop_dir
+    type: path
+    default: my-workshop
+    description: Directory the new workshop is scaffolded into
+pages:
+  - pages/01-what-a-workshop-is.md
+  - pages/02-scaffold.md
+  - pages/03-write-a-page.md
+  - pages/04-lint.md
+  - pages/05-test-and-publish.md

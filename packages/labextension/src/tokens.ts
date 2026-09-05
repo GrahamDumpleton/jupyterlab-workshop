@@ -179,8 +179,14 @@ export interface ITrustStore {
   get(sourceKey: string, hash: string): Promise<ITrustDecision | null>;
   set(decision: ITrustDecision): Promise<void>;
 
-  /** Forget every decision for a source. */
+  /** Forget every decision for a source, including that it is authored. */
   forget(sourceKey: string): Promise<void>;
+
+  /** Whether a source is the learner's own work, trusted at any hash. */
+  isAuthored(sourceKey: string): Promise<boolean>;
+
+  /** Mark a source as the learner's own work, or stop treating it so. */
+  setAuthored(sourceKey: string, authored: boolean): Promise<void>;
 }
 
 /** Where a variable value came from, lowest precedence first. */
@@ -437,6 +443,12 @@ export interface IWorkshopManager {
   /** Where events of the open workshop are reported, or an empty string. */
   readonly analyticsSink: string;
 
+  /** Whether the open workshop is being edited rather than followed. */
+  readonly authoring: boolean;
+
+  /** Lint findings for the open workshop, refreshed on reload. */
+  readonly lint: ILintMessage[];
+
   /** Pages whose `when` condition holds, in order. */
   readonly visiblePages: IPage[];
 
@@ -457,6 +469,15 @@ export interface IWorkshopManager {
 
   /** Record a progress event that the manager cannot observe itself. */
   track(kind: string, data?: Record<string, unknown>): void;
+
+  /**
+   * Turn author mode on or off. Turning it on marks the workshop as the
+   * learner's own, so edits never prompt for trust again.
+   */
+  setAuthoring(on: boolean): Promise<void>;
+
+  /** Re-read the manifest and pages from disk, keeping progress. */
+  reload(): Promise<void>;
 
   /** Ask the server again about the environment. */
   refreshEnvironment(): Promise<void>;
@@ -624,6 +645,29 @@ export namespace CommandIDs {
   export const launch = 'workshop:launch';
   export const exportEvents = 'workshop:export-events';
   export const createEnvironment = 'workshop:create-environment';
+  export const authorMode = 'workshop:author-mode';
+  export const newWorkshop = 'workshop:new';
+  export const editPage = 'workshop:edit-page';
+  export const editManifest = 'workshop:edit-manifest';
+  export const openSource = 'workshop:open-source';
+  export const newPage = 'workshop:new-page';
+  export const managePages = 'workshop:manage-pages';
+  export const insertAction = 'workshop:insert-action';
+  export const editAction = 'workshop:edit-action';
+  export const deleteAction = 'workshop:delete-action';
+  export const capture = 'workshop:capture';
+  export const runPageActions = 'workshop:run-page-actions';
+  export const runPageChecks = 'workshop:run-page-checks';
+  export const runPage = 'workshop:run-page';
+  export const showLint = 'workshop:lint';
+  export const applyFix = 'workshop:apply-fix';
+  export const trustPreview = 'workshop:trust-preview';
+  export const publish = 'workshop:publish';
+  export const record = 'workshop:record';
+  export const recordPageBreak = 'workshop:record-page-break';
+  export const bridgeOpen = 'workshop:bridge-open';
+  export const bridgeStatus = 'workshop:bridge-status';
+  export const bridgeRun = 'workshop:bridge-run';
 }
 
 /**

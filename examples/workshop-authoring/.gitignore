@@ -1,0 +1,5 @@
+# Runtime state written by the workshop extension
+_workshop/
+
+# The workshop the learner scaffolds
+my-workshop/

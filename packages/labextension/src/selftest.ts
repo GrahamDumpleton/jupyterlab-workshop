@@ -29,6 +29,12 @@ export interface ISelfTestReport {
   skipped: number;
 }
 
+/** Which directives of a page to run. */
+export type RunFilter = 'all' | 'actions' | 'checks';
+
+/** Directives that are checks rather than steps. */
+const CHECKS: ReadonlySet<string> = new Set(['verify', 'quiz', 'form']);
+
 /**
  * Run every action of every visible page in order, answering quizzes
  * correctly and submitting form defaults, and report what happened. Used
@@ -55,67 +61,102 @@ export async function runAll(
       break;
     }
 
-    // Actions can set variables, which re-renders the pages, so fetch the
-    // current page again before each step and continue from the next id.
-    const done = new Set<string>();
-
-    for (;;) {
-      const page = manager.currentPage;
-
-      if (!page || page.id !== pageId) {
-        break;
-      }
-
-      const node = visibleDirectives(page, manager.variables.values).find(
-        item => !done.has(item.id)
-      );
-
-      if (!node) {
-        break;
-      }
-
-      done.add(node.id);
-
-      if (node.name === 'hint') {
-        continue;
-      }
-
-      if (INTERACTIVE.has(node.name)) {
-        results.push({
-          page: pageId,
-          id: node.id,
-          type: node.name,
-          status: 'skipped',
-          message: 'Needs a person; skipped by the self-test',
-          seconds: 0
-        });
-
-        continue;
-      }
-
-      const started = Date.now();
-      const result = await manager.runAction(
-        prepared(node),
-        'click',
-        argumentFor(node, manager)
-      );
-
-      results.push({
-        page: pageId,
-        id: node.id,
-        type: node.name,
-        status: result.status,
-        message: result.message ?? '',
-        seconds: (Date.now() - started) / 1000
-      });
-    }
-
+    results.push(...(await runCurrentPage(manager, 'all')));
     manager.markDone(pageId, true);
     index += 1;
   }
 
+  return summarize(workshop.path, results);
+}
+
+/**
+ * Run the directives of the current page in order: every one, only the
+ * steps, or only the checks. Used by author mode and the bridge.
+ */
+export async function runCurrentPage(
+  manager: IWorkshopManager,
+  filter: RunFilter
+): Promise<ISelfTestResult[]> {
+  const pageId = manager.currentPage?.id;
+  const results: ISelfTestResult[] = [];
+
+  if (!pageId) {
+    return results;
+  }
+
+  // Actions can set variables, which re-renders the pages, so fetch the
+  // current page again before each step and continue from the next id.
+  const done = new Set<string>();
+
+  for (;;) {
+    const page = manager.currentPage;
+
+    if (!page || page.id !== pageId) {
+      break;
+    }
+
+    const node = visibleDirectives(page, manager.variables.values).find(
+      item => !done.has(item.id)
+    );
+
+    if (!node) {
+      break;
+    }
+
+    done.add(node.id);
+
+    const isCheck = CHECKS.has(node.name);
+
+    if (
+      node.name === 'hint' ||
+      (filter === 'actions' && isCheck) ||
+      (filter === 'checks' && !isCheck)
+    ) {
+      continue;
+    }
+
+    if (INTERACTIVE.has(node.name)) {
+      results.push({
+        page: pageId,
+        id: node.id,
+        type: node.name,
+        status: 'skipped',
+        message: 'Needs a person; skipped by the self-test',
+        seconds: 0
+      });
+
+      continue;
+    }
+
+    const started = Date.now();
+    const result = await manager.runAction(
+      prepared(node),
+      'click',
+      argumentFor(node, manager)
+    );
+
+    results.push({
+      page: pageId,
+      id: node.id,
+      type: node.name,
+      status: result.status,
+      message: result.message ?? '',
+      seconds: (Date.now() - started) / 1000
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Count the outcomes of a run into a report.
+ */
+export function summarize(
+  workshop: string,
+  results: ISelfTestResult[]
+): ISelfTestReport {
   return {
-    workshop: workshop.path,
+    workshop,
     results,
     passed: results.filter(item => item.status === 'ok').length,
     failed: results.filter(item => item.status === 'error').length,

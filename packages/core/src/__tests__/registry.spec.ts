@@ -92,7 +92,7 @@ describe('parseRegistryIndex', () => {
     expect(validate(data)).toBe(true);
     expect(validate.errors ?? []).toEqual([]);
     expect(parseRegistryIndex(data).workshops.map(entry => entry.name)).toEqual(
-      ['git-basics', 'hello-jupyterlab']
+      ['git-basics', 'hello-jupyterlab', 'workshop-authoring']
     );
   });
 });

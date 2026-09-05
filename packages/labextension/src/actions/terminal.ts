@@ -3,6 +3,7 @@ import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Terminal as TerminalService } from '@jupyterlab/services';
 import { Terminal } from '@jupyterlab/terminal';
 import { terminalIcon } from '@jupyterlab/ui-components';
+import { Token } from '@lumino/coreutils';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import { WORKSHOP_STATE_DIR } from '../state';
@@ -63,6 +64,18 @@ export class TerminalSessions {
   /** Emitted with text a workshop terminal printed. */
   get output(): ISignal<this, { name: string; text: string }> {
     return this._output;
+  }
+
+  /** Emitted with text sent to a workshop terminal, typed or by an action. */
+  get input(): ISignal<this, { name: string; text: string }> {
+    return this._input;
+  }
+
+  /** The names of the terminals that are open. */
+  names(): string[] {
+    return [...this._widgets.entries()]
+      .filter(([, widget]) => !widget.isDisposed)
+      .map(([name]) => name);
   }
 
   /**
@@ -149,7 +162,21 @@ export class TerminalSessions {
 
     session.messageReceived.connect(onMessage);
 
+    // Everything sent to the terminal passes through the connection's
+    // public send method, so wrapping it is how typed input is observed
+    // for the recorder; the original is put back when the widget goes.
+    const send = session.send.bind(session);
+
+    session.send = (message: TerminalService.IMessage): void => {
+      if (message.type === 'stdin' && message.content) {
+        this._input.emit({ name, text: message.content.map(String).join('') });
+      }
+
+      send(message);
+    };
+
     widget.disposed.connect(() => {
+      session.send = send;
       session.messageReceived.disconnect(onMessage);
 
       if (this._widgets.get(name) === widget) {
@@ -240,6 +267,7 @@ export class TerminalSessions {
   private _pending = new Map<string, Promise<MainAreaWidget<Terminal>>>();
   private _first: MainAreaWidget<Terminal> | null = null;
   private _output = new Signal<this, { name: string; text: string }>(this);
+  private _input = new Signal<this, { name: string; text: string }>(this);
 }
 
 export namespace TerminalSessions {
@@ -249,6 +277,12 @@ export namespace TerminalSessions {
     manager: IWorkshopManager;
   }
 }
+
+/** The workshop terminals, shared by the actions and the recorder. */
+export const ITerminalSessions = new Token<TerminalSessions>(
+  '@educates/jupyterlab-workshop:ITerminalSessions',
+  'Terminals opened by the workshop, keyed by session name.'
+);
 
 /**
  * The command that loads the workshop environment file in the platform's

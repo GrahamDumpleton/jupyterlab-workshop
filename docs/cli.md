@@ -10,13 +10,21 @@ other commands are pure Python.
 
 ```
 jupyter workshop init my-workshop [--name NAME] [--title TITLE] [--ci]
+                                  [--template starter|blank|notebook]
+                                  [--platform NAME]... [--capability NAME]...
+                                  [--gating off|soft|strict]
 ```
 
-Creates a directory with a `workshop.yaml`, two starter pages showing
-commands, a check, a file write and a quiz, a README and a `.gitignore`.
-The name defaults to a slug of the directory name. With `--ci` it also
-writes a GitHub Actions workflow that lints and self-tests the workshop on
-Linux and macOS.
+Creates a directory with a `workshop.yaml`, starter pages, a README and
+a `.gitignore`. The `starter` template's pages show commands, a check,
+a file write and a quiz; `blank` is one page of prose; `notebook`
+creates a notebook, runs its cells and checks a value in its kernel. The
+name defaults to a slug of the directory name. `--platform` and
+`--capability` may be repeated and set the manifest lists (the defaults
+are `linux` and `macos`, and the template's capabilities); `--gating`
+sets the page gating. With `--ci` it also writes a GitHub Actions
+workflow that lints and self-tests the workshop on Linux, macOS and
+Windows.
 
 ## lint
 
@@ -86,6 +94,32 @@ creating it if needed. An entry for a name that is already listed
 replaces the listing and keeps the earlier versions, newest first. See
 [Finding and installing workshops](registry.md) for the index format and
 how the extension uses it.
+
+## record
+
+```
+jupyter workshop record RECORDING DIRECTORY [--name NAME] [--title TITLE]
+```
+
+Writes draft pages from a recording saved by the Record button in
+JupyterLab (a JSON file under the workshop's `_workshop/recordings/`).
+When the directory is a workshop the pages are added to it and its
+manifest gains the pages and capabilities they need; otherwise a new
+workshop is created there. See [Writing workshops in
+JupyterLab](authoring.md) for what the draft contains.
+
+## mcp
+
+```
+jupyter workshop mcp [--url URL --token TOKEN]
+```
+
+Serves the tools to AI agents over the Model Context Protocol on
+standard input and output; needs the `mcp` extra. Lint, render, test,
+init, publish and draft work on directories. The live tools drive a
+running JupyterLab that has a workshop open in author mode, found
+through `jupyter server list` unless `--url` and `--token` name one. See
+[Writing workshops in JupyterLab](authoring.md).
 
 ## test
 

@@ -1,4 +1,5 @@
 export * from './actions/catalog';
+export * from './authoring';
 export * from './checks';
 export * from './diff';
 export * from './errors';
@@ -16,3 +17,4 @@ export * from './trust';
 export * from './variables/expressions';
 export * from './variables/substitute';
 export * from './variables/envfile';
+export * from './util';
