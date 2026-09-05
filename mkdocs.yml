@@ -1,0 +1,23 @@
+site_name: educates-jupyterlab-workshop
+site_description: Guided, interactive workshops inside JupyterLab.
+repo_url: https://github.com/educates/educates-jupyterlab-workshop
+docs_dir: docs
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true
+nav:
+  - Overview: index.md
+  - Try the demo: demo.md
+  - Writing workshops:
+      - Actions: actions.md
+      - Checks, forms and checkpoints: checks.md
+      - Manifest reference: reference/manifest.md
+  - Loading and trust: trust.md
+  - Command line: cli.md

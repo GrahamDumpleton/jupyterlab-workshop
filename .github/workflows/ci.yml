@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: extractions/setup-just@v2
+      - name: Install
+        run: just install
+      - name: Lint
+        run: just lint
+      - name: Type check
+        run: just typecheck
+      - name: Unit tests
+        run: just test
+      - name: Build the docs
+        run: just docs
+      - name: Build the distribution
+        run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: extractions/setup-just@v2
+      - name: Install
+        run: just install
+      - name: Install browsers
+        run: |
+          cd tests/ui-tests && uv run jlpm install && uv run jlpm playwright install --with-deps chromium
+          uv run playwright install --with-deps chromium
+      - name: Galata tests
+        run: just test-ui
+      - name: Workshop self-tests
+        run: just selftest
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: tests/ui-tests/test-results

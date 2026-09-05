@@ -65,13 +65,26 @@ typecheck:
     uv run jlpm typecheck
     uv run mypy
 
-# Build the documentation.
+# Build the documentation site into site/ (generates the manifest reference first).
 docs:
-    @echo "Documentation build is not set up yet (planned for Phase 4)."
+    uv run python scripts/generate_manifest_reference.py
+    uv run mkdocs build --strict
 
-# Clear a stale incremental documentation build.
+# Serve the documentation with live reload.
+docs-serve:
+    uv run python scripts/generate_manifest_reference.py
+    uv run mkdocs serve
+
+# Clear generated documentation outputs.
 docs-clean:
-    @echo "Documentation build is not set up yet (planned for Phase 4)."
+    rm -rf site docs/reference
+
+# Self-test a workshop directory in a real JupyterLab (default: both examples).
+selftest *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$#" -eq 0 ]; then set -- examples/git-basics examples/hello-jupyterlab; fi
+    for dir in "$@"; do uv run jupyter workshop test "$dir"; done
 
 # Remove build outputs.
 clean:

@@ -26,6 +26,14 @@ dependencies = [
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 
+[project.optional-dependencies]
+test = [
+    "playwright>=1.45",
+]
+
+[project.scripts]
+jupyter-workshop = "educates_jupyterlab_workshop.cli:main"
+
 [dependency-groups]
 dev = [
     "jupyterlab>=4.6.0,<5",
@@ -34,6 +42,9 @@ dev = [
     "pytest>=8",
     "pytest-jupyter[server]>=0.10",
     "ruff>=0.5",
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "playwright>=1.45",
 ]
 
 [tool.hatch.version]
@@ -43,7 +54,11 @@ source = "nodejs"
 fields = ["description", "authors", "urls", "keywords"]
 
 [tool.hatch.build.targets.sdist]
-artifacts = ["educates_jupyterlab_workshop/labextension"]
+artifacts = [
+    "educates_jupyterlab_workshop/labextension",
+    "educates_jupyterlab_workshop/nodejs",
+    "educates_jupyterlab_workshop/schema",
+]
 exclude = [".github", "scratch", "tests"]
 
 [tool.hatch.build.targets.wheel]
@@ -63,6 +78,8 @@ build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
     "educates_jupyterlab_workshop/labextension/static/style.js",
     "educates_jupyterlab_workshop/labextension/package.json",
+    "educates_jupyterlab_workshop/nodejs/workshop-cli.cjs",
+    "educates_jupyterlab_workshop/schema/workshop.schema.json",
 ]
 skip-if-exists = ["educates_jupyterlab_workshop/labextension/static/style.js"]
 

@@ -11,19 +11,22 @@
     "types": "lib/index.d.ts",
     "files": [
         "lib/**/*.{d.ts,js,js.map,json}",
-        "src/**/*.ts"
+        "src/**/*.ts",
+        "scripts/*.js"
     ],
     "scripts": {
-        "build": "tsc -b",
+        "build": "tsc -b && node scripts/bundle-node.js",
         "clean": "rimraf lib tsconfig.tsbuildinfo",
         "test": "jest",
-        "watch": "tsc -b -w"
+        "watch": "tsc -b -w",
+        "build:node": "node scripts/bundle-node.js"
     },
     "dependencies": {
         "js-yaml": "^4.1.0",
         "markdown-it": "^14.1.0"
     },
     "devDependencies": {
+        "@rspack/core": "2.2.2",
         "@types/jest": "^29.2.0",
         "@types/js-yaml": "^4.0.9",
         "@types/markdown-it": "^14.1.2",

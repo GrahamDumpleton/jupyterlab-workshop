@@ -30,3 +30,6 @@ def _load_jupyter_server_extension(server_app: Any) -> None:
 
     setup_handlers(server_app)
     server_app.log.info("Registered educates_jupyterlab_workshop server extension")
+
+
+__all__ = ["__version__"]

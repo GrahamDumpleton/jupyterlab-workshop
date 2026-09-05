@@ -11,9 +11,15 @@ node_modules/
 packages/*/lib/
 packages/core/coverage/
 
-# Built labextension and generated version file
+# Built labextension, Node CLI bundle, schema copy and generated version file
 educates_jupyterlab_workshop/labextension/
+educates_jupyterlab_workshop/nodejs/
+educates_jupyterlab_workshop/schema/
 educates_jupyterlab_workshop/_version.py
+
+# Documentation build outputs
+site/
+docs/reference/
 
 # Integration tests
 tests/ui-tests/test-results/

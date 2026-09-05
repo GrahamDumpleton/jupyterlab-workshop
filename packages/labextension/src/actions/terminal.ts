@@ -185,6 +185,35 @@ export class TerminalSessions {
   }
 
   /**
+   * Resolve to true when a terminal prints the text, or false after the
+   * timeout. Call before sending the command that produces the text.
+   */
+  waitForOutput(
+    name: string,
+    text: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    return new Promise(resolve => {
+      const onOutput = (
+        _: this,
+        args: { name: string; text: string }
+      ): void => {
+        if (args.name === name && args.text.includes(text)) {
+          finish(true);
+        }
+      };
+      const timer = window.setTimeout(() => finish(false), timeoutMs);
+      const finish = (result: boolean): void => {
+        window.clearTimeout(timer);
+        this._output.disconnect(onOutput);
+        resolve(result);
+      };
+
+      this._output.connect(onOutput);
+    });
+  }
+
+  /**
    * Re-source the environment file in every open terminal.
    */
   refreshEnvironment(): void {
@@ -251,6 +280,29 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
 }
 
 /**
+ * A command that prints the marker without the typed line itself
+ * containing it, so the echo of the input cannot be mistaken for output.
+ */
+export function markerCommand(
+  manager: IWorkshopManager,
+  marker: string
+): string | null {
+  const split = `${marker.slice(0, 6)}""${marker.slice(6)}`;
+
+  switch (manager.platform?.shell) {
+    case 'bash':
+    case 'zsh':
+    case 'sh':
+    case 'fish':
+      return `echo ${split}`;
+    case 'powershell':
+      return `Write-Output ("${marker.slice(0, 6)}" + "${marker.slice(6)}")`;
+    default:
+      return null;
+  }
+}
+
+/**
  * Translate key names such as `enter` or `ctrl-c` into terminal input.
  */
 export function translateKeys(spec: string): string {
@@ -291,15 +343,47 @@ export class ExecuteAction implements IActionImplementation {
 
   async run(request: IActionRequest): Promise<IActionResult> {
     const command = requireBody(request, 'a command').replace(/\r\n/g, '\n');
+    const name = sessionName(request);
+    const wait = request.options.wait;
+
+    // `wait: prompt` follows the command with a marker command and waits
+    // for the marker to be printed, which happens once the shell is back
+    // at its prompt. Any other value is a duration to pause for.
+    if (wait === 'prompt') {
+      const marker = `__WORKSHOP_DONE_${Date.now().toString(36)}__`;
+      const echo = markerCommand(this._manager, marker);
+
+      if (!echo) {
+        return {
+          status: 'error',
+          message: 'Waiting for the prompt is not supported by this shell'
+        };
+      }
+
+      const timeout = parseDuration(request.options.timeout, 120000);
+      const seen = this._terminals.waitForOutput(name, marker, timeout);
+
+      await this._terminals.send(
+        name,
+        `${command.replace(/\n+$/, '')}\n${echo}\n`,
+        terminalCwd(request, this._manager)
+      );
+
+      if (!(await seen)) {
+        return {
+          status: 'error',
+          message: `The command did not finish within ${Math.round(timeout / 1000)}s`
+        };
+      }
+
+      return { status: 'ok' };
+    }
 
     await this._terminals.send(
-      sessionName(request),
+      name,
       command.endsWith('\n') ? command : `${command}\n`,
       terminalCwd(request, this._manager)
     );
-
-    // Completion cannot be observed, so `wait` is a duration to pause for.
-    const wait = request.options.wait;
 
     if (wait && wait !== 'none') {
       await sleep(parseDuration(wait, 0));

@@ -41,6 +41,14 @@ extension and JupyterLab.
   on port 8890 so it never collides with a JupyterLab started by
   `just lab`; set `JUPYTER_PORT` to change it.
 
+- `just selftest [dir...]` runs `jupyter workshop test` on the example
+  workshops (or the directories given): a real JupyterLab driven by
+  Playwright runs every action, check, quiz and form in order. It needs
+  `uv run playwright install chromium` once. CI runs it after the Galata
+  tests. The Python tests for the CLI itself live in
+  `tests/python/test_cli.py`; the ones that need the Node bundle skip
+  unless `just build` has run.
+
 ## Conventions
 
 - Test against real things. The Python tests start a real server and

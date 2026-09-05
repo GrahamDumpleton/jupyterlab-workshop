@@ -403,7 +403,8 @@ export interface IWorkshopManager {
   /** Put the files and variables of a checkpoint back. */
   restoreCheckpoint(name: string): Promise<void>;
 
-  goTo(index: number): void;
+  /** Show a page by index; `force` ignores gating. */
+  goTo(index: number, force?: boolean): void;
   goToPage(id: string): void;
   next(): void;
   previous(): void;
@@ -494,6 +495,7 @@ export namespace CommandIDs {
   export const trust = 'workshop:trust';
   export const uninstall = 'workshop:uninstall';
   export const reset = 'workshop:reset';
+  export const runAll = 'workshop:run-all';
 }
 
 /**

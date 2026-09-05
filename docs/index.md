@@ -1,0 +1,69 @@
+# educates-jupyterlab-workshop
+
+Guided, interactive workshops inside JupyterLab.
+
+Workshop instructions are shown in a JupyterLab side panel and contain
+clickable actions that drive the live session: terminals, the file
+browser, the editor, notebooks, kernels and layout. Workshops can check
+what the learner has done, ask questions, collect values, hold pages
+until requirements are met, and snapshot the working directory. The
+concept comes from the [Educates Training Platform](https://educates.dev),
+re-imagined so that a single workshop runs wherever JupyterLab runs,
+without Kubernetes or containers.
+
+A workshop is a directory with a `workshop.yaml` manifest and Markdown
+pages. The format is text based and git friendly:
+
+````markdown
+---
+title: Your first commit
+requires: [verify:first-commit]
+---
+
+Record the commit with a message describing the change.
+
+```{execute}
+git commit -m "Add README"
+```
+
+```{verify}
+:id: first-commit
+:label: You have made a commit
+:trigger: terminal-output "Add README"
+import subprocess
+out = subprocess.run(["git", "log", "--oneline"], capture_output=True, text=True).stdout
+assert out.strip(), "No commits yet: run git commit"
+```
+````
+
+## Where to start
+
+- [Try the demo](demo.md) to see the example workshops running.
+
+- [Actions](actions.md) lists every directive a page can use.
+
+- [Checks, forms and checkpoints](checks.md) covers verifying progress,
+  quizzes, forms, gating and checkpoints.
+
+- [Manifest reference](reference/manifest.md) documents `workshop.yaml`.
+
+- [Loading and trust](trust.md) explains where workshops come from and
+  what the trust levels allow.
+
+- [Command line](cli.md) covers `jupyter workshop` for creating,
+  checking, self-testing and publishing workshops.
+
+## Install
+
+```
+pip install educates-jupyterlab-workshop
+```
+
+The package is a prebuilt JupyterLab 4 extension with its server
+extension; nothing else needs installing. Add the `test` extra and a
+browser to self-test workshops:
+
+```
+pip install "educates-jupyterlab-workshop[test]"
+playwright install chromium
+```

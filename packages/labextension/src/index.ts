@@ -23,6 +23,7 @@ import {
 import { IEditorTracker } from '@jupyterlab/fileeditor';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
+import { ReadonlyJSONValue } from '@lumino/coreutils';
 import { Widget } from '@lumino/widgets';
 
 import {
@@ -95,6 +96,7 @@ import {
 import { LayoutManager } from './layout';
 import { WorkshopManager } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
+import { runAll } from './selftest';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import {
@@ -604,10 +606,33 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    // The self-test harness opens a workshop and runs everything in it.
+    app.commands.addCommand(CommandIDs.runAll, {
+      label: 'Workshop: Run Every Action (self-test)',
+      caption:
+        'Run every action, check, quiz and form of the open workshop in order and report the results',
+      isEnabled: () => manager.workshop !== null,
+      execute: async (args): Promise<unknown> => {
+        const path = typeof args.path === 'string' ? args.path : '';
+
+        if (path && manager.workshop?.path !== path) {
+          await manager.open(path);
+        }
+
+        const report = await runAll(manager);
+
+        return report as unknown as ReadonlyJSONValue;
+      }
+    });
+
     if (palette) {
       for (const command of Object.values(CommandIDs)) {
-        // The context menu command only makes sense with a selection.
-        if (command !== CommandIDs.openSelected) {
+        // The context menu command only makes sense with a selection, and
+        // the self-test is for the harness.
+        if (
+          command !== CommandIDs.openSelected &&
+          command !== CommandIDs.runAll
+        ) {
           palette.addItem({ command, category: PALETTE_CATEGORY });
         }
       }

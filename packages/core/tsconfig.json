@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "lib",
     "rootDir": "src",
-    "types": []
+    "types": ["node"]
   },
   "include": ["src/**/*", "src/**/*.json"],
   "exclude": ["src/**/__tests__/**"]

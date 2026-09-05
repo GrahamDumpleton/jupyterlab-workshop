@@ -501,7 +501,7 @@ export class WorkshopManager implements IWorkshopManager {
     return this._workshop !== null;
   }
 
-  goTo(index: number): void {
+  goTo(index: number, force = false): void {
     const visible = this.visiblePages;
     const page = visible[Math.max(0, Math.min(index, visible.length - 1))];
 
@@ -510,8 +510,9 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     // Moving forward past unmet requirements is refused under strict
-    // gating and recorded as a skip under soft gating.
-    if (index > this.pageIndex) {
+    // gating and recorded as a skip under soft gating, unless forced by
+    // the self-test harness.
+    if (index > this.pageIndex && !force) {
       const gate = this.gate();
 
       if (gate.blocked) {
