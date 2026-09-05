@@ -1,0 +1,15 @@
+{
+  "jupyter.lab.shortcuts": [],
+  "title": "Workshop",
+  "description": "Settings for the guided workshop panel.",
+  "type": "object",
+  "properties": {
+    "defaultWorkshop": {
+      "type": "string",
+      "title": "Default workshop",
+      "description": "Directory of the workshop to open when JupyterLab starts and no workshop was open before, relative to the JupyterLab root directory. Leave empty to open nothing.",
+      "default": "examples/git-basics"
+    }
+  },
+  "additionalProperties": false
+}

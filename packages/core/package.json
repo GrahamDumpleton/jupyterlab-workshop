@@ -1,0 +1,38 @@
+{
+    "name": "@educates/workshop-core",
+    "version": "0.1.0",
+    "description": "Workshop format parsing, actions vocabulary, variables and lint rules for educates-jupyterlab-workshop.",
+    "license": "Apache-2.0",
+    "author": {
+        "name": "Graham Dumpleton",
+        "email": "graham.dumpleton@gmail.com"
+    },
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "files": [
+        "lib/**/*.{d.ts,js,js.map,json}",
+        "src/**/*.ts"
+    ],
+    "scripts": {
+        "build": "tsc -b",
+        "clean": "rimraf lib tsconfig.tsbuildinfo",
+        "test": "jest",
+        "watch": "tsc -b -w"
+    },
+    "dependencies": {
+        "js-yaml": "^4.1.0",
+        "markdown-it": "^14.1.0"
+    },
+    "devDependencies": {
+        "@types/jest": "^29.2.0",
+        "@types/js-yaml": "^4.0.9",
+        "@types/markdown-it": "^14.1.2",
+        "jest": "^29.2.0",
+        "rimraf": "^5.0.1",
+        "ts-jest": "^29.2.0",
+        "typescript": "~5.5.4"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

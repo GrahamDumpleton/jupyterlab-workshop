@@ -1,0 +1,266 @@
+/* Workshop instructions panel. */
+
+.jp-WorkshopPanel {
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+  height: 100%;
+  overflow: hidden;
+  color: var(--jp-ui-font-color1);
+  background: var(--jp-layout-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopPanel-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.jp-WorkshopPanel-header {
+  flex: 0 0 auto;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--jp-border-color2);
+}
+
+.jp-WorkshopPanel-titleRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jp-WorkshopPanel-title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--jp-ui-font-size2);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jp-WorkshopPanel-iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+}
+
+.jp-WorkshopPanel-iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jp-WorkshopPanel-iconButton:hover:not(:disabled) {
+  background: var(--jp-layout-color2);
+}
+
+.jp-WorkshopPanel-progress {
+  height: 4px;
+  margin: 6px 0;
+  border-radius: 2px;
+  background: var(--jp-layout-color3);
+  overflow: hidden;
+}
+
+.jp-WorkshopPanel-progressBar {
+  height: 100%;
+  background: var(--jp-brand-color1);
+  transition: width 0.2s ease;
+}
+
+.jp-WorkshopPanel-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jp-WorkshopPanel-pageSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 2px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopPanel-body {
+  flex: 1 1 auto;
+  padding: 8px 12px 16px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.jp-WorkshopPanel-pageTitle {
+  margin: 4px 0 8px;
+  font-size: var(--jp-ui-font-size2);
+  font-weight: 600;
+}
+
+.jp-WorkshopPanel-prose h1 {
+  display: none;
+}
+
+.jp-WorkshopPanel-prose p {
+  margin: 0 0 10px;
+}
+
+.jp-WorkshopPanel-prose code,
+.jp-WorkshopPanel-actionBody {
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+}
+
+.jp-WorkshopPanel-warnings {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--jp-warn-color1);
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+/* Inline roles rendered by the page parser. */
+
+.jp-Workshop-role {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--jp-content-link-color);
+  cursor: pointer;
+}
+
+.jp-Workshop-role code {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--jp-layout-color2);
+  text-decoration: underline dotted;
+}
+
+.jp-Workshop-role:hover code {
+  background: var(--jp-layout-color3);
+}
+
+/* Action blocks. */
+
+.jp-WorkshopPanel-action {
+  margin: 0 0 12px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-brand-color1);
+  border-radius: 3px;
+  background: var(--jp-layout-color0);
+  cursor: pointer;
+  outline: none;
+}
+
+.jp-WorkshopPanel-action:hover,
+.jp-WorkshopPanel-action:focus-visible {
+  border-color: var(--jp-brand-color1);
+  box-shadow: 0 0 0 1px var(--jp-brand-color1);
+}
+
+.jp-WorkshopPanel-action.jp-mod-unknown {
+  border-left-color: var(--jp-error-color1);
+  cursor: default;
+}
+
+.jp-WorkshopPanel-action.jp-mod-status-ok {
+  border-left-color: var(--jp-success-color1);
+}
+
+.jp-WorkshopPanel-action.jp-mod-status-error {
+  border-left-color: var(--jp-error-color1);
+}
+
+.jp-WorkshopPanel-action.jp-mod-status-running {
+  border-left-color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-actionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--jp-border-color3);
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-actionLabel {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jp-WorkshopPanel-actionStatus {
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopPanel-actionBody {
+  margin: 0;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.jp-WorkshopPanel-actionMessage {
+  padding: 4px 8px;
+  border-top: 1px solid var(--jp-border-color3);
+  color: var(--jp-error-color1);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--jp-border-color2);
+}
+
+.jp-WorkshopPanel-pageCount {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-empty {
+  padding: 16px 12px;
+}
+
+.jp-WorkshopPanel-error {
+  color: var(--jp-error-color1);
+  white-space: pre-wrap;
+}
+
+/* Highlight and callout used by the highlight action. */
+
+.jp-Workshop-highlight {
+  outline: 3px solid var(--jp-brand-color1) !important;
+  outline-offset: -3px;
+  transition: outline-color 0.2s ease;
+}
+
+.jp-Workshop-callout {
+  position: fixed;
+  z-index: 10000;
+  max-width: 320px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  background: var(--jp-brand-color1);
+  color: var(--jp-ui-inverse-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+  box-shadow: var(--jp-elevation-z4);
+  pointer-events: none;
+}

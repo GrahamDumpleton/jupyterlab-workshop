@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/lib
+**/package.json
+!/package.json
+educates_jupyterlab_workshop
+eslint.config.mjs
+.venv
+scratch
+tests/ui-tests/test-results
+tests/ui-tests/playwright-report

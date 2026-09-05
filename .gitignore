@@ -1,0 +1,40 @@
+scratch/
+
+# JavaScript
+node_modules/
+.yarn/
+*.bundle.*
+*.log
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+packages/*/lib/
+packages/core/coverage/
+
+# Built labextension and generated version file
+educates_jupyterlab_workshop/labextension/
+educates_jupyterlab_workshop/_version.py
+
+# Integration tests
+tests/ui-tests/test-results/
+tests/ui-tests/playwright-report/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Editors and OS
+.DS_Store
+
+# Files created by running the example workshops
+examples/*/demo/

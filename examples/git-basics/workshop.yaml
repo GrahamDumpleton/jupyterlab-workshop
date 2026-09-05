@@ -1,0 +1,20 @@
+apiVersion: workshop.educates.dev/v1alpha1
+name: git-basics
+title: Git from the command line
+version: 0.1.0
+description: Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.
+authors: [Graham Dumpleton]
+tags: [git, cli, beginner]
+duration: 30m
+platforms: [linux, macos]
+variables:
+  - name: repo_dir
+    type: path
+    default: demo
+    description: Directory in which the practice repository is created
+pages:
+  - pages/01-create-a-repository.md
+  - pages/02-first-commit.md
+  - pages/03-edit-and-diff.md
+  - pages/04-branch-and-merge.md
+  - pages/05-resolve-a-conflict.md

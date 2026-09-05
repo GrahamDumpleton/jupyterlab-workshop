@@ -1,0 +1,94 @@
+{
+    "name": "@educates/jupyterlab-workshop",
+    "version": "0.1.0",
+    "description": "Guided interactive workshops inside JupyterLab.",
+    "keywords": [
+        "jupyter",
+        "jupyterlab",
+        "jupyterlab-extension"
+    ],
+    "homepage": "https://github.com/educates/educates-jupyterlab-workshop",
+    "bugs": {
+        "url": "https://github.com/educates/educates-jupyterlab-workshop/issues"
+    },
+    "license": "Apache-2.0",
+    "author": {
+        "name": "Graham Dumpleton",
+        "email": "graham.dumpleton@gmail.com"
+    },
+    "files": [
+        "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+        "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+        "src/**/*.{ts,tsx}",
+        "schema/*.json"
+    ],
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "style": "style/index.css",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/educates/educates-jupyterlab-workshop.git"
+    },
+    "scripts": {
+        "build": "jlpm build:lib && jlpm build:labextension:dev",
+        "build:prod": "jlpm clean && jlpm build:lib && jlpm build:labextension",
+        "build:labextension": "jupyter-builder build .",
+        "build:labextension:dev": "jupyter-builder build --development True .",
+        "build:lib": "tsc -b",
+        "clean": "rimraf lib tsconfig.tsbuildinfo",
+        "clean:labextension": "rimraf ../../educates_jupyterlab_workshop/labextension",
+        "clean:all": "jlpm clean && jlpm clean:labextension",
+        "watch": "run-p watch:src watch:labextension",
+        "watch:src": "tsc -b -w",
+        "watch:labextension": "jupyter-builder watch ."
+    },
+    "dependencies": {
+        "@educates/workshop-core": "workspace:*",
+        "@jupyterlab/application": "^4.6.0",
+        "@jupyterlab/apputils": "^4.6.0",
+        "@jupyterlab/codeeditor": "^4.6.0",
+        "@jupyterlab/coreutils": "^6.6.0",
+        "@jupyterlab/docmanager": "^4.6.0",
+        "@jupyterlab/docregistry": "^4.6.0",
+        "@jupyterlab/fileeditor": "^4.6.0",
+        "@jupyterlab/services": "^7.6.0",
+        "@jupyterlab/settingregistry": "^4.6.0",
+        "@jupyterlab/statedb": "^4.6.0",
+        "@jupyterlab/terminal": "^4.6.0",
+        "@jupyterlab/ui-components": "^4.6.0",
+        "@lumino/coreutils": "^2.0.0",
+        "@lumino/signaling": "^2.0.0",
+        "@lumino/widgets": "^2.0.0",
+        "react": "^18.2.0"
+    },
+    "devDependencies": {
+        "@jupyter/builder": "^1.2.0",
+        "@types/react": "^18.0.26",
+        "npm-run-all2": "^7.0.1",
+        "rimraf": "^5.0.1",
+        "typescript": "~5.5.4"
+    },
+    "sideEffects": [
+        "style/*.css",
+        "style/index.js"
+    ],
+    "styleModule": "style/index.js",
+    "publishConfig": {
+        "access": "public"
+    },
+    "jupyterlab": {
+        "discovery": {
+            "server": {
+                "managers": [
+                    "pip"
+                ],
+                "base": {
+                    "name": "educates_jupyterlab_workshop"
+                }
+            }
+        },
+        "extension": true,
+        "outputDir": "../../educates_jupyterlab_workshop/labextension",
+        "schemaDir": "schema"
+    }
+}

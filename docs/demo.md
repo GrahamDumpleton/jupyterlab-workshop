@@ -1,0 +1,58 @@
+# Demo: the git-basics workshop
+
+This walks through the proof of concept by hand. It needs
+[uv](https://docs.astral.sh/uv/), [just](https://just.systems/), Node.js
+and git.
+
+## Set up
+
+From the repository root:
+
+```
+just install
+just lab
+```
+
+`just install` creates the Python environment, installs the JavaScript
+workspace, builds the extension and links it into JupyterLab in development
+mode. `just lab` starts JupyterLab with the repository root as its root
+directory, which is where the example workshop lives.
+
+To rebuild while editing the TypeScript, run `just watch` in a second
+terminal and refresh the browser after each rebuild.
+
+## Walk through
+
+1. In JupyterLab, click the book icon in the left sidebar to show the
+   Workshop panel. The `examples/git-basics` workshop loads automatically
+   (the path is the `defaultWorkshop` setting of the extension; change it
+   under Settings, or use the folder icon in the panel header to open a
+   different workshop directory, given relative to the JupyterLab root).
+
+2. On page one, click each command block in turn. The first click starts a
+   terminal named `git` in a split beneath the main area and runs the
+   command there. Every block shows exactly the text that is sent to the
+   terminal.
+
+3. On page two, the first action writes `README.md` into the `demo`
+   directory and opens it in the editor above the terminal. The final
+   action highlights the terminal with a short callout.
+
+4. Page three appends a line to the open file through the editor and saves
+   it, then opens a second terminal named `log` beside the first.
+
+5. Pages four and five branch, merge, create a conflict, open the file at
+   the conflict marker and resolve it by rewriting the file. The last action
+   shows a success notification.
+
+6. Use the arrows or the page dropdown to move between pages. Reload the
+   browser tab: the panel reopens on the same page.
+
+## Reset
+
+The workshop creates `examples/git-basics/demo`, which is ignored by git.
+Delete it to start again:
+
+```
+rm -rf examples/git-basics/demo
+```
