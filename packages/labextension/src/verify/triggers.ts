@@ -2,7 +2,7 @@ import {
   IDirectiveNode,
   VerifyTrigger,
   parseTriggers
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { NotebookActions } from '@jupyterlab/notebook';
 import { Contents } from '@jupyterlab/services';

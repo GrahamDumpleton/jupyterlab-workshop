@@ -17,13 +17,13 @@ from .handlers import setup_handlers
 def _jupyter_labextension_paths() -> list[dict[str, str]]:
     """Tell JupyterLab where the prebuilt frontend extension lives."""
 
-    return [{"src": "labextension", "dest": "@educates/jupyterlab-workshop"}]
+    return [{"src": "labextension", "dest": "@jupyterlab-workshop/labextension"}]
 
 
 def _jupyter_server_extension_points() -> list[dict[str, str]]:
     """Declare this package as a Jupyter Server extension."""
 
-    return [{"module": "educates_jupyterlab_workshop"}]
+    return [{"module": "jupyterlab_workshop"}]
 
 
 def _load_jupyter_server_extension(server_app: Any) -> None:
@@ -31,7 +31,7 @@ def _load_jupyter_server_extension(server_app: Any) -> None:
 
     setup_bridge(server_app)
     setup_handlers(server_app)
-    server_app.log.info("Registered educates_jupyterlab_workshop server extension")
+    server_app.log.info("Registered jupyterlab_workshop server extension")
 
 
 __all__ = ["__version__"]

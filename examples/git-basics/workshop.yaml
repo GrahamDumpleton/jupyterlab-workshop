@@ -1,4 +1,4 @@
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: git-basics
 title: Git from the command line
 version: 0.1.0

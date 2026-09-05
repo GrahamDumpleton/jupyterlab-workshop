@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from mcp.client import Client
 
-from educates_jupyterlab_workshop import cli
-from educates_jupyterlab_workshop.mcp import JupyterSession, create_server
+from jupyterlab_workshop import cli
+from jupyterlab_workshop.mcp import JupyterSession, create_server
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None or not cli.NODE_BUNDLE.is_file(),
@@ -70,7 +70,7 @@ def test_init_tool_writes_a_workshop_and_live_tools_need_a_session(
         (target / "workshop.yaml")
         .read_text()
         .startswith(
-            "apiVersion: workshop.educates.dev/v1alpha1\nname: quiz-time\ntitle: Quiz\n"
+            "apiVersion: jupyterlab-workshop/v1alpha1\nname: quiz-time\ntitle: Quiz\n"
         )
     )
     assert "workshop.yaml" in created

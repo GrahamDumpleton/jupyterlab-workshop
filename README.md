@@ -1,4 +1,4 @@
-# educates-jupyterlab-workshop
+# jupyterlab-workshop
 
 Guided, interactive workshops inside JupyterLab.
 
@@ -29,7 +29,7 @@ and the MCP server and `skills/workshop-author` skill for AI agents.
 ## Writing a workshop
 
 ```
-pip install "educates-jupyterlab-workshop[test]"
+pip install "jupyterlab-workshop[test]"
 playwright install chromium
 jupyter workshop init my-workshop
 jupyter workshop lint my-workshop

@@ -59,7 +59,7 @@ example under JupyterHub, through the `analytics` setting in
 
 ```json
 {
-  "@educates/jupyterlab-workshop:panel": {
+  "@jupyterlab-workshop/labextension:panel": {
     "analytics": {
       "sink": "https://workshops.example.org/events",
       "identity": "hub"

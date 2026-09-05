@@ -29,7 +29,7 @@ They can switch panels. Open the file browser, then come back here.
 ```
 
 ```{panel-open}
-:id: educates-workshop-panel
+:id: jupyterlab-workshop-panel
 ```
 
 A tour walks through several parts of the interface with a button to move
@@ -40,7 +40,7 @@ on.
   text: The menu bar.
 - selector: "#jp-main-dock-panel"
   text: Notebooks, editors and terminals open here.
-- selector: "#educates-workshop-panel"
+- selector: "#jupyterlab-workshop-panel"
   text: The instructions you are reading.
 ```
 

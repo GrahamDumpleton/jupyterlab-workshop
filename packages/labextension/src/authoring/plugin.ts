@@ -37,7 +37,7 @@ const HIDDEN: ReadonlySet<string> = new Set([
  * drive the extension.
  */
 export const authoringPlugin: JupyterFrontEndPlugin<void> = {
-  id: '@educates/jupyterlab-workshop:authoring',
+  id: '@jupyterlab-workshop/labextension:authoring',
   description: 'Edit, record and lint workshops from JupyterLab.',
   autoStart: true,
   requires: [IWorkshopManager, ILabShell, IDocumentManager, ITerminalSessions],

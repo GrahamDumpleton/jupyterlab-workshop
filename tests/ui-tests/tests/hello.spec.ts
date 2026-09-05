@@ -5,7 +5,7 @@ const WORKSHOP = 'hello-jupyterlab';
 
 const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
-const PANEL = '#educates-workshop-panel';
+const PANEL = '#jupyterlab-workshop-panel';
 
 interface IExposedApp {
   jupyterapp: {
@@ -35,7 +35,7 @@ async function openWorkshop(
   // Loading finishes after the dialog closes and may apply a layout that
   // toggles the sidebar; wait for the panel to show the workshop first.
   await expect(
-    page.locator('#educates-workshop-panel .jp-WorkshopPanel-title')
+    page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
   ).toBeAttached();
 }
 
@@ -53,7 +53,7 @@ test.describe('hello-jupyterlab workshop', () => {
       }
     }
     await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
-    await page.sidebar.openTab('educates-workshop-panel');
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
   });
 
   test('drives notebooks, kernels, variables, tracks and cascades', async ({

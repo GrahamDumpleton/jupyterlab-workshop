@@ -1,4 +1,4 @@
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: workshop-authoring
 title: Writing your first workshop
 version: 0.1.0
@@ -13,7 +13,7 @@ capabilities:
   - kernel-exec
 requires:
   tools:
-    - { name: jupyter, hint: { default: "pip install educates-jupyterlab-workshop" } }
+    - { name: jupyter, hint: { default: "pip install jupyterlab-workshop" } }
     - { name: node, optional: true, hint: { default: "Install Node.js 18 or newer; jupyter workshop lint needs it" } }
 layout: default
 gating: strict

@@ -3,7 +3,7 @@ requires = ["hatchling>=1.5.0", "hatch-nodejs-version>=0.3.2", "jupyter-builder>
 build-backend = "hatchling.build"
 
 [project]
-name = "educates-jupyterlab-workshop"
+name = "jupyterlab-workshop"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -40,7 +40,7 @@ lite = [
 ]
 
 [project.scripts]
-jupyter-workshop = "educates_jupyterlab_workshop.cli:main"
+jupyter-workshop = "jupyterlab_workshop.cli:main"
 
 [dependency-groups]
 dev = [
@@ -67,42 +67,42 @@ fields = ["description", "authors", "urls", "keywords"]
 
 [tool.hatch.build.targets.sdist]
 artifacts = [
-    "educates_jupyterlab_workshop/labextension",
-    "educates_jupyterlab_workshop/nodejs",
-    "educates_jupyterlab_workshop/schema",
+    "jupyterlab_workshop/labextension",
+    "jupyterlab_workshop/nodejs",
+    "jupyterlab_workshop/schema",
 ]
 exclude = [".github", "scratch", "tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["educates_jupyterlab_workshop"]
+packages = ["jupyterlab_workshop"]
 artifacts = [
-    "educates_jupyterlab_workshop/nodejs",
-    "educates_jupyterlab_workshop/schema",
+    "jupyterlab_workshop/nodejs",
+    "jupyterlab_workshop/schema",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
-"skills/workshop-author" = "educates_jupyterlab_workshop/skills/workshop-author"
+"skills/workshop-author" = "jupyterlab_workshop/skills/workshop-author"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"educates_jupyterlab_workshop/labextension/static" = "share/jupyter/labextensions/@educates/jupyterlab-workshop/static"
-"educates_jupyterlab_workshop/labextension/schemas" = "share/jupyter/labextensions/@educates/jupyterlab-workshop/schemas"
-"educates_jupyterlab_workshop/labextension/package.json" = "share/jupyter/labextensions/@educates/jupyterlab-workshop/package.json"
-"install.json" = "share/jupyter/labextensions/@educates/jupyterlab-workshop/install.json"
+"jupyterlab_workshop/labextension/static" = "share/jupyter/labextensions/@jupyterlab-workshop/labextension/static"
+"jupyterlab_workshop/labextension/schemas" = "share/jupyter/labextensions/@jupyterlab-workshop/labextension/schemas"
+"jupyterlab_workshop/labextension/package.json" = "share/jupyter/labextensions/@jupyterlab-workshop/labextension/package.json"
+"install.json" = "share/jupyter/labextensions/@jupyterlab-workshop/labextension/install.json"
 "jupyter-config/server-config" = "etc/jupyter/jupyter_server_config.d"
 
 [tool.hatch.build.hooks.version]
-path = "educates_jupyterlab_workshop/_version.py"
+path = "jupyterlab_workshop/_version.py"
 
 [tool.hatch.build.hooks.jupyter-builder]
 dependencies = ["hatch-jupyter-builder>=0.5"]
 build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
-    "educates_jupyterlab_workshop/labextension/static/style.js",
-    "educates_jupyterlab_workshop/labextension/package.json",
-    "educates_jupyterlab_workshop/nodejs/workshop-cli.cjs",
-    "educates_jupyterlab_workshop/schema/workshop.schema.json",
+    "jupyterlab_workshop/labextension/static/style.js",
+    "jupyterlab_workshop/labextension/package.json",
+    "jupyterlab_workshop/nodejs/workshop-cli.cjs",
+    "jupyterlab_workshop/schema/workshop.schema.json",
 ]
-skip-if-exists = ["educates_jupyterlab_workshop/labextension/static/style.js"]
+skip-if-exists = ["jupyterlab_workshop/labextension/static/style.js"]
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 build_cmd = "build:prod"
@@ -112,7 +112,7 @@ npm = ["jlpm"]
 build_cmd = "install:extension"
 npm = ["jlpm"]
 source_dir = "packages"
-build_dir = "educates_jupyterlab_workshop/labextension"
+build_dir = "jupyterlab_workshop/labextension"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
@@ -120,14 +120,14 @@ testpaths = ["tests/python"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-extend-exclude = ["scratch", "educates_jupyterlab_workshop/_version.py"]
+extend-exclude = ["scratch", "jupyterlab_workshop/_version.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 
 [tool.mypy]
 python_version = "3.12"
-packages = ["educates_jupyterlab_workshop"]
+packages = ["jupyterlab_workshop"]
 strict = true
 ignore_missing_imports = true
 

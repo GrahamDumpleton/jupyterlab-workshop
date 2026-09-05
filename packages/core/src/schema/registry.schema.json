@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://workshop.educates.dev/schemas/v1alpha1/registry.schema.json",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/registry.schema.json",
   "title": "Workshop registry index",
   "description": "A list of workshops that can be installed, with where to fetch each version from.",
   "type": "object",

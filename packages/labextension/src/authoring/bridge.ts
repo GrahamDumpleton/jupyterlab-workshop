@@ -7,7 +7,7 @@ import { CommandIDs, IWorkshopManager, errorMessage } from '../tokens';
 
 /** Schema id of the bridge events the server emits. */
 export const BRIDGE_SCHEMA_ID =
-  'https://educates.dev/jupyterlab-workshop/bridge/v1';
+  'https://grahamdumpleton.github.io/jupyterlab-workshop/bridge/v1';
 
 /** Commands answered even when no workshop is open in author mode. */
 const ALWAYS: ReadonlySet<string> = new Set([

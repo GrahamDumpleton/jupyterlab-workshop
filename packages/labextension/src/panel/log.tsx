@@ -4,7 +4,7 @@ import React from 'react';
 import { IWorkshopManager } from '../tokens';
 
 /** Id of the action log widget. */
-export const LOG_ID = 'educates-workshop-log';
+export const LOG_ID = 'jupyterlab-workshop-log';
 
 /**
  * Main-area widget listing every action the workshop has run.

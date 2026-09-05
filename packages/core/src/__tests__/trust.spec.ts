@@ -9,7 +9,7 @@ import {
 import { decideAction } from '../trust/policy';
 
 const MANIFEST = `
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: demo
 title: Demo
 capabilities:

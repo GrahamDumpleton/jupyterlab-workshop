@@ -30,7 +30,7 @@ from xml.sax.saxutils import escape
 
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 
-PANEL_PLUGIN = "@educates/jupyterlab-workshop:panel"
+PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
 #: Sub-path the JupyterLite site is served under during a self-test.
 LITE_PREFIX = "lite"
@@ -76,7 +76,7 @@ def run_self_test(options: SelfTestOptions) -> int:
     except ImportError as error:
         print(
             "error: `jupyter workshop test` needs the test extra: pip install "
-            '"educates-jupyterlab-workshop[test]" and then '
+            '"jupyterlab-workshop[test]" and then '
             "`playwright install chromium`",
             file=sys.stderr,
         )

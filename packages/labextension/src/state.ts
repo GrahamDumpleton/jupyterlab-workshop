@@ -3,7 +3,7 @@ import { Contents } from '@jupyterlab/services';
 import { Debouncer } from '@lumino/polling';
 
 import { ensureDirectory, readIfExists } from './actions/contents';
-import { TrustLevel } from '@educates/workshop-core';
+import { TrustLevel } from '@jupyterlab-workshop/core';
 
 import {
   IActionLogEntry,

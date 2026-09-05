@@ -1,8 +1,8 @@
-# Agent guidance for educates-jupyterlab-workshop
+# Agent guidance for jupyterlab-workshop
 
 ## Project
 
-educates-jupyterlab-workshop is a JupyterLab extension for running guided,
+jupyterlab-workshop is a JupyterLab extension for running guided,
 interactive workshops inside JupyterLab. Workshop instructions are shown in
 a side panel and contain clickable actions that drive the live JupyterLab
 session: terminals, the file browser, the editor, notebooks, kernels and
@@ -17,16 +17,16 @@ MyST-flavoured Markdown pages. The format is text based and git friendly.
 
 The repository is a monorepo with three main parts:
 
-- `packages/core/` is `@educates/workshop-core`, pure TypeScript with no
+- `packages/core/` is `@jupyterlab-workshop/core`, pure TypeScript with no
   JupyterLab dependencies: workshop format parsing, action definitions,
   variable substitution, lint rules and JSON schemas. Keep it free of
   JupyterLab imports so the CLI and other tooling can reuse it under Node.
 
-- `packages/labextension/` is `@educates/jupyterlab-workshop`, the
+- `packages/labextension/` is `@jupyterlab-workshop/labextension`, the
   JupyterLab frontend extension: instructions panel, renderer, action
   implementations, verify engine, trust manager, loader and state.
 
-- `educates_jupyterlab_workshop/` is the Python package: the
+- `jupyterlab_workshop/` is the Python package: the
   `jupyter_server` extension (platform detection, fetching, script
   verifies, checkpoints) and the `jupyter workshop` CLI.
 

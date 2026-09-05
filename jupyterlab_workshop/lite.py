@@ -29,7 +29,7 @@ import yaml
 
 MANIFEST_FILE = "workshop.yaml"
 
-PANEL_PLUGIN = "@educates/jupyterlab-workshop:panel"
+PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
 #: Entries of a workshop directory that never belong in a site.
 IGNORED = ("_workshop", ".git", "node_modules", "__pycache__", ".ipynb_checkpoints")
@@ -90,7 +90,7 @@ def default_lite_dir() -> Path:
 
     from jupyter_core.paths import jupyter_data_dir
 
-    return Path(jupyter_data_dir()) / "educates-workshop" / "lite"
+    return Path(jupyter_data_dir()) / "jupyterlab-workshop" / "lite"
 
 
 def missing_requirements(terminal: bool) -> list[str]:
@@ -100,8 +100,7 @@ def missing_requirements(terminal: bool) -> list[str]:
 
     if importlib.util.find_spec("jupyterlite_core") is None:
         problems.append(
-            "jupyterlite-core is not installed: pip install "
-            '"educates-jupyterlab-workshop[lite]"'
+            'jupyterlite-core is not installed: pip install "jupyterlab-workshop[lite]"'
         )
 
     if importlib.util.find_spec("jupyterlite_pyodide_kernel") is None:

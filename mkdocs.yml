@@ -1,6 +1,6 @@
-site_name: educates-jupyterlab-workshop
+site_name: jupyterlab-workshop
 site_description: Guided, interactive workshops inside JupyterLab.
-repo_url: https://github.com/educates/educates-jupyterlab-workshop
+repo_url: https://github.com/GrahamDumpleton/jupyterlab-workshop
 docs_dir: docs
 theme:
   name: material

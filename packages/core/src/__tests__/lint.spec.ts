@@ -10,7 +10,7 @@ import { lintWorkshop } from '../lint/rules';
 import { formatLintMessage } from '../lint/types';
 
 const MANIFEST = `
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: demo
 title: Demo
 capabilities:

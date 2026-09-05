@@ -1,7 +1,7 @@
 {
-  "name": "@educates/jupyterlab-workshop-ui-tests",
+  "name": "@jupyterlab-workshop/ui-tests",
   "version": "1.0.0",
-  "description": "JupyterLab @educates/jupyterlab-workshop Integration Tests",
+  "description": "JupyterLab @jupyterlab-workshop/labextension Integration Tests",
   "private": true,
   "scripts": {
     "start": "jupyter lab --config jupyter_server_test_config.py",

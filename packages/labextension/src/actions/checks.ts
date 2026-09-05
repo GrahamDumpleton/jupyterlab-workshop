@@ -9,7 +9,7 @@ import {
   parseQuiz,
   validateForm,
   verifySubstrate
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { ICodeCellModel } from '@jupyterlab/cells';
 import { IDocumentManager } from '@jupyterlab/docmanager';

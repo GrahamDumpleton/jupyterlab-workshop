@@ -18,7 +18,7 @@ export default defineConfig([
       'scratch',
       'tests',
       '**/__tests__/**',
-      'educates_jupyterlab_workshop'
+      'jupyterlab_workshop'
     ]
   },
   js.configs.recommended,

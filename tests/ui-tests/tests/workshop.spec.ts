@@ -5,7 +5,7 @@ const WORKSHOP = 'git-basics';
 
 const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
-const PANEL = '#educates-workshop-panel';
+const PANEL = '#jupyterlab-workshop-panel';
 
 interface IExposedApp {
   jupyterapp: {
@@ -44,7 +44,7 @@ async function openWorkshop(
   // Loading finishes after the dialog closes and may apply a layout that
   // toggles the sidebar; wait for the panel to show the workshop first.
   await expect(
-    page.locator('#educates-workshop-panel .jp-WorkshopPanel-title')
+    page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
   ).toBeAttached();
 }
 
@@ -70,7 +70,7 @@ test.describe('workshop panel', () => {
     const workshopPath = `${tmpPath}/${WORKSHOP}`;
 
     await openWorkshop(page, workshopPath, 'Restricted');
-    await page.sidebar.openTab('educates-workshop-panel');
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
 
     const panel = page.locator(PANEL);
 
@@ -139,7 +139,7 @@ test.describe('workshop panel', () => {
     // Open the uploaded workshop through the command the panel uses.
     await openWorkshop(page, workshopPath);
 
-    await page.sidebar.openTab('educates-workshop-panel');
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
 
     const panel = page.locator(PANEL);
 
@@ -334,7 +334,7 @@ test.describe('workshop panel', () => {
 
       await exposed.jupyterapp.restored;
     });
-    await page.sidebar.openTab('educates-workshop-panel');
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
     await expect(
       page.locator(PANEL).locator('.jp-WorkshopPanel-pageTitle')
     ).toHaveText('Edit and diff');

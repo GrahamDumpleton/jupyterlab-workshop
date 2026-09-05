@@ -3,7 +3,7 @@ import {
   TRUST_LEVEL_DESCRIPTIONS,
   TrustLevel,
   formatLintMessage
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { Dialog, showDialog } from '@jupyterlab/apputils';
 import { ReactWidget } from '@jupyterlab/ui-components';
 import React from 'react';

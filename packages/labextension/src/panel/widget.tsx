@@ -7,7 +7,7 @@ import { IWorkshopManager } from '../tokens';
 import { WorkshopPanelComponent } from './components';
 
 /** Id of the panel widget, also used for layout restoration. */
-export const PANEL_ID = 'educates-workshop-panel';
+export const PANEL_ID = 'jupyterlab-workshop-panel';
 
 /**
  * The instructions panel shown in the left sidebar.

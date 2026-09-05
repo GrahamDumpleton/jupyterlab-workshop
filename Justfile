@@ -1,4 +1,4 @@
-# Development tasks for educates-jupyterlab-workshop.
+# Development tasks for jupyterlab-workshop.
 #
 # Python is managed with uv, JavaScript with jlpm (the Yarn that ships with
 # JupyterLab, installed into the project environment). Run `just --list`
@@ -17,7 +17,7 @@ install:
     uv run --no-sync jlpm build
     uv sync
     uv run jupyter labextension develop . --overwrite
-    uv run jupyter server extension enable educates_jupyterlab_workshop
+    uv run jupyter server extension enable jupyterlab_workshop
 
 # Build the TypeScript packages and the labextension bundle.
 build:
@@ -105,7 +105,7 @@ clean:
 # Return to a fresh checkout: also removes node_modules, .venv, caches, built docs and sites.
 distclean:
     rm -rf packages/core/lib packages/labextension/lib packages/*/tsconfig.tsbuildinfo
-    rm -rf educates_jupyterlab_workshop/labextension educates_jupyterlab_workshop/nodejs educates_jupyterlab_workshop/schema
+    rm -rf jupyterlab_workshop/labextension jupyterlab_workshop/nodejs jupyterlab_workshop/schema
     rm -rf .eslintcache .stylelintcache packages/core/coverage
     rm -rf node_modules packages/*/node_modules tests/ui-tests/node_modules .venv
     rm -rf site docs/reference build dist lite-site .jupyterlite.doit.db .coverage htmlcov

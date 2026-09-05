@@ -130,7 +130,7 @@ import { TriggerBus } from './verify/triggers';
 
 export { IActionRegistry, IWorkshopManager } from './tokens';
 
-const PLUGIN_PREFIX = '@educates/jupyterlab-workshop';
+const PLUGIN_PREFIX = '@jupyterlab-workshop/labextension';
 
 const PALETTE_CATEGORY = 'Workshop';
 

@@ -30,7 +30,7 @@ describe('workshop schema', () => {
   it('rejects unknown fields and capabilities', () => {
     expect(
       validate({
-        apiVersion: 'workshop.educates.dev/v1alpha1',
+        apiVersion: 'jupyterlab-workshop/v1alpha1',
         name: 'x',
         title: 'X',
         pages: ['a.md'],
@@ -39,7 +39,7 @@ describe('workshop schema', () => {
     ).toBe(false);
     expect(
       validate({
-        apiVersion: 'workshop.educates.dev/v1alpha1',
+        apiVersion: 'jupyterlab-workshop/v1alpha1',
         name: 'x',
         title: 'X',
         pages: ['a.md'],

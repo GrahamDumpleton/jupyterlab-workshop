@@ -6,7 +6,7 @@ from threading import Thread
 
 import pytest
 
-from educates_jupyterlab_workshop.analytics import (
+from jupyterlab_workshop.analytics import (
     AnalyticsError,
     append_events,
     forward_events,
@@ -15,8 +15,7 @@ from educates_jupyterlab_workshop.analytics import (
 )
 
 MANIFEST = (
-    "apiVersion: workshop.educates.dev/v1alpha1\n"
-    "name: demo\ntitle: Demo\npages: [a.md]\n"
+    "apiVersion: jupyterlab-workshop/v1alpha1\nname: demo\ntitle: Demo\npages: [a.md]\n"
 )
 
 

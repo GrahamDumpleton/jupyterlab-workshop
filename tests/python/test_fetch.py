@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from educates_jupyterlab_workshop.fetch import (
+from jupyterlab_workshop.fetch import (
     FetchError,
     Source,
     archive_url,
@@ -17,7 +17,7 @@ from educates_jupyterlab_workshop.fetch import (
 )
 
 MANIFEST = (
-    "apiVersion: workshop.educates.dev/v1alpha1\n"
+    "apiVersion: jupyterlab-workshop/v1alpha1\n"
     "name: demo\ntitle: Demo\npages: [pages/01.md]\n"
 )
 
@@ -48,18 +48,20 @@ def make_zip(files: dict[str, str], prefix: str = "repo-main/") -> bytes:
 class TestParseSource:
     def test_github_tree_url_gives_ref_and_subdir(self) -> None:
         source = parse_source(
-            {"url": "https://github.com/educates/workshops/tree/v1.2.0/git-basics"}
+            {
+                "url": "https://github.com/GrahamDumpleton/workshops/tree/v1.2.0/git-basics"
+            }
         )
 
         assert source == Source(
             kind="git",
-            url="https://github.com/educates/workshops",
+            url="https://github.com/GrahamDumpleton/workshops",
             ref="v1.2.0",
             subdir="git-basics",
         )
         assert (
             source.key()
-            == "git:https://github.com/educates/workshops@v1.2.0/git-basics"
+            == "git:https://github.com/GrahamDumpleton/workshops@v1.2.0/git-basics"
         )
 
     def test_explicit_fields_win_over_the_url(self) -> None:

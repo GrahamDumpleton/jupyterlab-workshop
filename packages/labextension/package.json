@@ -1,5 +1,5 @@
 {
-    "name": "@educates/jupyterlab-workshop",
+    "name": "@jupyterlab-workshop/labextension",
     "version": "0.1.0",
     "description": "Guided interactive workshops inside JupyterLab.",
     "keywords": [
@@ -7,9 +7,9 @@
         "jupyterlab",
         "jupyterlab-extension"
     ],
-    "homepage": "https://github.com/educates/educates-jupyterlab-workshop",
+    "homepage": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
     "bugs": {
-        "url": "https://github.com/educates/educates-jupyterlab-workshop/issues"
+        "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues"
     },
     "license": "Apache-2.0",
     "author": {
@@ -27,7 +27,7 @@
     "style": "style/index.css",
     "repository": {
         "type": "git",
-        "url": "https://github.com/educates/educates-jupyterlab-workshop.git"
+        "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop.git"
     },
     "scripts": {
         "build": "jlpm build:lib && jlpm build:labextension:dev",
@@ -36,14 +36,14 @@
         "build:labextension:dev": "jupyter-builder build --development True .",
         "build:lib": "tsc -b",
         "clean": "rimraf lib tsconfig.tsbuildinfo",
-        "clean:labextension": "rimraf ../../educates_jupyterlab_workshop/labextension",
+        "clean:labextension": "rimraf ../../jupyterlab_workshop/labextension",
         "clean:all": "jlpm clean && jlpm clean:labextension",
         "watch": "run-p watch:src watch:labextension",
         "watch:src": "tsc -b -w",
         "watch:labextension": "jupyter-builder watch ."
     },
     "dependencies": {
-        "@educates/workshop-core": "workspace:*",
+        "@jupyterlab-workshop/core": "workspace:*",
         "@jupyterlab/application": "^4.6.0",
         "@jupyterlab/apputils": "^4.6.0",
         "@jupyterlab/cells": "^4.6.0",
@@ -91,12 +91,12 @@
                     "pip"
                 ],
                 "base": {
-                    "name": "educates_jupyterlab_workshop"
+                    "name": "jupyterlab_workshop"
                 }
             }
         },
         "extension": true,
-        "outputDir": "../../educates_jupyterlab_workshop/labextension",
+        "outputDir": "../../jupyterlab_workshop/labextension",
         "schemaDir": "schema"
     }
 }

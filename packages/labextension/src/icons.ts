@@ -6,6 +6,6 @@ const WORKSHOP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height=
 
 /** Icon for the workshop panel tab. */
 export const workshopIcon = new LabIcon({
-  name: 'educates-workshop:book',
+  name: 'jupyterlab-workshop:book',
   svgstr: WORKSHOP_SVG
 });

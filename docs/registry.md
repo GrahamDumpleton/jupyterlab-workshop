@@ -39,7 +39,7 @@ the list through `overrides.json`:
 
 ```json
 {
-  "@educates/jupyterlab-workshop:panel": {
+  "@jupyterlab-workshop/labextension:panel": {
     "registries": [
       "https://example.org/workshops/index.json",
       "shared/registry.json"
@@ -147,9 +147,9 @@ The `urlpath` is `lab?workshop=…` URL-encoded.
 
 ## Installed workshops and the server
 
-The list in the browser comes from `GET educates-workshop/workshops`,
+The list in the browser comes from `GET jupyterlab-workshop/workshops`,
 which describes every directory under the workshops directory that holds
 a `workshop.yaml`, reading `_workshop/source.json` and
 `_workshop/state.json` for the source and progress. Registries are read
-through `GET educates-workshop/registry?url=…`. Both refuse paths outside
+through `GET jupyterlab-workshop/registry?url=…`. Both refuse paths outside
 the JupyterLab root.

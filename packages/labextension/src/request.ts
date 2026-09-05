@@ -2,7 +2,7 @@ import { URLExt } from '@jupyterlab/coreutils';
 import { ServerConnection } from '@jupyterlab/services';
 
 /** URL namespace of the server extension's endpoints. */
-export const API_NAMESPACE = 'educates-workshop';
+export const API_NAMESPACE = 'jupyterlab-workshop';
 
 /**
  * Call an endpoint of the server extension and return its JSON response.

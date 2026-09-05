@@ -278,7 +278,7 @@ export function draftManifest(
       : `  - ${item.slice(0, colon)}: [${item.slice(colon + 1)}]`;
   });
   const head = [
-    'apiVersion: workshop.educates.dev/v1alpha1',
+    'apiVersion: jupyterlab-workshop/v1alpha1',
     `name: ${name}`,
     `title: ${title}`,
     'version: 0.1.0',

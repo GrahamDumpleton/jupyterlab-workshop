@@ -34,10 +34,10 @@ from .scaffold import slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
-SERVER_NAME = "educates-workshop"
+SERVER_NAME = "jupyterlab-workshop"
 
 INSTRUCTIONS = """Tools for writing guided JupyterLab workshops in the
-educates-jupyterlab-workshop format: a directory with a workshop.yaml
+jupyterlab-workshop format: a directory with a workshop.yaml
 manifest and MyST Markdown pages whose fenced directives are clickable
 actions. Read the workshop://skill resource first: it explains the
 format, the workflow (outline, pages, actions, checks, lint, test) and
@@ -65,7 +65,7 @@ class JupyterSession:
     ) -> Any:
         """Call an endpoint of the workshop server extension."""
 
-        target = f"{self.url.rstrip('/')}/educates-workshop/{endpoint}"
+        target = f"{self.url.rstrip('/')}/jupyterlab-workshop/{endpoint}"
         data = json.dumps(body).encode() if body is not None else None
         headers = {"Content-Type": "application/json"}
 

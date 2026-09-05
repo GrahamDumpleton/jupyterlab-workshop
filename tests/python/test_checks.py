@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from educates_jupyterlab_workshop.checks import (
+from jupyterlab_workshop.checks import (
     CheckError,
     create_checkpoint,
     list_checkpoints,
@@ -13,7 +13,7 @@ from educates_jupyterlab_workshop.checks import (
 )
 
 MANIFEST = (
-    "apiVersion: workshop.educates.dev/v1alpha1\n"
+    "apiVersion: jupyterlab-workshop/v1alpha1\n"
     "name: demo\ntitle: Demo\npages: [pages/01.md]\n"
 )
 
@@ -131,7 +131,7 @@ class TestCheckpoints:
 
 class TestPreflight:
     def test_finds_python_and_reports_missing_tools(self) -> None:
-        from educates_jupyterlab_workshop.checks import _satisfies, preflight
+        from jupyterlab_workshop.checks import _satisfies, preflight
 
         results = preflight(
             [

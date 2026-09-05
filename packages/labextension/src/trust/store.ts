@@ -1,12 +1,12 @@
-import { TRUST_LEVELS, TrustLevel } from '@educates/workshop-core';
+import { TRUST_LEVELS, TrustLevel } from '@jupyterlab-workshop/core';
 import { IStateDB } from '@jupyterlab/statedb';
 import { ReadonlyPartialJSONValue } from '@lumino/coreutils';
 
 import { ITrustDecision, ITrustPolicy, ITrustStore } from '../tokens';
 
-const DECISIONS_KEY = '@educates/jupyterlab-workshop:trust';
+const DECISIONS_KEY = '@jupyterlab-workshop/labextension:trust';
 
-const AUTHORED_KEY = '@educates/jupyterlab-workshop:authored';
+const AUTHORED_KEY = '@jupyterlab-workshop/labextension:authored';
 
 /** The policy applied when settings are unavailable. */
 export const DEFAULT_POLICY: ITrustPolicy = {

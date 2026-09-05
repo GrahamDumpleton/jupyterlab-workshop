@@ -548,8 +548,7 @@ def command_mcp(args: argparse.Namespace) -> int:
         from .mcp import serve
     except ImportError as error:
         raise CliError(
-            "The MCP server needs the mcp extra: pip install "
-            '"educates-jupyterlab-workshop[mcp]"'
+            'The MCP server needs the mcp extra: pip install "jupyterlab-workshop[mcp]"'
         ) from error
 
     return serve(url=args.url, token=args.token)

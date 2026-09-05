@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "title": "Educates example workshops",
+  "title": "Example workshops",
   "workshops": [
     {
       "name": "git-basics",
@@ -15,7 +15,7 @@
         {
           "version": "0.1.0",
           "source": {
-            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
             "ref": "main",
             "subdir": "examples/git-basics"
           }
@@ -40,7 +40,7 @@
         {
           "version": "0.1.0",
           "source": {
-            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
             "ref": "main",
             "subdir": "examples/hello-jupyterlab"
           }
@@ -60,7 +60,7 @@
         {
           "version": "0.1.0",
           "source": {
-            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
             "ref": "main",
             "subdir": "examples/workshop-authoring"
           }

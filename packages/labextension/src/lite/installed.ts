@@ -1,4 +1,4 @@
-import { parseManifest } from '@educates/workshop-core';
+import { parseManifest } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 

@@ -5,7 +5,7 @@ const WORKSHOP = 'git-basics';
 
 const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
-const PANEL = '#educates-workshop-panel';
+const PANEL = '#jupyterlab-workshop-panel';
 
 interface IExposedApp {
   jupyterapp: {
@@ -83,7 +83,7 @@ test.describe('author mode', () => {
     );
 
     await execute('workshop:author-mode', {});
-    await page.sidebar.openTab('educates-workshop-panel');
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
 
     const panel = page.locator(PANEL);
 
@@ -150,7 +150,7 @@ test.describe('author mode', () => {
     // The lint panel lists findings for the open workshop.
     await execute('workshop:lint', {});
 
-    const lint = page.locator('#educates-workshop-lint');
+    const lint = page.locator('#jupyterlab-workshop-lint');
 
     await expect(lint).toBeVisible();
     await expect(lint.locator('.jp-WorkshopLint-summary')).toContainText(

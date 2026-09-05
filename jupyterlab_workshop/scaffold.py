@@ -70,7 +70,7 @@ def manifest(
     )
     page_text = "\n".join(f"  - {page}" for page in pages or [])
 
-    return f"""apiVersion: workshop.educates.dev/v1alpha1
+    return f"""apiVersion: jupyterlab-workshop/v1alpha1
 name: {name}
 title: {title}
 version: 0.1.0
@@ -291,7 +291,7 @@ def readme(name: str, title: str) -> str:
 
     return f"""# {title}
 
-A guided workshop for JupyterLab, built with educates-jupyterlab-workshop.
+A guided workshop for JupyterLab, built with jupyterlab-workshop.
 
 ## Try it
 
@@ -299,7 +299,7 @@ Install the extension into a JupyterLab environment and open this
 directory as a workshop:
 
 ```
-pip install educates-jupyterlab-workshop
+pip install jupyterlab-workshop
 jupyter lab
 ```
 
@@ -314,7 +314,7 @@ jupyter workshop test .
 ```
 
 `lint` needs Node.js on the path. `test` needs the `test` extra and a
-browser: `pip install "educates-jupyterlab-workshop[test]"` and
+browser: `pip install "jupyterlab-workshop[test]"` and
 `playwright install chromium`.
 
 Workshop name: `{name}`.
@@ -366,7 +366,7 @@ jobs:
       - name: Install the workshop extension
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "educates-jupyterlab-workshop[test]"
+          python -m pip install "jupyterlab-workshop[test]"
           python -m playwright install --with-deps chromium
       - name: Lint
         run: jupyter workshop lint .

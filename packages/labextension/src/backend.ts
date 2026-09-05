@@ -18,7 +18,7 @@ import {
 } from './tokens';
 
 /**
- * The backend that talks to the `educates_jupyterlab_workshop` server
+ * The backend that talks to the `jupyterlab_workshop` server
  * extension over its REST endpoints.
  */
 export class ServerBackend implements IWorkshopBackend {

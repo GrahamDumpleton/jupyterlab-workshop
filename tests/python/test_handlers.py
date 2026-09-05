@@ -9,7 +9,7 @@ import pytest
 
 
 async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_root_dir):
-    response = await jp_fetch("educates-workshop", "platform")
+    response = await jp_fetch("jupyterlab-workshop", "platform")
 
     assert response.code == 200
 
@@ -29,7 +29,7 @@ async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_roo
 
 
 MANIFEST = (
-    "apiVersion: workshop.educates.dev/v1alpha1\n"
+    "apiVersion: jupyterlab-workshop/v1alpha1\n"
     "name: demo\ntitle: Demo\npages: [pages/01.md]\n"
 )
 
@@ -83,7 +83,7 @@ async def test_fetch_and_remove_a_workshop(jp_fetch, jp_root_dir, archive_url):
     from tornado.httpclient import HTTPClientError
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "fetch",
         method="POST",
         body=json.dumps({"source": {"archive": archive_url}}),
@@ -102,7 +102,7 @@ async def test_fetch_and_remove_a_workshop(jp_fetch, jp_root_dir, archive_url):
     # A second fetch without overwrite conflicts.
     with pytest.raises(HTTPClientError) as conflict:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "fetch",
             method="POST",
             body=json.dumps({"source": {"archive": archive_url}}),
@@ -111,7 +111,7 @@ async def test_fetch_and_remove_a_workshop(jp_fetch, jp_root_dir, archive_url):
     assert conflict.value.code == 409
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "workshops",
         method="DELETE",
         params={"path": "workshops/demo"},
@@ -126,7 +126,7 @@ async def test_fetch_rejects_bad_sources(jp_fetch):
 
     with pytest.raises(HTTPClientError) as error:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "fetch",
             method="POST",
             body=json.dumps({"source": {"url": "file:///etc"}}),
@@ -146,7 +146,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
     (workshop / "data.txt").write_text("one\n")
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "verify",
         method="POST",
         body=json.dumps({"workshop": "ws", "script": "verify/ok.py"}),
@@ -156,7 +156,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
 
     with pytest.raises(HTTPClientError) as error:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "verify",
             method="POST",
             body=json.dumps({"workshop": "ws", "script": "../outside.py"}),
@@ -165,7 +165,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
     assert error.value.code == 400
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "checkpoints",
         method="POST",
         body=json.dumps({"workshop": "ws", "name": "start", "variables": {"x": "1"}}),
@@ -176,7 +176,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
     (workshop / "data.txt").write_text("two\n")
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "checkpoints",
         method="POST",
         body=json.dumps({"workshop": "ws", "name": "start", "action": "restore"}),
@@ -186,7 +186,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
     assert (workshop / "data.txt").read_text() == "one\n"
 
     response = await jp_fetch(
-        "educates-workshop", "checkpoints", params={"workshop": "ws"}
+        "jupyterlab-workshop", "checkpoints", params={"workshop": "ws"}
     )
 
     assert [item["name"] for item in json.loads(response.body)["checkpoints"]] == [
@@ -196,7 +196,7 @@ async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
 
 async def test_preflight_endpoint(jp_fetch):
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "preflight",
         method="POST",
         body=json.dumps({"tools": [{"name": "python3"}], "versions": False}),
@@ -232,7 +232,7 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
         )
     )
 
-    response = await jp_fetch("educates-workshop", "workshops")
+    response = await jp_fetch("jupyterlab-workshop", "workshops")
     listed = json.loads(response.body)["workshops"]
 
     assert [item["path"] for item in listed] == ["workshops/demo"]
@@ -240,7 +240,7 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
     assert listed[0]["started"] is False
 
     response = await jp_fetch(
-        "educates-workshop", "registry", params={"url": "registry.json"}
+        "jupyterlab-workshop", "registry", params={"url": "registry.json"}
     )
     payload = json.loads(response.body)
 
@@ -248,12 +248,12 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
     assert payload["index"]["workshops"][0]["name"] == "demo"
 
     with pytest.raises(HTTPClientError) as error:
-        await jp_fetch("educates-workshop", "registry", params={"url": "nope.json"})
+        await jp_fetch("jupyterlab-workshop", "registry", params={"url": "nope.json"})
 
     assert error.value.code == 400
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "events",
         method="POST",
         body=json.dumps(
@@ -272,7 +272,7 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
     assert (workshop / "_workshop" / "events.jsonl").read_text().count("\n") == 2
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "environment",
         params={"workshop": "workshops/demo", "kernel": "workshop-demo"},
     )
@@ -282,7 +282,7 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
 
 async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "init",
         method="POST",
         body=json.dumps(
@@ -316,7 +316,7 @@ async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
     # outside the root is refused.
     with pytest.raises(Exception) as conflict:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "init",
             method="POST",
             body=json.dumps({"directory": "authored/my-workshop"}),
@@ -326,7 +326,7 @@ async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
 
     with pytest.raises(Exception) as outside:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "init",
             method="POST",
             body=json.dumps({"directory": "../elsewhere"}),
@@ -335,7 +335,7 @@ async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
     assert outside.value.code == 400
 
     response = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "publish",
         method="POST",
         body=json.dumps(
@@ -359,7 +359,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
     # result is posted for it, as the frontend would do.
     request = asyncio.ensure_future(
         jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "bridge",
             method="POST",
             body=json.dumps(
@@ -371,7 +371,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
     pending: list[dict] = []
 
     for _ in range(50):
-        listing = await jp_fetch("educates-workshop", "bridge")
+        listing = await jp_fetch("jupyterlab-workshop", "bridge")
         pending = json.loads(listing.body)["pending"]
 
         if pending:
@@ -382,7 +382,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
     assert pending and pending[0]["command"] == "workshop:bridge-status"
 
     answer = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "bridge",
         "result",
         method="POST",
@@ -394,7 +394,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
 
     # Answering again finds nothing to resolve.
     again = await jp_fetch(
-        "educates-workshop",
+        "jupyterlab-workshop",
         "bridge",
         "result",
         method="POST",
@@ -405,7 +405,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
 
     with pytest.raises(Exception) as timeout:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "bridge",
             method="POST",
             body=json.dumps({"command": "workshop:x", "args": {}, "timeout": 0.2}),
@@ -415,7 +415,7 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
 
     with pytest.raises(Exception) as refused:
         await jp_fetch(
-            "educates-workshop",
+            "jupyterlab-workshop",
             "bridge",
             method="POST",
             body=json.dumps({"command": "filebrowser:delete", "args": {}}),

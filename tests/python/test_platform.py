@@ -1,4 +1,4 @@
-from educates_jupyterlab_workshop.platform import PlatformInfo, detect_platform
+from jupyterlab_workshop.platform import PlatformInfo, detect_platform
 
 
 def detect(**overrides: object) -> PlatformInfo:

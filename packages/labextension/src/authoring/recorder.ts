@@ -1,4 +1,4 @@
-import { IRecording, RecordedEvent } from '@educates/workshop-core';
+import { IRecording, RecordedEvent } from '@jupyterlab-workshop/core';
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { NotebookActions } from '@jupyterlab/notebook';

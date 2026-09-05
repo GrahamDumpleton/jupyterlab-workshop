@@ -5,7 +5,7 @@ import {
   registryTags,
   searchRegistry,
   supportsPlatform
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { Dialog, showDialog, showErrorMessage } from '@jupyterlab/apputils';
 import { ReactWidget, UseSignal, refreshIcon } from '@jupyterlab/ui-components';
 import { CommandRegistry } from '@lumino/commands';
@@ -22,7 +22,7 @@ import {
 import { describeSource } from '../trust/summary';
 
 /** Id of the browser widget. */
-export const BROWSER_ID = 'educates-workshop-browser';
+export const BROWSER_ID = 'jupyterlab-workshop-browser';
 
 /** Settings the browser reads each time it refreshes. */
 export interface IBrowserSettings {

@@ -21,7 +21,7 @@ import {
   setFrontmatter,
   setManifestPages,
   splitFrontmatter
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import {
   Dialog,

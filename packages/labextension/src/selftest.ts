@@ -1,4 +1,8 @@
-import { IDirectiveNode, parseForm, parseQuiz } from '@educates/workshop-core';
+import {
+  IDirectiveNode,
+  parseForm,
+  parseQuiz
+} from '@jupyterlab-workshop/core';
 
 import { IActionResult, IWorkshopManager } from './tokens';
 import { visibleDirectives } from './util';

@@ -5,7 +5,7 @@ const WORKSHOP = 'git-basics';
 
 const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
-const PLUGIN = '@educates/jupyterlab-workshop:panel';
+const PLUGIN = '@jupyterlab-workshop/labextension:panel';
 
 /** Fixed paths under the test server root, removed after each test. */
 const REGISTRY_FILE = 'test-registry.json';
@@ -102,7 +102,7 @@ test.describe('workshop browser', () => {
       void exposed.jupyterapp.commands.execute('workshop:browse', {});
     });
 
-    const browser = page.locator('#educates-workshop-browser');
+    const browser = page.locator('#jupyterlab-workshop-browser');
 
     await expect(browser).toBeVisible();
 
@@ -152,7 +152,7 @@ test.describe('workshop browser', () => {
     await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
     await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
     await expect(
-      page.locator('#educates-workshop-panel .jp-WorkshopPanel-title')
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
     ).toHaveText('Git from the command line');
   });
 
@@ -177,7 +177,7 @@ test.describe('workshop browser', () => {
     });
     await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
 
-    const panel = page.locator('#educates-workshop-panel');
+    const panel = page.locator('#jupyterlab-workshop-panel');
 
     await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
       'Git from the command line'

@@ -591,73 +591,6 @@ wheels = [
 ]
 
 [[package]]
-name = "educates-jupyterlab-workshop"
-source = { editable = "." }
-dependencies = [
-    { name = "jupyter-server" },
-    { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-lite = [
-    { name = "jupyterlite-core" },
-    { name = "jupyterlite-pyodide-kernel" },
-    { name = "jupyterlite-terminal" },
-]
-mcp = [
-    { name = "mcp" },
-]
-test = [
-    { name = "playwright" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "jupyter-builder" },
-    { name = "jupyterlab" },
-    { name = "jupyterlite-core" },
-    { name = "jupyterlite-pyodide-kernel" },
-    { name = "jupyterlite-terminal" },
-    { name = "mcp" },
-    { name = "mkdocs" },
-    { name = "mkdocs-material" },
-    { name = "mypy" },
-    { name = "playwright" },
-    { name = "pytest" },
-    { name = "pytest-jupyter", extra = ["server"] },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jupyter-server", specifier = ">=2.13.0,<3" },
-    { name = "jupyterlite-core", marker = "extra == 'lite'", specifier = ">=0.8.3,<0.9" },
-    { name = "jupyterlite-pyodide-kernel", marker = "extra == 'lite'", specifier = ">=0.8.5,<0.9" },
-    { name = "jupyterlite-terminal", marker = "extra == 'lite'", specifier = ">=1.6,<2" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
-    { name = "playwright", marker = "extra == 'test'", specifier = ">=1.45" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-]
-provides-extras = ["lite", "mcp", "test"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "jupyter-builder", specifier = ">=1.2.0,<2" },
-    { name = "jupyterlab", specifier = ">=4.6.0,<5" },
-    { name = "jupyterlite-core", specifier = ">=0.8.3,<0.9" },
-    { name = "jupyterlite-pyodide-kernel", specifier = ">=0.8.5,<0.9" },
-    { name = "jupyterlite-terminal", specifier = ">=1.6,<2" },
-    { name = "mcp", specifier = ">=1.0" },
-    { name = "mkdocs", specifier = ">=1.6" },
-    { name = "mkdocs-material", specifier = ">=9.5" },
-    { name = "mypy", specifier = ">=1.10" },
-    { name = "playwright", specifier = ">=1.45" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-jupyter", extras = ["server"], specifier = ">=0.10" },
-    { name = "ruff", specifier = ">=0.5" },
-]
-
-[[package]]
 name = "executing"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1173,6 +1106,73 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d6/2c/90153f189e421e93c4bb4f9e3f59802a1f01abd2ac5cf40b152d7f735232/jupyterlab_server-2.28.0.tar.gz", hash = "sha256:35baa81898b15f93573e2deca50d11ac0ae407ebb688299d3a5213265033712c", size = 76996, upload-time = "2025-10-22T13:59:18.37Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/07/a000fe835f76b7e1143242ab1122e6362ef1c03f23f83a045c38859c2ae0/jupyterlab_server-2.28.0-py3-none-any.whl", hash = "sha256:e4355b148fdcf34d312bbbc80f22467d6d20460e8b8736bf235577dd18506968", size = 59830, upload-time = "2025-10-22T13:59:16.767Z" },
+]
+
+[[package]]
+name = "jupyterlab-workshop"
+source = { editable = "." }
+dependencies = [
+    { name = "jupyter-server" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+lite = [
+    { name = "jupyterlite-core" },
+    { name = "jupyterlite-pyodide-kernel" },
+    { name = "jupyterlite-terminal" },
+]
+mcp = [
+    { name = "mcp" },
+]
+test = [
+    { name = "playwright" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "jupyter-builder" },
+    { name = "jupyterlab" },
+    { name = "jupyterlite-core" },
+    { name = "jupyterlite-pyodide-kernel" },
+    { name = "jupyterlite-terminal" },
+    { name = "mcp" },
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mypy" },
+    { name = "playwright" },
+    { name = "pytest" },
+    { name = "pytest-jupyter", extra = ["server"] },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jupyter-server", specifier = ">=2.13.0,<3" },
+    { name = "jupyterlite-core", marker = "extra == 'lite'", specifier = ">=0.8.3,<0.9" },
+    { name = "jupyterlite-pyodide-kernel", marker = "extra == 'lite'", specifier = ">=0.8.5,<0.9" },
+    { name = "jupyterlite-terminal", marker = "extra == 'lite'", specifier = ">=1.6,<2" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
+    { name = "playwright", marker = "extra == 'test'", specifier = ">=1.45" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+provides-extras = ["lite", "mcp", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "jupyter-builder", specifier = ">=1.2.0,<2" },
+    { name = "jupyterlab", specifier = ">=4.6.0,<5" },
+    { name = "jupyterlite-core", specifier = ">=0.8.3,<0.9" },
+    { name = "jupyterlite-pyodide-kernel", specifier = ">=0.8.5,<0.9" },
+    { name = "jupyterlite-terminal", specifier = ">=1.6,<2" },
+    { name = "mcp", specifier = ">=1.0" },
+    { name = "mkdocs", specifier = ">=1.6" },
+    { name = "mkdocs-material", specifier = ">=9.5" },
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "playwright", specifier = ">=1.45" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-jupyter", extras = ["server"], specifier = ">=0.10" },
+    { name = "ruff", specifier = ">=0.5" },
 ]
 
 [[package]]

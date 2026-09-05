@@ -7,7 +7,7 @@ pytest_plugins = ("pytest_jupyter.jupyter_server",)
 def jp_server_config(jp_server_config):
     return {
         "ServerApp": {
-            "jpserver_extensions": {"educates_jupyterlab_workshop": True},
+            "jpserver_extensions": {"jupyterlab_workshop": True},
             # Test against a server which requires authentication on all endpoints
             "allow_unauthenticated_access": False,
         }

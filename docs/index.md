@@ -1,4 +1,4 @@
-# educates-jupyterlab-workshop
+# jupyterlab-workshop
 
 Guided, interactive workshops inside JupyterLab.
 
@@ -75,7 +75,7 @@ assert out.strip(), "No commits yet: run git commit"
 ## Install
 
 ```
-pip install educates-jupyterlab-workshop
+pip install jupyterlab-workshop
 ```
 
 The package is a prebuilt JupyterLab 4 extension with its server
@@ -83,7 +83,7 @@ extension; nothing else needs installing. Add the `test` extra and a
 browser to self-test workshops:
 
 ```
-pip install "educates-jupyterlab-workshop[test]"
+pip install "jupyterlab-workshop[test]"
 playwright install chromium
 ```
 

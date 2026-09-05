@@ -1,7 +1,7 @@
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 /** Id of the plugin whose settings hold the workshop configuration. */
-export const PANEL_PLUGIN_ID = '@educates/jupyterlab-workshop:panel';
+export const PANEL_PLUGIN_ID = '@jupyterlab-workshop/labextension:panel';
 
 /**
  * Read a string setting of the panel plugin, or the fallback.

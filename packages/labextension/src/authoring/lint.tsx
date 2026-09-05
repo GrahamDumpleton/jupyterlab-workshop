@@ -1,4 +1,4 @@
-import { ILintMessage } from '@educates/workshop-core';
+import { ILintMessage } from '@jupyterlab-workshop/core';
 import { ReactWidget, UseSignal, bugIcon } from '@jupyterlab/ui-components';
 import { CommandRegistry } from '@lumino/commands';
 import { ReadonlyJSONObject } from '@lumino/coreutils';
@@ -7,7 +7,7 @@ import React from 'react';
 import { CommandIDs, IWorkshopManager } from '../tokens';
 
 /** Id of the lint widget. */
-export const LINT_ID = 'educates-workshop-lint';
+export const LINT_ID = 'jupyterlab-workshop-lint';
 
 /**
  * Main-area widget listing the lint findings of the open workshop, with

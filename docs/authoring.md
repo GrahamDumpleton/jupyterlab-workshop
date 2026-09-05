@@ -78,7 +78,7 @@ Protocol on standard input and output, for Claude Code, jupyter-ai and
 other MCP clients. It needs the `mcp` extra:
 
 ```
-pip install "educates-jupyterlab-workshop[mcp]"
+pip install "jupyterlab-workshop[mcp]"
 ```
 
 A Claude Code configuration, for example, is:

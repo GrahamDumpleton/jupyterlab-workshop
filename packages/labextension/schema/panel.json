@@ -46,7 +46,7 @@
         "trustedSources": {
           "type": "array",
           "title": "Trusted sources",
-          "description": "Source key prefixes that open as trusted without asking, such as \"git:https://github.com/educates/\" or \"local:examples/\".",
+          "description": "Source key prefixes that open as trusted without asking, such as \"git:https://github.com/GrahamDumpleton/\" or \"local:examples/\".",
           "items": { "type": "string" },
           "default": []
         },
@@ -77,7 +77,7 @@
       "description": "Registry index files listing workshops that can be installed: http(s) URLs, or paths relative to the JupyterLab root. The workshop browser shows every registry's workshops.",
       "items": { "type": "string" },
       "default": [
-        "https://raw.githubusercontent.com/educates/educates-jupyterlab-workshop/main/registry/index.json"
+        "https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop/main/registry/index.json"
       ]
     },
     "analytics": {

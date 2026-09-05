@@ -11,7 +11,7 @@ import {
   IWorkshopManifest,
   TrustLevel,
   Variables
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { Token } from '@lumino/coreutils';
 import { ISignal } from '@lumino/signaling';
 
@@ -277,7 +277,7 @@ export interface IActionRegistry {
 }
 
 export const IActionRegistry = new Token<IActionRegistry>(
-  '@educates/jupyterlab-workshop:IActionRegistry',
+  '@jupyterlab-workshop/labextension:IActionRegistry',
   'Registry of workshop action implementations.'
 );
 
@@ -749,7 +749,7 @@ export interface IUninstallPlan {
 }
 
 export const IWorkshopManager = new Token<IWorkshopManager>(
-  '@educates/jupyterlab-workshop:IWorkshopManager',
+  '@jupyterlab-workshop/labextension:IWorkshopManager',
   'Loads workshops and tracks the current page.'
 );
 

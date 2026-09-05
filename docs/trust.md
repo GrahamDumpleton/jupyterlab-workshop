@@ -33,8 +33,8 @@ A workshop is opened from one of these sources:
 
 Downloaded workshops carry a `_workshop/source.json` record with the
 source, the archive URL and its hash, so reopening the directory later
-identifies it. The server endpoints are `POST educates-workshop/fetch`
-and `DELETE educates-workshop/workshops?path=...`; both refuse paths
+identifies it. The server endpoints are `POST jupyterlab-workshop/fetch`
+and `DELETE jupyterlab-workshop/workshops?path=...`; both refuse paths
 outside the JupyterLab root, and removal only deletes directories that
 contain a `workshop.yaml`.
 
@@ -119,11 +119,14 @@ the behaviour for every learner:
 
 ```json
 {
-  "@educates/jupyterlab-workshop:panel": {
+  "@jupyterlab-workshop/labextension:panel": {
     "defaultTrustLevel": "restricted",
     "trustPolicy": {
       "forcedLevel": null,
-      "trustedSources": ["git:https://github.com/educates/", "local:examples/"],
+      "trustedSources": [
+        "git:https://github.com/GrahamDumpleton/",
+        "local:examples/"
+      ],
       "disabledCapabilities": ["ui-settings"]
     }
   }

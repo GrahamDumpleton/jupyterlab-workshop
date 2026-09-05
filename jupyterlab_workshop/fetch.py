@@ -36,7 +36,7 @@ SOURCE_FILE = "source.json"
 
 DEFAULT_REF = "HEAD"
 
-USER_AGENT = "educates-jupyterlab-workshop"
+USER_AGENT = "jupyterlab-workshop"
 
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 

@@ -22,7 +22,7 @@ import {
   renderEnvCmd,
   renderEnvPs1,
   renderEnvSh
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -75,7 +75,7 @@ import {
 } from './util';
 import { VariableStore } from './variables';
 
-const STATE_KEY = '@educates/jupyterlab-workshop:state';
+const STATE_KEY = '@jupyterlab-workshop/labextension:state';
 
 const MANIFEST_FILE = 'workshop.yaml';
 

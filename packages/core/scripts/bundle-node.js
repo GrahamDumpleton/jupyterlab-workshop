@@ -11,11 +11,8 @@ const path = require('path');
 const { rspack } = require('@rspack/core');
 
 const root = path.resolve(__dirname, '..');
-const target = path.resolve(root, '../../educates_jupyterlab_workshop/nodejs');
-const schemaTarget = path.resolve(
-  root,
-  '../../educates_jupyterlab_workshop/schema'
-);
+const target = path.resolve(root, '../../jupyterlab_workshop/nodejs');
+const schemaTarget = path.resolve(root, '../../jupyterlab_workshop/schema');
 
 rspack(
   {

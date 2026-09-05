@@ -1,7 +1,7 @@
 {
-    "name": "@educates/workshop-core",
+    "name": "@jupyterlab-workshop/core",
     "version": "0.1.0",
-    "description": "Workshop format parsing, actions vocabulary, variables and lint rules for educates-jupyterlab-workshop.",
+    "description": "Workshop format parsing, actions vocabulary, variables and lint rules for jupyterlab-workshop.",
     "license": "Apache-2.0",
     "author": {
         "name": "Graham Dumpleton",

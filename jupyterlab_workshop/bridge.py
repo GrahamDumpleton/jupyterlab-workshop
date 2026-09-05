@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-SCHEMA_ID = "https://educates.dev/jupyterlab-workshop/bridge/v1"
+SCHEMA_ID = "https://grahamdumpleton.github.io/jupyterlab-workshop/bridge/v1"
 
 SCHEMA_VERSION = "1"
 
@@ -49,7 +49,7 @@ BRIDGE_SCHEMA: dict[str, Any] = {
 
 DEFAULT_TIMEOUT = 60.0
 
-SETTINGS_KEY = "educates_workshop_bridge"
+SETTINGS_KEY = "jupyterlab_workshop_bridge"
 
 
 class BridgeError(Exception):

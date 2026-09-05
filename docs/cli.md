@@ -156,7 +156,7 @@ pass, fail or skip, and the exit code is 1 when anything failed. `--junit`
 writes a JUnit XML report for CI, `--json` the full results.
 
 Requirements: the `test` extra (`pip install
-"educates-jupyterlab-workshop[test]"`) and a browser (`playwright install
+"jupyterlab-workshop[test]"`) and a browser (`playwright install
 chromium`). Terminals started by the test use a non-interactive pager so
 commands such as `git diff` do not wait for a key press.
 

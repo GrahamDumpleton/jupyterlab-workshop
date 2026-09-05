@@ -24,7 +24,7 @@ STATE_DIR = "_workshop"
 
 EVENTS_FILE = "events.jsonl"
 
-USER_AGENT = "educates-jupyterlab-workshop"
+USER_AGENT = "jupyterlab-workshop"
 
 MAX_BATCH = 1000
 

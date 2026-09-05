@@ -43,7 +43,7 @@ exists demo
 \`\`\`
 `;
 
-const MANIFEST = `apiVersion: workshop.educates.dev/v1alpha1
+const MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
 name: demo
 title: Demo
 # What the workshop may do
@@ -168,7 +168,7 @@ describe('manifest editing', () => {
 
   it('appends a missing key at the end', () => {
     const source =
-      'apiVersion: workshop.educates.dev/v1alpha1\nname: x\ntitle: X\n';
+      'apiVersion: jupyterlab-workshop/v1alpha1\nname: x\ntitle: X\n';
 
     expect(setManifestPages(source, ['pages/01.md'])).toBe(
       `${source}pages:\n  - pages/01.md\n`

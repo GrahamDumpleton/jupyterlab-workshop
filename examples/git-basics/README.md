@@ -1,6 +1,6 @@
 # Git from the command line
 
-An example workshop for educates-jupyterlab-workshop. It walks through the
+An example workshop for jupyterlab-workshop. It walks through the
 everyday git commands using two terminals and the editor, and doubles as the
 fixture for the project's tests.
 

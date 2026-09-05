@@ -41,7 +41,7 @@ from .publish import PublishError, publish_workshop
 from .registry import RegistryError, list_installed, load_registry
 from .scaffold import TEMPLATES, slug, write_scaffold
 
-API_NAMESPACE = "educates-workshop"
+API_NAMESPACE = "jupyterlab-workshop"
 
 DEFAULT_WORKSHOPS_DIRECTORY = "workshops"
 

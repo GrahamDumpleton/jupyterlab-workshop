@@ -1,4 +1,4 @@
-import { ILayoutSpec } from '@educates/workshop-core';
+import { ILayoutSpec } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { Widget } from '@lumino/widgets';

@@ -14,7 +14,7 @@ import {
   parseQuiz,
   parseTriggers,
   validateForm
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import {
   UseSignal,
   caretLeftIcon,

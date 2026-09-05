@@ -2,7 +2,7 @@ import { WorkshopFormatError } from '../errors';
 import { parseManifest } from '../format/manifest';
 
 const VALID = `
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: git-basics
 title: Git from the command line
 version: 1.2.0
@@ -122,7 +122,7 @@ describe('parseManifest', () => {
 
   it('fills defaults for a minimal manifest', () => {
     const manifest = parseManifest(
-      'apiVersion: workshop.educates.dev/v1alpha1\nname: x\ntitle: X\npages: [a.md]\n'
+      'apiVersion: jupyterlab-workshop/v1alpha1\nname: x\ntitle: X\npages: [a.md]\n'
     );
 
     expect(manifest.gating).toBe('off');

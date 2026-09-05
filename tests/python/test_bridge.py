@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from educates_jupyterlab_workshop.bridge import Bridge, BridgeError
+from jupyterlab_workshop.bridge import Bridge, BridgeError
 
 
 def test_bridge_resolves_requests_and_times_out() -> None:

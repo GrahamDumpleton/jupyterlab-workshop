@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from educates_jupyterlab_workshop import cli
-from educates_jupyterlab_workshop.lite import (
+from jupyterlab_workshop import cli
+from jupyterlab_workshop.lite import (
+    PANEL_PLUGIN,
     LiteBuildOptions,
     LiteError,
     build_command,
@@ -27,7 +28,7 @@ needs_lite = pytest.mark.skipif(
 def _workshop(directory: Path, name: str) -> Path:
     directory.mkdir(parents=True)
     (directory / "workshop.yaml").write_text(
-        f"apiVersion: workshop.educates.dev/v1alpha1\nname: {name}\n"
+        f"apiVersion: jupyterlab-workshop/v1alpha1\nname: {name}\n"
         f"title: {name.title()}\npages: [pages/01.md]\n"
     )
     (directory / "pages").mkdir()
@@ -60,15 +61,13 @@ def test_stage_contents_copies_workshops_without_progress(tmp_path: Path) -> Non
 
 def test_settings_overrides_open_the_only_workshop_by_default(tmp_path: Path) -> None:
     options = LiteBuildOptions(workshops=(), output=tmp_path / "out")
-    settings = settings_overrides(options, ["solo"])[
-        "@educates/jupyterlab-workshop:panel"
-    ]
+    settings = settings_overrides(options, ["solo"])[PANEL_PLUGIN]
 
     assert settings["defaultWorkshop"] == "solo"
     assert settings["workshopsDirectory"] == ""
     assert "trustPolicy" not in settings
 
-    two = settings_overrides(options, ["a", "b"])["@educates/jupyterlab-workshop:panel"]
+    two = settings_overrides(options, ["a", "b"])[PANEL_PLUGIN]
 
     assert two["defaultWorkshop"] == ""
 
@@ -79,9 +78,7 @@ def test_settings_overrides_open_the_only_workshop_by_default(tmp_path: Path) ->
         trust="trusted",
         registries=("https://example.org/index.json",),
     )
-    settings = settings_overrides(chosen, ["a", "b"])[
-        "@educates/jupyterlab-workshop:panel"
-    ]
+    settings = settings_overrides(chosen, ["a", "b"])[PANEL_PLUGIN]
 
     assert settings["defaultWorkshop"] == "b"
     assert settings["trustPolicy"] == {"forcedLevel": "trusted"}
@@ -148,7 +145,7 @@ def test_build_lite_site_stages_and_configures_before_building(tmp_path: Path) -
     overrides = json.loads((lite_dir / "overrides.json").read_text())
 
     assert config["jupyter-config-data"]["exposeAppInBrowser"] is True
-    assert overrides["@educates/jupyterlab-workshop:panel"]["defaultWorkshop"] == "demo"
+    assert overrides[PANEL_PLUGIN]["defaultWorkshop"] == "demo"
 
     def failing(command, cwd):  # type: ignore[no-untyped-def]
         return 3

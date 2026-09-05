@@ -7,7 +7,7 @@ import {
   declaredCapabilities,
   hashFiles,
   lintWorkshop
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 

@@ -3,7 +3,7 @@ node_modules
 **/lib
 **/package.json
 !/package.json
-educates_jupyterlab_workshop
+jupyterlab_workshop
 eslint.config.mjs
 .venv
 scratch

@@ -6,7 +6,7 @@ from threading import Thread
 
 import pytest
 
-from educates_jupyterlab_workshop.registry import (
+from jupyterlab_workshop.registry import (
     RegistryError,
     build_registry,
     describe_installed,
@@ -132,7 +132,7 @@ def test_build_registry_merges_entries_and_versions() -> None:
 def _write_workshop(directory: Path, name: str, done: int = 0) -> None:
     directory.mkdir(parents=True)
     (directory / "workshop.yaml").write_text(
-        "apiVersion: workshop.educates.dev/v1alpha1\n"
+        "apiVersion: jupyterlab-workshop/v1alpha1\n"
         f"name: {name}\ntitle: {name.title()}\nversion: 2.0\n"
         "pages: [pages/01.md, pages/02.md]\n"
     )

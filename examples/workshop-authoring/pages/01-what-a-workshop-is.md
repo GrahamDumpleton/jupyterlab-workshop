@@ -28,7 +28,7 @@ jupyter workshop --version
 
 ```{hint}
 :title: If the command is not found
-The tool is installed with the `educates-jupyterlab-workshop` package.
+The tool is installed with the `jupyterlab-workshop` package.
 Install it into the same environment JupyterLab runs from, then restart
 the terminal.
 ```

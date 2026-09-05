@@ -1,6 +1,6 @@
 ---
 name: workshop-author
-description: Write, check and self-test guided JupyterLab workshops in the educates-jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, or make one pass jupyter workshop lint and jupyter workshop test.
+description: Write, check and self-test guided JupyterLab workshops in the jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, or make one pass jupyter workshop lint and jupyter workshop test.
 ---
 
 # Workshop author
@@ -49,7 +49,7 @@ from `jupyter workshop mcp`.
 ## Manifest (`workshop.yaml`)
 
 ```yaml
-apiVersion: workshop.educates.dev/v1alpha1
+apiVersion: jupyterlab-workshop/v1alpha1
 name: git-basics # lower case, digits, hyphens
 title: Git from the command line
 version: 0.1.0

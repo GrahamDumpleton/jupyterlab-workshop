@@ -1,5 +1,5 @@
 {
-    "name": "educates-jupyterlab-workshop",
+    "name": "jupyterlab-workshop",
     "version": "0.1.0",
     "private": true,
     "description": "Guided interactive workshops inside JupyterLab.",
@@ -10,9 +10,9 @@
         "workshop",
         "training"
     ],
-    "homepage": "https://github.com/educates/educates-jupyterlab-workshop",
+    "homepage": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
     "bugs": {
-        "url": "https://github.com/educates/educates-jupyterlab-workshop/issues"
+        "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues"
     },
     "license": "Apache-2.0",
     "author": {
@@ -21,7 +21,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/educates/educates-jupyterlab-workshop.git"
+        "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop.git"
     },
     "workspaces": [
         "packages/*"
@@ -29,16 +29,16 @@
     "scripts": {
         "build": "jlpm build:core && jlpm build:lab",
         "build:prod": "jlpm clean && jlpm build:core && jlpm build:lab:prod",
-        "build:core": "jlpm workspace @educates/workshop-core build",
-        "build:lab": "jlpm workspace @educates/jupyterlab-workshop build",
-        "build:lab:prod": "jlpm workspace @educates/jupyterlab-workshop build:prod",
-        "clean": "jlpm workspace @educates/workshop-core clean && jlpm workspace @educates/jupyterlab-workshop clean:all",
+        "build:core": "jlpm workspace @jupyterlab-workshop/core build",
+        "build:lab": "jlpm workspace @jupyterlab-workshop/labextension build",
+        "build:lab:prod": "jlpm workspace @jupyterlab-workshop/labextension build:prod",
+        "clean": "jlpm workspace @jupyterlab-workshop/core clean && jlpm workspace @jupyterlab-workshop/labextension clean:all",
         "clean:lintcache": "rimraf .eslintcache .stylelintcache",
         "install:extension": "jlpm build",
         "watch": "run-p watch:core watch:lab",
-        "watch:core": "jlpm workspace @educates/workshop-core watch",
-        "watch:lab": "jlpm workspace @educates/jupyterlab-workshop watch",
-        "test": "jlpm workspace @educates/workshop-core test",
+        "watch:core": "jlpm workspace @jupyterlab-workshop/core watch",
+        "watch:lab": "jlpm workspace @jupyterlab-workshop/labextension watch",
+        "test": "jlpm workspace @jupyterlab-workshop/core test",
         "typecheck": "tsc -b packages/labextension",
         "lint": "jlpm prettier && jlpm eslint && jlpm stylelint",
         "lint:check": "jlpm prettier:check && jlpm eslint:check && jlpm stylelint:check",

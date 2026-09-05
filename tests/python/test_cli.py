@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from educates_jupyterlab_workshop import cli
-from educates_jupyterlab_workshop.harness import SelfTestReport, _junit
-from educates_jupyterlab_workshop.scaffold import slug
+from jupyterlab_workshop import cli
+from jupyterlab_workshop.harness import SelfTestReport, _junit
+from jupyterlab_workshop.scaffold import slug
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None or not cli.NODE_BUNDLE.is_file(),
@@ -29,7 +29,7 @@ def test_init_writes_a_workshop_and_refuses_to_overwrite(
     assert (
         (target / "workshop.yaml")
         .read_text()
-        .startswith("apiVersion: workshop.educates.dev/v1alpha1\nname: intro-to-git\n")
+        .startswith("apiVersion: jupyterlab-workshop/v1alpha1\nname: intro-to-git\n")
     )
     assert (target / "pages" / "01-welcome.md").exists()
     assert (target / ".github" / "workflows" / "workshop.yml").exists()

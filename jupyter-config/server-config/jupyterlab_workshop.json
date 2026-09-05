@@ -1,7 +1,7 @@
 {
   "ServerApp": {
     "jpserver_extensions": {
-      "educates_jupyterlab_workshop": true
+      "jupyterlab_workshop": true
     }
   }
 }

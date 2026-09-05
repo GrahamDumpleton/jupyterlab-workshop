@@ -1,4 +1,4 @@
-import { environmentVariables } from '@educates/workshop-core';
+import { environmentVariables } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Terminal as TerminalService } from '@jupyterlab/services';
@@ -136,7 +136,7 @@ export class TerminalSessions {
     const terminal = new Terminal(session, {});
     const widget = new MainAreaWidget({ content: terminal });
 
-    widget.id = `educates-workshop-terminal-${name}`;
+    widget.id = `jupyterlab-workshop-terminal-${name}`;
     widget.title.label = name;
     widget.title.caption = `Workshop terminal "${name}"`;
     widget.title.icon = terminalIcon;
@@ -333,7 +333,7 @@ export namespace TerminalSessions {
 
 /** The workshop terminals, shared by the actions and the recorder. */
 export const ITerminalSessions = new Token<TerminalSessions>(
-  '@educates/jupyterlab-workshop:ITerminalSessions',
+  '@jupyterlab-workshop/labextension:ITerminalSessions',
   'Terminals opened by the workshop, keyed by session name.'
 );
 

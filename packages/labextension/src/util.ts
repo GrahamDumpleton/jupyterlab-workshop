@@ -4,7 +4,7 @@ import {
   PageNode,
   Variables,
   evaluateExpression
-} from '@educates/workshop-core';
+} from '@jupyterlab-workshop/core';
 
 /**
  * Parse a duration such as `1500ms`, `2s` or `3` (seconds) into milliseconds.

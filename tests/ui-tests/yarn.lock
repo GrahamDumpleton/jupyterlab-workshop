@@ -285,15 +285,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@educates/jupyterlab-workshop-ui-tests@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "@educates/jupyterlab-workshop-ui-tests@workspace:."
-  dependencies:
-    "@jupyterlab/galata": ^5.0.5
-    "@playwright/test": ^1.60.0
-  languageName: unknown
-  linkType: soft
-
 "@fortawesome/fontawesome-free@npm:^5.12.0":
   version: 5.15.4
   resolution: "@fortawesome/fontawesome-free@npm:5.15.4"
@@ -354,6 +345,15 @@ __metadata:
   checksum: 46ee6f70d2a971b352f5c89ab3bd36cf6e58317b3bdbb41b0d0e98f7fe7a96fe31eb733c3da0363a08d48cdaf0ecb596116e2fdbebd307e3b4c768da5b4d7e65
   languageName: node
   linkType: hard
+
+"@jupyterlab-workshop/ui-tests@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@jupyterlab-workshop/ui-tests@workspace:."
+  dependencies:
+    "@jupyterlab/galata": ^5.0.5
+    "@playwright/test": ^1.60.0
+  languageName: unknown
+  linkType: soft
 
 "@jupyterlab/application@npm:^4.6.3":
   version: 4.6.3

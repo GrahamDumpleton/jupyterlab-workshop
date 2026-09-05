@@ -17,7 +17,7 @@ const CAPABILITY_NAMES: readonly string[] = [
 const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
 
 /** The manifest API version this package understands. */
-export const MANIFEST_API_VERSION = 'workshop.educates.dev/v1alpha1';
+export const MANIFEST_API_VERSION = 'jupyterlab-workshop/v1alpha1';
 
 /** Field types a variable may declare. */
 export type VariableType =

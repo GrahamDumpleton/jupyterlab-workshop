@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://workshop.educates.dev/schemas/v1alpha1/workshop.schema.json",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/workshop.schema.json",
   "title": "Workshop manifest",
   "description": "The workshop.yaml manifest of a guided JupyterLab workshop.",
   "type": "object",
   "required": ["apiVersion", "name", "title", "pages"],
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "workshop.educates.dev/v1alpha1" },
+    "apiVersion": { "const": "jupyterlab-workshop/v1alpha1" },
     "name": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$",

@@ -1,4 +1,4 @@
-import { IVariableDefinition, Variables } from '@educates/workshop-core';
+import { IVariableDefinition, Variables } from '@jupyterlab-workshop/core';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import { IVariableEntry, IVariableStore, VariableSource } from './tokens';

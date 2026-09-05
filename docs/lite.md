@@ -53,7 +53,7 @@ The `lite` built-in variable is `true`, so prose can adapt with
 ## Building a site
 
 ```
-pip install "educates-jupyterlab-workshop[lite]"
+pip install "jupyterlab-workshop[lite]"
 jupyter workshop lite my-workshop [other-workshop ...] [--out lite-site]
                                   [--default NAME] [--trust LEVEL]
                                   [--registry URL] [--no-terminal]
@@ -86,7 +86,7 @@ site with the example workshop and deploys it with `actions/deploy-pages`.
 A workshop repository can do the same:
 
 ```yaml
-- run: pip install "educates-jupyterlab-workshop[lite]"
+- run: pip install "jupyterlab-workshop[lite]"
 - run: |
     curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
       | tar -xj -C /usr/local bin/micromamba

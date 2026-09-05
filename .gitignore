@@ -12,10 +12,10 @@ packages/*/lib/
 packages/core/coverage/
 
 # Built labextension, Node CLI bundle, schema copy and generated version file
-educates_jupyterlab_workshop/labextension/
-educates_jupyterlab_workshop/nodejs/
-educates_jupyterlab_workshop/schema/
-educates_jupyterlab_workshop/_version.py
+jupyterlab_workshop/labextension/
+jupyterlab_workshop/nodejs/
+jupyterlab_workshop/schema/
+jupyterlab_workshop/_version.py
 
 # Documentation build outputs
 site/
