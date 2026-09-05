@@ -166,7 +166,11 @@ work/
 
 
 def ci_workflow() -> str:
-    """A GitHub Actions workflow that lints and self-tests the workshop."""
+    """A GitHub Actions workflow that lints and self-tests the workshop.
+
+    The matrix covers Linux, macOS and Windows so platform variants get
+    exercised; drop an operating system the workshop does not support.
+    """
 
     return """name: workshop
 
@@ -179,7 +183,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

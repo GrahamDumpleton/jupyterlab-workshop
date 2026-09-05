@@ -11,6 +11,7 @@ import React from 'react';
 import {
   ConfirmAnswer,
   IConfirmRequest,
+  ITrustChoice,
   ITrustPrompts,
   ITrustSummary
 } from '../tokens';
@@ -19,12 +20,17 @@ import { describeSource } from './summary';
 /**
  * Dialog body summarising what a workshop asks to be trusted with.
  */
-class TrustBody extends ReactWidget {
+class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
   constructor(summary: ITrustSummary) {
     super();
 
     this._summary = summary;
     this.addClass('jp-WorkshopTrust');
+  }
+
+  /** Whether the learner ticked the analytics opt-in. */
+  getValue(): boolean {
+    return this._analytics;
   }
 
   protected render(): JSX.Element {
@@ -106,6 +112,19 @@ class TrustBody extends ReactWidget {
             </ul>
           </details>
         ) : null}
+        {summary.analyticsSink ? (
+          <label className="jp-WorkshopTrust-analytics">
+            <input
+              type="checkbox"
+              defaultChecked={false}
+              onChange={event => {
+                this._analytics = event.target.checked;
+              }}
+            />{' '}
+            Report my progress (pages, actions and check results, no file
+            contents) to <code>{sinkHost(summary.analyticsSink)}</code>
+          </label>
+        ) : null}
         <p className="jp-WorkshopTrust-heading">Levels</p>
         <dl className="jp-WorkshopTrust-levels">
           <dt>Trust</dt>
@@ -120,6 +139,15 @@ class TrustBody extends ReactWidget {
   }
 
   private _summary: ITrustSummary;
+  private _analytics = false;
+}
+
+function sinkHost(url: string): string {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -176,7 +204,7 @@ class ConfirmBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
 export async function showTrustDialog(
   summary: ITrustSummary,
   defaultLevel: TrustLevel
-): Promise<TrustLevel | null> {
+): Promise<ITrustChoice | null> {
   const buttons: Dialog.IButton[] = [
     Dialog.cancelButton({ label: 'Cancel' }),
     Dialog.okButton({
@@ -195,7 +223,7 @@ export async function showTrustDialog(
   const levels: (TrustLevel | null)[] = [null, 'ask', 'restricted', 'trusted'];
   const defaultButton = levels.indexOf(defaultLevel);
 
-  const result = await showDialog({
+  const result = await showDialog<boolean>({
     title: `Open workshop "${summary.title}"?`,
     body: new TrustBody(summary),
     buttons,
@@ -206,8 +234,9 @@ export async function showTrustDialog(
   const index = buttons.findIndex(
     button => button.label === result.button.label
   );
+  const level = result.button.accept && index >= 0 ? levels[index] : null;
 
-  return result.button.accept && index >= 0 ? levels[index] : null;
+  return level ? { level, analytics: result.value === true } : null;
 }
 
 /**

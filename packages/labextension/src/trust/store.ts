@@ -11,7 +11,9 @@ export const DEFAULT_POLICY: ITrustPolicy = {
   defaultLevel: 'restricted',
   forcedLevel: null,
   trustedSources: [],
-  disabledCapabilities: []
+  disabledCapabilities: [],
+  analyticsSink: '',
+  analyticsIdentity: 'none'
 };
 
 interface IStoredDecisions {
@@ -138,10 +140,15 @@ export function asTrustLevel(value: unknown): TrustLevel | null {
 export function policyFromSettings(values: {
   defaultTrustLevel?: unknown;
   trustPolicy?: unknown;
+  analytics?: unknown;
 }): ITrustPolicy {
   const raw =
     typeof values.trustPolicy === 'object' && values.trustPolicy !== null
       ? (values.trustPolicy as Record<string, unknown>)
+      : {};
+  const analytics =
+    typeof values.analytics === 'object' && values.analytics !== null
+      ? (values.analytics as Record<string, unknown>)
       : {};
   const strings = (value: unknown): string[] =>
     Array.isArray(value)
@@ -153,6 +160,11 @@ export function policyFromSettings(values: {
       asTrustLevel(values.defaultTrustLevel) ?? DEFAULT_POLICY.defaultLevel,
     forcedLevel: asTrustLevel(raw.forcedLevel),
     trustedSources: strings(raw.trustedSources),
-    disabledCapabilities: strings(raw.disabledCapabilities)
+    disabledCapabilities: strings(raw.disabledCapabilities),
+    analyticsSink:
+      typeof analytics.sink === 'string' && /^https?:\/\//.test(analytics.sink)
+        ? analytics.sink
+        : '',
+    analyticsIdentity: analytics.identity === 'hub' ? 'hub' : 'none'
   };
 }

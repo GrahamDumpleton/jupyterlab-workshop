@@ -30,6 +30,9 @@ class PlatformInfo:
     path_sep: str
     root_dir: str
 
+    #: The JupyterHub user name, when running under a hub; else empty.
+    hub_user: str = ""
+
     def to_dict(self) -> dict[str, str]:
         """Return the fields as a JSON-serialisable mapping."""
 
@@ -64,6 +67,7 @@ def detect_platform(
         user=user,
         path_sep=path_sep,
         root_dir=root_dir,
+        hub_user=environ.get("JUPYTERHUB_USER", ""),
     )
 
 

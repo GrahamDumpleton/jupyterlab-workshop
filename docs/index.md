@@ -45,10 +45,22 @@ assert out.strip(), "No commits yet: run git commit"
 - [Checks, forms and checkpoints](checks.md) covers verifying progress,
   quizzes, forms, gating and checkpoints.
 
+- [Platforms](platforms.md) covers command variants for Linux, macOS
+  and Windows, paths and terminal shells.
+
+- [Isolated environments](environment.md) describes giving a workshop
+  its own Python environment and kernel.
+
 - [Manifest reference](reference/manifest.md) documents `workshop.yaml`.
+
+- [Finding and installing workshops](registry.md) covers the workshop
+  browser, registries and launch links.
 
 - [Loading and trust](trust.md) explains where workshops come from and
   what the trust levels allow.
+
+- [Progress events](analytics.md) describes what is recorded, the export,
+  and reporting to a sink.
 
 - [Command line](cli.md) covers `jupyter workshop` for creating,
   checking, self-testing and publishing workshops.

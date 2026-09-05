@@ -214,13 +214,24 @@ def _tail(log: Path) -> str:
 
 
 def _stop_server(server: subprocess.Popen[bytes]) -> None:
-    if server.poll() is None:
+    if server.poll() is not None:
+        return
+
+    # On Windows terminate() only ends the server process itself and would
+    # leave its kernels and terminals running, so take the whole tree down.
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(server.pid)],
+            capture_output=True,
+            check=False,
+        )
+    else:
         server.terminate()
 
-        try:
-            server.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            server.kill()
+    try:
+        server.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        server.kill()
 
 
 def _to_report(raw: object) -> SelfTestReport:

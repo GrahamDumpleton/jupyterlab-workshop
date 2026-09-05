@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 from . import __version__ as VERSION
+from .registry import RegistryError, build_registry, parse_registry
 from .scaffold import slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -28,6 +29,10 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 NODE_BUNDLE = PACKAGE_DIR / "nodejs" / "workshop-cli.cjs"
 
 SCHEMA_FILE = PACKAGE_DIR / "schema" / "workshop.schema.json"
+
+REGISTRY_SCHEMA_FILE = PACKAGE_DIR / "schema" / "registry.schema.json"
+
+PLATFORMS = ["linux", "macos", "windows", "lite"]
 
 PUBLISH_EXCLUDES = {"_workshop", ".git", ".github", "scratch", "dist", "node_modules"}
 
@@ -77,12 +82,22 @@ def build_parser() -> argparse.ArgumentParser:
     lint = commands.add_parser("lint", help="report problems in a workshop")
     lint.add_argument("directory", type=Path)
     lint.add_argument("--json", action="store_true", help="print the report as JSON")
+    lint.add_argument(
+        "--platform",
+        choices=PLATFORMS,
+        help="platform to select body variants for (default linux)",
+    )
     lint.set_defaults(func=command_lint)
 
     render = commands.add_parser("render", help="render pages to standalone HTML")
     render.add_argument("directory", type=Path)
     render.add_argument("page", nargs="?", help="page id or path; default all pages")
     render.add_argument("--out", type=Path, help="write to a file instead of stdout")
+    render.add_argument(
+        "--platform",
+        choices=PLATFORMS,
+        help="platform to select body variants for (default linux)",
+    )
     render.set_defaults(func=command_render)
 
     pages = commands.add_parser("pages", help="list the pages of a workshop")
@@ -90,7 +105,25 @@ def build_parser() -> argparse.ArgumentParser:
     pages.set_defaults(func=command_pages)
 
     schema = commands.add_parser("schema", help="print the manifest JSON schema")
+    schema.add_argument(
+        "--registry",
+        action="store_true",
+        help="print the registry index schema instead",
+    )
     schema.set_defaults(func=command_schema)
+
+    registry = commands.add_parser(
+        "registry", help="add published entries to a registry index file"
+    )
+    registry.add_argument("index", type=Path, help="index file to create or update")
+    registry.add_argument(
+        "entries",
+        nargs="+",
+        type=Path,
+        help="entry files written by publish (*.registry.json)",
+    )
+    registry.add_argument("--title", help="title of the registry")
+    registry.set_defaults(func=command_registry)
 
     publish = commands.add_parser(
         "publish", help="build an archive, its sha256 and a registry entry"
@@ -163,6 +196,10 @@ def command_lint(args: argparse.Namespace) -> int:
     """Lint a workshop through the Node bundle."""
 
     extra = ["--json"] if args.json else []
+
+    if args.platform:
+        extra += ["--platform", args.platform]
+
     completed = run_node(["lint", str(_workshop_dir(args.directory)), *extra])
 
     sys.stdout.write(completed.stdout)
@@ -181,6 +218,9 @@ def command_render(args: argparse.Namespace) -> int:
 
     if args.out:
         command += ["--out", str(args.out)]
+
+    if args.platform:
+        command += ["--platform", args.platform]
 
     completed = run_node(command)
 
@@ -214,15 +254,57 @@ def command_pages(args: argparse.Namespace) -> int:
 
 
 def command_schema(args: argparse.Namespace) -> int:
-    """Print the manifest schema."""
+    """Print the manifest or registry schema."""
 
-    if not SCHEMA_FILE.is_file():
+    schema = REGISTRY_SCHEMA_FILE if args.registry else SCHEMA_FILE
+
+    if not schema.is_file():
         raise CliError(
-            "The manifest schema is missing from this installation; "
+            f"The schema {schema.name} is missing from this installation; "
             "build the package first"
         )
 
-    sys.stdout.write(SCHEMA_FILE.read_text(encoding="utf-8"))
+    sys.stdout.write(schema.read_text(encoding="utf-8"))
+
+    return 0
+
+
+def command_registry(args: argparse.Namespace) -> int:
+    """Merge entry files into a registry index."""
+
+    index_path: Path = args.index
+    existing = None
+
+    if index_path.is_file():
+        try:
+            existing = parse_registry(
+                index_path.read_text(encoding="utf-8"), str(index_path)
+            )
+        except RegistryError as error:
+            raise CliError(str(error)) from error
+
+    entries = []
+
+    for entry_path in args.entries:
+        try:
+            entry = json.loads(entry_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise CliError(f"Unable to read {entry_path}: {error}") from error
+
+        if not isinstance(entry, dict):
+            raise CliError(f"{entry_path} does not contain a registry entry")
+
+        entries.append(entry)
+
+    try:
+        index = build_registry(existing, entries, title=args.title)
+    except RegistryError as error:
+        raise CliError(str(error)) from error
+
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
+
+    print(f"wrote {index_path} with {len(index['workshops'])} workshop(s)")
 
     return 0
 
@@ -260,7 +342,9 @@ def command_publish(args: argparse.Namespace) -> int:
         "description": manifest.get("description", ""),
         "tags": manifest.get("tags", []),
         "platforms": manifest.get("platforms", []),
-        "capabilities": manifest.get("capabilities", []),
+        "capabilities": _flatten_capabilities(manifest.get("capabilities")),
+        "duration": manifest.get("duration", ""),
+        "authors": manifest.get("authors", []),
         "versions": [
             {
                 "version": version,
@@ -343,6 +427,26 @@ def _read_manifest(directory: Path) -> dict[str, object]:
         raise CliError("workshop.yaml must be a mapping")
 
     return data
+
+
+def _flatten_capabilities(value: object) -> list[str]:
+    # The manifest writes scoped capabilities as single-key mappings; the
+    # registry lists them as name:scope strings.
+    names: list[str] = []
+
+    if not isinstance(value, list):
+        return names
+
+    for item in value:
+        if isinstance(item, str):
+            names.append(item)
+        elif isinstance(item, dict):
+            for key, scopes in item.items():
+                listed = scopes if isinstance(scopes, list) else [scopes]
+
+                names.extend(f"{key}:{scope}" for scope in listed)
+
+    return names
 
 
 def _clean_tar(info: tarfile.TarInfo) -> tarfile.TarInfo | None:

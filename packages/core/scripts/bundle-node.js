@@ -55,10 +55,13 @@ rspack(
     }
 
     fs.mkdirSync(schemaTarget, { recursive: true });
-    fs.copyFileSync(
-      path.join(root, 'src/schema/workshop.schema.json'),
-      path.join(schemaTarget, 'workshop.schema.json')
-    );
+
+    for (const name of ['workshop.schema.json', 'registry.schema.json']) {
+      fs.copyFileSync(
+        path.join(root, 'src/schema', name),
+        path.join(schemaTarget, name)
+      );
+    }
 
     console.log(`Wrote ${path.join(target, 'workshop-cli.cjs')}`);
   }

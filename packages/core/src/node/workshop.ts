@@ -9,6 +9,7 @@ import * as path from 'path';
 import { IWorkshopManifest, parseManifest } from '../format/manifest';
 import { IPage, parsePage } from '../format/page';
 import { declaredVariables } from '../format/page';
+import { PLATFORM_NAMES } from '../format/variants';
 import { Variables } from '../variables/substitute';
 
 /** A workshop read from disk. */
@@ -17,25 +18,77 @@ export interface ILoadedWorkshopFiles {
   manifest: IWorkshopManifest;
   manifestSource: string;
   pages: IPage[];
+
+  /** The platform the pages were rendered for. */
+  platform: string;
 }
 
-/** Built-in variables as the linter assumes them. */
-const BUILTINS: Variables = {
-  platform: 'linux',
-  shell: 'bash',
-  path_sep: '/',
-  workshop_dir: '.',
-  home: '/home/learner',
-  user: 'learner',
-  lite: 'false',
-  hub: 'false'
+/** Options for loading a workshop. */
+export interface ILoadOptions {
+  /** Platform to render body variants for; `linux` by default. */
+  platform?: string;
+}
+
+/** Built-in variables as the linter assumes them, per platform. */
+const BUILTINS: Readonly<Record<string, Variables>> = {
+  linux: {
+    platform: 'linux',
+    shell: 'bash',
+    path_sep: '/',
+    workshop_dir: '.',
+    home: '/home/learner',
+    user: 'learner',
+    lite: 'false',
+    hub: 'false'
+  },
+  macos: {
+    platform: 'macos',
+    shell: 'zsh',
+    path_sep: '/',
+    workshop_dir: '.',
+    home: '/Users/learner',
+    user: 'learner',
+    lite: 'false',
+    hub: 'false'
+  },
+  windows: {
+    platform: 'windows',
+    shell: 'powershell',
+    path_sep: '\\',
+    workshop_dir: '.',
+    home: 'C:\\Users\\learner',
+    user: 'learner',
+    lite: 'false',
+    hub: 'false'
+  },
+  lite: {
+    platform: 'lite',
+    shell: '',
+    path_sep: '/',
+    workshop_dir: '.',
+    home: '/home/learner',
+    user: 'learner',
+    lite: 'true',
+    hub: 'false'
+  }
 };
 
 /**
  * Read and parse a workshop directory, rendering pages with the manifest
  * defaults so substituted arguments look as a learner would first see them.
  */
-export function loadWorkshopFiles(directory: string): ILoadedWorkshopFiles {
+export function loadWorkshopFiles(
+  directory: string,
+  options: ILoadOptions = {}
+): ILoadedWorkshopFiles {
+  const platform = options.platform ?? 'linux';
+
+  if (!PLATFORM_NAMES.includes(platform)) {
+    throw new Error(
+      `Unknown platform "${platform}"; expected one of ${PLATFORM_NAMES.join(', ')}`
+    );
+  }
+
   const manifestPath = path.join(directory, 'workshop.yaml');
 
   if (!fs.existsSync(manifestPath)) {
@@ -60,7 +113,8 @@ export function loadWorkshopFiles(directory: string): ILoadedWorkshopFiles {
 
   // Names set anywhere in the workshop render as placeholders, not
   // warnings, the same way the extension treats them.
-  const variables: Variables = { ...BUILTINS };
+  const builtins = BUILTINS[platform];
+  const variables: Variables = { ...builtins };
   const declared = new Set<string>(
     manifest.variables.map(definition => definition.name)
   );
@@ -83,9 +137,11 @@ export function loadWorkshopFiles(directory: string): ILoadedWorkshopFiles {
     parsePage(sources.get(pagePath) ?? '', {
       path: pagePath,
       variables,
-      declared
+      pathSep: builtins.path_sep,
+      declared,
+      platform
     })
   );
 
-  return { directory, manifest, manifestSource, pages };
+  return { directory, manifest, manifestSource, pages, platform };
 }

@@ -22,6 +22,8 @@ export interface IDirectiveContent {
   body: string;
 }
 
+import { PLATFORM_NAMES } from './variants';
+
 const INFO = /^\{([a-z][a-z0-9-]*)\}(?:[ \t]+(.*?))?[ \t]*$/;
 
 const OPTION_LINE = /^:([A-Za-z][A-Za-z0-9_-]*):(?:[ \t]+(.*))?$/;
@@ -49,7 +51,12 @@ export function parseDirectiveContent(content: string): IDirectiveContent {
   while (index < lines.length) {
     const match = OPTION_LINE.exec(lines[index]);
 
-    if (!match) {
+    // A platform marker such as `:windows:` starts the body, even when it
+    // is the first line, so it is never read as a flag option.
+    if (
+      !match ||
+      (match[2] === undefined && PLATFORM_NAMES.includes(match[1]))
+    ) {
       break;
     }
 

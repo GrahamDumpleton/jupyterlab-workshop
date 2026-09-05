@@ -8,13 +8,14 @@ import * as fs from 'fs';
 
 import { lintWorkshop } from '../lint/rules';
 import { ILintMessage, formatLintMessage } from '../lint/types';
-import { WORKSHOP_SCHEMA } from '../schema';
+import { REGISTRY_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
 import { renderWorkshopHtml } from './render';
-import { loadWorkshopFiles } from './workshop';
+import { ILoadOptions, loadWorkshopFiles } from './workshop';
 
 /** The lint report the CLI prints as JSON. */
 export interface ILintReport {
   directory: string;
+  platform: string;
   messages: ILintMessage[];
   errors: number;
   warnings: number;
@@ -23,8 +24,11 @@ export interface ILintReport {
 /**
  * Lint a workshop directory.
  */
-export function lintDirectory(directory: string): ILintReport {
-  const workshop = loadWorkshopFiles(directory);
+export function lintDirectory(
+  directory: string,
+  options: ILoadOptions = {}
+): ILintReport {
+  const workshop = loadWorkshopFiles(directory, options);
   const messages = lintWorkshop({
     manifest: workshop.manifest,
     pages: workshop.pages
@@ -32,6 +36,7 @@ export function lintDirectory(directory: string): ILintReport {
 
   return {
     directory,
+    platform: workshop.platform,
     messages,
     errors: messages.filter(message => message.level === 'error').length,
     warnings: messages.filter(message => message.level === 'warning').length
@@ -42,10 +47,11 @@ function usage(): string {
   return [
     'Usage: workshop-cli <command> [arguments]',
     '',
-    '  lint <dir> [--json]        Report problems in a workshop',
-    '  render <dir> [page] [--out <file>]',
+    '  lint <dir> [--json] [--platform <name>]',
+    '                             Report problems in a workshop',
+    '  render <dir> [page] [--out <file>] [--platform <name>]',
     '                             Render pages to standalone HTML',
-    '  schema                     Print the manifest JSON schema',
+    '  schema [--registry]        Print the manifest (or registry) JSON schema',
     '  pages <dir>                List page ids and titles as JSON'
   ].join('\n');
 }
@@ -56,9 +62,15 @@ function usage(): string {
 export function main(argv: string[]): number {
   const [command, ...rest] = argv;
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
-  const positional = rest.filter(arg => !arg.startsWith('--'));
-  const outIndex = rest.indexOf('--out');
-  const out = outIndex >= 0 ? rest[outIndex + 1] : undefined;
+  const out = valueOf(rest, '--out');
+  const platform = valueOf(rest, '--platform');
+  const positional = rest.filter(
+    (arg, index) =>
+      !arg.startsWith('--') &&
+      rest[index - 1] !== '--out' &&
+      rest[index - 1] !== '--platform'
+  );
+  const options: ILoadOptions = { platform };
 
   try {
     switch (command) {
@@ -67,7 +79,7 @@ export function main(argv: string[]): number {
           throw new Error('lint needs a workshop directory');
         }
 
-        const report = lintDirectory(positional[0]);
+        const report = lintDirectory(positional[0], options);
 
         if (flags.has('--json')) {
           process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -90,8 +102,8 @@ export function main(argv: string[]): number {
         }
 
         const html = renderWorkshopHtml(
-          loadWorkshopFiles(positional[0]),
-          positional[1] === out ? undefined : positional[1]
+          loadWorkshopFiles(positional[0], options),
+          positional[1]
         );
 
         if (out) {
@@ -103,17 +115,22 @@ export function main(argv: string[]): number {
         return 0;
       }
 
-      case 'schema':
-        process.stdout.write(`${JSON.stringify(WORKSHOP_SCHEMA, null, 2)}\n`);
+      case 'schema': {
+        const schema = flags.has('--registry')
+          ? REGISTRY_SCHEMA
+          : WORKSHOP_SCHEMA;
+
+        process.stdout.write(`${JSON.stringify(schema, null, 2)}\n`);
 
         return 0;
+      }
 
       case 'pages': {
         if (!positional[0]) {
           throw new Error('pages needs a workshop directory');
         }
 
-        const workshop = loadWorkshopFiles(positional[0]);
+        const workshop = loadWorkshopFiles(positional[0], options);
 
         process.stdout.write(
           `${JSON.stringify(
@@ -147,4 +164,10 @@ export function main(argv: string[]): number {
 
     return 2;
   }
+}
+
+function valueOf(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+
+  return index >= 0 ? args[index + 1] : undefined;
 }

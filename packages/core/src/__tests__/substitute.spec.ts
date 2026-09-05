@@ -27,6 +27,19 @@ describe('substitute', () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it('renders the path helper with the platform separator', () => {
+    expect(substitute('cat {{ path "src/app.py" }}', variables).text).toBe(
+      'cat src/app.py'
+    );
+    expect(
+      substitute("type {{ path 'src/app.py' }}", variables, { pathSep: '\\' })
+        .text
+    ).toBe('type src\\app.py');
+    expect(substitute('\\{{ path "a/b" }}', variables).text).toBe(
+      '{{ path "a/b" }}'
+    );
+  });
+
   it('ignores references that are not variable names', () => {
     const text =
       "kubectl get pods -o go-template='{{.metadata.name}}' {{ range .Items }}";

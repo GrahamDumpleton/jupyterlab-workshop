@@ -274,6 +274,11 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
 
       return `. '${path.replace(/'/g, "''")}'`;
     }
+    case 'cmd': {
+      const path = manager.absolutePath(`${WORKSHOP_STATE_DIR}/env.cmd`);
+
+      return `call "${path}"`;
+    }
     default:
       return null;
   }
@@ -297,6 +302,10 @@ export function markerCommand(
       return `echo ${split}`;
     case 'powershell':
       return `Write-Output ("${marker.slice(0, 6)}" + "${marker.slice(6)}")`;
+    case 'cmd':
+      // The caret is cmd's escape character and vanishes from the output,
+      // so the typed line never contains the marker itself.
+      return `echo ${marker.slice(0, 6)}^${marker.slice(6)}`;
     default:
       return null;
   }

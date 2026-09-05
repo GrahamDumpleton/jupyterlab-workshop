@@ -65,8 +65,17 @@ export interface IRequirements {
 
 /** Optional isolated environment. */
 export interface IEnvironment {
+  /** Requirements file, relative to the workshop, installed into a venv. */
   requirements?: string;
+
+  /** Kernelspec name to register for the environment. */
   kernel?: string;
+}
+
+/** Where a workshop asks to report progress events. */
+export interface IAnalytics {
+  /** URL that receives batches of events as JSON lines, after opt-in. */
+  sink?: string;
 }
 
 /** One region of a named layout. */
@@ -100,6 +109,7 @@ export interface IWorkshopManifest {
   capabilities: string[];
   requires: IRequirements;
   environment?: IEnvironment;
+  analytics?: IAnalytics;
   variables: IVariableDefinition[];
   layout?: string;
   layouts: Record<string, ILayoutSpec>;
@@ -196,6 +206,7 @@ export function parseManifest(
     capabilities: parseCapabilities(data.capabilities, path),
     requires: parseRequirements(data.requires, path),
     environment: parseEnvironment(data.environment, path),
+    analytics: parseAnalytics(data.analytics, path),
     variables: parseVariables(data.variables, path),
     layout: optionalString(data, 'layout', path),
     layouts: parseLayouts(data.layouts, path),
@@ -388,6 +399,27 @@ function parseEnvironment(
     requirements: optionalString(value, 'requirements', path),
     kernel: optionalString(value, 'kernel', path)
   };
+}
+
+function parseAnalytics(value: unknown, path: string): IAnalytics | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "analytics" must be a mapping', path);
+  }
+
+  const sink = optionalString(value, 'sink', path);
+
+  if (sink !== undefined && !/^https?:\/\//.test(sink)) {
+    throw new WorkshopFormatError(
+      'Field "analytics.sink" must be an http or https URL',
+      path
+    );
+  }
+
+  return { sink };
 }
 
 function parseVariables(value: unknown, path: string): IVariableDefinition[] {

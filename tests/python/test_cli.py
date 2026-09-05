@@ -172,3 +172,53 @@ def test_junit_report_marks_failures_and_skips() -> None:
     assert '<testcase classname="p1" name="check (verify)"' in xml
     assert '<failure message="No commits &lt;yet&gt; &quot;run&quot; git">' in xml
     assert '<skipped message=""/>' in xml
+
+
+def test_registry_command_builds_an_index_from_entries(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    entry = tmp_path / "demo-1.0.registry.json"
+    index = tmp_path / "registry" / "index.json"
+
+    entry.write_text(
+        json.dumps(
+            {
+                "name": "demo",
+                "title": "Demo",
+                "versions": [
+                    {"version": "1.0", "source": {"archive": "https://h/demo.tgz"}}
+                ],
+            }
+        )
+    )
+
+    assert cli.main(["registry", str(index), str(entry), "--title", "Mine"]) == 0
+    assert "1 workshop(s)" in capsys.readouterr().out
+
+    data = json.loads(index.read_text())
+
+    assert data["title"] == "Mine"
+    assert data["workshops"][0]["name"] == "demo"
+
+    # Publishing again adds a version rather than replacing the entry.
+    entry.write_text(
+        json.dumps(
+            {
+                "name": "demo",
+                "title": "Demo",
+                "versions": [
+                    {"version": "1.1", "source": {"archive": "https://h/demo11.tgz"}}
+                ],
+            }
+        )
+    )
+
+    assert cli.main(["registry", str(index), str(entry)]) == 0
+
+    data = json.loads(index.read_text())
+
+    assert [v["version"] for v in data["workshops"][0]["versions"]] == ["1.1", "1.0"]
+
+    entry.write_text("[]")
+
+    assert cli.main(["registry", str(index), str(entry)]) == 2

@@ -5,6 +5,12 @@ import {
   parseDirectiveContent,
   parseDirectiveInfo
 } from '../format/directives';
+import {
+  allVariants,
+  hasVariants,
+  selectVariant,
+  splitVariants
+} from '../format/variants';
 import { escapeHtml } from '../util';
 import { substitute, Variables } from '../variables/substitute';
 
@@ -31,6 +37,9 @@ export interface IRenderEnv {
   /** Names the workshop can set later; see `ISubstituteOptions.declared`. */
   declared: ReadonlySet<string>;
 
+  /** Platform whose body variants are selected, when known. */
+  platform?: string;
+
   /** Problems found while parsing, in page order. */
   warnings: string[];
 
@@ -45,6 +54,12 @@ export interface IDirectiveMeta {
   id: string;
   options: Record<string, string>;
   body: string;
+
+  /** Every platform alternative of the body, when it has any. */
+  variants?: Record<string, string>;
+
+  /** Which alternative `body` holds: a platform name or `default`. */
+  variant?: string;
 }
 
 let parser: MarkdownIt | undefined;
@@ -85,13 +100,15 @@ export function createRenderEnv(
   pageId: string,
   variables: Variables,
   pathSep = '/',
-  declared: ReadonlySet<string> = new Set()
+  declared: ReadonlySet<string> = new Set(),
+  platform?: string
 ): IRenderEnv {
   return {
     pageId,
     variables,
     pathSep,
     declared,
+    platform,
     warnings: [],
     directiveCount: 0
   };
@@ -130,6 +147,23 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       options,
       body
     };
+
+    // Command and text bodies may carry platform variants; the one for
+    // the rendering platform becomes the body and the rest are kept for
+    // lint and for showing which was chosen.
+    const bodyKind = ACTION_TYPES[info.name]?.body;
+
+    if (
+      (bodyKind === 'required' || bodyKind === 'optional') &&
+      hasVariants(body)
+    ) {
+      const split = splitVariants(body);
+      const chosen = selectVariant(split, env.platform);
+
+      meta.body = chosen.body;
+      meta.variant = chosen.variant;
+      meta.variants = allVariants(split);
+    }
 
     token.type = DIRECTIVE_TOKEN;
     token.meta = meta;
@@ -251,6 +285,12 @@ function substituteRule(state: MarkdownIt.StateCore): void {
       // Markdown bodies are substituted when they are rendered.
       if (ACTION_TYPES[meta.name]?.body !== 'markdown') {
         meta.body = apply(meta.body);
+      }
+
+      if (meta.variants) {
+        for (const key of Object.keys(meta.variants)) {
+          meta.variants[key] = apply(meta.variants[key]);
+        }
       }
     }
   }

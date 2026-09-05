@@ -29,6 +29,8 @@ alongside the first one.
 ```{execute}
 :session: log
 cd {{ repo_dir }} && git log --oneline --graph --all
+:windows:
+cd {{ repo_dir }}; git log --oneline --graph --all
 ```
 
 Back in the first terminal, commit the change. The `-a` flag stages every

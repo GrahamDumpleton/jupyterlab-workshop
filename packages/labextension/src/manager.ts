@@ -3,9 +3,11 @@ import {
   Capability,
   IDirectiveNode,
   IPage,
+  IRegistryIndex,
   IWorkshopManifest,
   TrustLevel,
   Variables,
+  parseRegistryIndex,
   parseRequirement,
   actionCapability,
   decideAction,
@@ -16,6 +18,7 @@ import {
   lineDiff,
   parseManifest,
   parsePage,
+  renderEnvCmd,
   renderEnvPs1,
   renderEnvSh
 } from '@educates/workshop-core';
@@ -38,10 +41,13 @@ import {
   IActionRequest,
   IActionResult,
   IActionStatus,
+  IEnvironmentStatus,
   IFetchRequest,
   IFetchResult,
   IGateStatus,
+  IInstalledWorkshop,
   ILoadedWorkshop,
+  IOpenOptions,
   IPreflightResult,
   IPageProgress,
   IPlatformInfo,
@@ -50,6 +56,7 @@ import {
   ITrustStore,
   ITrustSummary,
   IUninstallPlan,
+  IWorkshopEvent,
   IWorkshopManager,
   IWorkshopSource,
   errorMessage
@@ -105,6 +112,10 @@ export class WorkshopManager implements IWorkshopManager {
     return this._actionChanged;
   }
 
+  get events(): ISignal<this, IWorkshopEvent> {
+    return this._events;
+  }
+
   get actionFocused(): ISignal<this, string> {
     return this._actionFocused;
   }
@@ -141,6 +152,22 @@ export class WorkshopManager implements IWorkshopManager {
     return this._state.state?.checkpoints ?? [];
   }
 
+  get environment(): IEnvironmentStatus | null {
+    return this._environment;
+  }
+
+  get analyticsSink(): string {
+    // The workshop's own sink needs the learner's opt-in; an administrator's
+    // sink applies to every workshop.
+    const own = this._workshop?.manifest.analytics?.sink ?? '';
+
+    if (own && this._decision?.analytics) {
+      return own;
+    }
+
+    return this._trustStore.policy.analyticsSink;
+  }
+
   get visiblePages(): IPage[] {
     if (!this._workshop) {
       return [];
@@ -173,12 +200,18 @@ export class WorkshopManager implements IWorkshopManager {
     return this._state.state?.log ?? [];
   }
 
-  async open(path: string): Promise<void> {
+  async open(path: string, options: IOpenOptions = {}): Promise<void> {
     const workshopPath = normalizeWorkshopPath(path);
+
+    // Leaving a workshop that is open counts as abandoning it.
+    if (this._workshop && this._workshop.path !== workshopPath) {
+      this._leaveWorkshop();
+    }
 
     this.stopChain();
     this._error = null;
     this._preflight = null;
+    this._environment = null;
     this._loading = true;
 
     try {
@@ -223,7 +256,8 @@ export class WorkshopManager implements IWorkshopManager {
           path: pagePath,
           variables: defaults,
           pathSep,
-          declared
+          declared,
+          platform: platform.os
         })
       );
       const trust = buildTrustSummary({
@@ -271,18 +305,38 @@ export class WorkshopManager implements IWorkshopManager {
         manifest.variables,
         state.variables
       );
+
+      // Values from a launch link sit above the manifest defaults but
+      // below anything the learner sets.
+      for (const [name, value] of Object.entries(options.variables ?? {})) {
+        this._store.set(name, value, 'override');
+      }
+
       this._renderPages();
 
       // Return to the saved page when it is still visible.
       const visible = this.visiblePages;
       const saved = visible.find(page => page.id === state.currentPage);
       const first = saved ?? visible[0];
+      const resumed = Object.values(state.pages).some(
+        page => page.enteredAt !== undefined
+      );
+
+      this._sessionId = randomId();
+      this._finished = false;
+      this._emit(resumed ? 'workshop-resume' : 'workshop-start', {
+        page: first?.id ?? ''
+      });
 
       if (first) {
         this._enterPage(
           first.id,
           saved === undefined || !state.pages[first.id]?.enteredAt
         );
+      }
+
+      if (manifest.environment?.requirements) {
+        void this.refreshEnvironment();
       }
     } catch (error) {
       this._workshop = null;
@@ -299,11 +353,14 @@ export class WorkshopManager implements IWorkshopManager {
 
   async fetch(request: IFetchRequest): Promise<IFetchResult> {
     const body = {
-      source: {
-        url: request.url,
-        ref: request.ref ?? '',
-        subdir: request.subdir ?? ''
-      },
+      source: request.archive
+        ? { archive: request.url, sha256: request.sha256 ?? '' }
+        : {
+            url: request.url,
+            ref: request.ref ?? '',
+            subdir: request.subdir ?? '',
+            sha256: request.sha256 ?? ''
+          },
       directory: request.directory,
       overwrite: request.overwrite ?? false
     };
@@ -314,7 +371,132 @@ export class WorkshopManager implements IWorkshopManager {
     });
   }
 
+  track(kind: string, data: Record<string, unknown> = {}): void {
+    this._emit(kind, data);
+  }
+
+  async refreshEnvironment(): Promise<void> {
+    const workshop = this._workshop;
+    const environment = workshop?.manifest.environment;
+
+    if (!workshop || !environment?.requirements) {
+      this._environment = null;
+
+      return;
+    }
+
+    try {
+      const status = await requestAPI<IEnvironmentStatus>(
+        `environment?workshop=${encodeURIComponent(workshop.path)}&kernel=${encodeURIComponent(this._environmentName())}`,
+        this._serverSettings
+      );
+
+      if (this._workshop === workshop) {
+        this._environment = { ...status, creating: false };
+        this._changed.emit();
+      }
+    } catch (error) {
+      console.warn('Unable to read the workshop environment', error);
+    }
+  }
+
+  async createEnvironment(): Promise<IEnvironmentStatus> {
+    const workshop = this._workshop;
+    const environment = workshop?.manifest.environment;
+
+    if (!workshop || !environment?.requirements) {
+      throw new Error('The workshop does not declare an environment');
+    }
+
+    const kernel = this._environmentName();
+
+    this._environment = {
+      ...(this._environment ?? emptyEnvironment(kernel)),
+      creating: true,
+      error: undefined
+    };
+    this._changed.emit();
+
+    try {
+      const status = await requestAPI<IEnvironmentStatus>(
+        'environment',
+        this._serverSettings,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            workshop: workshop.path,
+            action: 'create',
+            requirements: environment.requirements,
+            kernel,
+            display: `${workshop.manifest.title} (workshop)`
+          })
+        }
+      );
+
+      if (this._workshop === workshop) {
+        this._environment = { ...status, creating: false };
+        this._changed.emit();
+      }
+
+      this._emit('environment-created', { kernel: status.kernel });
+
+      return status;
+    } catch (error) {
+      if (this._workshop === workshop) {
+        this._environment = {
+          ...(this._environment ?? emptyEnvironment(kernel)),
+          creating: false,
+          error: errorMessage(error)
+        };
+        this._changed.emit();
+      }
+
+      throw error;
+    }
+  }
+
+  environmentKernel(): string | undefined {
+    const status = this._environment;
+
+    return status?.ready && status.registered ? status.kernel : undefined;
+  }
+
+  async installed(directory: string): Promise<IInstalledWorkshop[]> {
+    const response = await requestAPI<{ workshops: IInstalledWorkshop[] }>(
+      `workshops?directory=${encodeURIComponent(directory)}`,
+      this._serverSettings
+    );
+
+    return response.workshops;
+  }
+
+  async removeInstalled(path: string): Promise<void> {
+    const target = normalizeWorkshopPath(path);
+
+    if (this._workshop?.path === target) {
+      await this.uninstall();
+
+      return;
+    }
+
+    await requestAPI<{ removed: string }>(
+      `workshops?path=${encodeURIComponent(target)}`,
+      this._serverSettings,
+      { method: 'DELETE' }
+    );
+  }
+
+  async fetchRegistry(url: string): Promise<IRegistryIndex> {
+    const response = await requestAPI<{ url: string; index: unknown }>(
+      `registry?url=${encodeURIComponent(url)}`,
+      this._serverSettings
+    );
+
+    return parseRegistryIndex(response.index);
+  }
+
   async close(): Promise<void> {
+    this._leaveWorkshop();
     this.stopChain();
     await this._state.flush();
     await this._state.unload();
@@ -322,6 +504,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._workshop = null;
     this._currentPageId = '';
     this._decision = null;
+    this._environment = null;
     this._error = null;
     this._store.load({}, []);
 
@@ -339,6 +522,7 @@ export class WorkshopManager implements IWorkshopManager {
     const decision: ITrustDecision = {
       level,
       allowed: [],
+      analytics: this._decision?.analytics,
       decidedAt: new Date().toISOString(),
       sourceKey: workshop.trust.sourceKey,
       hash: workshop.trust.hash,
@@ -368,13 +552,17 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
-    const level = await this._prompts.decide(
+    const choice = await this._prompts.decide(
       workshop.trust,
       this._decision?.level ?? this._trustStore.policy.defaultLevel
     );
 
-    if (level) {
-      await this.setTrust(level);
+    if (choice) {
+      if (this._decision) {
+        this._decision.analytics = choice.analytics;
+      }
+
+      await this.setTrust(choice.level);
     }
   }
 
@@ -410,6 +598,12 @@ export class WorkshopManager implements IWorkshopManager {
       steps.push(`Restore the setting ${change.plugin} ${change.key}`);
     }
 
+    if (this._environment?.ready) {
+      steps.push(
+        `Remove the kernel "${this._environment.kernel}" and the environment it runs in`
+      );
+    }
+
     steps.push('Forget the trust decision for this workshop');
 
     return { steps, removesDirectory };
@@ -430,8 +624,26 @@ export class WorkshopManager implements IWorkshopManager {
     const path = workshop.path;
     const stateDir = PathExt.join(path, WORKSHOP_STATE_DIR);
 
-    // Put settings back first while the registry still knows about them.
+    // Put settings back first while the registry still knows about them,
+    // and unregister the environment's kernel before its files go.
     await this._restoreSettings(settings);
+
+    if (this._environment?.ready) {
+      try {
+        await requestAPI('environment', this._serverSettings, {
+          method: 'POST',
+          body: JSON.stringify({
+            workshop: path,
+            action: 'remove',
+            kernel: this._environment.kernel
+          })
+        });
+      } catch (error) {
+        console.warn('Unable to remove the workshop environment', error);
+      }
+    }
+
+    this._leaveWorkshop();
 
     // Drop the workshop before touching files so nothing writes them back.
     await this._state.unload();
@@ -439,6 +651,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._workshop = null;
     this._currentPageId = '';
     this._decision = null;
+    this._environment = null;
     this._error = null;
     this._store.load({}, []);
 
@@ -521,6 +734,7 @@ export class WorkshopManager implements IWorkshopManager {
 
       if (gate.unmet.length > 0) {
         const state = this._state.state;
+        const skipped = gate.unmet.map(item => `${item.kind}:${item.id}`);
 
         if (state) {
           const current = this._currentPageId;
@@ -528,9 +742,14 @@ export class WorkshopManager implements IWorkshopManager {
           state.pages[current] = {
             ...state.pages[current],
             done: state.pages[current]?.done ?? false,
-            skipped: gate.unmet.map(item => `${item.kind}:${item.id}`)
+            skipped
           };
         }
+
+        this._emit('gate-skipped', {
+          page: this._currentPageId,
+          requirements: skipped
+        });
       }
     }
 
@@ -560,6 +779,17 @@ export class WorkshopManager implements IWorkshopManager {
   setPreflight(results: IPreflightResult[] | null): void {
     this._preflight = results;
     this._changed.emit();
+
+    if (results) {
+      this._emit('preflight-result', {
+        tools: results.map(result => ({
+          name: result.name,
+          found: result.found,
+          satisfied: result.satisfied,
+          version: result.version ?? ''
+        }))
+      });
+    }
   }
 
   focusAction(id: string): void {
@@ -618,6 +848,7 @@ export class WorkshopManager implements IWorkshopManager {
       this._store.set(variable, value, source);
     }
 
+    this._emit('checkpoint-restored', { name });
     this._changed.emit();
   }
 
@@ -661,6 +892,17 @@ export class WorkshopManager implements IWorkshopManager {
         console.warn(`Unable to checkpoint page ${pageId}`, error);
       });
     }
+
+    // Finishing the last page finishes the workshop, once.
+    const visible = this.visiblePages;
+    const allDone =
+      visible.length > 0 &&
+      visible.every(item => state.pages[item.id]?.done === true);
+
+    if (done && allDone && !this._finished) {
+      this._finished = true;
+      this._emit('workshop-finish', { pages: visible.length });
+    }
   }
 
   actionStatus(id: string): IActionStatus {
@@ -700,7 +942,17 @@ export class WorkshopManager implements IWorkshopManager {
     });
     this._actionChanged.emit(request.id);
 
-    const result = await this._runGated(registry, request, trigger);
+    // A body chosen from platform variants that came out empty means the
+    // action has nothing to do on this platform.
+    const automatic = trigger === 'auto' || trigger === 'cascade';
+    const disposition = this._decide(request.type, automatic, request.options);
+    const result =
+      node?.variants && request.body.trim() === ''
+        ? {
+            status: 'skipped' as const,
+            message: `Nothing to do on ${this._platform?.os ?? 'this platform'}`
+          }
+        : await this._runGated(registry, request, trigger);
 
     if (result.captured) {
       for (const [name, value] of Object.entries(result.captured)) {
@@ -711,6 +963,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._record(request, result, trigger, registry.describe(request));
     this._running.delete(request.id);
     this._actionChanged.emit(request.id);
+    this._emitActionEvent(request, result, trigger, disposition.kind);
 
     // Gating is shown outside the page body, which only redraws on the
     // broader change signal.
@@ -850,7 +1103,9 @@ export class WorkshopManager implements IWorkshopManager {
 
   private _enterPage(id: string, runAutos: boolean): void {
     this.stopChain();
+    this._leavePage();
     this._currentPageId = id;
+    this._pageEnteredAt = Date.now();
 
     const state = this._state.state;
 
@@ -862,6 +1117,8 @@ export class WorkshopManager implements IWorkshopManager {
       };
       this._state.save();
     }
+
+    this._emit('page-enter', { page: id });
 
     if (runAutos) {
       const page = this.currentPage;
@@ -879,6 +1136,102 @@ export class WorkshopManager implements IWorkshopManager {
           }))
         );
       }
+    }
+  }
+
+  private _leavePage(): void {
+    if (this._currentPageId && this._pageEnteredAt > 0) {
+      this._emit('page-leave', {
+        page: this._currentPageId,
+        active_ms: Date.now() - this._pageEnteredAt
+      });
+    }
+
+    this._pageEnteredAt = 0;
+  }
+
+  private _leaveWorkshop(): void {
+    if (!this._workshop) {
+      return;
+    }
+
+    this._leavePage();
+
+    if (!this._finished) {
+      this._emit('workshop-abandon', { page: this._currentPageId });
+    }
+  }
+
+  private _environmentName(): string {
+    const workshop = this._workshop;
+
+    return (
+      workshop?.manifest.environment?.kernel ??
+      `workshop-${workshop?.manifest.name ?? 'unknown'}`
+    );
+  }
+
+  private _emit(kind: string, data: Record<string, unknown>): void {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      return;
+    }
+
+    this._events.emit({
+      ...data,
+      kind,
+      ts: new Date().toISOString(),
+      session_id: this._sessionId,
+      workshop: workshop.path,
+      version: workshop.manifest.version ?? '',
+      platform: this._platform?.os ?? '',
+      trust: this._decision?.level ?? ''
+    });
+  }
+
+  private _emitActionEvent(
+    request: IActionRequest,
+    result: IActionResult,
+    trigger: ActionTrigger,
+    disposition: ActionDisposition['kind']
+  ): void {
+    const attempt = this.actionStatus(request.id).runs;
+
+    switch (request.type) {
+      case 'verify':
+        this._emit('verify-result', {
+          id: request.id,
+          status: result.status,
+          attempt,
+          trigger
+        });
+        break;
+
+      case 'quiz':
+        this._emit('quiz-answered', {
+          id: request.id,
+          correct: result.status === 'ok',
+          attempt
+        });
+        break;
+
+      case 'form':
+        this._emit('form-submitted', {
+          id: request.id,
+          fields: Object.keys(result.captured ?? {})
+        });
+        break;
+
+      default:
+        this._emit('action-executed', {
+          id: request.id,
+          type: request.type,
+          status: result.status,
+          trigger,
+          downgraded: disposition === 'downgrade'
+        });
+        break;
     }
   }
 
@@ -1033,7 +1386,8 @@ export class WorkshopManager implements IWorkshopManager {
         path: pagePath,
         variables,
         pathSep,
-        declared: this._declared
+        declared: this._declared,
+        platform: this._platform?.os
       })
     );
   }
@@ -1078,6 +1432,11 @@ export class WorkshopManager implements IWorkshopManager {
         PathExt.join(directory, 'env.ps1'),
         renderEnvPs1(values)
       );
+      await writeTextFile(
+        this._contents,
+        PathExt.join(directory, 'env.cmd'),
+        renderEnvCmd(values)
+      );
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);
     }
@@ -1106,7 +1465,8 @@ export class WorkshopManager implements IWorkshopManager {
         home: '',
         user: '',
         path_sep: '/',
-        root_dir: ''
+        root_dir: '',
+        hub_user: ''
       };
     }
 
@@ -1229,9 +1589,13 @@ export class WorkshopManager implements IWorkshopManager {
   ): Promise<ITrustDecision | null> {
     const policy = this._trustStore.policy;
     const stored = await this._trustStore.get(summary.sourceKey, summary.hash);
-    const decision = (level: TrustLevel): ITrustDecision => ({
+    const decision = (
+      level: TrustLevel,
+      analytics = stored?.analytics ?? false
+    ): ITrustDecision => ({
       level,
       allowed: stored?.allowed ?? [],
+      analytics,
       decidedAt: new Date().toISOString(),
       sourceKey: summary.sourceKey,
       hash: summary.hash,
@@ -1253,13 +1617,13 @@ export class WorkshopManager implements IWorkshopManager {
       return stored;
     }
 
-    const level = await this._prompts.decide(summary, policy.defaultLevel);
+    const choice = await this._prompts.decide(summary, policy.defaultLevel);
 
-    if (!level) {
+    if (!choice) {
       return null;
     }
 
-    const chosen = decision(level);
+    const chosen = decision(choice.level, choice.analytics);
 
     await this._trustStore.set(chosen);
 
@@ -1336,6 +1700,7 @@ export class WorkshopManager implements IWorkshopManager {
 
   private _changed = new Signal<this, void>(this);
   private _actionChanged = new Signal<this, string>(this);
+  private _events = new Signal<this, IWorkshopEvent>(this);
   private _actionFocused = new Signal<this, string>(this);
   private _environmentChanged = new Signal<this, void>(this);
   private _contents: Contents.IManager;
@@ -1346,6 +1711,10 @@ export class WorkshopManager implements IWorkshopManager {
   private _settings: ISettingRegistry | null;
   private _decision: ITrustDecision | null = null;
   private _preflight: IPreflightResult[] | null = null;
+  private _environment: IEnvironmentStatus | null = null;
+  private _sessionId = '';
+  private _finished = false;
+  private _pageEnteredAt = 0;
   private _state: StateStore;
   private _store = new VariableStore();
   private _envWriter: Debouncer;
@@ -1380,6 +1749,23 @@ export namespace WorkshopManager {
 
 function normalizeWorkshopPath(path: string): string {
   return PathExt.normalize(path.trim()).replace(/^\/+|\/+$/g, '');
+}
+
+function randomId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function emptyEnvironment(kernel: string): IEnvironmentStatus {
+  return {
+    kernel,
+    ready: false,
+    registered: false,
+    python: '',
+    requirements: '',
+    stale: false,
+    createdAt: '',
+    log: ''
+  };
 }
 
 function buildBuiltins(

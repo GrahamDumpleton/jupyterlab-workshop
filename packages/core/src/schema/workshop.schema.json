@@ -81,10 +81,29 @@
     },
     "environment": {
       "type": "object",
+      "description": "An isolated Python environment created for the workshop from a requirements file, with its own kernel. Needs the install-packages capability.",
       "additionalProperties": false,
       "properties": {
-        "requirements": { "type": "string" },
-        "kernel": { "type": "string" }
+        "requirements": {
+          "type": "string",
+          "description": "Requirements file relative to the workshop directory, installed into a virtual environment under _workshop/venv."
+        },
+        "kernel": {
+          "type": "string",
+          "description": "Name of the kernelspec registered for the environment; defaults to workshop-<name>."
+        }
+      }
+    },
+    "analytics": {
+      "type": "object",
+      "description": "Where progress events are reported, once the learner opts in from the trust dialog.",
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "URL that receives batches of events as JSON lines by POST."
+        }
       }
     },
     "variables": {

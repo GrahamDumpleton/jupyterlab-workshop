@@ -53,6 +53,7 @@
         "@jupyterlab/docregistry": "^4.6.0",
         "@jupyterlab/filebrowser": "^4.6.0",
         "@jupyterlab/fileeditor": "^4.6.0",
+        "@jupyterlab/launcher": "^4.6.0",
         "@jupyterlab/notebook": "^4.6.0",
         "@jupyterlab/services": "^7.6.0",
         "@jupyterlab/settingregistry": "^4.6.0",

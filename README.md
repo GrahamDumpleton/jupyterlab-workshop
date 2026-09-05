@@ -12,11 +12,15 @@ containers.
 This project is at the proof-of-concept stage. See `docs/demo.md` for how
 to try the example workshop, `docs/actions.md` for the actions a workshop
 page can use, `docs/checks.md` for verifies, quizzes, forms, gating and
-checkpoints, `docs/trust.md` for how workshops are loaded from
-repositories and archives, what capabilities they declare, and how the
-trust levels change what actions do, and `docs/cli.md` for the
-`jupyter workshop` command line tool that creates, lints, renders,
-self-tests and publishes workshops. `just docs` builds these into a site.
+checkpoints, `docs/platforms.md` for Windows and macOS variants of
+commands, `docs/environment.md` for isolated Python environments,
+`docs/registry.md` for the workshop browser, registries and launch links,
+`docs/trust.md` for how workshops are loaded from repositories and
+archives, what capabilities they declare, and how the trust levels change
+what actions do, `docs/analytics.md` for the progress events a workshop
+records, and `docs/cli.md` for the `jupyter workshop` command line tool
+that creates, lints, renders, self-tests and publishes workshops.
+`just docs` builds these into a site.
 
 ## Writing a workshop
 

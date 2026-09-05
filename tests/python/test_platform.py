@@ -71,4 +71,5 @@ def test_to_dict_round_trips_all_fields() -> None:
         "user": "learner",
         "path_sep": "/",
         "root_dir": "/home/learner/work",
+        "hub_user": "",
     }

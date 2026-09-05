@@ -45,7 +45,13 @@ form and the command below picks up your answers.
 ```{execute}
 :session: git
 git config user.name "{{ user_name }}" && git config user.email "{{ user_email }}"
+:windows:
+git config user.name "{{ user_name }}"; git config user.email "{{ user_email }}"
 ```
+
+On Windows the action above shows a PowerShell version, because the
+`&&` operator only exists in newer PowerShell releases. Pages can carry
+such platform variants for any command.
 
 Finally, ask git for the state of the repository. It should report that
 there are no commits yet.

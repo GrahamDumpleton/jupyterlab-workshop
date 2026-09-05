@@ -487,6 +487,13 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Copy the body to the clipboard.',
         'none',
         'required'
+      ),
+      spec(
+        'environment-create',
+        'external',
+        'Create the isolated environment declared in the manifest and register its kernel.',
+        'install-packages',
+        'none'
       )
     ].map(item => [item.name, item])
   );

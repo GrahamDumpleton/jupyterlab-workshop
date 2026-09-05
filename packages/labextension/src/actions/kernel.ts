@@ -102,7 +102,9 @@ export class WorkshopKernel {
 
     await specs.ready;
 
-    const name = workshop.manifest.environment?.kernel ?? specs.specs?.default;
+    // The workshop's own environment is used once it exists; before that
+    // the server default keeps captures and checks working.
+    const name = this._manager.environmentKernel() ?? specs.specs?.default;
 
     if (!name) {
       throw new Error('No kernel is available');

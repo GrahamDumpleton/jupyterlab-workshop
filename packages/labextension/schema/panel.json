@@ -74,9 +74,33 @@
     "registries": {
       "type": "array",
       "title": "Workshop registries",
-      "description": "URLs of registry index files listing workshops that can be installed.",
+      "description": "Registry index files listing workshops that can be installed: http(s) URLs, or paths relative to the JupyterLab root. The workshop browser shows every registry's workshops.",
       "items": { "type": "string" },
-      "default": []
+      "default": [
+        "https://raw.githubusercontent.com/educates/educates-jupyterlab-workshop/main/registry/index.json"
+      ]
+    },
+    "analytics": {
+      "type": "object",
+      "title": "Analytics",
+      "description": "Administrator reporting of progress events, typically set through overrides.json. Events are always written to _workshop/events.jsonl in the workshop directory.",
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "type": "string",
+          "title": "Sink URL",
+          "description": "URL that receives every workshop's events as JSON lines by POST, without asking the learner. Leave empty to report only to sinks the learner opts in to.",
+          "default": ""
+        },
+        "identity": {
+          "type": "string",
+          "title": "Identity",
+          "description": "Whether events carry the JupyterHub user name (\"hub\") or no identity (\"none\").",
+          "enum": ["none", "hub"],
+          "default": "none"
+        }
+      },
+      "default": {}
     }
   },
   "additionalProperties": false

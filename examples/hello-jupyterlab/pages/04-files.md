@@ -48,4 +48,6 @@ A terminal is never far away.
 ```{execute}
 :session: shell
 ls -la scratch
+:windows:
+Get-ChildItem scratch
 ```

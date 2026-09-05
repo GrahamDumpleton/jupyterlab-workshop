@@ -48,4 +48,6 @@ Variables are also exported to terminals as environment variables.
 ```{execute}
 :session: shell
 echo "$GREETING for $LEARNER on $WORKSHOP_PLATFORM"
+:windows:
+echo "$env:GREETING for $env:LEARNER on $env:WORKSHOP_PLATFORM"
 ```

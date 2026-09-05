@@ -22,6 +22,7 @@ import {
   closeIcon,
   downloadIcon,
   folderIcon,
+  launcherIcon,
   listIcon,
   runIcon,
   settingsIcon,
@@ -92,6 +93,7 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
         error={manager.error}
         onOpen={() => void commands.execute(CommandIDs.open)}
         onOpenUrl={() => void commands.execute(CommandIDs.openUrl)}
+        onBrowse={() => void commands.execute(CommandIDs.browse)}
       />
     );
   }
@@ -134,6 +136,11 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
             icon={listIcon}
             title="Action log"
             onClick={() => run(CommandIDs.showLog)}
+          />
+          <IconButton
+            icon={launcherIcon}
+            title="Browse workshops"
+            onClick={() => run(CommandIDs.browse)}
           />
           <IconButton
             icon={folderIcon}
@@ -249,11 +256,13 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
 function EmptyState({
   error,
   onOpen,
-  onOpenUrl
+  onOpenUrl,
+  onBrowse
 }: {
   error: string | null;
   onOpen: () => void;
   onOpenUrl: () => void;
+  onBrowse: () => void;
 }): JSX.Element {
   return (
     <div className="jp-WorkshopPanel-empty">
@@ -263,6 +272,13 @@ function EmptyState({
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
+          onClick={onBrowse}
+        >
+          Browse workshops
+        </button>
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled"
           onClick={onOpen}
         >
           Open a directory
@@ -371,6 +387,8 @@ function PageBody({
     <div className="jp-WorkshopPanel-body" ref={container}>
       <h3 className="jp-WorkshopPanel-pageTitle">{page.title}</h3>
       {manager.pageIndex === 0 ? <PreflightBanner manager={manager} /> : null}
+      {manager.pageIndex === 0 ? <ShellBanner manager={manager} /> : null}
+      <EnvironmentBanner manager={manager} />
       {page.warnings.length > 0 ? (
         <div className="jp-WorkshopPanel-warnings">
           {page.warnings.map((warning, position) => (
@@ -448,7 +466,7 @@ function DirectiveBlock({
 }): JSX.Element {
   switch (node.name) {
     case 'hint':
-      return <HintBlock node={node} />;
+      return <HintBlock node={node} manager={manager} />;
     case 'choice':
       return <ChoiceBlock node={node} manager={manager} />;
     case 'verify':
@@ -466,11 +484,22 @@ function DirectiveBlock({
   }
 }
 
-function HintBlock({ node }: { node: IDirectiveNode }): JSX.Element {
+function HintBlock({
+  node,
+  manager
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+}): JSX.Element {
   return (
     <details
       className="jp-WorkshopPanel-hint"
       open={node.options.open === 'true'}
+      onToggle={event => {
+        if ((event.target as HTMLDetailsElement).open) {
+          manager.track('hint-opened', { id: node.id });
+        }
+      }}
     >
       <summary>{node.options.title ?? 'Hint'}</summary>
       <div
@@ -599,6 +628,14 @@ function ActionBlock({
         {node.options.cascade && node.options.cascade !== 'false' ? (
           <span className="jp-WorkshopPanel-badge">cascade</span>
         ) : null}
+        {node.variant && node.variant !== 'default' ? (
+          <span
+            className="jp-WorkshopPanel-badge jp-mod-platform"
+            title={`This is the ${node.variant} version of the action`}
+          >
+            {node.variant}
+          </span>
+        ) : null}
         {trustBadge ? (
           <span
             className={`jp-WorkshopPanel-badge ${trustBadge.className}`}
@@ -666,6 +703,136 @@ function PreflightBanner({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Shells that satisfy a `requires.shell` of each family. */
+const SHELL_FAMILIES: Readonly<Record<string, readonly string[]>> = {
+  bash: ['bash'],
+  zsh: ['zsh'],
+  sh: ['sh', 'bash', 'zsh'],
+  fish: ['fish'],
+  powershell: ['powershell'],
+  cmd: ['cmd']
+};
+
+function ShellBanner({
+  manager
+}: {
+  manager: IWorkshopManager;
+}): JSX.Element | null {
+  const required = manager.workshop?.manifest.requires.shell;
+  const platform = manager.platform;
+
+  if (!required || !platform) {
+    return null;
+  }
+
+  const accepted = SHELL_FAMILIES[required] ?? [required];
+
+  if (accepted.includes(platform.shell)) {
+    return null;
+  }
+
+  // The terminal shell is a server setting, so the advice names the
+  // configuration line rather than a button.
+  const example =
+    platform.os === 'windows' && required !== 'powershell' && required !== 'cmd'
+      ? `c.ServerApp.terminado_settings = {"shell_command": ["C:\\Program Files\\Git\\bin\\bash.exe"]}`
+      : `c.ServerApp.terminado_settings = {"shell_command": ["${required}"]}`;
+
+  return (
+    <div className="jp-WorkshopPanel-preflight">
+      <div className="jp-WorkshopPanel-preflightTitle">
+        This workshop expects a <code>{required}</code> shell but terminals here
+        run <code>{platform.shell}</code>.
+      </div>
+      <div className="jp-WorkshopPanel-preflightHint">
+        Commands may need adjusting. To change the terminal shell, add to the
+        server configuration and restart JupyterLab: <code>{example}</code>
+        {platform.os === 'windows' && required === 'bash'
+          ? ' (Git for Windows provides bash.)'
+          : ''}
+      </div>
+    </div>
+  );
+}
+
+function EnvironmentBanner({
+  manager
+}: {
+  manager: IWorkshopManager;
+}): JSX.Element | null {
+  const environment = manager.environment;
+  const declared = manager.workshop?.manifest.environment;
+
+  if (!declared?.requirements || !environment) {
+    return null;
+  }
+
+  if (environment.ready && environment.registered && !environment.stale) {
+    return null;
+  }
+
+  const request: IActionRequest = {
+    type: 'environment-create',
+    id: 'environment-create',
+    argument: '',
+    options: {},
+    body: ''
+  };
+  const disposition = manager.disposition({
+    kind: 'directive',
+    name: 'environment-create',
+    argument: '',
+    id: 'environment-create',
+    options: {},
+    body: '',
+    line: 0
+  });
+  const rejected = disposition.kind === 'reject';
+
+  return (
+    <div className="jp-WorkshopPanel-preflight jp-WorkshopPanel-environment">
+      <div className="jp-WorkshopPanel-preflightTitle">
+        {environment.stale
+          ? 'The requirements of this workshop changed since its environment was created.'
+          : environment.ready
+            ? 'The workshop environment exists but its kernel is not registered.'
+            : 'This workshop wants its own Python environment.'}
+      </div>
+      <div className="jp-WorkshopPanel-preflightHint">
+        A virtual environment is created inside the workshop from{' '}
+        <code>{declared.requirements}</code> and a kernel named{' '}
+        <code>{environment.kernel}</code> is registered for it. Notebooks and
+        checks use that kernel once it exists. Nothing outside the workshop
+        directory changes except the kernel registration, which is removed with
+        the workshop.
+      </div>
+      {environment.error ? (
+        <pre className="jp-WorkshopPanel-environmentLog">
+          {environment.error}
+        </pre>
+      ) : null}
+      <div className="jp-WorkshopPanel-environmentActions">
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={environment.creating || rejected}
+          title={rejected ? disposition.reason : ''}
+          onClick={() => void manager.runRequest(request, 'click')}
+        >
+          {environment.creating
+            ? 'Creating…'
+            : environment.ready
+              ? 'Recreate environment'
+              : 'Create environment'}
+        </button>
+        {rejected ? (
+          <span className="jp-WorkshopPanel-note">{disposition.reason}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

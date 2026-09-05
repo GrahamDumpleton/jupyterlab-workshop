@@ -5,6 +5,7 @@ import {
   IDirectiveNode,
   ILintMessage,
   IPage,
+  IRegistryIndex,
   IRequirement,
   IVariableDefinition,
   IWorkshopManifest,
@@ -22,6 +23,9 @@ export interface IPlatformInfo {
   user: string;
   path_sep: string;
   root_dir: string;
+
+  /** The JupyterHub user name when running under a hub, else empty. */
+  hub_user: string;
 }
 
 /** Where a workshop came from. */
@@ -67,6 +71,17 @@ export interface ITrustSummary {
   automatic: number;
 
   lint: ILintMessage[];
+
+  /** URL the workshop asks to report progress to, if any. */
+  analyticsSink?: string;
+}
+
+/** What the learner chose in the trust dialog. */
+export interface ITrustChoice {
+  level: TrustLevel;
+
+  /** Whether progress may be reported to the workshop's analytics sink. */
+  analytics: boolean;
 }
 
 /** A stored decision about a workshop at a particular hash. */
@@ -75,6 +90,9 @@ export interface ITrustDecision {
 
   /** Capabilities allowed without asking again under the `ask` level. */
   allowed: string[];
+
+  /** Whether the learner opted in to the workshop's analytics sink. */
+  analytics?: boolean;
 
   decidedAt: string;
   sourceKey: string;
@@ -95,6 +113,12 @@ export interface ITrustPolicy {
 
   /** Capabilities that never run regardless of trust. */
   disabledCapabilities: string[];
+
+  /** Sink every workshop's events are reported to, when set by an administrator. */
+  analyticsSink: string;
+
+  /** Whether events carry the JupyterHub user name. */
+  analyticsIdentity: 'none' | 'hub';
 }
 
 /** A workshop that has been read and parsed. */
@@ -142,7 +166,7 @@ export interface ITrustPrompts {
   decide(
     summary: ITrustSummary,
     defaultLevel: TrustLevel
-  ): Promise<TrustLevel | null>;
+  ): Promise<ITrustChoice | null>;
 
   /** Ask whether one action may run. */
   confirm(request: IConfirmRequest): Promise<ConfirmAnswer>;
@@ -310,10 +334,77 @@ export interface IPreflightResult {
   hint?: string;
 }
 
+/** A progress event, as recorded in `_workshop/events.jsonl`. */
+export interface IWorkshopEvent {
+  kind: string;
+
+  /** ISO time stamp. */
+  ts: string;
+
+  /** Random id of this open of the workshop. */
+  session_id: string;
+  workshop: string;
+  version: string;
+  platform: string;
+  trust: string;
+
+  /** Event specific fields. */
+  [field: string]: unknown;
+}
+
+/** What the server reports about a workshop's isolated environment. */
+export interface IEnvironmentStatus {
+  kernel: string;
+  ready: boolean;
+  registered: boolean;
+  python: string;
+  requirements: string;
+
+  /** Whether the requirements changed since the environment was created. */
+  stale: boolean;
+  createdAt: string;
+  log: string;
+
+  /** Set by the manager while the environment is being created. */
+  creating?: boolean;
+  error?: string;
+}
+
+/** A workshop directory under the workshops directory. */
+export interface IInstalledWorkshop {
+  path: string;
+  name: string;
+  title: string;
+  version: string;
+  description: string;
+  tags: string[];
+  platforms: string[];
+  source: IWorkshopSource | null;
+  sha256: string;
+
+  /** Number of pages, and how many are marked done. */
+  pages: number;
+  done: number;
+  currentPage: string;
+  trust: string;
+
+  /** Whether a state file exists, that is, the learner has opened it. */
+  started: boolean;
+}
+
+/** Options for opening a workshop. */
+export interface IOpenOptions {
+  /** Values applied over the manifest defaults, as a launch link provides. */
+  variables?: Record<string, string>;
+}
+
 /** Loads workshops, tracks progress and runs actions. */
 export interface IWorkshopManager {
   /** Emitted whenever the workshop, page, variables, error or progress change. */
   readonly changed: ISignal<IWorkshopManager, void>;
+
+  /** Emitted for every progress event, for analytics. */
+  readonly events: ISignal<IWorkshopManager, IWorkshopEvent>;
 
   /** Emitted with an action id when its status changes. */
   readonly actionChanged: ISignal<IWorkshopManager, string>;
@@ -340,6 +431,12 @@ export interface IWorkshopManager {
   /** Names of the checkpoints taken in this workshop. */
   readonly checkpoints: readonly string[];
 
+  /** State of the isolated environment, when the manifest declares one. */
+  readonly environment: IEnvironmentStatus | null;
+
+  /** Where events of the open workshop are reported, or an empty string. */
+  readonly analyticsSink: string;
+
   /** Pages whose `when` condition holds, in order. */
   readonly visiblePages: IPage[];
 
@@ -356,7 +453,28 @@ export interface IWorkshopManager {
   registry: IActionRegistry | null;
 
   /** Open the workshop in a directory relative to the JupyterLab root. */
-  open(path: string): Promise<void>;
+  open(path: string, options?: IOpenOptions): Promise<void>;
+
+  /** Record a progress event that the manager cannot observe itself. */
+  track(kind: string, data?: Record<string, unknown>): void;
+
+  /** Ask the server again about the environment. */
+  refreshEnvironment(): Promise<void>;
+
+  /** Create the isolated environment and register its kernel. */
+  createEnvironment(): Promise<IEnvironmentStatus>;
+
+  /** The kernel of the environment once it is ready, else undefined. */
+  environmentKernel(): string | undefined;
+
+  /** List the workshops under a directory relative to the JupyterLab root. */
+  installed(directory: string): Promise<IInstalledWorkshop[]>;
+
+  /** Delete a downloaded workshop that is not open. */
+  removeInstalled(path: string): Promise<void>;
+
+  /** Read a registry index through the server. */
+  fetchRegistry(url: string): Promise<IRegistryIndex>;
 
   /**
    * Download a workshop from a git forge or archive URL into a directory
@@ -455,6 +573,12 @@ export interface IFetchRequest {
 
   /** Replace an existing directory of the same name. */
   overwrite?: boolean;
+
+  /** Expected archive hash; the download fails when it differs. */
+  sha256?: string;
+
+  /** Treat the URL as an archive even without an archive extension. */
+  archive?: boolean;
 }
 
 /** What a download produced. */
@@ -496,6 +620,10 @@ export namespace CommandIDs {
   export const uninstall = 'workshop:uninstall';
   export const reset = 'workshop:reset';
   export const runAll = 'workshop:run-all';
+  export const browse = 'workshop:browse';
+  export const launch = 'workshop:launch';
+  export const exportEvents = 'workshop:export-events';
+  export const createEnvironment = 'workshop:create-environment';
 }
 
 /**

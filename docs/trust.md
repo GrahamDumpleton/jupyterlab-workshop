@@ -27,6 +27,10 @@ A workshop is opened from one of these sources:
 
 - A direct `.zip` or `.tar.gz` URL, handled the same way.
 
+- A registry entry chosen in the workshop browser, or a launch link in
+  the JupyterLab URL, both of which resolve to one of the above; see
+  [Finding and installing workshops](registry.md).
+
 Downloaded workshops carry a `_workshop/source.json` record with the
 source, the archive URL and its hash, so reopening the directory later
 identifies it. The server endpoints are `POST educates-workshop/fetch`
@@ -49,15 +53,15 @@ capabilities:
   - auto-run
 ```
 
-| Capability         | Grants                                                              |
-| ------------------ | ------------------------------------------------------------------- |
-| `terminal`         | Running commands and typing into terminals.                         |
-| `write-files`      | Creating and changing files and notebooks. Scopes below.            |
-| `network`          | Downloading from the listed hosts (informational; checked by lint). |
-| `install-packages` | Installing packages (reserved for the package actions).             |
-| `kernel-exec`      | Running code in kernels, including background captures.             |
-| `auto-run`         | Actions with `auto` or `cascade` options that run without a click.  |
-| `ui-settings`      | Changing JupyterLab settings.                                       |
+| Capability         | Grants                                                               |
+| ------------------ | -------------------------------------------------------------------- |
+| `terminal`         | Running commands and typing into terminals.                          |
+| `write-files`      | Creating and changing files and notebooks. Scopes below.             |
+| `network`          | Downloading from the listed hosts (informational; checked by lint).  |
+| `install-packages` | Creating the workshop's isolated environment (`environment-create`). |
+| `kernel-exec`      | Running code in kernels, including background captures.              |
+| `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
+| `ui-settings`      | Changing JupyterLab settings.                                        |
 
 The `write-files` scopes are `workspace` (paths must stay inside the
 workshop directory, the default), `home` and `any` (paths may reach
@@ -86,6 +90,10 @@ The learner picks a level:
 | Trust         | Every declared capability is allowed, including automatic runs.                                                                                                                                                                                                                                  |
 | Restricted    | `execute` types the command into the terminal without pressing Enter. File writes, editor changes, notebook changes, kernel execution, key presses and settings changes show what they will do and ask for confirmation. Automatic runs are skipped and logged as skipped. Everything else runs. |
 | Ask each time | Actions with a capability other than `none` ask for confirmation, with an option to allow that capability for the rest of the workshop.                                                                                                                                                          |
+
+A workshop that names an analytics sink in its manifest adds a checkbox,
+off by default, asking whether progress may be reported to it; see
+[Progress events](analytics.md).
 
 Cancelling leaves the workshop closed. The decision is stored in the
 JupyterLab state database keyed by source and hash, so the same content
@@ -131,8 +139,10 @@ the behaviour for every learner:
 "Workshop: Remove…" lists what it will do before doing it: delete the
 workshop directory for downloaded workshops (for local directories only
 the `_workshop` state directory is removed), restore any JupyterLab
-settings the workshop changed with `settings-set`, and forget the trust
-decision.
+settings the workshop changed with `settings-set`, unregister the kernel
+of an [isolated environment](environment.md) it created, and forget the
+trust decision. The workshop browser's Remove button does the same for
+workshops that are not open.
 
 "Workshop: Reset Progress…" forgets page progress, action results,
 captured variables and the log, restores changed settings, and reopens

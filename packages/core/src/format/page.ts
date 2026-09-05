@@ -43,6 +43,12 @@ export interface IDirectiveNode {
   /** Rendered HTML of the body for directives whose body is Markdown. */
   html?: string;
 
+  /** Every platform alternative of the body, when the body has variants. */
+  variants?: Record<string, string>;
+
+  /** Which alternative `body` holds: a platform name or `default`. */
+  variant?: string;
+
   /** One-based line of the directive within the page source. */
   line: number;
 }
@@ -85,6 +91,9 @@ export interface IParsePageOptions {
 
   /** Names the workshop can set later, which do not warn when unset. */
   declared?: Iterable<string>;
+
+  /** Platform whose body variants are selected: linux, macos, windows or lite. */
+  platform?: string;
 }
 
 /**
@@ -100,7 +109,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     id,
     options.variables ?? {},
     options.pathSep,
-    new Set(options.declared ?? [])
+    new Set(options.declared ?? []),
+    options.platform
   );
   const tokens = md.parse(body, env);
   const nodes = tokensToNodes(tokens, md, env, bodyLine);
@@ -227,6 +237,11 @@ function tokensToNodes(
       body: meta.body,
       line
     };
+
+    if (meta.variants) {
+      node.variants = meta.variants;
+      node.variant = meta.variant;
+    }
 
     if (ACTION_TYPES[meta.name]?.body === 'markdown') {
       node.html = md.render(meta.body, env);

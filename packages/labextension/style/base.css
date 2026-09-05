@@ -717,11 +717,6 @@
   font-size: var(--jp-ui-font-size1);
 }
 
-.jp-WorkshopPanel-formField.jp-mod-invalid input,
-.jp-WorkshopPanel-formField.jp-mod-invalid select {
-  border-color: var(--jp-error-color1);
-}
-
 .jp-WorkshopPanel-formSecret {
   display: flex;
   gap: 4px;
@@ -729,6 +724,11 @@
 
 .jp-WorkshopPanel-formSecret input {
   flex: 1 1 auto;
+}
+
+.jp-WorkshopPanel-formField.jp-mod-invalid input,
+.jp-WorkshopPanel-formField.jp-mod-invalid select {
+  border-color: var(--jp-error-color1);
 }
 
 .jp-WorkshopPanel-formChoices label {
@@ -747,4 +747,198 @@
 
 .jp-WorkshopPanel-formFooter {
   margin-top: 6px;
+}
+
+/* Platform variant badge. */
+
+.jp-WorkshopPanel-badge.jp-mod-platform {
+  background: var(--jp-brand-color3);
+  color: var(--jp-ui-font-color1);
+}
+
+/* Environment banner. */
+
+.jp-WorkshopPanel-environment {
+  border-left-color: var(--jp-brand-color1);
+}
+
+.jp-WorkshopPanel-environmentActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.jp-WorkshopPanel-environmentLog {
+  max-height: 160px;
+  margin: 6px 0 0;
+  overflow: auto;
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  white-space: pre-wrap;
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopPanel-note {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+/* Trust dialog analytics opt-in. */
+
+.jp-WorkshopTrust-analytics {
+  display: block;
+  margin: 8px 0;
+}
+
+/* Workshop browser. */
+
+.jp-WorkshopBrowser {
+  overflow: auto;
+  color: var(--jp-ui-font-color1);
+  background: var(--jp-layout-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopBrowser-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 24px 32px;
+}
+
+.jp-WorkshopBrowser-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.jp-WorkshopBrowser-search {
+  flex: 1 1 240px;
+  min-width: 160px;
+  padding: 4px 8px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 2px;
+  background: var(--jp-input-background);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopBrowser-refresh {
+  min-width: 28px;
+}
+
+.jp-WorkshopBrowser-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.jp-WorkshopBrowser-tag {
+  padding: 2px 10px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 12px;
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size0);
+  cursor: pointer;
+}
+
+.jp-WorkshopBrowser-tag.jp-mod-selected {
+  border-color: var(--jp-brand-color1);
+  background: var(--jp-brand-color1);
+  color: var(--jp-ui-inverse-font-color1);
+}
+
+.jp-WorkshopBrowser-heading {
+  margin: 16px 0 8px;
+  font-size: var(--jp-ui-font-size2);
+  font-weight: 600;
+}
+
+.jp-WorkshopBrowser-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.jp-WorkshopBrowser-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 4px;
+  background: var(--jp-layout-color1);
+}
+
+.jp-WorkshopBrowser-card.jp-mod-open {
+  border-color: var(--jp-brand-color1);
+}
+
+.jp-WorkshopBrowser-card.jp-mod-unsupported {
+  opacity: 0.7;
+}
+
+.jp-WorkshopBrowser-cardTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.jp-WorkshopBrowser-cardVersion {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+  font-weight: 400;
+}
+
+.jp-WorkshopBrowser-cardText {
+  margin: 0;
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopBrowser-cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jp-WorkshopBrowser-chip {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopBrowser-chip.jp-mod-platform.jp-mod-current {
+  background: var(--jp-brand-color3);
+  color: var(--jp-ui-font-color1);
+}
+
+.jp-WorkshopBrowser-chip.jp-mod-progress {
+  background: var(--jp-success-color3);
+  color: var(--jp-ui-font-color1);
+}
+
+.jp-WorkshopBrowser-cardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.jp-WorkshopBrowser-note {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopBrowser-error {
+  color: var(--jp-error-color1);
+  font-size: var(--jp-ui-font-size0);
 }

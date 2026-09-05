@@ -298,7 +298,71 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
       lintBody(node, where, messages);
       lintPaths(node, workspaceOnly, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
+      lintVariants(node, input.manifest.platforms, where, messages);
     }
+  }
+
+  // An isolated environment installs packages, so it needs the capability
+  // whether or not a page carries an explicit environment-create action.
+  if (
+    input.manifest.environment?.requirements &&
+    !declared.has('install-packages')
+  ) {
+    messages.push({
+      level: 'error',
+      rule: 'undeclared-capability',
+      message:
+        'The manifest declares an environment with requirements but not the "install-packages" capability it needs',
+      path: input.manifestPath ?? 'workshop.yaml'
+    });
+  }
+}
+
+/** Action types that need a terminal and so cannot run in JupyterLite. */
+const LITE_UNSUPPORTED: ReadonlySet<string> = new Set([
+  'execute',
+  'terminal-open',
+  'terminal-clear',
+  'terminal-type',
+  'send-key',
+  'interrupt'
+]);
+
+function lintVariants(
+  node: IDirectiveNode,
+  platforms: readonly string[],
+  where: { path: string; line: number },
+  messages: ILintMessage[]
+): void {
+  const variants = node.variants;
+
+  // A body with variants but no default must cover every declared
+  // platform, or the action has nothing to run on the ones it misses.
+  if (variants && !('default' in variants)) {
+    for (const platform of platforms) {
+      if (!(platform in variants)) {
+        messages.push({
+          level: 'error',
+          rule: 'missing-variant',
+          message: `${node.name} "${node.id}" has no body for ${platform}, which the manifest lists, and no default`,
+          ...where
+        });
+      }
+    }
+  }
+
+  if (
+    platforms.includes('lite') &&
+    LITE_UNSUPPORTED.has(node.name) &&
+    !(variants && 'lite' in variants) &&
+    !/\blite\b/.test(node.options.when ?? '')
+  ) {
+    messages.push({
+      level: 'warning',
+      rule: 'lite-unsupported',
+      message: `${node.name} "${node.id}" needs a terminal, which JupyterLite lacks; add a :lite: variant or a when condition`,
+      ...where
+    });
   }
 }
 
@@ -322,7 +386,9 @@ function lintOptions(
 
   const spec = ACTION_TYPES[node.name];
 
-  if (spec.body === 'required' && node.body.trim() === '') {
+  // An empty body chosen from platform variants means there is nothing to
+  // do on this platform, which is deliberate; see lintVariants.
+  if (spec.body === 'required' && node.body.trim() === '' && !node.variants) {
     messages.push({
       level: 'error',
       rule: 'missing-body',
@@ -442,8 +508,12 @@ function lintCapabilities(
   // learner is asked to trust for nothing.
   const used = new Set(uses.map(use => use.capability));
 
+  if (input.manifest.environment?.requirements) {
+    used.add('install-packages');
+  }
+
   for (const [name] of declaredCapabilities(input.manifest)) {
-    if (name === 'network' || name === 'install-packages') {
+    if (name === 'network') {
       continue;
     }
 

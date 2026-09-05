@@ -18,6 +18,11 @@ nav:
   - Writing workshops:
       - Actions: actions.md
       - Checks, forms and checkpoints: checks.md
+      - Platforms: platforms.md
+      - Isolated environments: environment.md
       - Manifest reference: reference/manifest.md
-  - Loading and trust: trust.md
+  - Running workshops:
+      - Finding and installing: registry.md
+      - Loading and trust: trust.md
+      - Progress events: analytics.md
   - Command line: cli.md

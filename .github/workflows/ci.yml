@@ -60,3 +60,32 @@ jobs:
         with:
           name: playwright-results
           path: tests/ui-tests/test-results
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: extractions/setup-just@v2
+      - name: Install
+        run: just install
+      - name: Unit tests
+        run: just test
+      - name: Lint the examples for Windows
+        run: |
+          uv run jupyter workshop lint examples/git-basics --platform windows
+          uv run jupyter workshop lint examples/hello-jupyterlab --platform windows
+      - name: Install browsers
+        run: uv run playwright install chromium
+      - name: Workshop self-test
+        run: uv run jupyter workshop test examples/git-basics --junit results-windows.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-windows
+          path: results-windows.xml

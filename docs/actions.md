@@ -92,9 +92,10 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 
 ## External
 
-| Directive | Capability | Body     | Options | Description                     |
-| --------- | ---------- | -------- | ------- | ------------------------------- |
-| `copy`    | none       | required | (none)  | Copy the body to the clipboard. |
+| Directive            | Capability       | Body     | Options | Description                                                                       |
+| -------------------- | ---------------- | -------- | ------- | --------------------------------------------------------------------------------- |
+| `copy`               | none             | required | (none)  | Copy the body to the clipboard.                                                   |
+| `environment-create` | install-packages | none     | (none)  | Create the isolated environment declared in the manifest and register its kernel. |
 
 ## Inline roles
 

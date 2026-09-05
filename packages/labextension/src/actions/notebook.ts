@@ -102,16 +102,17 @@ export function findCell(
 }
 
 /**
- * The name of the server's default kernel, if any.
+ * The kernel new notebooks use: the workshop's environment once it is
+ * ready, else the server's default kernel, if any.
  */
 async function defaultKernel(
-  app: JupyterFrontEnd
+  context: INotebookActionContext
 ): Promise<string | undefined> {
-  const specs = app.serviceManager.kernelspecs;
+  const specs = context.app.serviceManager.kernelspecs;
 
   await specs.ready;
 
-  return specs.specs?.default;
+  return context.manager.environmentKernel() ?? specs.specs?.default;
 }
 
 /**
@@ -243,7 +244,7 @@ export class NotebookCreateAction implements IActionImplementation {
     const cells = request.body.trim() ? parseCells(request.body) : [];
     const contents = this._context.app.serviceManager.contents;
     const kernel =
-      request.options.kernel || (await defaultKernel(this._context.app));
+      request.options.kernel || (await defaultKernel(this._context));
 
     // Close any open view so it reloads with the new content.
     const existing = this._context.docManager.findWidget(

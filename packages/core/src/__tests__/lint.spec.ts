@@ -325,4 +325,43 @@ echo {{ user_name }}
       ['use-before-form', 'pages/01.md']
     ]);
   });
+
+  it('checks platform variants against the declared platforms', () => {
+    const manifest = MANIFEST.replace(
+      'pages:',
+      'platforms: [linux, windows, lite]\npages:'
+    );
+    const page = (body: string) => `\`\`\`{execute}\n${body}\n\`\`\`\n`;
+
+    expect(rules(page('ls\n:windows:\ndir'), manifest)).toEqual([
+      'lite-unsupported',
+      'unused-capability'
+    ]);
+    expect(rules(page(':windows:\ndir\n:lite:'), manifest)).toEqual([
+      'missing-variant',
+      'unused-capability'
+    ]);
+    expect(rules(page(':windows:\ndir'), MANIFEST)).toEqual([
+      'unused-capability'
+    ]);
+  });
+
+  it('requires install-packages for an environment', () => {
+    const manifest = MANIFEST.replace(
+      'pages:',
+      'environment: { requirements: requirements.txt }\npages:'
+    );
+
+    expect(rules('# Nothing\n', manifest)).toEqual([
+      'undeclared-capability',
+      'unused-capability',
+      'unused-capability'
+    ]);
+    expect(
+      rules(
+        '# Nothing\n',
+        manifest.replace('  - terminal', '  - install-packages')
+      )
+    ).toEqual(['unused-capability']);
+  });
 });

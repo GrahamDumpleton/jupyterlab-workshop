@@ -13,9 +13,12 @@ extension and JupyterLab.
   tests need no browser and run in a second or two.
 
 - `tests/python/` holds the pytest suite for the Python package: the
-  server extension handlers and platform detection. It uses
-  `pytest-jupyter` to start a real Jupyter Server in a temporary directory
-  and talks to the handlers over HTTP with the `jp_fetch` fixture.
+  server extension handlers, platform detection, fetching, checks,
+  registries, events, environments and the CLI. It uses `pytest-jupyter`
+  to start a real Jupyter Server in a temporary directory and talks to
+  the handlers over HTTP with the `jp_fetch` fixture. Anything that
+  needs a remote (archives, registries, event sinks) is served by a
+  local `ThreadingHTTPServer` started inside the test.
 
 - `tests/ui-tests/` holds Galata (Playwright) tests that start a real
   JupyterLab with the built extension, upload an example workshop into the
@@ -60,6 +63,11 @@ extension and JupyterLab.
 - Keep browser tests few and broad. A Galata test should walk through a
   realistic slice of a workshop rather than assert one detail, because
   each test pays for a JupyterLab start.
+
+- Settings for a browser test go through Galata's `mockSettings` (see
+  `browser.spec.ts`), and files it needs at a fixed path under the test
+  server's root, such as a registry index, are uploaded in `beforeEach`
+  and removed in `afterEach` so runs do not interfere.
 
 - Opening a workshop shows the trust dialog, so a browser test must not
   await the `workshop:open` command; fire it, answer the dialog, and wait

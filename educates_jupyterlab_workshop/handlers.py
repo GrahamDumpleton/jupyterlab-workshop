@@ -13,6 +13,12 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
 from tornado.ioloop import IOLoop
 
+from .analytics import (
+    AnalyticsError,
+    append_events,
+    forward_events,
+    identity_from_environment,
+)
 from .checks import (
     CheckError,
     create_checkpoint,
@@ -21,8 +27,15 @@ from .checks import (
     restore_checkpoint,
     run_script,
 )
+from .environment import (
+    EnvironmentSetupError,
+    create_environment,
+    environment_status,
+    remove_environment,
+)
 from .fetch import FetchError, fetch_workshop, parse_source, remove_workshop
 from .platform import current_platform
+from .registry import RegistryError, list_installed, load_registry
 
 API_NAMESPACE = "educates-workshop"
 
@@ -100,7 +113,18 @@ class FetchHandler(WorkshopHandler):
 
 
 class WorkshopsHandler(WorkshopHandler):
-    """Remove a downloaded workshop directory."""
+    """List the installed workshops and remove a downloaded one."""
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
+
+        try:
+            records = list_installed(self.root_dir, directory)
+        except RegistryError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"workshops": records}))
 
     @tornado.web.authenticated
     def delete(self) -> None:
@@ -218,6 +242,114 @@ class PreflightHandler(WorkshopHandler):
         self.finish(json.dumps({"tools": [result.to_dict() for result in results]}))
 
 
+class RegistryHandler(WorkshopHandler):
+    """Read a registry index from a URL or a file under the root."""
+
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        location = self.get_argument("url", "")
+
+        if not location:
+            raise tornado.web.HTTPError(400, "A url query argument is required")
+
+        try:
+            index = await IOLoop.current().run_in_executor(
+                None, lambda: load_registry(location, self.root_dir)
+            )
+        except RegistryError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"url": location, "index": index}))
+
+
+class EventsHandler(WorkshopHandler):
+    """Record a batch of progress events and forward it to a sink."""
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        workshop = str(body.get("workshop") or "")
+        events = body.get("events")
+        sink = str(body.get("sink") or "")
+
+        if not isinstance(events, list):
+            raise tornado.web.HTTPError(400, "events must be a list")
+
+        # The hub identity is only attached when the frontend asks for it,
+        # which it does under the administrator's identity policy.
+        if body.get("identity") == "hub":
+            user = identity_from_environment()
+
+            for event in events:
+                if isinstance(event, dict) and user:
+                    event["user"] = user
+
+        try:
+            written = append_events(self.root_dir, workshop, events)
+        except AnalyticsError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        forwarded = False
+        problem = ""
+
+        if sink and written:
+            try:
+                await IOLoop.current().run_in_executor(
+                    None, lambda: forward_events(sink, events)
+                )
+                forwarded = True
+            except AnalyticsError as error:
+                problem = str(error)
+
+        self.finish(
+            json.dumps({"written": written, "forwarded": forwarded, "problem": problem})
+        )
+
+
+class EnvironmentHandler(WorkshopHandler):
+    """Inspect, create and remove a workshop's isolated environment."""
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        workshop = self.get_argument("workshop", "")
+        kernel = self.get_argument("kernel", "")
+
+        try:
+            status = environment_status(self.root_dir, workshop, kernel)
+        except EnvironmentSetupError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps(status.to_dict()))
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        workshop = str(body.get("workshop") or "")
+        action = str(body.get("action") or "create")
+        kernel = str(body.get("kernel") or "")
+        requirements = str(body.get("requirements") or "")
+        display_name = str(body.get("display") or "")
+
+        try:
+            if action == "create":
+                status = await IOLoop.current().run_in_executor(
+                    None,
+                    lambda: create_environment(
+                        self.root_dir, workshop, requirements, kernel, display_name
+                    ),
+                )
+            elif action == "remove":
+                status = await IOLoop.current().run_in_executor(
+                    None, lambda: remove_environment(self.root_dir, workshop, kernel)
+                )
+            else:
+                raise tornado.web.HTTPError(400, f'Unknown action "{action}"')
+        except EnvironmentSetupError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps(status.to_dict()))
+
+
 def setup_handlers(server_app: Any) -> None:
     """Add the extension's handlers to the server's web application."""
 
@@ -231,6 +363,9 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
         (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
         (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),
+        (url_path_join(base_url, API_NAMESPACE, "registry"), RegistryHandler),
+        (url_path_join(base_url, API_NAMESPACE, "events"), EventsHandler),
+        (url_path_join(base_url, API_NAMESPACE, "environment"), EnvironmentHandler),
     ]
 
     web_app.add_handlers(".*$", handlers)

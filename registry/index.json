@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "title": "Educates example workshops",
+  "workshops": [
+    {
+      "name": "git-basics",
+      "title": "Git from the command line",
+      "description": "Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.",
+      "tags": ["git", "cli", "beginner"],
+      "platforms": ["linux", "macos", "windows"],
+      "capabilities": ["terminal", "write-files:workspace", "kernel-exec"],
+      "duration": "30m",
+      "authors": ["Graham Dumpleton"],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "source": {
+            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "ref": "main",
+            "subdir": "examples/git-basics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hello-jupyterlab",
+      "title": "Hello JupyterLab",
+      "description": "A tour of what workshop actions can do with notebooks, kernels, the interface and variables.",
+      "tags": ["jupyterlab", "notebooks", "demo"],
+      "platforms": ["linux", "macos", "windows"],
+      "capabilities": [
+        "terminal",
+        "write-files:workspace",
+        "kernel-exec",
+        "auto-run"
+      ],
+      "duration": "20m",
+      "authors": ["Graham Dumpleton"],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "source": {
+            "git": "https://github.com/educates/educates-jupyterlab-workshop",
+            "ref": "main",
+            "subdir": "examples/hello-jupyterlab"
+          }
+        }
+      ]
+    }
+  ]
+}

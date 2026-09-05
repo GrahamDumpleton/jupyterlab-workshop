@@ -15,7 +15,15 @@ async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_roo
 
     payload = json.loads(response.body)
 
-    assert set(payload) == {"os", "shell", "home", "user", "path_sep", "root_dir"}
+    assert set(payload) == {
+        "os",
+        "shell",
+        "home",
+        "user",
+        "path_sep",
+        "root_dir",
+        "hub_user",
+    }
     assert payload["os"] in {"linux", "macos", "windows"}
     assert payload["root_dir"] == str(jp_root_dir)
 
@@ -198,3 +206,75 @@ async def test_preflight_endpoint(jp_fetch):
     assert payload["tools"][0]["name"] == "python3"
     assert payload["tools"][0]["found"] is True
     assert payload["tools"][0]["version"] == ""
+
+
+async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root_dir):
+    from tornado.httpclient import HTTPClientError
+
+    workshop = jp_root_dir / "workshops" / "demo"
+
+    workshop.mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(MANIFEST)
+    (jp_root_dir / "registry.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "workshops": [
+                    {
+                        "name": "demo",
+                        "title": "Demo",
+                        "versions": [
+                            {"version": "1", "source": {"archive": "https://h/d.tgz"}}
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+
+    response = await jp_fetch("educates-workshop", "workshops")
+    listed = json.loads(response.body)["workshops"]
+
+    assert [item["path"] for item in listed] == ["workshops/demo"]
+    assert listed[0]["pages"] == 1
+    assert listed[0]["started"] is False
+
+    response = await jp_fetch(
+        "educates-workshop", "registry", params={"url": "registry.json"}
+    )
+    payload = json.loads(response.body)
+
+    assert payload["url"] == "registry.json"
+    assert payload["index"]["workshops"][0]["name"] == "demo"
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch("educates-workshop", "registry", params={"url": "nope.json"})
+
+    assert error.value.code == 400
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "events",
+        method="POST",
+        body=json.dumps(
+            {
+                "workshop": "workshops/demo",
+                "events": [{"kind": "workshop-start"}, {"kind": "page-enter"}],
+            }
+        ),
+    )
+
+    assert json.loads(response.body) == {
+        "written": 2,
+        "forwarded": False,
+        "problem": "",
+    }
+    assert (workshop / "_workshop" / "events.jsonl").read_text().count("\n") == 2
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "environment",
+        params={"workshop": "workshops/demo", "kernel": "workshop-demo"},
+    )
+
+    assert json.loads(response.body)["ready"] is False

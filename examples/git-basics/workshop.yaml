@@ -6,15 +6,14 @@ description: Learn init, add, commit, diff, branch, merge and conflict resolutio
 authors: [Graham Dumpleton]
 tags: [git, cli, beginner]
 duration: 30m
-platforms: [linux, macos]
+platforms: [linux, macos, windows]
 capabilities:
   - terminal
   - write-files: [workspace]
   - kernel-exec
 requires:
   tools:
-    - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git" } }
-  shell: bash
+    - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git", windows: "winget install Git.Git" } }
 layout: default
 gating: soft
 layouts:

@@ -44,6 +44,9 @@ const REFERENCE =
 
 const FILTER = /\|\s*([a-z_]+)(?:\(([^)]*)\))?/g;
 
+/** The `{{ path "a/b" }}` helper, which renders a path for the platform. */
+const PATH_HELPER = /(\\?)\{\{\s*path\s+(?:"([^"]*)"|'([^']*)')\s*\}\}/g;
+
 /**
  * Replace variable references in text with their values.
  */
@@ -55,7 +58,16 @@ export function substitute(
   const warnings: string[] = [];
   const pathSep = options.pathSep ?? '/';
 
-  const result = text.replace(
+  // The path helper takes a literal, so it is handled before references.
+  const withPaths = text.replace(
+    PATH_HELPER,
+    (match: string, escaped: string, doubled?: string, single?: string) =>
+      escaped
+        ? match.slice(1)
+        : (doubled ?? single ?? '').split('/').join(pathSep)
+  );
+
+  const result = withPaths.replace(
     REFERENCE,
     (match: string, escaped: string, name: string, filters: string) => {
       // A backslash before the reference asks for the literal text.

@@ -1,6 +1,7 @@
 import {
   ILabShell,
   ILayoutRestorer,
+  IRouter,
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
@@ -13,7 +14,7 @@ import {
   showErrorMessage
 } from '@jupyterlab/apputils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
-import { PathExt } from '@jupyterlab/coreutils';
+import { PathExt, URLExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import {
   FileBrowser,
@@ -21,6 +22,7 @@ import {
   IDefaultFileBrowser
 } from '@jupyterlab/filebrowser';
 import { IEditorTracker } from '@jupyterlab/fileeditor';
+import { ILauncher } from '@jupyterlab/launcher';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
 import { ReadonlyJSONValue } from '@lumino/coreutils';
@@ -74,6 +76,7 @@ import {
   OutputClearAction
 } from './actions/notebook';
 import { getIfExists } from './actions/contents';
+import { EnvironmentCreateAction } from './actions/environment';
 import { ActionRegistry } from './actions/registry';
 import {
   ExecuteAction,
@@ -93,12 +96,19 @@ import {
   PanelCloseAction,
   SettingsSetAction
 } from './actions/ui';
+import { AnalyticsRecorder } from './analytics';
+import {
+  BROWSER_ID,
+  IBrowserSettings,
+  WorkshopBrowser
+} from './browser/widget';
 import { LayoutManager } from './layout';
 import { WorkshopManager } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { runAll } from './selftest';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
+import { WORKSHOP_STATE_DIR } from './state';
 import {
   CommandIDs,
   IActionRegistry,
@@ -139,7 +149,8 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       const apply = (settings: ISettingRegistry.ISettings): void => {
         trustStore.policy = policyFromSettings({
           defaultTrustLevel: settings.get('defaultTrustLevel').composite,
-          trustPolicy: settings.get('trustPolicy').composite
+          trustPolicy: settings.get('trustPolicy').composite,
+          analytics: settings.get('analytics').composite
         });
       };
 
@@ -154,7 +165,7 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
         });
     }
 
-    return new WorkshopManager({
+    const manager = new WorkshopManager({
       contents: app.serviceManager.contents,
       serverSettings: app.serviceManager.serverSettings,
       stateDB,
@@ -162,6 +173,15 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       prompts: trustPrompts,
       settings: settingRegistry
     });
+
+    // Progress events go to the workshop's events file and any sink.
+    new AnalyticsRecorder({
+      manager,
+      serverSettings: app.serviceManager.serverSettings,
+      trustStore
+    });
+
+    return manager;
   }
 };
 
@@ -270,7 +290,8 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       new ChoiceAction(manager),
       new EnvSetAction(manager),
       new MarkDoneAction(manager),
-      new NextPageAction(manager)
+      new NextPageAction(manager),
+      new EnvironmentCreateAction(manager)
     ];
 
     for (const implementation of implementations) {
@@ -320,7 +341,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     ISettingRegistry,
     ICommandPalette,
     ILayoutRestorer,
-    IDefaultFileBrowser
+    IDefaultFileBrowser,
+    ILauncher,
+    IRouter
   ],
   activate: (
     app: JupyterFrontEnd,
@@ -331,7 +354,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     settingRegistry: ISettingRegistry | null,
     palette: ICommandPalette | null,
     restorer: ILayoutRestorer | null,
-    fileBrowser: FileBrowser | null
+    fileBrowser: FileBrowser | null,
+    launcher: ILauncher | null,
+    router: IRouter | null
   ): void => {
     const panel = new WorkshopPanel({ manager, commands: app.commands });
 
@@ -455,6 +480,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         const ref = typeof args.ref === 'string' ? args.ref : undefined;
         const subdir =
           typeof args.subdir === 'string' ? args.subdir : undefined;
+        const sha256 =
+          typeof args.sha256 === 'string' ? args.sha256 : undefined;
+        const archive = args.archive === true;
+        const variables = isStringRecord(args.variables)
+          ? args.variables
+          : undefined;
 
         if (!url) {
           const result = await InputDialog.getText({
@@ -480,14 +511,181 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           url,
           ref,
           subdir,
+          sha256,
+          archive,
           directory
         });
 
         if (path) {
-          await manager.open(path);
+          await manager.open(path, { variables });
           shell.activateById(panel.id);
         }
       }
+    });
+
+    // The browser lists registries and installed workshops in the main area.
+    const readBrowserSettings = async (): Promise<IBrowserSettings> => {
+      const registries = await readSettingList(settingRegistry, 'registries');
+      const workshopsDirectory = await readSetting(
+        settingRegistry,
+        'workshopsDirectory',
+        'workshops'
+      );
+
+      return { registries, workshopsDirectory };
+    };
+    let browser: WorkshopBrowser | null = null;
+
+    app.commands.addCommand(CommandIDs.browse, {
+      label: 'Browse Workshops',
+      caption: 'Find, install, resume and remove workshops',
+      icon: args => (args.isLauncher ? panel.title.icon : undefined),
+      execute: (): void => {
+        if (!browser || browser.isDisposed) {
+          browser = new WorkshopBrowser({
+            manager,
+            commands: app.commands,
+            readSettings: readBrowserSettings
+          });
+        }
+
+        if (!browser.isAttached) {
+          shell.add(browser, 'main');
+        } else {
+          browser.refresh();
+        }
+
+        shell.activateById(BROWSER_ID);
+      }
+    });
+
+    if (launcher) {
+      launcher.add({
+        command: CommandIDs.browse,
+        category: 'Workshops',
+        rank: 1,
+        args: { isLauncher: true }
+      });
+    }
+
+    // A launch link such as `/lab?workshop=<url>&ref=<ref>&var.x=y`
+    // fetches (or opens, for a path) the workshop and applies the values.
+    app.commands.addCommand(CommandIDs.launch, {
+      label: 'Open Workshop from Launch Link',
+      execute: (args): void => {
+        const search =
+          typeof args.search === 'string'
+            ? args.search
+            : window.location.search;
+        const request = parseLaunchLink(search);
+
+        if (!request) {
+          return;
+        }
+
+        // The router waits for this command and the layout restore needs
+        // the routing to finish, so the work is deferred rather than
+        // awaited here, and the URL is only rewritten once restored.
+        const launch = async (): Promise<void> => {
+          await app.restored;
+
+          if (router) {
+            const location = router.current;
+            const remaining = stripLaunchParams(location.search ?? '');
+
+            router.navigate(`${location.path}${remaining}${location.hash}`, {
+              skipRouting: true
+            });
+          }
+
+          if (request.path !== undefined) {
+            await manager.open(request.path, { variables: request.variables });
+            shell.activateById(panel.id);
+
+            return;
+          }
+
+          await app.commands.execute(CommandIDs.openUrl, {
+            url: request.url,
+            ref: request.ref,
+            subdir: request.subdir,
+            sha256: request.sha256,
+            variables: request.variables
+          });
+        };
+
+        launch().catch(error => {
+          console.error(
+            'Unable to open the workshop from the launch link',
+            error
+          );
+        });
+      }
+    });
+
+    if (router) {
+      router.register({
+        command: CommandIDs.launch,
+        pattern: /(\?|&)workshop=/,
+        rank: 20
+      });
+    }
+
+    app.commands.addCommand(CommandIDs.exportEvents, {
+      label: 'Workshop: Export Progress Events',
+      caption:
+        'Download the events file recording pages, actions and check results',
+      isEnabled: () => manager.workshop !== null,
+      execute: async (): Promise<void> => {
+        const workshop = manager.workshop;
+
+        if (!workshop) {
+          return;
+        }
+
+        const path = PathExt.join(
+          workshop.path,
+          WORKSHOP_STATE_DIR,
+          'events.jsonl'
+        );
+        const exists = await getIfExists(
+          app.serviceManager.contents,
+          path,
+          false
+        );
+
+        if (!exists) {
+          await showErrorMessage(
+            'No events yet',
+            'Nothing has been recorded for this workshop so far.'
+          );
+
+          return;
+        }
+
+        const url = await app.serviceManager.contents.getDownloadUrl(path);
+
+        window.open(url, '_blank', 'noopener');
+      }
+    });
+
+    app.commands.addCommand(CommandIDs.createEnvironment, {
+      label: 'Workshop: Create Environment',
+      caption:
+        'Create the isolated Python environment the workshop declares and register its kernel',
+      isEnabled: () =>
+        manager.workshop?.manifest.environment?.requirements !== undefined,
+      execute: () =>
+        manager.runRequest(
+          {
+            type: 'environment-create',
+            id: 'environment-create',
+            argument: '',
+            options: {},
+            body: ''
+          },
+          'click'
+        )
     });
 
     app.commands.addCommand(CommandIDs.close, {
@@ -627,11 +825,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     if (palette) {
       for (const command of Object.values(CommandIDs)) {
-        // The context menu command only makes sense with a selection, and
-        // the self-test is for the harness.
+        // The context menu command only makes sense with a selection, the
+        // self-test is for the harness and the launch command for URLs.
         if (
           command !== CommandIDs.openSelected &&
-          command !== CommandIDs.runAll
+          command !== CommandIDs.runAll &&
+          command !== CommandIDs.launch
         ) {
           palette.addItem({ command, category: PALETTE_CATEGORY });
         }
@@ -663,8 +862,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Once JupyterLab has restored its layout, reopen the previous workshop
-    // or fall back to the configured default.
+    // or fall back to the configured default. A launch link in the URL
+    // takes precedence and is handled by the router.
     void app.restored.then(async () => {
+      if (parseLaunchLink(window.location.search)) {
+        return;
+      }
+
       const restored = await (manager as WorkshopManager).restore?.();
 
       if (restored) {
@@ -684,6 +888,105 @@ async function readDefaultWorkshop(
   settingRegistry: ISettingRegistry | null
 ): Promise<string> {
   return readSetting(settingRegistry, 'defaultWorkshop', '');
+}
+
+async function readSettingList(
+  settingRegistry: ISettingRegistry | null,
+  key: string
+): Promise<string[]> {
+  if (!settingRegistry) {
+    return [];
+  }
+
+  try {
+    const settings = await settingRegistry.load(panelPlugin.id);
+    const value = settings.get(key).composite;
+
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch (error) {
+    console.error('Failed to load workshop settings', error);
+
+    return [];
+  }
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(item => typeof item === 'string')
+  );
+}
+
+/** What a launch link asks for. */
+interface ILaunchRequest {
+  /** A local directory to open, when the workshop parameter is not a URL. */
+  path?: string;
+  url: string;
+  ref?: string;
+  subdir?: string;
+  sha256?: string;
+  variables: Record<string, string>;
+}
+
+/** Query parameters a launch link uses. */
+const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
+  'workshop',
+  'ref',
+  'subdir',
+  'sha256'
+]);
+
+/**
+ * Parse the query string of a launch link, or return null when it has no
+ * `workshop` parameter.
+ */
+export function parseLaunchLink(search: string): ILaunchRequest | null {
+  const params = URLExt.queryStringToObject(search);
+  const workshop = params.workshop?.trim() ?? '';
+
+  if (workshop === '') {
+    return null;
+  }
+
+  const variables: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(params)) {
+    if (key.startsWith('var.') && key.length > 4 && value !== undefined) {
+      variables[key.slice(4)] = value;
+    }
+  }
+
+  const isUrl = /^https?:\/\//i.test(workshop);
+
+  return {
+    path: isUrl ? undefined : workshop,
+    url: workshop,
+    ref: params.ref || undefined,
+    subdir: params.subdir || undefined,
+    sha256: params.sha256 || undefined,
+    variables
+  };
+}
+
+function stripLaunchParams(search: string): string {
+  const params = URLExt.queryStringToObject(search);
+  const kept: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(params)) {
+    if (
+      !LAUNCH_PARAMS.has(key) &&
+      !key.startsWith('var.') &&
+      value !== undefined
+    ) {
+      kept[key] = value;
+    }
+  }
+
+  return Object.keys(kept).length > 0 ? URLExt.objectToQueryString(kept) : '';
 }
 
 async function readSetting(

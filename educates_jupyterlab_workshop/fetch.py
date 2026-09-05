@@ -183,7 +183,7 @@ def archive_url(source: Source) -> str:
     return f"https://{host}/{owner}/{repo}/archive/{ref}.tar.gz"
 
 
-def download(url: str) -> bytes:
+def download(url: str, limit: int = MAX_ARCHIVE_BYTES) -> bytes:
     """Download a URL, refusing anything other than http and https."""
 
     scheme = urlsplit(url).scheme.lower()
@@ -195,12 +195,12 @@ def download(url: str) -> bytes:
 
     try:
         with urlopen(request, timeout=60) as response:
-            data: bytes = response.read(MAX_ARCHIVE_BYTES + 1)
+            data: bytes = response.read(limit + 1)
     except OSError as error:
         raise FetchError(f"Unable to download {url}: {error}") from error
 
-    if len(data) > MAX_ARCHIVE_BYTES:
-        raise FetchError(f"The archive at {url} is larger than the limit")
+    if len(data) > limit:
+        raise FetchError(f"The download from {url} is larger than the limit")
 
     return data
 

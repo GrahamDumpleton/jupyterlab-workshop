@@ -146,6 +146,7 @@ export function buildTrustSummary(options: {
     hash,
     capabilities,
     automatic: countAutomatic(pages),
-    lint: lintWorkshop({ manifest, pages })
+    lint: lintWorkshop({ manifest, pages }),
+    analyticsSink: manifest.analytics?.sink
   };
 }
