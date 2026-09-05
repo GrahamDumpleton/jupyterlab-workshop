@@ -204,3 +204,125 @@ git status
     expect(messages[1].line).toBe(5);
   });
 });
+
+describe('lintWorkshop checks', () => {
+  const CHECKS_MANIFEST = MANIFEST.replace(
+    '- terminal',
+    '- terminal\n  - kernel-exec'
+  );
+
+  function lintPages(pages: Record<string, string>) {
+    const manifest = parseManifest(
+      CHECKS_MANIFEST.replace(
+        'pages: [pages/01.md]',
+        `pages: [${Object.keys(pages).join(', ')}]`
+      )
+    );
+
+    return lintWorkshop({
+      manifest,
+      pages: Object.entries(pages).map(([path, source]) =>
+        parsePage(source, { path, variables: {} })
+      )
+    }).filter(message => message.level === 'error');
+  }
+
+  it('validates verify, quiz and form directives', () => {
+    const messages = lintPages({
+      'pages/01.md': `---
+title: One
+---
+
+\`\`\`{verify}
+:id: ok
+:substrate: contents
+exists demo
+\`\`\`
+
+\`\`\`{verify}
+:id: bad
+:trigger: teleport
+:substrate: ui
+nope
+\`\`\`
+
+\`\`\`{quiz}
+:id: q
+question: x
+options: [a]
+\`\`\`
+
+\`\`\`{form}
+:id: f
+- { name: a, type: select }
+\`\`\`
+`
+    });
+
+    expect(messages.map(message => message.rule)).toEqual([
+      'invalid-verify',
+      'invalid-verify',
+      'invalid-quiz',
+      'invalid-form'
+    ]);
+    expect(messages[0].message).toContain('Unknown trigger "teleport"');
+    expect(messages[1].message).toContain('Unknown predicate "nope"');
+  });
+
+  it('checks requirements name existing checks', () => {
+    const messages = lintPages({
+      'pages/01.md': `---
+title: One
+requires: [verify:done, quiz:done, nonsense]
+---
+
+\`\`\`{verify}
+:id: done
+:substrate: contents
+exists demo
+\`\`\`
+`
+    });
+
+    expect(messages.map(message => [message.rule, message.message])).toEqual([
+      [
+        'unknown-requirement',
+        'Requirement "quiz:done" names no quiz directive'
+      ],
+      [
+        'invalid-requirement',
+        'Requirement "nonsense" should look like verify:<id>, quiz:<id> or form:<id>'
+      ]
+    ]);
+  });
+
+  it('flags variables used before the form that sets them', () => {
+    const messages = lintPages({
+      'pages/01.md': `---
+title: One
+---
+
+\`\`\`{execute}
+git config user.name "{{ user_name }}"
+\`\`\`
+`,
+      'pages/02.md': `---
+title: Two
+---
+
+\`\`\`{form}
+:id: setup
+- { name: user_name }
+\`\`\`
+
+\`\`\`{execute}
+echo {{ user_name }}
+\`\`\`
+`
+    });
+
+    expect(messages.map(message => [message.rule, message.path])).toEqual([
+      ['use-before-form', 'pages/01.md']
+    ]);
+  });
+});

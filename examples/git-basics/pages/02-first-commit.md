@@ -1,5 +1,7 @@
 ---
 title: Your first commit
+requires: [verify:first-commit, quiz:staging]
+checkpoint: true
 ---
 
 # Your first commit
@@ -64,3 +66,38 @@ git log --oneline
 :duration: 3s
 Commands run in this terminal.
 ```
+
+The check below looks for the commit whenever the terminal reports one,
+so it turns green a moment after the commit runs.
+
+```{verify}
+:id: first-commit
+:label: You have made a commit
+:trigger: terminal-output "Add README"; interval 10s
+import subprocess
+
+out = subprocess.run(
+    ["git", "-C", "{{ repo_dir }}", "log", "--oneline"],
+    capture_output=True, text=True
+).stdout
+
+assert out.strip(), "No commits yet: run git commit"
+print(f"{len(out.splitlines())} commit(s) so far")
+```
+
+A quick question before moving on.
+
+```{quiz}
+:id: staging
+:title: Staging area
+:attempts: 3
+question: Which command moves changes into the staging area?
+options:
+  - { text: git add, correct: true }
+  - { text: git commit, explanation: "git commit records what is already staged." }
+  - { text: git stage-it }
+explanation: git add stages changes; git commit records what is staged.
+```
+
+Marking this page done also saves a checkpoint named after the page, so
+you can come back to this state with a `restore` action later.

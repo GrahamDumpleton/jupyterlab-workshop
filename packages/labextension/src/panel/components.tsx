@@ -2,11 +2,17 @@ import {
   ACTION_TYPES,
   ActionDisposition,
   IDirectiveNode,
+  IFormField,
   IPage,
   IProseNode,
   PageNode,
   TRUST_LEVEL_DESCRIPTIONS,
-  isActionType
+  describeRequirement,
+  isActionType,
+  parseForm,
+  parseQuiz,
+  parseTriggers,
+  validateForm
 } from '@educates/workshop-core';
 import {
   UseSignal,
@@ -22,7 +28,13 @@ import {
   stopIcon
 } from '@jupyterlab/ui-components';
 import { CommandRegistry } from '@lumino/commands';
-import React, { useCallback, useEffect, useReducer, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState
+} from 'react';
 
 import { CommandIDs, IActionRequest, IWorkshopManager } from '../tokens';
 
@@ -91,7 +103,9 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
     item => manager.pageProgress(item.id).done
   ).length;
   const done = manager.pageProgress(page.id).done;
+  const gate = manager.gate(page.id);
   const run = (command: string): void => void commands.execute(command);
+  const jumpTo = (id: string): void => manager.focusAction(id);
 
   return (
     <div className="jp-WorkshopPanel-content">
@@ -179,6 +193,27 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
         page={page}
         manager={manager}
       />
+      {gate.unmet.length > 0 ? (
+        <div
+          className={`jp-WorkshopPanel-gate${gate.blocked ? ' jp-mod-blocked' : ''}`}
+        >
+          <span>{gate.blocked ? 'Before moving on: ' : 'Not yet done: '}</span>
+          {gate.unmet.map((item, position) => (
+            <React.Fragment key={item.id}>
+              {position > 0 ? ', ' : null}
+              <a
+                href="#"
+                onClick={event => {
+                  event.preventDefault();
+                  jumpTo(item.id);
+                }}
+              >
+                {describeRequirement(item)}
+              </a>
+            </React.Fragment>
+          ))}
+        </div>
+      ) : null}
       <div className="jp-WorkshopPanel-footer">
         <button
           type="button"
@@ -200,7 +235,8 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={index >= count - 1}
+          disabled={index >= count - 1 || gate.blocked}
+          title={gate.blocked ? 'Complete the requirements above first' : ''}
           onClick={() => manager.next()}
         >
           Next
@@ -334,6 +370,7 @@ function PageBody({
   return (
     <div className="jp-WorkshopPanel-body" ref={container}>
       <h3 className="jp-WorkshopPanel-pageTitle">{page.title}</h3>
+      {manager.pageIndex === 0 ? <PreflightBanner manager={manager} /> : null}
       {page.warnings.length > 0 ? (
         <div className="jp-WorkshopPanel-warnings">
           {page.warnings.map((warning, position) => (
@@ -414,6 +451,12 @@ function DirectiveBlock({
       return <HintBlock node={node} />;
     case 'choice':
       return <ChoiceBlock node={node} manager={manager} />;
+    case 'verify':
+      return <VerifyBlock node={node} manager={manager} />;
+    case 'quiz':
+      return <QuizBlock node={node} manager={manager} />;
+    case 'form':
+      return <FormBlock node={node} manager={manager} />;
     default:
       return isActionType(node.name) ? (
         <ActionBlock node={node} manager={manager} />
@@ -578,6 +621,501 @@ function ActionBlock({
         <pre className="jp-WorkshopPanel-actionOutput">{status.message}</pre>
       ) : null}
     </div>
+  );
+}
+
+function PreflightBanner({
+  manager
+}: {
+  manager: IWorkshopManager;
+}): JSX.Element | null {
+  const results = manager.preflight;
+
+  if (!results) {
+    return null;
+  }
+
+  const problems = results.filter(result => !result.satisfied);
+
+  if (problems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="jp-WorkshopPanel-preflight">
+      <div className="jp-WorkshopPanel-preflightTitle">
+        This workshop needs tools that were not found:
+      </div>
+      <ul>
+        {problems.map(result => (
+          <li key={result.name}>
+            <code>{result.name}</code>
+            {result.requirement ? ` ${result.requirement}` : ''}
+            {result.found
+              ? result.version
+                ? ` (found ${result.version})`
+                : ' (version unknown)'
+              : ' (not installed)'}
+            {result.optional ? ', optional' : ''}
+            {result.hint ? (
+              <span className="jp-WorkshopPanel-preflightHint">
+                {' '}
+                Try: <code>{result.hint}</code>
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VerifyBlock({
+  node,
+  manager
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+}): JSX.Element {
+  const status = manager.actionStatus(node.id);
+  const label = node.options.label ?? node.options.title ?? 'Check progress';
+  const triggers = parseTriggers(node.options.trigger).triggers.filter(
+    trigger => trigger.kind !== 'click'
+  );
+  const disposition = manager.disposition(node);
+  const trustBadge = dispositionBadge(disposition, node);
+  const state =
+    status.status === 'ok'
+      ? 'pass'
+      : status.status === 'error'
+        ? 'fail'
+        : status.status;
+
+  return (
+    <div
+      className={`jp-WorkshopPanel-action jp-WorkshopPanel-verify jp-mod-verify-${state}`}
+      data-action-id={node.id}
+    >
+      <div className="jp-WorkshopPanel-actionHeader">
+        <span className="jp-WorkshopPanel-verifyMark" aria-hidden="true">
+          {state === 'pass' ? '✓' : state === 'fail' ? '✗' : '○'}
+        </span>
+        <span className="jp-WorkshopPanel-actionLabel">{label}</span>
+        {triggers.length > 0 ? (
+          <span
+            className="jp-WorkshopPanel-badge"
+            title={`Runs on: ${triggers.map(describeTrigger).join(', ')}`}
+          >
+            auto
+          </span>
+        ) : null}
+        {trustBadge ? (
+          <span
+            className={`jp-WorkshopPanel-badge ${trustBadge.className}`}
+            title={trustBadge.title}
+          >
+            {trustBadge.label}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-WorkshopPanel-verifyButton"
+          disabled={status.status === 'running'}
+          onClick={() => void manager.runAction(node, 'click')}
+        >
+          {status.status === 'running' ? 'Checking…' : 'Check'}
+        </button>
+      </div>
+      {status.message ? (
+        <div className="jp-WorkshopPanel-verifyMessage">{status.message}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function describeTrigger(trigger: {
+  kind: string;
+  id?: string;
+  pattern?: string;
+  path?: string;
+  tag?: string;
+  ms?: number;
+}): string {
+  switch (trigger.kind) {
+    case 'action':
+      return trigger.id ? `after ${trigger.id}` : 'after any action';
+    case 'terminal-output':
+      return `terminal prints "${trigger.pattern}"`;
+    case 'file-saved':
+      return `${trigger.path} is saved`;
+    case 'cell-executed':
+      return `cell "${trigger.tag}" runs`;
+    case 'interval':
+      return `every ${Math.round((trigger.ms ?? 0) / 1000)}s`;
+    default:
+      return trigger.kind;
+  }
+}
+
+function QuizBlock({
+  node,
+  manager
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+}): JSX.Element {
+  const parsed = parseQuiz(node.body, node.options);
+  const status = manager.actionStatus(node.id);
+  const [picked, setPicked] = useState<number[]>([]);
+
+  if (!parsed.quiz) {
+    return (
+      <div className="jp-WorkshopPanel-action jp-mod-unknown">
+        <div className="jp-WorkshopPanel-actionHeader">
+          <span className="jp-WorkshopPanel-actionLabel">Invalid quiz</span>
+        </div>
+        <div className="jp-WorkshopPanel-actionMessage">
+          {parsed.errors.join('; ')}
+        </div>
+      </div>
+    );
+  }
+
+  const quiz = parsed.quiz;
+  const order = quiz.shuffle
+    ? shuffled(quiz.options.length, node.id)
+    : quiz.options.map((_, index) => index);
+  const passed = status.status === 'ok';
+  const exhausted =
+    quiz.attempts > 0 && status.runs >= quiz.attempts && !passed;
+  const locked = passed || exhausted || status.status === 'running';
+  const remaining = quiz.attempts > 0 ? quiz.attempts - status.runs : null;
+
+  const toggle = (index: number): void => {
+    if (quiz.type === 'single') {
+      setPicked([index]);
+    } else {
+      setPicked(current =>
+        current.includes(index)
+          ? current.filter(item => item !== index)
+          : [...current, index]
+      );
+    }
+  };
+
+  return (
+    <div
+      className={`jp-WorkshopPanel-action jp-WorkshopPanel-quiz jp-mod-status-${status.status}`}
+      data-action-id={node.id}
+    >
+      <div className="jp-WorkshopPanel-actionHeader">
+        <span className="jp-WorkshopPanel-actionLabel">
+          {node.options.title ?? 'Quiz'}
+        </span>
+        <span className="jp-WorkshopPanel-actionStatus">
+          {passed ? 'correct' : exhausted ? 'no attempts left' : ''}
+        </span>
+      </div>
+      <div className="jp-WorkshopPanel-quizQuestion">{quiz.question}</div>
+      <div className="jp-WorkshopPanel-quizOptions">
+        {order.map(index => (
+          <label key={index} className="jp-WorkshopPanel-quizOption">
+            <input
+              type={quiz.type === 'single' ? 'radio' : 'checkbox'}
+              name={`quiz-${node.id}`}
+              checked={picked.includes(index)}
+              disabled={locked}
+              onChange={() => toggle(index)}
+            />{' '}
+            {quiz.options[index].text}
+          </label>
+        ))}
+      </div>
+      <div className="jp-WorkshopPanel-quizFooter">
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={locked || picked.length === 0}
+          onClick={() =>
+            void manager.runAction(node, 'click', JSON.stringify(picked))
+          }
+        >
+          Submit
+        </button>
+        {remaining !== null && !passed ? (
+          <span className="jp-WorkshopPanel-quizAttempts">
+            {remaining} {remaining === 1 ? 'attempt' : 'attempts'} left
+          </span>
+        ) : null}
+      </div>
+      {status.message && status.status !== 'running' ? (
+        <div
+          className={`jp-WorkshopPanel-quizFeedback${passed ? ' jp-mod-pass' : ' jp-mod-fail'}`}
+        >
+          {status.message}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function shuffled(count: number, seed: string): number[] {
+  // A stable shuffle per quiz id, so re-renders keep the same order.
+  let hash = 0;
+
+  for (const char of seed) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+
+  const order = Array.from({ length: count }, (_, index) => index);
+
+  for (let index = count - 1; index > 0; index -= 1) {
+    hash = (hash * 1103515245 + 12345) >>> 0;
+
+    const other = hash % (index + 1);
+
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+
+  return order;
+}
+
+function FormBlock({
+  node,
+  manager
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+}): JSX.Element {
+  const parsed = parseForm(node.body);
+  const status = manager.actionStatus(node.id);
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+
+    for (const field of parsed.form?.fields ?? []) {
+      initial[field.name] =
+        manager.variables.get(field.name) ?? field.default ?? '';
+    }
+
+    return initial;
+  });
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+
+  if (!parsed.form) {
+    return (
+      <div className="jp-WorkshopPanel-action jp-mod-unknown">
+        <div className="jp-WorkshopPanel-actionHeader">
+          <span className="jp-WorkshopPanel-actionLabel">Invalid form</span>
+        </div>
+        <div className="jp-WorkshopPanel-actionMessage">
+          {parsed.errors.join('; ')}
+        </div>
+      </div>
+    );
+  }
+
+  const form = parsed.form;
+  const update = (name: string, value: string): void => {
+    setValues(current => ({ ...current, [name]: value }));
+    setProblems(current => {
+      const next = { ...current };
+
+      delete next[name];
+
+      return next;
+    });
+  };
+  const submit = (): void => {
+    const found = validateForm(form, values);
+
+    setProblems(found);
+
+    if (Object.keys(found).length === 0) {
+      void manager.runAction(node, 'click', JSON.stringify(values));
+    }
+  };
+
+  return (
+    <form
+      className={`jp-WorkshopPanel-action jp-WorkshopPanel-form jp-mod-status-${status.status}`}
+      data-action-id={node.id}
+      noValidate
+      onSubmit={event => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <div className="jp-WorkshopPanel-actionHeader">
+        <span className="jp-WorkshopPanel-actionLabel">
+          {node.options.title ?? node.options.label ?? 'Your details'}
+        </span>
+        <span className="jp-WorkshopPanel-actionStatus">
+          {status.status === 'ok' ? 'saved' : ''}
+        </span>
+      </div>
+      {form.fields.map(field => (
+        <FormFieldInput
+          key={field.name}
+          field={field}
+          value={values[field.name] ?? ''}
+          problem={problems[field.name]}
+          revealed={revealed[field.name] ?? false}
+          onReveal={() =>
+            setRevealed(current => ({
+              ...current,
+              [field.name]: !current[field.name]
+            }))
+          }
+          onChange={value => update(field.name, value)}
+        />
+      ))}
+      <div className="jp-WorkshopPanel-formFooter">
+        <button
+          type="submit"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={status.status === 'running'}
+        >
+          {status.status === 'ok' ? 'Update' : 'Save'}
+        </button>
+      </div>
+      {status.status === 'error' && status.message ? (
+        <div className="jp-WorkshopPanel-actionMessage">{status.message}</div>
+      ) : null}
+    </form>
+  );
+}
+
+function FormFieldInput({
+  field,
+  value,
+  problem,
+  revealed,
+  onReveal,
+  onChange
+}: {
+  field: IFormField;
+  value: string;
+  problem?: string;
+  revealed: boolean;
+  onReveal: () => void;
+  onChange: (value: string) => void;
+}): JSX.Element {
+  let control: JSX.Element;
+
+  switch (field.type) {
+    case 'boolean':
+      control = (
+        <input
+          type="checkbox"
+          checked={value === 'true'}
+          onChange={event => onChange(event.target.checked ? 'true' : 'false')}
+        />
+      );
+      break;
+
+    case 'select':
+      control = (
+        <select value={value} onChange={event => onChange(event.target.value)}>
+          <option value="">Choose…</option>
+          {field.options.map(option => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+      break;
+
+    case 'multiselect': {
+      const chosen = value
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item !== '');
+
+      control = (
+        <div className="jp-WorkshopPanel-formChoices">
+          {field.options.map(option => (
+            <label key={option}>
+              <input
+                type="checkbox"
+                checked={chosen.includes(option)}
+                onChange={event =>
+                  onChange(
+                    (event.target.checked
+                      ? [...chosen, option]
+                      : chosen.filter(item => item !== option)
+                    ).join(',')
+                  )
+                }
+              />{' '}
+              {option}
+            </label>
+          ))}
+        </div>
+      );
+      break;
+    }
+
+    case 'secret':
+      control = (
+        <span className="jp-WorkshopPanel-formSecret">
+          <input
+            type={revealed ? 'text' : 'password'}
+            value={value}
+            placeholder={field.placeholder}
+            autoComplete="off"
+            onChange={event => onChange(event.target.value)}
+          />
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-minimal"
+            onClick={onReveal}
+          >
+            {revealed ? 'Hide' : 'Show'}
+          </button>
+        </span>
+      );
+      break;
+
+    default:
+      control = (
+        <input
+          type={
+            field.type === 'number'
+              ? 'number'
+              : field.type === 'email'
+                ? 'email'
+                : field.type === 'url'
+                  ? 'url'
+                  : 'text'
+          }
+          value={value}
+          placeholder={field.placeholder}
+          min={field.type === 'number' ? field.min : undefined}
+          max={field.type === 'number' ? field.max : undefined}
+          onChange={event => onChange(event.target.value)}
+        />
+      );
+      break;
+  }
+
+  return (
+    <label
+      className={`jp-WorkshopPanel-formField${problem ? ' jp-mod-invalid' : ''}`}
+    >
+      <span className="jp-WorkshopPanel-formLabel">
+        {field.label}
+        {field.required ? <span aria-hidden="true"> *</span> : null}
+      </span>
+      {control}
+      {field.description ? (
+        <span className="jp-WorkshopPanel-formHelp">{field.description}</span>
+      ) : null}
+      {problem ? (
+        <span className="jp-WorkshopPanel-formProblem">{problem}</span>
+      ) : null}
+    </label>
   );
 }
 

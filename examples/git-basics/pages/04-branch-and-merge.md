@@ -1,5 +1,6 @@
 ---
 title: Branch and merge
+requires: [verify:merged]
 ---
 
 # Branch and merge
@@ -61,4 +62,14 @@ Both branches now point at the same commit.
 ```{execute}
 :session: log
 git log --oneline --graph --all
+```
+
+This check runs a script shipped with the workshop in `verify/merged.py`
+after the merge command, and every ten seconds.
+
+```{verify}
+:id: merged
+:label: main includes the feature branch
+:script: verify/merged.py
+:trigger: after:branch-and-merge-7; interval 10s
 ```

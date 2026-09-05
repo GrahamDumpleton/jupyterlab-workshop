@@ -125,3 +125,76 @@ async def test_fetch_rejects_bad_sources(jp_fetch):
         )
 
     assert error.value.code == 400
+
+
+async def test_verify_and_checkpoint_endpoints(jp_fetch, jp_root_dir):
+    from tornado.httpclient import HTTPClientError
+
+    workshop = jp_root_dir / "ws"
+
+    (workshop / "verify").mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(MANIFEST)
+    (workshop / "verify" / "ok.py").write_text("print('fine')\n")
+    (workshop / "data.txt").write_text("one\n")
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "verify",
+        method="POST",
+        body=json.dumps({"workshop": "ws", "script": "verify/ok.py"}),
+    )
+
+    assert json.loads(response.body) == {"code": 0, "stdout": "fine\n", "stderr": ""}
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "educates-workshop",
+            "verify",
+            method="POST",
+            body=json.dumps({"workshop": "ws", "script": "../outside.py"}),
+        )
+
+    assert error.value.code == 400
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "checkpoints",
+        method="POST",
+        body=json.dumps({"workshop": "ws", "name": "start", "variables": {"x": "1"}}),
+    )
+
+    assert json.loads(response.body)["name"] == "start"
+
+    (workshop / "data.txt").write_text("two\n")
+
+    response = await jp_fetch(
+        "educates-workshop",
+        "checkpoints",
+        method="POST",
+        body=json.dumps({"workshop": "ws", "name": "start", "action": "restore"}),
+    )
+
+    assert json.loads(response.body)["variables"] == {"x": "1"}
+    assert (workshop / "data.txt").read_text() == "one\n"
+
+    response = await jp_fetch(
+        "educates-workshop", "checkpoints", params={"workshop": "ws"}
+    )
+
+    assert [item["name"] for item in json.loads(response.body)["checkpoints"]] == [
+        "start"
+    ]
+
+
+async def test_preflight_endpoint(jp_fetch):
+    response = await jp_fetch(
+        "educates-workshop",
+        "preflight",
+        method="POST",
+        body=json.dumps({"tools": [{"name": "python3"}], "versions": False}),
+    )
+    payload = json.loads(response.body)
+
+    assert payload["tools"][0]["name"] == "python3"
+    assert payload["tools"][0]["found"] is True
+    assert payload["tools"][0]["version"] == ""

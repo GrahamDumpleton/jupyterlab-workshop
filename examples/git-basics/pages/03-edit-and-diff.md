@@ -1,5 +1,6 @@
 ---
 title: Edit and diff
+requires: [verify:second-commit]
 ---
 
 # Edit and diff
@@ -44,4 +45,19 @@ with {copy}`git log --oneline --graph --all` and paste it yourself.
 ```{execute}
 :session: log
 git log --oneline --graph --all
+```
+
+```{verify}
+:id: second-commit
+:label: The change has been committed
+:trigger: terminal-output "Note what git diff shows"; interval 10s
+import subprocess
+
+out = subprocess.run(
+    ["git", "-C", "{{ repo_dir }}", "log", "--oneline"],
+    capture_output=True, text=True
+).stdout
+count = len(out.splitlines())
+
+assert count >= 2, f"Expected two commits, found {count}"
 ```

@@ -10,15 +10,12 @@ import { IWorkshopManager } from './tokens';
 /** Layouts available to every workshop. */
 export const BUILTIN_LAYOUTS: Readonly<Record<string, ILayoutSpec>> = {
   default: {
-    left: 'instructions',
     main: [{ area: 'bottom', widgets: ['terminal:workshop'] }]
   },
   'terminal-only': {
-    left: 'instructions',
     main: [{ area: 'top', widgets: ['terminal:workshop'] }]
   },
   notebook: {
-    left: 'instructions',
     main: []
   }
 };
@@ -106,14 +103,36 @@ export class LayoutManager {
       anchor = first;
     }
 
-    if (spec.left === 'instructions') {
-      shell.activateById(this._context.panelId);
-    } else if (spec.left) {
-      shell.activateById(spec.left);
+    // A side naming "instructions" pins the panel there; any other name
+    // is a widget id to bring forward on that side.
+    for (const side of ['left', 'right'] as const) {
+      const name = spec[side];
+
+      if (name === 'instructions') {
+        this._movePanel(side);
+      } else if (name) {
+        shell.activateById(name);
+      }
     }
 
-    if (spec.right) {
-      shell.activateById(spec.right);
+    shell.activateById(this._context.panelId);
+  }
+
+  private _movePanel(side: 'left' | 'right'): void {
+    const { shell, panelId } = this._context;
+
+    for (const widget of shell.widgets(side)) {
+      if (widget.id === panelId) {
+        return;
+      }
+    }
+
+    for (const widget of shell.widgets(side === 'left' ? 'right' : 'left')) {
+      if (widget.id === panelId) {
+        shell.add(widget, side, { rank: 600 });
+
+        return;
+      }
     }
   }
 

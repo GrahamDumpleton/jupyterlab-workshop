@@ -45,6 +45,14 @@ import {
   TooltipAction,
   TourAction
 } from './actions/guidance';
+import {
+  CheckpointAction,
+  FormAction,
+  ICheckActionContext,
+  QuizAction,
+  RestoreAction,
+  VerifyAction
+} from './actions/checks';
 import { WorkshopKernel } from './actions/kernel';
 import {
   CellInsertAction,
@@ -86,11 +94,14 @@ import {
   CommandIDs,
   IActionRegistry,
   IFetchRequest,
+  IPreflightResult,
   IWorkshopManager,
   errorMessage
 } from './tokens';
+import { requestAPI } from './request';
 import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
+import { TriggerBus } from './verify/triggers';
 
 export { IActionRegistry, IWorkshopManager } from './tokens';
 
@@ -187,6 +198,15 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       terminals,
       kernel
     };
+    const checks: ICheckActionContext = {
+      app,
+      docManager,
+      manager,
+      terminals,
+      kernel,
+      notebooks,
+      serverSettings: app.serviceManager.serverSettings
+    };
     const registry = new ActionRegistry();
 
     const implementations = [
@@ -233,6 +253,11 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       new ToastAction(),
       new DialogAction(),
       new CopyAction(),
+      new VerifyAction(checks),
+      new QuizAction(),
+      new FormAction(),
+      new CheckpointAction(manager),
+      new RestoreAction(manager),
       new ChoiceAction(manager),
       new EnvSetAction(manager),
       new MarkDoneAction(manager),
@@ -248,15 +273,24 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     // Keep open terminals in step with the variables.
     manager.environmentChanged.connect(() => terminals.refreshEnvironment());
 
-    // Shut the hidden kernel down when the workshop closes.
+    // Verifies re-run on the events they listen for.
+    new TriggerBus({ app, manager, terminals });
+
+    // Shut the hidden kernel down when the workshop changes, and check the
+    // tools a newly opened workshop requires.
     let openPath: string | null = null;
 
     manager.changed.connect(() => {
-      const path = manager.workshop?.path ?? null;
+      const workshop = manager.workshop;
+      const path = workshop?.path ?? null;
 
       if (path !== openPath) {
         openPath = path;
         void kernel.shutdown();
+
+        if (workshop) {
+          void runPreflight(app, manager);
+        }
       }
     });
 
@@ -285,11 +319,18 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
   ): void => {
     const panel = new WorkshopPanel({ manager, commands: app.commands });
 
-    shell.add(panel, 'left', { rank: 600 });
+    // Start on the right; a saved layout or the setting may move it.
+    shell.add(panel, 'right', { rank: 600 });
 
     if (restorer) {
       restorer.add(panel, PANEL_ID);
     }
+
+    void readSetting(settingRegistry, 'panelSide', 'right').then(side => {
+      if (side === 'left' && !panel.isDisposed) {
+        shell.add(panel, 'left', { rank: 600 });
+      }
+    });
 
     // Commands.
     app.commands.addCommand(CommandIDs.open, {
@@ -608,6 +649,61 @@ async function fetchWorkshop(
     );
 
     return '';
+  }
+}
+
+/**
+ * Ask the server which required tools are installed and record the result.
+ */
+async function runPreflight(
+  app: JupyterFrontEnd,
+  manager: IWorkshopManager
+): Promise<void> {
+  const workshop = manager.workshop;
+
+  if (!workshop || workshop.manifest.requires.tools.length === 0) {
+    manager.setPreflight(null);
+
+    return;
+  }
+
+  const tools = workshop.manifest.requires.tools;
+  const platform = manager.platform?.os ?? '';
+
+  try {
+    // Running each tool for its version only happens once trusted.
+    const response = await requestAPI<{ tools: IPreflightResult[] }>(
+      'preflight',
+      app.serviceManager.serverSettings,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tools: tools.map(tool => ({
+            name: tool.name,
+            version: tool.version ?? '',
+            optional: tool.optional
+          })),
+          versions: manager.trust === 'trusted'
+        })
+      }
+    );
+
+    if (manager.workshop !== workshop) {
+      return;
+    }
+
+    manager.setPreflight(
+      response.tools.map(result => {
+        const tool = tools.find(item => item.name === result.name);
+
+        return {
+          ...result,
+          hint: tool?.hint[platform] ?? tool?.hint.default ?? tool?.hint.any
+        };
+      })
+    );
+  } catch (error) {
+    console.warn('Preflight check failed', error);
   }
 }
 

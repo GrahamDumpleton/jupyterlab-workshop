@@ -10,6 +10,13 @@
       "description": "Directory of the workshop to open when JupyterLab starts and no workshop was open before, relative to the JupyterLab root directory. Leave empty to open nothing.",
       "default": "examples/git-basics"
     },
+    "panelSide": {
+      "type": "string",
+      "title": "Panel side",
+      "description": "Which sidebar the workshop panel starts in. Moving the panel by hand is remembered by JupyterLab's layout, and a workshop layout that names \"instructions\" for a side overrides this.",
+      "enum": ["left", "right"],
+      "default": "right"
+    },
     "workshopsDirectory": {
       "type": "string",
       "title": "Workshops directory",

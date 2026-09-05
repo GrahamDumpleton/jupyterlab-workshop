@@ -45,6 +45,7 @@ export interface IWorkshopState {
   pages: Record<string, IPageProgress>;
   actions: Record<string, IActionStatus>;
   variables: Record<string, { value: string; source: VariableSource }>;
+  checkpoints: string[];
   log: IActionLogEntry[];
 }
 
@@ -60,6 +61,7 @@ export function emptyState(name: string, version: string): IWorkshopState {
     pages: {},
     actions: {},
     variables: {},
+    checkpoints: [],
     log: []
   };
 }
@@ -105,7 +107,8 @@ export class StateStore {
             ...this._state,
             ...parsed,
             workshop: { ...parsed.workshop, name, version },
-            installed: { settings: [], ...parsed.installed }
+            installed: { settings: [], ...parsed.installed },
+            checkpoints: parsed.checkpoints ?? []
           };
         }
       } catch (error) {

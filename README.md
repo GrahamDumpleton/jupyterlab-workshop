@@ -11,7 +11,8 @@ containers.
 
 This project is at the proof-of-concept stage. See `docs/demo.md` for how
 to try the example workshop, `docs/actions.md` for the actions a workshop
-page can use, and `docs/trust.md` for how workshops are loaded from
+page can use, `docs/checks.md` for verifies, quizzes, forms, gating and
+checkpoints, and `docs/trust.md` for how workshops are loaded from
 repositories and archives, what capabilities they declare, and how the
 trust levels change what actions do.
 
@@ -24,5 +25,6 @@ just install
 just lab
 ```
 
-Then open the Workshop panel in the left sidebar. See `just --list` for the
+Then open the Workshop panel in the right sidebar (the `panelSide`
+setting, or dragging the tab, moves it to the left). See `just --list` for the
 other development tasks.

@@ -80,6 +80,16 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 | `mark-done` | none       | none     | (none)                                  | Mark the current page done.                                |
 | `next-page` | none       | none     | (none)                                  | Go to the next page.                                       |
 
+## Checks, forms and checkpoints
+
+| Directive    | Capability  | Body     | Options                                                      | Description                                                                   |
+| ------------ | ----------- | -------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `verify`     | none        | optional | `label`, `trigger`, `substrate`, `script`, `path`, `timeout` | Check learner progress with code, a script, or file and interface predicates. |
+| `quiz`       | none        | yaml     | `type`, `shuffle`, `attempts`                                | Ask a multiple choice question with the options in the body.                  |
+| `form`       | none        | yaml     | `label`                                                      | Collect variable values from the learner with the fields in the body.         |
+| `checkpoint` | none        | none     | `name`                                                       | Snapshot the workshop files and variables under a name.                       |
+| `restore`    | write-files | none     | `name`                                                       | Restore the workshop files and variables from a checkpoint.                   |
+
 ## External
 
 | Directive | Capability | Body     | Options | Description                     |
@@ -101,3 +111,6 @@ The `{when}` directive takes a condition as its argument and shows its body only
 when the condition holds, for example ` ```{when} track == "pip" `.
 Conditions use `==`, `!=`, `in`, `not in`, `and`, `or`, `not` and parentheses
 over variables, quoted strings and `[lists]`.
+
+The `verify`, `quiz`, `form`, `checkpoint` and `restore` directives are described
+in [checks.md](checks.md).

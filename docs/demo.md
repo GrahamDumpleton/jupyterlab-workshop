@@ -23,8 +23,9 @@ terminal and refresh the browser after each rebuild.
 
 ## Walk through
 
-1. In JupyterLab, click the book icon in the left sidebar to show the
-   Workshop panel. The `examples/git-basics` workshop loads automatically
+1. In JupyterLab, click the book icon in the right sidebar to show the
+   Workshop panel (the `panelSide` setting moves it to the left, and
+   JupyterLab remembers a tab you drag to the other side). The `examples/git-basics` workshop loads automatically
    (the path is the `defaultWorkshop` setting of the extension; change it
    under Settings, or use the folder icon in the panel header to open a
    different workshop directory, given relative to the JupyterLab root).

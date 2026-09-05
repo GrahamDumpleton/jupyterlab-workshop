@@ -79,7 +79,7 @@ test.describe('workshop panel', () => {
     );
 
     // Commands are typed into the terminal but not run.
-    const actions = panel.locator('.jp-WorkshopPanel-action');
+    const actions = panel.locator('.jp-WorkshopPanel-action.jp-mod-execute');
 
     await expect(actions.nth(1)).toContainText('git init -b main demo');
     await expect(actions.nth(1).locator('.jp-WorkshopPanel-badge')).toHaveText(
@@ -88,6 +88,12 @@ test.describe('workshop panel', () => {
     await actions.nth(1).click();
     await expect(actions.nth(1)).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-Terminal').first()).toBeVisible();
+
+    // Frontend-only checks still run; code checks are off.
+    const verify = panel.locator('.jp-WorkshopPanel-verify');
+
+    await verify.first().getByRole('button', { name: 'Check' }).click();
+    await expect(verify.first()).toHaveClass(/jp-mod-verify-fail/);
 
     // The terminal renders on a canvas, so the typed text cannot be read
     // back; give the command time to have run if it were going to, then
@@ -144,8 +150,31 @@ test.describe('workshop panel', () => {
       'Create a repository'
     );
 
+    // Soft gating lists what the page still needs.
+    const gate = panel.locator('.jp-WorkshopPanel-gate');
+
+    await expect(gate).toContainText('Fill in the form "identity"');
+    await expect(gate).toContainText('Pass the check "repo-created"');
+
+    // The form stores its values as variables used by later commands.
+    const form = panel.locator('.jp-WorkshopPanel-form');
+
+    await form.getByLabel('Name').fill('Test Learner');
+    await form.getByLabel('Email').fill('not-an-email');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(form.locator('.jp-WorkshopPanel-formProblem')).toHaveText(
+      'Enter an email address'
+    );
+    await form.getByLabel('Email').fill('learner@example.com');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(form).toHaveClass(/jp-mod-status-ok/);
+    await expect(
+      panel.locator('.jp-WorkshopPanel-action.jp-mod-execute').nth(3)
+    ).toContainText('git config user.name "Test Learner"');
+    await expect(gate).not.toContainText('form "identity"');
+
     // Run the first two terminal actions: git --version and git init.
-    const actions = panel.locator('.jp-WorkshopPanel-action');
+    const actions = panel.locator('.jp-WorkshopPanel-action.jp-mod-execute');
 
     await expect(actions.first()).toContainText('git --version');
     await actions.first().click();
@@ -161,6 +190,20 @@ test.describe('workshop panel', () => {
         timeout: 20000
       })
       .toBe(true);
+
+    // Move into the repository and set the identity, so later commits work.
+    await actions.nth(2).click();
+    await expect(actions.nth(2)).toHaveClass(/jp-mod-status-ok/);
+    await actions.nth(3).click();
+    await expect(actions.nth(3)).toHaveClass(/jp-mod-status-ok/);
+
+    // The contents check runs after git init and passes; the gate clears.
+    const repoCheck = panel.locator('.jp-WorkshopPanel-verify');
+
+    await expect(repoCheck).toHaveClass(/jp-mod-verify-pass/, {
+      timeout: 20000
+    });
+    await expect(gate).toHaveCount(0);
 
     // Move to the second page and write the README through the editor.
     await panel
@@ -197,6 +240,54 @@ test.describe('workshop panel', () => {
     await expect(
       page.locator('.jp-Terminal.jp-Workshop-highlight')
     ).toHaveCount(1);
+
+    // Commit, and the kernel check picks the commit up from the terminal
+    // output. The quiz gives feedback on a wrong answer and then passes.
+    const commitActions = panel.locator(
+      '.jp-WorkshopPanel-action.jp-mod-execute'
+    );
+
+    await commitActions.nth(1).click();
+    await expect(commitActions.nth(1)).toHaveClass(/jp-mod-status-ok/);
+    await commitActions.nth(3).click();
+    await expect(commitActions.nth(3)).toHaveClass(/jp-mod-status-ok/);
+
+    const commitCheck = panel.locator('.jp-WorkshopPanel-verify');
+
+    await expect(commitCheck).toHaveClass(/jp-mod-verify-pass/, {
+      timeout: 60000
+    });
+    await expect(commitCheck).toContainText('1 commit(s) so far');
+
+    const quiz = panel.locator('.jp-WorkshopPanel-quiz');
+
+    await quiz.getByLabel('git commit').check();
+    await quiz.getByRole('button', { name: 'Submit' }).click();
+    await expect(quiz.locator('.jp-WorkshopPanel-quizFeedback')).toHaveText(
+      'git commit records what is already staged.'
+    );
+    await expect(quiz).toContainText('2 attempts left');
+    await quiz.getByLabel('git add').check();
+    await quiz.getByRole('button', { name: 'Submit' }).click();
+    await expect(quiz).toHaveClass(/jp-mod-status-ok/);
+    await expect(quiz.locator('.jp-WorkshopPanel-quizFeedback')).toHaveText(
+      'git add stages changes; git commit records what is staged.'
+    );
+    await expect(gate).toHaveCount(0);
+
+    // Marking the page done takes a checkpoint.
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Mark done' })
+      .click();
+    await expect
+      .poll(
+        () =>
+          page.contents.fileExists(
+            `${workshopPath}/_workshop/checkpoints/02-first-commit.tar`
+          ),
+        { timeout: 20000 }
+      )
+      .toBe(true);
 
     // Inline roles render as buttons, and editor-insert appends through the
     // open editor and saves.

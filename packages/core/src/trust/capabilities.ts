@@ -5,6 +5,7 @@
  */
 
 import { ACTION_TYPES, Capability, ROLE_TYPES } from '../actions/catalog';
+import { CODE_SUBSTRATES, verifySubstrate } from '../checks/verify';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage, PageNode } from '../format/page';
 
@@ -96,6 +97,26 @@ export function actionCapability(type: string): Capability | null {
 }
 
 /**
+ * The capability a particular directive needs, taking its options into
+ * account: a verify that runs code needs the kernel, one that only looks
+ * at files or the interface needs nothing.
+ */
+export function effectiveCapability(
+  type: string,
+  options: Record<string, string>
+): Capability | null {
+  if (type === 'verify') {
+    const substrate = verifySubstrate(options);
+
+    return substrate && (CODE_SUBSTRATES as string[]).includes(substrate)
+      ? 'kernel-exec'
+      : 'none';
+  }
+
+  return actionCapability(type);
+}
+
+/**
  * Whether a directive runs without a click: on page entry, after another
  * action, or as the target of a cascade from a previous action.
  */
@@ -166,7 +187,7 @@ export function capabilityUses(
   const counts = new Map<Capability, number>();
 
   for (const node of allDirectives(pages)) {
-    const capability = actionCapability(node.name);
+    const capability = effectiveCapability(node.name, node.options);
 
     if (capability && capability !== 'none') {
       counts.set(capability, (counts.get(capability) ?? 0) + 1);

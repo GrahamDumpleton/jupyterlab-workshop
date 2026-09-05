@@ -556,3 +556,195 @@
   gap: 8px;
   justify-content: center;
 }
+
+/* Gating message above the footer. */
+
+.jp-WorkshopPanel-gate {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-top: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-gate.jp-mod-blocked {
+  color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-gate a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Preflight banner. */
+
+.jp-WorkshopPanel-preflight {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--jp-warn-color1);
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-preflightTitle {
+  font-weight: 600;
+}
+
+.jp-WorkshopPanel-preflight ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.jp-WorkshopPanel-preflightHint {
+  color: var(--jp-ui-font-color2);
+}
+
+/* Verify blocks. */
+
+.jp-WorkshopPanel-verify {
+  cursor: default;
+}
+
+.jp-WorkshopPanel-verifyMark {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.jp-WorkshopPanel-verify.jp-mod-verify-pass {
+  border-color: var(--jp-success-color1);
+}
+
+.jp-WorkshopPanel-verify.jp-mod-verify-pass .jp-WorkshopPanel-verifyMark {
+  color: var(--jp-success-color1);
+}
+
+.jp-WorkshopPanel-verify.jp-mod-verify-fail {
+  border-color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-verify.jp-mod-verify-fail .jp-WorkshopPanel-verifyMark {
+  color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-verifyButton {
+  margin-left: auto;
+  padding: 0 8px;
+  min-height: 22px;
+  line-height: 22px;
+}
+
+.jp-WorkshopPanel-verifyMessage {
+  margin-top: 6px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+  white-space: pre-wrap;
+}
+
+/* Quiz blocks. */
+
+.jp-WorkshopPanel-quiz {
+  cursor: default;
+}
+
+.jp-WorkshopPanel-quizQuestion {
+  margin: 6px 0;
+}
+
+.jp-WorkshopPanel-quizOption {
+  display: block;
+  margin: 2px 0;
+}
+
+.jp-WorkshopPanel-quizFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.jp-WorkshopPanel-quizAttempts,
+.jp-WorkshopPanel-quizFeedback {
+  font-size: var(--jp-ui-font-size0);
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopPanel-quizFeedback {
+  margin-top: 6px;
+}
+
+.jp-WorkshopPanel-quizFeedback.jp-mod-pass {
+  color: var(--jp-success-color1);
+}
+
+.jp-WorkshopPanel-quizFeedback.jp-mod-fail {
+  color: var(--jp-warn-color1);
+}
+
+/* Form blocks. */
+
+.jp-WorkshopPanel-form {
+  cursor: default;
+}
+
+.jp-WorkshopPanel-formField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+
+.jp-WorkshopPanel-formLabel {
+  font-weight: 600;
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-formField input[type='text'],
+.jp-WorkshopPanel-formField input[type='password'],
+.jp-WorkshopPanel-formField input[type='number'],
+.jp-WorkshopPanel-formField input[type='email'],
+.jp-WorkshopPanel-formField input[type='url'],
+.jp-WorkshopPanel-formField select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 2px;
+  background: var(--jp-input-background);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopPanel-formField.jp-mod-invalid input,
+.jp-WorkshopPanel-formField.jp-mod-invalid select {
+  border-color: var(--jp-error-color1);
+}
+
+.jp-WorkshopPanel-formSecret {
+  display: flex;
+  gap: 4px;
+}
+
+.jp-WorkshopPanel-formSecret input {
+  flex: 1 1 auto;
+}
+
+.jp-WorkshopPanel-formChoices label {
+  display: block;
+}
+
+.jp-WorkshopPanel-formHelp {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-formProblem {
+  color: var(--jp-error-color1);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-formFooter {
+  margin-top: 6px;
+}

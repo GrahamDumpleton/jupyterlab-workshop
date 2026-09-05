@@ -1,4 +1,5 @@
 export * from './actions/catalog';
+export * from './checks';
 export * from './diff';
 export * from './errors';
 export * from './format/directives';

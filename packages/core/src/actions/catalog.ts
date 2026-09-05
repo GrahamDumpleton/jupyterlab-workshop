@@ -22,7 +22,14 @@ export type BodyKind = 'required' | 'optional' | 'none' | 'markdown' | 'yaml';
 
 /** Grouping of actions for documentation and the trust dialog. */
 export type ActionGroup =
-  'terminal' | 'files' | 'notebook' | 'ui' | 'guidance' | 'flow' | 'external';
+  | 'terminal'
+  | 'files'
+  | 'notebook'
+  | 'ui'
+  | 'guidance'
+  | 'flow'
+  | 'checks'
+  | 'external';
 
 /** Description of a block action directive. */
 export interface IActionTypeSpec {
@@ -430,6 +437,48 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       ),
       spec('mark-done', 'flow', 'Mark the current page done.', 'none', 'none'),
       spec('next-page', 'flow', 'Go to the next page.', 'none', 'none'),
+
+      // Checks, forms and checkpoints.
+      spec(
+        'verify',
+        'checks',
+        'Check learner progress with code, a script, or file and interface predicates.',
+        'none',
+        'optional',
+        ['label', 'trigger', 'substrate', 'script', 'path', 'timeout']
+      ),
+      spec(
+        'quiz',
+        'checks',
+        'Ask a multiple choice question with the options in the body.',
+        'none',
+        'yaml',
+        ['type', 'shuffle', 'attempts']
+      ),
+      spec(
+        'form',
+        'checks',
+        'Collect variable values from the learner with the fields in the body.',
+        'none',
+        'yaml',
+        ['label']
+      ),
+      spec(
+        'checkpoint',
+        'checks',
+        'Snapshot the workshop files and variables under a name.',
+        'none',
+        'none',
+        ['name']
+      ),
+      spec(
+        'restore',
+        'checks',
+        'Restore the workshop files and variables from a checkpoint.',
+        'write-files',
+        'none',
+        ['name']
+      ),
 
       // External.
       spec(

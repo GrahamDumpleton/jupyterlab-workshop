@@ -9,6 +9,16 @@ import {
   allowedOptions,
   isActionType
 } from '../actions/catalog';
+import { parseForm } from '../checks/form';
+import { parseRequirement } from '../checks/gating';
+import { parseQuiz } from '../checks/quiz';
+import {
+  CONTENTS_PREDICATES,
+  UI_PREDICATES,
+  parsePredicates,
+  parseTriggers,
+  verifySubstrate
+} from '../checks/verify';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import {
@@ -67,9 +77,194 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   }
 
   lintDirectives(input, messages);
+  lintChecks(input, messages);
+  lintRequirements(input, messages);
+  lintFormOrder(input, messages);
   lintCapabilities(input, manifestPath, messages);
 
   return messages;
+}
+
+function lintChecks(input: ILintInput, messages: ILintMessage[]): void {
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      const where = { path: page.path, line: node.line };
+      const problems: string[] = [];
+
+      switch (node.name) {
+        case 'verify':
+          problems.push(...verifyProblems(node));
+          break;
+
+        case 'quiz':
+          problems.push(...parseQuiz(node.body, node.options).errors);
+          break;
+
+        case 'form':
+          problems.push(...parseForm(node.body).errors);
+          break;
+
+        default:
+          continue;
+      }
+
+      for (const problem of problems) {
+        messages.push({
+          level: 'error',
+          rule: `invalid-${node.name}`,
+          message: `${problem} in ${node.name} "${node.id}"`,
+          ...where
+        });
+      }
+    }
+  }
+}
+
+function verifyProblems(node: IDirectiveNode): string[] {
+  const problems = parseTriggers(node.options.trigger).errors;
+  const substrate = verifySubstrate(node.options);
+
+  if (substrate === null) {
+    problems.push(`Unknown substrate "${node.options.substrate}"`);
+
+    return problems;
+  }
+
+  switch (substrate) {
+    case 'script':
+      if (!node.options.script) {
+        problems.push('A script substrate needs a "script" option');
+      }
+
+      break;
+
+    case 'contents':
+      problems.push(...parsePredicates(node.body, CONTENTS_PREDICATES).errors);
+      break;
+
+    case 'ui':
+      problems.push(...parsePredicates(node.body, UI_PREDICATES).errors);
+      break;
+
+    case 'learner-kernel':
+      if (!node.options.path) {
+        problems.push('A learner-kernel substrate needs a notebook "path"');
+      }
+
+      if (node.body.trim() === '') {
+        problems.push('The verify needs code in its body');
+      }
+
+      break;
+
+    default:
+      if (node.body.trim() === '') {
+        problems.push('The verify needs code in its body');
+      }
+
+      break;
+  }
+
+  return problems;
+}
+
+function lintRequirements(input: ILintInput, messages: ILintMessage[]): void {
+  const ids = new Map<string, string>();
+
+  for (const node of allDirectives(input.pages)) {
+    if (['verify', 'quiz', 'form'].includes(node.name)) {
+      ids.set(node.id, node.name);
+    }
+  }
+
+  for (const page of input.pages) {
+    for (const text of page.frontmatter.requires) {
+      const requirement = parseRequirement(text);
+
+      if (!requirement) {
+        messages.push({
+          level: 'error',
+          rule: 'invalid-requirement',
+          message: `Requirement "${text}" should look like verify:<id>, quiz:<id> or form:<id>`,
+          path: page.path
+        });
+      } else if (ids.get(requirement.id) !== requirement.kind) {
+        messages.push({
+          level: 'error',
+          rule: 'unknown-requirement',
+          message: `Requirement "${text}" names no ${requirement.kind} directive`,
+          path: page.path
+        });
+      }
+    }
+  }
+}
+
+function lintFormOrder(input: ILintInput, messages: ILintMessage[]): void {
+  // A variable a form sets must not be used on an earlier page, since the
+  // learner has had no chance to fill it in yet.
+  const definedAt = new Map<string, number>();
+  const manifestNames = new Set(
+    input.manifest.variables
+      .filter(definition => definition.default !== undefined)
+      .map(definition => definition.name)
+  );
+
+  input.pages.forEach((page, index) => {
+    for (const node of allDirectives([page])) {
+      if (node.name !== 'form') {
+        continue;
+      }
+
+      const parsed = parseForm(node.body);
+
+      for (const field of parsed.form?.fields ?? []) {
+        if (!definedAt.has(field.name)) {
+          definedAt.set(field.name, index);
+        }
+      }
+    }
+  });
+
+  input.pages.forEach((page, index) => {
+    for (const name of usedVariables(page)) {
+      const defined = definedAt.get(name);
+
+      if (
+        defined !== undefined &&
+        defined > index &&
+        !manifestNames.has(name)
+      ) {
+        messages.push({
+          level: 'error',
+          rule: 'use-before-form',
+          message: `Variable "${name}" is used before the form on page ${defined + 1} sets it`,
+          path: page.path
+        });
+      }
+    }
+  });
+}
+
+function usedVariables(page: IPage): Set<string> {
+  const names = new Set<string>();
+  const pattern = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)/g;
+
+  const scan = (text: string): void => {
+    for (const match of text.matchAll(pattern)) {
+      names.add(match[1]);
+    }
+  };
+
+  for (const node of allDirectives([page])) {
+    scan(node.body);
+
+    for (const value of Object.values(node.options)) {
+      scan(value);
+    }
+  }
+
+  return names;
 }
 
 function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {

@@ -23,7 +23,19 @@ Create a notebook from a list of cells. It opens in the main area.
 Run every cell. The kernel starts if it has not already.
 
 ```{cell-run-all}
+:id: run-all
 :path: scratch/hello.ipynb
+```
+
+The check below passes once the cell tagged `answer` has been run. It
+re-runs whenever a cell with that tag is executed.
+
+```{verify}
+:id: answer-ran
+:label: The answer cell has been run
+:substrate: contents
+:trigger: cell-executed answer; after:run-all
+cell-executed scratch/hello.ipynb answer
 ```
 
 Insert a new code cell after the cell tagged `answer`, tagging it too.

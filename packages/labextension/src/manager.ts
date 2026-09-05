@@ -6,6 +6,7 @@ import {
   IWorkshopManifest,
   TrustLevel,
   Variables,
+  parseRequirement,
   actionCapability,
   decideAction,
   declaredCapabilities,
@@ -31,6 +32,7 @@ import { requestAPI } from './request';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
+  VariableSource,
   IActionLogEntry,
   IActionRegistry,
   IActionRequest,
@@ -38,7 +40,9 @@ import {
   IActionStatus,
   IFetchRequest,
   IFetchResult,
+  IGateStatus,
   ILoadedWorkshop,
+  IPreflightResult,
   IPageProgress,
   IPlatformInfo,
   ITrustDecision,
@@ -129,6 +133,14 @@ export class WorkshopManager implements IWorkshopManager {
     return this._decision?.level ?? null;
   }
 
+  get preflight(): IPreflightResult[] | null {
+    return this._preflight;
+  }
+
+  get checkpoints(): readonly string[] {
+    return this._state.state?.checkpoints ?? [];
+  }
+
   get visiblePages(): IPage[] {
     if (!this._workshop) {
       return [];
@@ -166,6 +178,7 @@ export class WorkshopManager implements IWorkshopManager {
 
     this.stopChain();
     this._error = null;
+    this._preflight = null;
     this._loading = true;
 
     try {
@@ -193,12 +206,22 @@ export class WorkshopManager implements IWorkshopManager {
         kind: 'local',
         url: workshopPath
       };
+      // The preview used for the trust summary and lint renders with the
+      // built-ins and manifest defaults, as the learner will first see it.
       const pathSep = platform.path_sep;
       const declared = this._collectDeclared(manifest, sources);
+      const defaults: Variables = { ...buildBuiltins(workshopPath, platform) };
+
+      for (const definition of manifest.variables) {
+        if (definition.default !== undefined) {
+          defaults[definition.name] = definition.default;
+        }
+      }
+
       const preview = manifest.pages.map(pagePath =>
         parsePage(sources[pagePath], {
           path: pagePath,
-          variables: {},
+          variables: defaults,
           pathSep,
           declared
         })
@@ -356,7 +379,7 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   disposition(node: IDirectiveNode): ActionDisposition {
-    return this._decide(node.name, isAutomatic(node));
+    return this._decide(node.name, isAutomatic(node), node.options);
   }
 
   uninstallPlan(): IUninstallPlan | null {
@@ -482,10 +505,119 @@ export class WorkshopManager implements IWorkshopManager {
     const visible = this.visiblePages;
     const page = visible[Math.max(0, Math.min(index, visible.length - 1))];
 
-    if (page && page.id !== this._currentPageId) {
-      this._enterPage(page.id, true);
-      this._changed.emit();
+    if (!page || page.id === this._currentPageId) {
+      return;
     }
+
+    // Moving forward past unmet requirements is refused under strict
+    // gating and recorded as a skip under soft gating.
+    if (index > this.pageIndex) {
+      const gate = this.gate();
+
+      if (gate.blocked) {
+        return;
+      }
+
+      if (gate.unmet.length > 0) {
+        const state = this._state.state;
+
+        if (state) {
+          const current = this._currentPageId;
+
+          state.pages[current] = {
+            ...state.pages[current],
+            done: state.pages[current]?.done ?? false,
+            skipped: gate.unmet.map(item => `${item.kind}:${item.id}`)
+          };
+        }
+      }
+    }
+
+    this._enterPage(page.id, true);
+    this._changed.emit();
+  }
+
+  gate(pageId?: string): IGateStatus {
+    const policy = this._workshop?.manifest.gating ?? 'off';
+    const id = pageId ?? this._currentPageId;
+    const page = this._workshop?.pages.find(item => item.id === id);
+    const unmet = [];
+
+    if (policy !== 'off' && page) {
+      for (const text of page.frontmatter.requires) {
+        const requirement = parseRequirement(text);
+
+        if (requirement && this.actionStatus(requirement.id).status !== 'ok') {
+          unmet.push(requirement);
+        }
+      }
+    }
+
+    return { policy, unmet, blocked: policy === 'strict' && unmet.length > 0 };
+  }
+
+  setPreflight(results: IPreflightResult[] | null): void {
+    this._preflight = results;
+    this._changed.emit();
+  }
+
+  focusAction(id: string): void {
+    this._actionFocused.emit(id);
+  }
+
+  async checkpoint(name: string): Promise<void> {
+    const workshop = this._workshop;
+    const state = this._state.state;
+
+    if (!workshop || !state) {
+      throw new Error('No workshop is open');
+    }
+
+    await requestAPI('checkpoints', this._serverSettings, {
+      method: 'POST',
+      body: JSON.stringify({
+        workshop: workshop.path,
+        name,
+        variables: this._store.persistable()
+      })
+    });
+
+    if (!state.checkpoints.includes(name)) {
+      state.checkpoints.push(name);
+      this._state.save();
+    }
+
+    this._changed.emit();
+  }
+
+  async restoreCheckpoint(name: string): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      throw new Error('No workshop is open');
+    }
+
+    const record = await requestAPI<{
+      variables?: Record<string, { value: string; source: VariableSource }>;
+    }>('checkpoints', this._serverSettings, {
+      method: 'POST',
+      body: JSON.stringify({ workshop: workshop.path, name, action: 'restore' })
+    });
+
+    // Put the learner's values back as they were at the checkpoint.
+    for (const entry of this._store.entries()) {
+      if (!entry.readonly) {
+        this._store.reset(entry.name);
+      }
+    }
+
+    for (const [variable, { value, source }] of Object.entries(
+      record.variables ?? {}
+    )) {
+      this._store.set(variable, value, source);
+    }
+
+    this._changed.emit();
   }
 
   goToPage(id: string): void {
@@ -519,6 +651,15 @@ export class WorkshopManager implements IWorkshopManager {
     state.pages[pageId] = { ...state.pages[pageId], done };
     this._state.save();
     this._changed.emit();
+
+    // Pages that ask for it are checkpointed when marked done.
+    const page = this._workshop?.pages.find(item => item.id === pageId);
+
+    if (done && page?.frontmatter.checkpoint) {
+      this.checkpoint(pageId).catch(error => {
+        console.warn(`Unable to checkpoint page ${pageId}`, error);
+      });
+    }
   }
 
   actionStatus(id: string): IActionStatus {
@@ -562,13 +703,21 @@ export class WorkshopManager implements IWorkshopManager {
 
     if (result.captured) {
       for (const [name, value] of Object.entries(result.captured)) {
-        this._store.set(name, value, 'capture');
+        this._store.set(name, value, result.captureSource ?? 'capture');
       }
     }
 
     this._record(request, result, trigger, registry.describe(request));
     this._running.delete(request.id);
     this._actionChanged.emit(request.id);
+
+    // Gating is shown outside the page body, which only redraws on the
+    // broader change signal.
+    const requires = this.currentPage?.frontmatter.requires ?? [];
+
+    if (requires.some(text => text.endsWith(`:${request.id}`))) {
+      this._changed.emit();
+    }
 
     if (node && request.page) {
       if (result.status === 'ok') {
@@ -963,7 +1112,11 @@ export class WorkshopManager implements IWorkshopManager {
     return this._platform;
   }
 
-  private _decide(type: string, automatic: boolean): ActionDisposition {
+  private _decide(
+    type: string,
+    automatic: boolean,
+    options: Record<string, string> = {}
+  ): ActionDisposition {
     const workshop = this._workshop;
     const decision = this._decision;
 
@@ -973,6 +1126,7 @@ export class WorkshopManager implements IWorkshopManager {
 
     return decideAction({
       type,
+      options,
       level: decision.level,
       automatic,
       declared: workshop.manifest.capabilities,
@@ -987,7 +1141,7 @@ export class WorkshopManager implements IWorkshopManager {
     trigger: ActionTrigger
   ): Promise<IActionResult> {
     const automatic = trigger === 'auto' || trigger === 'cascade';
-    const disposition = this._decide(request.type, automatic);
+    const disposition = this._decide(request.type, automatic, request.options);
 
     switch (disposition.kind) {
       case 'run':
@@ -1190,6 +1344,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _prompts: ITrustPrompts;
   private _settings: ISettingRegistry | null;
   private _decision: ITrustDecision | null = null;
+  private _preflight: IPreflightResult[] | null = null;
   private _state: StateStore;
   private _store = new VariableStore();
   private _envWriter: Debouncer;

@@ -8,7 +8,7 @@
  */
 
 import { Capability } from '../actions/catalog';
-import { actionCapability } from './capabilities';
+import { effectiveCapability } from './capabilities';
 
 /** How far a workshop is trusted. */
 export type TrustLevel = 'trusted' | 'restricted' | 'ask';
@@ -40,6 +40,9 @@ export type ActionDisposition =
 export interface IPolicyInput {
   /** The action type, such as `execute`. */
   type: string;
+
+  /** The directive's options, which can change the capability needed. */
+  options?: Record<string, string>;
 
   level: TrustLevel;
 
@@ -86,7 +89,7 @@ const RESTRICTED_RUNS: ReadonlySet<string> = new Set([
  * Decide what to do with an action under a trust level.
  */
 export function decideAction(input: IPolicyInput): ActionDisposition {
-  const capability = actionCapability(input.type);
+  const capability = effectiveCapability(input.type, input.options ?? {});
 
   // Unknown types fall through to the registry, which reports them.
   if (capability === null) {
@@ -151,6 +154,15 @@ function decideRestricted(
 
   if (capability === 'none' || RESTRICTED_RUNS.has(type)) {
     return { kind: 'run' };
+  }
+
+  // Checks run over and over on their triggers, so asking each time would
+  // be a nuisance; they simply do not run until the workshop is trusted.
+  if (type === 'verify') {
+    return {
+      kind: 'skip',
+      reason: 'Checks that run code are off while the workshop is restricted'
+    };
   }
 
   const downgrade = TYPE_ONLY[type];

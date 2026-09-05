@@ -1,5 +1,6 @@
 ---
 title: Resolve a conflict
+requires: [verify:conflict-resolved]
 ---
 
 # Resolve a conflict
@@ -101,4 +102,38 @@ That is the end of the workshop.
 ```{toast}
 :type: success
 You have completed Git from the command line.
+```
+
+```{verify}
+:id: conflict-resolved
+:label: The conflict is resolved and merged
+:trigger: terminal-output "Merge hotfix"; interval 10s
+import subprocess
+
+def git(*args):
+    return subprocess.run(
+        ["git", "-C", "{{ repo_dir }}", *args], capture_output=True, text=True
+    ).stdout
+
+readme = open("{{ repo_dir }}/README.md").read()
+
+assert "<<<<<<<" not in readme, "README.md still has conflict markers"
+assert "hotfix" in git("branch", "--merged", "main"), "hotfix is not merged into main"
+print("Conflict resolved and merged")
+```
+
+## Starting over
+
+Marking the "Your first commit" page done saved a checkpoint of the
+repository as it was after the first commit. To practise the branching and
+merging pages again, restore it: the files go back to that state and the
+later commits disappear. Saving a checkpoint of the finished state first
+lets you come back here too.
+
+```{checkpoint}
+:name: finished
+```
+
+```{restore}
+:name: 02-first-commit
 ```

@@ -106,6 +106,13 @@ test.describe('hello-jupyterlab workshop', () => {
       page.locator('.jp-NotebookPanel .jp-OutputArea-output').first()
     ).toContainText('Hello from a notebook');
 
+    // The contents check sees the execution count in the open notebook
+    // without waiting for a save.
+    await expect(panel.locator('.jp-WorkshopPanel-verify')).toHaveClass(
+      /jp-mod-verify-pass/,
+      { timeout: 30000 }
+    );
+
     const insert = panel.locator('.jp-WorkshopPanel-action.jp-mod-cell-insert');
 
     await insert.click();

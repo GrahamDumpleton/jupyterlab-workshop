@@ -1,9 +1,11 @@
 import {
   ActionDisposition,
   Capability,
+  GatingPolicy,
   IDirectiveNode,
   ILintMessage,
   IPage,
+  IRequirement,
   IVariableDefinition,
   IWorkshopManifest,
   TrustLevel,
@@ -219,6 +221,9 @@ export interface IActionResult {
   /** Variables captured by the action, stored with the `capture` source. */
   captured?: Record<string, string>;
 
+  /** Source to store captured variables under; `capture` by default. */
+  captureSource?: VariableSource;
+
   /** A setting the action changed, recorded for uninstall. */
   setting?: ISettingChange;
 }
@@ -246,8 +251,9 @@ export const IActionRegistry = new Token<IActionRegistry>(
   'Registry of workshop action implementations.'
 );
 
-/** How an action came to run. */
-export type ActionTrigger = 'click' | 'cascade' | 'auto' | 'role' | 'layout';
+/** How an action came to run; `trigger` is a verify re-run by an event. */
+export type ActionTrigger =
+  'click' | 'cascade' | 'auto' | 'role' | 'layout' | 'trigger';
 
 /** Recorded run state of an action. */
 export interface IActionStatus {
@@ -272,6 +278,36 @@ export interface IActionLogEntry {
 export interface IPageProgress {
   done: boolean;
   enteredAt?: string;
+
+  /** Requirements that were unmet when the learner moved on anyway. */
+  skipped?: string[];
+}
+
+/** Whether the learner may leave a page. */
+export interface IGateStatus {
+  policy: GatingPolicy;
+
+  /** Requirements of the page not yet satisfied. */
+  unmet: IRequirement[];
+
+  /** Whether moving forward is blocked outright. */
+  blocked: boolean;
+}
+
+/** What the preflight found about one required tool. */
+export interface IPreflightResult {
+  name: string;
+  found: boolean;
+  path?: string;
+  version?: string;
+
+  /** Whether the version requirement, if any, is satisfied. */
+  satisfied: boolean;
+  requirement?: string;
+  optional: boolean;
+
+  /** Installation hint for the platform, from the manifest. */
+  hint?: string;
 }
 
 /** Loads workshops, tracks progress and runs actions. */
@@ -297,6 +333,12 @@ export interface IWorkshopManager {
 
   /** Trust level of the open workshop. */
   readonly trust: TrustLevel | null;
+
+  /** Results of checking the tools the manifest requires, once known. */
+  readonly preflight: IPreflightResult[] | null;
+
+  /** Names of the checkpoints taken in this workshop. */
+  readonly checkpoints: readonly string[];
 
   /** Pages whose `when` condition holds, in order. */
   readonly visiblePages: IPage[];
@@ -345,6 +387,21 @@ export interface IWorkshopManager {
 
   /** Forget progress and reopen the workshop from its first page. */
   reset(): Promise<void>;
+
+  /** Whether the current page's requirements allow moving on. */
+  gate(pageId?: string): IGateStatus;
+
+  /** Record preflight results reported by the actions plugin. */
+  setPreflight(results: IPreflightResult[] | null): void;
+
+  /** Scroll the panel to an action and draw attention to it. */
+  focusAction(id: string): void;
+
+  /** Snapshot the workshop files and variables under a name. */
+  checkpoint(name: string): Promise<void>;
+
+  /** Put the files and variables of a checkpoint back. */
+  restoreCheckpoint(name: string): Promise<void>;
 
   goTo(index: number): void;
   goToPage(id: string): void;

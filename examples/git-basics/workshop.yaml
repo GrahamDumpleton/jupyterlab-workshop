@@ -10,14 +10,15 @@ platforms: [linux, macos]
 capabilities:
   - terminal
   - write-files: [workspace]
+  - kernel-exec
 requires:
   tools:
     - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git" } }
   shell: bash
 layout: default
+gating: soft
 layouts:
   default:
-    left: instructions
     main:
       - { area: bottom, widgets: ["terminal:git"] }
 variables:
@@ -25,6 +26,12 @@ variables:
     type: path
     default: demo
     description: Directory in which the practice repository is created
+  - name: user_name
+    type: text
+    description: The name git records on your commits
+  - name: user_email
+    type: email
+    description: The email address git records on your commits
 pages:
   - pages/01-create-a-repository.md
   - pages/02-first-commit.md

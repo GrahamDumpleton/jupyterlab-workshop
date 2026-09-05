@@ -13,6 +13,14 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
 from tornado.ioloop import IOLoop
 
+from .checks import (
+    CheckError,
+    create_checkpoint,
+    list_checkpoints,
+    preflight,
+    restore_checkpoint,
+    run_script,
+)
 from .fetch import FetchError, fetch_workshop, parse_source, remove_workshop
 from .platform import current_platform
 
@@ -109,6 +117,107 @@ class WorkshopsHandler(WorkshopHandler):
         self.finish(json.dumps({"removed": removed}))
 
 
+class VerifyHandler(WorkshopHandler):
+    """Run a verify script shipped with a workshop."""
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        workshop = str(body.get("workshop") or "")
+        script = str(body.get("script") or "")
+        timeout = float(body.get("timeout") or 60)
+        environment = body.get("environment")
+
+        if not script:
+            raise tornado.web.HTTPError(400, "A script is required")
+
+        if environment is not None and not isinstance(environment, dict):
+            raise tornado.web.HTTPError(400, "environment must be an object")
+
+        try:
+            result = await IOLoop.current().run_in_executor(
+                None,
+                lambda: run_script(
+                    self.root_dir,
+                    workshop,
+                    script,
+                    timeout=timeout,
+                    environment={
+                        str(key): str(value)
+                        for key, value in (environment or {}).items()
+                    },
+                ),
+            )
+        except CheckError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps(result.to_dict()))
+
+
+class CheckpointsHandler(WorkshopHandler):
+    """List, create and restore checkpoints of a workshop."""
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        workshop = self.get_argument("workshop", "")
+
+        try:
+            records = list_checkpoints(self.root_dir, workshop)
+        except CheckError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"checkpoints": records}))
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        workshop = str(body.get("workshop") or "")
+        name = str(body.get("name") or "")
+        action = str(body.get("action") or "create")
+        variables = body.get("variables")
+
+        if variables is not None and not isinstance(variables, dict):
+            raise tornado.web.HTTPError(400, "variables must be an object")
+
+        try:
+            if action == "create":
+                record = await IOLoop.current().run_in_executor(
+                    None,
+                    lambda: create_checkpoint(
+                        self.root_dir, workshop, name, variables=variables
+                    ),
+                )
+            elif action == "restore":
+                record = await IOLoop.current().run_in_executor(
+                    None, lambda: restore_checkpoint(self.root_dir, workshop, name)
+                )
+            else:
+                raise tornado.web.HTTPError(400, f'Unknown action "{action}"')
+        except CheckError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps(record))
+
+
+class PreflightHandler(WorkshopHandler):
+    """Report which tools a workshop requires are installed."""
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        tools = body.get("tools")
+        check_versions = bool(body.get("versions", True))
+
+        if not isinstance(tools, list) or not all(isinstance(t, dict) for t in tools):
+            raise tornado.web.HTTPError(400, "tools must be a list of objects")
+
+        results = await IOLoop.current().run_in_executor(
+            None, lambda: preflight(tools, check_versions=check_versions)
+        )
+
+        self.finish(json.dumps({"tools": [result.to_dict() for result in results]}))
+
+
 def setup_handlers(server_app: Any) -> None:
     """Add the extension's handlers to the server's web application."""
 
@@ -119,6 +228,9 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "platform"), PlatformHandler),
         (url_path_join(base_url, API_NAMESPACE, "fetch"), FetchHandler),
         (url_path_join(base_url, API_NAMESPACE, "workshops"), WorkshopsHandler),
+        (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
+        (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
+        (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),
     ]
 
     web_app.add_handlers(".*$", handlers)

@@ -1,7 +1,9 @@
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
+import { Terminal as TerminalService } from '@jupyterlab/services';
 import { Terminal } from '@jupyterlab/terminal';
 import { terminalIcon } from '@jupyterlab/ui-components';
+import { ISignal, Signal } from '@lumino/signaling';
 
 import { WORKSHOP_STATE_DIR } from '../state';
 import {
@@ -56,6 +58,20 @@ export class TerminalSessions {
   /** The first terminal opened, used as the anchor for layout. */
   get first(): MainAreaWidget<Terminal> | null {
     return this._first && !this._first.isDisposed ? this._first : null;
+  }
+
+  /** Emitted with text a workshop terminal printed. */
+  get output(): ISignal<this, { name: string; text: string }> {
+    return this._output;
+  }
+
+  /**
+   * Whether a terminal with the session name is open.
+   */
+  has(name: string): boolean {
+    const widget = this._widgets.get(name);
+
+    return widget !== undefined && !widget.isDisposed;
   }
 
   /**
@@ -121,7 +137,21 @@ export class TerminalSessions {
 
     this._widgets.set(name, widget);
 
+    // Relay what the terminal prints so verifies can react to it.
+    const onMessage = (
+      _: TerminalService.ITerminalConnection,
+      message: TerminalService.IMessage
+    ): void => {
+      if (message.type === 'stdout' && message.content) {
+        this._output.emit({ name, text: message.content.map(String).join('') });
+      }
+    };
+
+    session.messageReceived.connect(onMessage);
+
     widget.disposed.connect(() => {
+      session.messageReceived.disconnect(onMessage);
+
       if (this._widgets.get(name) === widget) {
         this._widgets.delete(name);
       }
@@ -180,6 +210,7 @@ export class TerminalSessions {
   private _widgets = new Map<string, MainAreaWidget<Terminal>>();
   private _pending = new Map<string, Promise<MainAreaWidget<Terminal>>>();
   private _first: MainAreaWidget<Terminal> | null = null;
+  private _output = new Signal<this, { name: string; text: string }>(this);
 }
 
 export namespace TerminalSessions {
