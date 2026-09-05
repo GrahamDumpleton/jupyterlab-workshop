@@ -13,6 +13,32 @@ interface IExposedApp {
   };
 }
 
+/** Open a workshop and answer the trust dialog with the given level. */
+async function openWorkshop(
+  page: import('@playwright/test').Page,
+  target: string,
+  level: 'Trust' | 'Restricted' | 'Ask each time' = 'Trust'
+): Promise<void> {
+  // The command waits for the trust dialog, so it must not be awaited.
+  await page.evaluate((path: string) => {
+    const exposed = window as unknown as IExposedApp;
+
+    void exposed.jupyterapp.commands.execute('workshop:open', { path });
+  }, target);
+
+  const dialog = page.locator('.jp-Dialog');
+
+  await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+  await dialog.getByRole('button', { name: level, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // Loading finishes after the dialog closes and may apply a layout that
+  // toggles the sidebar; wait for the panel to show the workshop first.
+  await expect(
+    page.locator('#educates-workshop-panel .jp-WorkshopPanel-title')
+  ).toBeAttached();
+}
+
 test.describe('hello-jupyterlab workshop', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
     await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
@@ -26,13 +52,7 @@ test.describe('hello-jupyterlab workshop', () => {
         await page.contents.deleteDirectory(directory);
       }
     }
-    await page.evaluate(async (target: string) => {
-      const exposed = window as unknown as IExposedApp;
-
-      await exposed.jupyterapp.commands.execute('workshop:open', {
-        path: target
-      });
-    }, `${tmpPath}/${WORKSHOP}`);
+    await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
     await page.sidebar.openTab('educates-workshop-panel');
   });
 

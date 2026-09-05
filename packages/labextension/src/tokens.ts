@@ -1,8 +1,12 @@
 import {
+  ActionDisposition,
+  Capability,
   IDirectiveNode,
+  ILintMessage,
   IPage,
   IVariableDefinition,
   IWorkshopManifest,
+  TrustLevel,
   Variables
 } from '@educates/workshop-core';
 import { Token } from '@lumino/coreutils';
@@ -18,6 +22,79 @@ export interface IPlatformInfo {
   root_dir: string;
 }
 
+/** Where a workshop came from. */
+export interface IWorkshopSource {
+  /** `local` for a directory used in place, else `git` or `archive`. */
+  kind: 'local' | 'git' | 'archive';
+
+  /** Repository or archive URL, or the directory for local workshops. */
+  url: string;
+
+  ref?: string;
+  subdir?: string;
+}
+
+/** A capability as shown in the trust dialog. */
+export interface ICapabilitySummary {
+  capability: Capability;
+  scopes: string[];
+
+  /** Number of actions in the pages needing the capability. */
+  count: number;
+
+  /** Whether the manifest declares it. */
+  declared: boolean;
+}
+
+/** What a learner is asked to trust. */
+export interface ITrustSummary {
+  name: string;
+  title: string;
+  version: string;
+  source: IWorkshopSource;
+
+  /** Stable key identifying the source for stored decisions. */
+  sourceKey: string;
+
+  /** Content hash (local) or archive hash (downloaded). */
+  hash: string;
+
+  capabilities: ICapabilitySummary[];
+
+  /** Number of actions that run without a click. */
+  automatic: number;
+
+  lint: ILintMessage[];
+}
+
+/** A stored decision about a workshop at a particular hash. */
+export interface ITrustDecision {
+  level: TrustLevel;
+
+  /** Capabilities allowed without asking again under the `ask` level. */
+  allowed: string[];
+
+  decidedAt: string;
+  sourceKey: string;
+  hash: string;
+  name: string;
+}
+
+/** Administrator policy from the settings. */
+export interface ITrustPolicy {
+  /** Level selected by default in the trust dialog. */
+  defaultLevel: TrustLevel;
+
+  /** Level applied to every workshop without asking, when set. */
+  forcedLevel: TrustLevel | null;
+
+  /** Source key prefixes that are trusted without asking. */
+  trustedSources: string[];
+
+  /** Capabilities that never run regardless of trust. */
+  disabledCapabilities: string[];
+}
+
 /** A workshop that has been read and parsed. */
 export interface ILoadedWorkshop {
   /** Directory of the workshop relative to the JupyterLab root. */
@@ -30,6 +107,54 @@ export interface ILoadedWorkshop {
 
   /** Every page, in manifest order, rendered with the current variables. */
   pages: IPage[];
+
+  source: IWorkshopSource;
+
+  /** What the learner was asked to trust. */
+  trust: ITrustSummary;
+}
+
+/** Answer to a confirmation prompt. */
+export type ConfirmAnswer = 'yes' | 'always' | 'no';
+
+/** What a confirmation prompt shows. */
+export interface IConfirmRequest {
+  /** What the action will do, from `describe()`. */
+  description: string;
+
+  /** Why confirmation is needed. */
+  reason: string;
+
+  capability: Capability;
+
+  /** Code, command or diff to show, when there is something to show. */
+  detail: string;
+
+  /** Whether to offer allowing the capability for the whole workshop. */
+  offerAlways: boolean;
+}
+
+/** User interface hooks the manager needs for trust decisions. */
+export interface ITrustPrompts {
+  /** Ask which level to apply; null means do not open the workshop. */
+  decide(
+    summary: ITrustSummary,
+    defaultLevel: TrustLevel
+  ): Promise<TrustLevel | null>;
+
+  /** Ask whether one action may run. */
+  confirm(request: IConfirmRequest): Promise<ConfirmAnswer>;
+}
+
+/** Persists trust decisions and exposes the administrator policy. */
+export interface ITrustStore {
+  readonly policy: ITrustPolicy;
+
+  get(sourceKey: string, hash: string): Promise<ITrustDecision | null>;
+  set(decision: ITrustDecision): Promise<void>;
+
+  /** Forget every decision for a source. */
+  forget(sourceKey: string): Promise<void>;
 }
 
 /** Where a variable value came from, lowest precedence first. */
@@ -77,6 +202,15 @@ export interface IActionRequest {
   page?: string;
 }
 
+/** A setting an action changed, kept so it can be put back. */
+export interface ISettingChange {
+  plugin: string;
+  key: string;
+
+  /** The user value before the change; undefined when there was none. */
+  previous?: unknown;
+}
+
 /** The outcome of running an action. */
 export interface IActionResult {
   status: 'ok' | 'error' | 'skipped';
@@ -84,6 +218,9 @@ export interface IActionResult {
 
   /** Variables captured by the action, stored with the `capture` source. */
   captured?: Record<string, string>;
+
+  /** A setting the action changed, recorded for uninstall. */
+  setting?: ISettingChange;
 }
 
 /** Implementation of one action type against JupyterLab. */
@@ -158,6 +295,9 @@ export interface IWorkshopManager {
   /** Message describing why the last open failed, if it did. */
   readonly error: string | null;
 
+  /** Trust level of the open workshop. */
+  readonly trust: TrustLevel | null;
+
   /** Pages whose `when` condition holds, in order. */
   readonly visiblePages: IPage[];
 
@@ -176,8 +316,35 @@ export interface IWorkshopManager {
   /** Open the workshop in a directory relative to the JupyterLab root. */
   open(path: string): Promise<void>;
 
+  /**
+   * Download a workshop from a git forge or archive URL into a directory
+   * under the JupyterLab root and return the path it landed in.
+   */
+  fetch(request: IFetchRequest): Promise<IFetchResult>;
+
   /** Close the current workshop. */
   close(): Promise<void>;
+
+  /** Change the trust level of the open workshop and remember it. */
+  setTrust(level: TrustLevel): Promise<void>;
+
+  /** Show the trust dialog again for the open workshop. */
+  reviewTrust(): Promise<void>;
+
+  /** What the trust policy will do with an action from a page. */
+  disposition(node: IDirectiveNode): ActionDisposition;
+
+  /** Describe what `uninstall()` would remove for the open workshop. */
+  uninstallPlan(): IUninstallPlan | null;
+
+  /**
+   * Remove what the workshop created: its progress, settings it changed
+   * and, for downloaded workshops, the directory itself.
+   */
+  uninstall(): Promise<void>;
+
+  /** Forget progress and reopen the workshop from its first page. */
+  reset(): Promise<void>;
 
   goTo(index: number): void;
   goToPage(id: string): void;
@@ -218,6 +385,37 @@ export interface IWorkshopManager {
   absolutePath(path?: string): string;
 }
 
+/** A request to download a workshop. */
+export interface IFetchRequest {
+  /** Repository, forge tree or archive URL. */
+  url: string;
+  ref?: string;
+  subdir?: string;
+
+  /** Directory under the JupyterLab root to download into. */
+  directory: string;
+
+  /** Replace an existing directory of the same name. */
+  overwrite?: boolean;
+}
+
+/** What a download produced. */
+export interface IFetchResult {
+  /** Directory of the workshop relative to the JupyterLab root. */
+  path: string;
+  name: string;
+  sha256: string;
+}
+
+/** What uninstalling a workshop would do. */
+export interface IUninstallPlan {
+  /** Human readable descriptions of each step. */
+  steps: string[];
+
+  /** Whether the workshop directory itself will be deleted. */
+  removesDirectory: boolean;
+}
+
 export const IWorkshopManager = new Token<IWorkshopManager>(
   '@educates/jupyterlab-workshop:IWorkshopManager',
   'Loads workshops and tracks the current page.'
@@ -233,6 +431,10 @@ export namespace CommandIDs {
   export const variables = 'workshop:variables';
   export const showLog = 'workshop:show-log';
   export const stopChain = 'workshop:stop-chain';
+  export const openUrl = 'workshop:open-url';
+  export const trust = 'workshop:trust';
+  export const uninstall = 'workshop:uninstall';
+  export const reset = 'workshop:reset';
 }
 
 /**

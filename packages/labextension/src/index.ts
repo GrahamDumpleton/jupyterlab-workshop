@@ -4,11 +4,20 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { ICommandPalette, InputDialog } from '@jupyterlab/apputils';
+import {
+  Dialog,
+  ICommandPalette,
+  InputDialog,
+  Notification,
+  showDialog,
+  showErrorMessage
+} from '@jupyterlab/apputils';
+import { ServerConnection } from '@jupyterlab/services';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { IEditorTracker } from '@jupyterlab/fileeditor';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
+import { Widget } from '@lumino/widgets';
 
 import {
   DownloadAction,
@@ -73,7 +82,15 @@ import { WorkshopManager } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
-import { CommandIDs, IActionRegistry, IWorkshopManager } from './tokens';
+import {
+  CommandIDs,
+  IActionRegistry,
+  IFetchRequest,
+  IWorkshopManager,
+  errorMessage
+} from './tokens';
+import { trustPrompts } from './trust/dialogs';
+import { TrustStore, policyFromSettings } from './trust/store';
 
 export { IActionRegistry, IWorkshopManager } from './tokens';
 
@@ -89,15 +106,41 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
   description: 'Loads workshops and tracks the current page.',
   autoStart: true,
   provides: IWorkshopManager,
-  optional: [IStateDB],
+  optional: [IStateDB, ISettingRegistry],
   activate: (
     app: JupyterFrontEnd,
-    stateDB: IStateDB | null
+    stateDB: IStateDB | null,
+    settingRegistry: ISettingRegistry | null
   ): IWorkshopManager => {
+    const trustStore = new TrustStore(stateDB);
+
+    // Keep the administrator policy in step with the settings.
+    if (settingRegistry) {
+      const apply = (settings: ISettingRegistry.ISettings): void => {
+        trustStore.policy = policyFromSettings({
+          defaultTrustLevel: settings.get('defaultTrustLevel').composite,
+          trustPolicy: settings.get('trustPolicy').composite
+        });
+      };
+
+      settingRegistry
+        .load(panelPlugin.id)
+        .then(settings => {
+          apply(settings);
+          settings.changed.connect(apply);
+        })
+        .catch(error => {
+          console.error('Failed to load workshop trust settings', error);
+        });
+    }
+
     return new WorkshopManager({
       contents: app.serviceManager.contents,
       serverSettings: app.serviceManager.serverSettings,
-      stateDB
+      stateDB,
+      trustStore,
+      prompts: trustPrompts,
+      settings: settingRegistry
     });
   }
 };
@@ -274,10 +317,117 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    app.commands.addCommand(CommandIDs.openUrl, {
+      label: 'Open Workshop from URL…',
+      caption:
+        'Download a workshop from a git repository or archive URL and open it',
+      execute: async (args): Promise<void> => {
+        let url = typeof args.url === 'string' ? args.url : '';
+        const ref = typeof args.ref === 'string' ? args.ref : undefined;
+        const subdir =
+          typeof args.subdir === 'string' ? args.subdir : undefined;
+
+        if (!url) {
+          const result = await InputDialog.getText({
+            title: 'Open Workshop from URL',
+            label:
+              'Repository URL (a GitHub tree URL may name a branch and directory) or archive URL',
+            placeholder: 'https://github.com/owner/repo/tree/main/workshop'
+          });
+
+          if (!result.button.accept || !result.value) {
+            return;
+          }
+
+          url = result.value.trim();
+        }
+
+        const directory = await readSetting(
+          settingRegistry,
+          'workshopsDirectory',
+          'workshops'
+        );
+        const path = await fetchWorkshop(manager, {
+          url,
+          ref,
+          subdir,
+          directory
+        });
+
+        if (path) {
+          await manager.open(path);
+          shell.activateById(panel.id);
+        }
+      }
+    });
+
     app.commands.addCommand(CommandIDs.close, {
       label: 'Close Workshop',
       isEnabled: () => manager.workshop !== null,
       execute: () => manager.close()
+    });
+
+    app.commands.addCommand(CommandIDs.trust, {
+      label: 'Workshop: Change Trust Level…',
+      isEnabled: () => manager.workshop !== null,
+      execute: () => manager.reviewTrust()
+    });
+
+    app.commands.addCommand(CommandIDs.reset, {
+      label: 'Workshop: Reset Progress…',
+      isEnabled: () => manager.workshop !== null,
+      execute: async (): Promise<void> => {
+        const result = await showDialog({
+          title: 'Reset workshop progress?',
+          body: 'Page progress, action results, captured variables and the action log will be forgotten and the workshop will reopen at its first page.',
+          buttons: [
+            Dialog.cancelButton(),
+            Dialog.warnButton({ label: 'Reset' })
+          ]
+        });
+
+        if (result.button.accept) {
+          await manager.reset();
+        }
+      }
+    });
+
+    app.commands.addCommand(CommandIDs.uninstall, {
+      label: 'Workshop: Remove…',
+      isEnabled: () => manager.workshop !== null,
+      execute: async (): Promise<void> => {
+        const plan = manager.uninstallPlan();
+        const title = manager.workshop?.manifest.title ?? '';
+
+        if (!plan) {
+          return;
+        }
+
+        const result = await showDialog({
+          title: `Remove workshop "${title}"?`,
+          body: new UninstallBody(plan.steps),
+          buttons: [
+            Dialog.cancelButton(),
+            Dialog.warnButton({ label: 'Remove' })
+          ]
+        });
+
+        if (!result.button.accept) {
+          return;
+        }
+
+        try {
+          await manager.uninstall();
+          Notification.success(`Removed workshop "${title}"`, {
+            autoClose: 4000
+          });
+        } catch (error) {
+          await showErrorMessage(
+            'Unable to remove the workshop',
+            errorMessage(error)
+          );
+        }
+      }
     });
 
     app.commands.addCommand(CommandIDs.nextPage, {
@@ -378,19 +528,106 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 async function readDefaultWorkshop(
   settingRegistry: ISettingRegistry | null
 ): Promise<string> {
+  return readSetting(settingRegistry, 'defaultWorkshop', '');
+}
+
+async function readSetting(
+  settingRegistry: ISettingRegistry | null,
+  key: string,
+  fallback: string
+): Promise<string> {
   if (!settingRegistry) {
-    return '';
+    return fallback;
   }
 
   try {
     const settings = await settingRegistry.load(panelPlugin.id);
-    const value = settings.get('defaultWorkshop').composite;
+    const value = settings.get(key).composite;
 
-    return typeof value === 'string' ? value : '';
+    return typeof value === 'string' ? value : fallback;
   } catch (error) {
     console.error('Failed to load workshop settings', error);
 
+    return fallback;
+  }
+}
+
+/**
+ * Download a workshop, offering to replace an existing directory, and
+ * return the path it landed in or an empty string when nothing was
+ * downloaded.
+ */
+async function fetchWorkshop(
+  manager: IWorkshopManager,
+  request: IFetchRequest
+): Promise<string> {
+  const notification = Notification.emit(
+    `Downloading workshop from ${request.url}`,
+    'in-progress',
+    { autoClose: false }
+  );
+
+  try {
+    const result = await manager.fetch(request);
+
+    Notification.update({
+      id: notification,
+      message: `Downloaded workshop "${result.name}"`,
+      type: 'success',
+      autoClose: 4000
+    });
+
+    return result.path;
+  } catch (error) {
+    Notification.dismiss(notification);
+
+    // A conflict means a directory of that name exists already.
+    if (
+      error instanceof ServerConnection.ResponseError &&
+      error.response.status === 409
+    ) {
+      const result = await showDialog({
+        title: 'Replace existing workshop?',
+        body: `${error.message}. Replace it with a fresh download? Progress recorded in it will be lost.`,
+        buttons: [
+          Dialog.cancelButton(),
+          Dialog.warnButton({ label: 'Replace' })
+        ]
+      });
+
+      if (result.button.accept) {
+        return fetchWorkshop(manager, { ...request, overwrite: true });
+      }
+
+      return '';
+    }
+
+    await showErrorMessage(
+      'Unable to download the workshop',
+      errorMessage(error)
+    );
+
     return '';
+  }
+}
+
+/**
+ * Dialog body listing what removing a workshop will do.
+ */
+class UninstallBody extends Widget {
+  constructor(steps: string[]) {
+    super();
+
+    const list = document.createElement('ul');
+
+    for (const step of steps) {
+      const item = document.createElement('li');
+
+      item.textContent = step;
+      list.appendChild(item);
+    }
+
+    this.node.appendChild(list);
   }
 }
 

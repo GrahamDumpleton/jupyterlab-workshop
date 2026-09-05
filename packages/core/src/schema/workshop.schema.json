@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://workshop.educates.dev/schemas/v1alpha1/workshop.schema.json",
+  "title": "Workshop manifest",
+  "description": "The workshop.yaml manifest of a guided JupyterLab workshop.",
+  "type": "object",
+  "required": ["apiVersion", "name", "title", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "workshop.educates.dev/v1alpha1" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Identifier used for directories and state; lower case letters, digits and hyphens."
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "version": { "type": ["string", "number"] },
+    "description": { "type": "string" },
+    "duration": {
+      "type": "string",
+      "description": "Expected duration such as 45m or 2h."
+    },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["linux", "macos", "windows", "lite"]
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "What the workshop needs permission for. Each entry is a capability name, or a mapping of one name to its scopes.",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/capabilityName" },
+          {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 1,
+            "propertyNames": { "$ref": "#/definitions/capabilityName" },
+            "additionalProperties": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "optional": { "type": "boolean" },
+              "hint": {
+                "oneOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "shell": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requirements": { "type": "string" },
+        "kernel": { "type": "string" }
+      }
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "boolean",
+              "select",
+              "multiselect",
+              "secret",
+              "path",
+              "url",
+              "email"
+            ]
+          },
+          "description": { "type": "string" },
+          "default": { "type": ["string", "number", "boolean"] },
+          "required": { "type": "boolean" },
+          "readonly": { "type": "boolean" },
+          "secret": { "type": "boolean" },
+          "options": {
+            "type": "array",
+            "items": { "type": ["string", "number"] }
+          }
+        }
+      }
+    },
+    "layout": {
+      "type": "string",
+      "description": "Name of the layout applied when the workshop opens."
+    },
+    "layouts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "left": { "type": "string" },
+          "right": { "type": "string" },
+          "main": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["area", "widgets"],
+              "additionalProperties": false,
+              "properties": {
+                "area": {
+                  "type": "string",
+                  "enum": ["top", "bottom", "left", "right"]
+                },
+                "widgets": { "type": "array", "items": { "type": "string" } },
+                "size": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gating": { "type": "string", "enum": ["off", "soft", "strict"] },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "type": "object",
+          "description": "Default option values for every action directive, keyed by option name.",
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "Page files in order, relative to the workshop directory."
+    }
+  },
+  "definitions": {
+    "capabilityName": {
+      "type": "string",
+      "enum": [
+        "terminal",
+        "write-files",
+        "network",
+        "install-packages",
+        "kernel-exec",
+        "auto-run",
+        "ui-settings"
+      ]
+    }
+  }
+}

@@ -505,6 +505,7 @@ name = "educates-jupyterlab-workshop"
 source = { editable = "." }
 dependencies = [
     { name = "jupyter-server" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -518,7 +519,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "jupyter-server", specifier = ">=2.13.0,<3" }]
+requires-dist = [
+    { name = "jupyter-server", specifier = ">=2.13.0,<3" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
 
 [package.metadata.requires-dev]
 dev = [

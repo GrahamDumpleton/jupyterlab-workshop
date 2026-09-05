@@ -19,9 +19,50 @@
     "defaultTrustLevel": {
       "type": "string",
       "title": "Default trust level",
-      "description": "Trust level applied to workshops from sources without a stored decision.",
+      "description": "Trust level selected by default in the trust dialog for workshops without a stored decision.",
       "enum": ["trusted", "restricted", "ask"],
       "default": "restricted"
+    },
+    "trustPolicy": {
+      "type": "object",
+      "title": "Trust policy",
+      "description": "Administrator overrides, typically set through overrides.json.",
+      "additionalProperties": false,
+      "properties": {
+        "forcedLevel": {
+          "type": ["string", "null"],
+          "title": "Forced trust level",
+          "description": "When set, every workshop opens at this level and the trust dialog is not shown.",
+          "enum": ["trusted", "restricted", "ask", null],
+          "default": null
+        },
+        "trustedSources": {
+          "type": "array",
+          "title": "Trusted sources",
+          "description": "Source key prefixes that open as trusted without asking, such as \"git:https://github.com/educates/\" or \"local:examples/\".",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "disabledCapabilities": {
+          "type": "array",
+          "title": "Disabled capabilities",
+          "description": "Capabilities that never run regardless of the trust level.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "write-files",
+              "network",
+              "install-packages",
+              "kernel-exec",
+              "auto-run",
+              "ui-settings"
+            ]
+          },
+          "default": []
+        }
+      },
+      "default": {}
     },
     "registries": {
       "type": "array",

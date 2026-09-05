@@ -3,10 +3,14 @@ import { Contents } from '@jupyterlab/services';
 import { Debouncer } from '@lumino/polling';
 
 import { ensureDirectory, readIfExists } from './actions/contents';
+import { TrustLevel } from '@educates/workshop-core';
+
 import {
   IActionLogEntry,
   IActionStatus,
   IPageProgress,
+  ISettingChange,
+  IWorkshopSource,
   VariableSource
 } from './tokens';
 
@@ -21,10 +25,22 @@ const STATE_FILE = 'state.json';
 
 const LOG_LIMIT = 200;
 
+/** Things the workshop changed outside its directory. */
+export interface IInstalled {
+  settings: ISettingChange[];
+}
+
 /** Persisted learner progress for a workshop. */
 export interface IWorkshopState {
   version: 1;
-  workshop: { name: string; version: string };
+  workshop: {
+    name: string;
+    version: string;
+    hash?: string;
+    source?: IWorkshopSource;
+  };
+  trust?: TrustLevel;
+  installed: IInstalled;
   currentPage: string;
   pages: Record<string, IPageProgress>;
   actions: Record<string, IActionStatus>;
@@ -39,6 +55,7 @@ export function emptyState(name: string, version: string): IWorkshopState {
   return {
     version: 1,
     workshop: { name, version },
+    installed: { settings: [] },
     currentPage: '',
     pages: {},
     actions: {},
@@ -87,7 +104,8 @@ export class StateStore {
           this._state = {
             ...this._state,
             ...parsed,
-            workshop: { name, version }
+            workshop: { ...parsed.workshop, name, version },
+            installed: { settings: [], ...parsed.installed }
           };
         }
       } catch (error) {
@@ -96,6 +114,11 @@ export class StateStore {
     }
 
     return this._state;
+  }
+
+  /** Path of the state file, or an empty string when nothing is loaded. */
+  get path(): string {
+    return this._path;
   }
 
   /**

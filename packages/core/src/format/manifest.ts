@@ -3,6 +3,19 @@ import { load } from 'js-yaml';
 import { WorkshopFormatError } from '../errors';
 import { isRecord, isStringArray } from '../util';
 
+/** Capability names and write scopes a manifest may declare. */
+const CAPABILITY_NAMES: readonly string[] = [
+  'terminal',
+  'write-files',
+  'network',
+  'install-packages',
+  'kernel-exec',
+  'auto-run',
+  'ui-settings'
+];
+
+const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
+
 /** The manifest API version this package understands. */
 export const MANIFEST_API_VERSION = 'workshop.educates.dev/v1alpha1';
 
@@ -264,13 +277,16 @@ function parseCapabilities(value: unknown, path: string): string[] {
 
   for (const item of value) {
     if (typeof item === 'string') {
+      checkCapability(item, [], path);
       capabilities.push(item);
     } else if (isRecord(item) && Object.keys(item).length === 1) {
       const [key, scopes] = Object.entries(item)[0];
-      const list = Array.isArray(scopes) ? scopes : [scopes];
+      const list = (Array.isArray(scopes) ? scopes : [scopes]).map(String);
+
+      checkCapability(key, list, path);
 
       for (const scope of list) {
-        capabilities.push(`${key}:${String(scope)}`);
+        capabilities.push(`${key}:${scope}`);
       }
     } else {
       throw new WorkshopFormatError(
@@ -281,6 +297,26 @@ function parseCapabilities(value: unknown, path: string): string[] {
   }
 
   return capabilities;
+}
+
+function checkCapability(name: string, scopes: string[], path: string): void {
+  if (!CAPABILITY_NAMES.includes(name)) {
+    throw new WorkshopFormatError(
+      `Unknown capability "${name}"; expected one of ${CAPABILITY_NAMES.join(', ')}`,
+      path
+    );
+  }
+
+  if (name === 'write-files') {
+    for (const scope of scopes) {
+      if (!WRITE_SCOPES.includes(scope)) {
+        throw new WorkshopFormatError(
+          `Unknown write-files scope "${scope}"; expected one of ${WRITE_SCOPES.join(', ')}`,
+          path
+        );
+      }
+    }
+  }
 }
 
 function parseRequirements(value: unknown, path: string): IRequirements {

@@ -10,7 +10,10 @@ that a single workshop runs wherever JupyterLab runs, without Kubernetes or
 containers.
 
 This project is at the proof-of-concept stage. See `docs/demo.md` for how
-to try the example workshop.
+to try the example workshop, `docs/actions.md` for the actions a workshop
+page can use, and `docs/trust.md` for how workshops are loaded from
+repositories and archives, what capabilities they declare, and how the
+trust levels change what actions do.
 
 ## Development
 

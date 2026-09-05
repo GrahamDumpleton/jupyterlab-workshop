@@ -53,6 +53,12 @@ extension and JupyterLab.
   realistic slice of a workshop rather than assert one detail, because
   each test pays for a JupyterLab start.
 
+- Opening a workshop shows the trust dialog, so a browser test must not
+  await the `workshop:open` command; fire it, answer the dialog, and wait
+  for the panel title to appear, as the `openWorkshop` helper in the
+  existing specs does. Choose "Restricted" or "Ask each time" to test the
+  degraded behaviour.
+
 - When adding a directive, option or action, add a core unit test for the
   parsing, and extend the example workshop and the UI test if the action
   touches JupyterLab.

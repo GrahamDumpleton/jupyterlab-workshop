@@ -40,3 +40,6 @@ htmlcov/
 examples/*/demo/
 examples/*/_workshop/
 examples/*/scratch/
+
+# Workshops downloaded through the extension
+workshops/

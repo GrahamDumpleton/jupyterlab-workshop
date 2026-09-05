@@ -1,9 +1,11 @@
 import {
   ACTION_TYPES,
+  ActionDisposition,
   IDirectiveNode,
   IPage,
   IProseNode,
   PageNode,
+  TRUST_LEVEL_DESCRIPTIONS,
   isActionType
 } from '@educates/workshop-core';
 import {
@@ -12,6 +14,7 @@ import {
   caretRightIcon,
   checkIcon,
   closeIcon,
+  downloadIcon,
   folderIcon,
   listIcon,
   runIcon,
@@ -76,6 +79,7 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
       <EmptyState
         error={manager.error}
         onOpen={() => void commands.execute(CommandIDs.open)}
+        onOpenUrl={() => void commands.execute(CommandIDs.openUrl)}
       />
     );
   }
@@ -99,6 +103,7 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
           >
             {workshop.manifest.title}
           </h2>
+          <TrustBadge manager={manager} onClick={() => run(CommandIDs.trust)} />
           {manager.chainRunning ? (
             <IconButton
               icon={stopIcon}
@@ -120,6 +125,11 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
             icon={folderIcon}
             title="Open another workshop"
             onClick={() => run(CommandIDs.open)}
+          />
+          <IconButton
+            icon={downloadIcon}
+            title="Open a workshop from a URL"
+            onClick={() => run(CommandIDs.openUrl)}
           />
           <IconButton
             icon={closeIcon}
@@ -202,23 +212,66 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
 
 function EmptyState({
   error,
-  onOpen
+  onOpen,
+  onOpenUrl
 }: {
   error: string | null;
   onOpen: () => void;
+  onOpenUrl: () => void;
 }): JSX.Element {
   return (
     <div className="jp-WorkshopPanel-empty">
       <p>No workshop is open.</p>
       {error ? <p className="jp-WorkshopPanel-error">{error}</p> : null}
-      <button
-        type="button"
-        className="jp-Button jp-mod-styled jp-mod-accept"
-        onClick={onOpen}
-      >
-        Open a workshop
-      </button>
+      <div className="jp-WorkshopPanel-emptyActions">
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          onClick={onOpen}
+        >
+          Open a directory
+        </button>
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled"
+          onClick={onOpenUrl}
+        >
+          Open from URL
+        </button>
+      </div>
     </div>
+  );
+}
+
+function TrustBadge({
+  manager,
+  onClick
+}: {
+  manager: IWorkshopManager;
+  onClick: () => void;
+}): JSX.Element | null {
+  const level = manager.trust;
+
+  if (!level) {
+    return null;
+  }
+
+  const label =
+    level === 'trusted'
+      ? 'trusted'
+      : level === 'restricted'
+        ? 'restricted'
+        : 'ask';
+
+  return (
+    <button
+      type="button"
+      className={`jp-WorkshopPanel-trust jp-mod-${level}`}
+      title={`Trust level: ${TRUST_LEVEL_DESCRIPTIONS[level]} Click to change.`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -474,6 +527,8 @@ function ActionBlock({
   const title =
     node.options.title ?? manager.registry?.describe(request) ?? node.name;
   const display = displayText(node);
+  const disposition = manager.disposition(node);
+  const trustBadge = dispositionBadge(disposition, node);
   const onRun = (): void => void manager.runAction(node, 'click');
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -500,6 +555,14 @@ function ActionBlock({
         ) : null}
         {node.options.cascade && node.options.cascade !== 'false' ? (
           <span className="jp-WorkshopPanel-badge">cascade</span>
+        ) : null}
+        {trustBadge ? (
+          <span
+            className={`jp-WorkshopPanel-badge ${trustBadge.className}`}
+            title={trustBadge.title}
+          >
+            {trustBadge.label}
+          </span>
         ) : null}
         <span className="jp-WorkshopPanel-actionStatus">
           {statusText(status)}
@@ -559,6 +622,40 @@ function roleRequest(role: string, value: string): IActionRequest | null {
         argument: '',
         options: { selector: value },
         body: ''
+      };
+    default:
+      return null;
+  }
+}
+
+function dispositionBadge(
+  disposition: ActionDisposition,
+  node: IDirectiveNode
+): { label: string; title: string; className: string } | null {
+  switch (disposition.kind) {
+    case 'reject':
+      return {
+        label: 'not allowed',
+        title: disposition.reason,
+        className: 'jp-mod-reject'
+      };
+    case 'skip':
+      return {
+        label: node.options.auto ? 'auto off' : 'off',
+        title: disposition.reason,
+        className: 'jp-mod-trust'
+      };
+    case 'downgrade':
+      return {
+        label: 'types only',
+        title: disposition.reason,
+        className: 'jp-mod-trust'
+      };
+    case 'confirm':
+      return {
+        label: 'confirms',
+        title: disposition.reason,
+        className: 'jp-mod-trust'
       };
     default:
       return null;

@@ -739,6 +739,8 @@ __metadata:
     "@types/jest": ^29.2.0
     "@types/js-yaml": ^4.0.9
     "@types/markdown-it": ^14.1.2
+    "@types/node": ^26.4.1
+    ajv: ^8.20.0
     jest: ^29.2.0
     js-yaml: ^4.1.0
     markdown-it: ^14.1.0
@@ -3095,7 +3097,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*":
+"@types/node@npm:*, @types/node@npm:^26.4.1":
   version: 26.4.1
   resolution: "@types/node@npm:26.4.1"
   dependencies:
@@ -3397,7 +3399,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ajv@npm:^8.0.1, ajv@npm:^8.12.0":
+"ajv@npm:^8.0.1, ajv@npm:^8.12.0, ajv@npm:^8.20.0":
   version: 8.20.0
   resolution: "ajv@npm:8.20.0"
   dependencies:

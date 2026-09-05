@@ -417,3 +417,142 @@
   color: var(--jp-ui-font-color3);
   font-style: italic;
 }
+
+/* Trust badge in the panel header. */
+
+.jp-WorkshopPanel-trust {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 10px;
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+  line-height: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jp-WorkshopPanel-trust.jp-mod-trusted {
+  border-color: var(--jp-success-color1);
+  color: var(--jp-success-color1);
+}
+
+.jp-WorkshopPanel-trust.jp-mod-restricted {
+  border-color: var(--jp-warn-color1);
+  color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-badge.jp-mod-trust {
+  background: transparent;
+  border: 1px solid var(--jp-warn-color1);
+  color: var(--jp-warn-color1);
+}
+
+.jp-WorkshopPanel-badge.jp-mod-reject {
+  background: transparent;
+  border: 1px solid var(--jp-error-color1);
+  color: var(--jp-error-color1);
+}
+
+/* Trust dialog. */
+
+.jp-WorkshopTrust {
+  max-width: 560px;
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopTrust-facts,
+.jp-WorkshopTrust-levels {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 8px 0;
+}
+
+.jp-WorkshopTrust-facts dt,
+.jp-WorkshopTrust-levels dt {
+  font-weight: 600;
+}
+
+.jp-WorkshopTrust-facts dd,
+.jp-WorkshopTrust-levels dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.jp-WorkshopTrust-heading {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+
+.jp-WorkshopTrust-capabilities {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.jp-WorkshopTrust-capabilities li {
+  margin: 2px 0;
+}
+
+.jp-WorkshopTrust-capabilities li.jp-mod-undeclared {
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopTrust-description {
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopTrust-lint {
+  margin: 8px 0;
+}
+
+.jp-WorkshopTrust-lint.jp-mod-error > summary {
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopTrust-lint ul {
+  margin: 4px 0;
+  padding-left: 20px;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+}
+
+/* Per-action confirmation dialog. */
+
+.jp-WorkshopConfirm {
+  max-width: 560px;
+}
+
+.jp-WorkshopConfirm-reason {
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopConfirm-detail {
+  max-height: 240px;
+  margin: 8px 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  white-space: pre;
+}
+
+.jp-WorkshopConfirm-always {
+  display: block;
+  margin-top: 8px;
+}
+
+/* Empty state actions. */
+
+.jp-WorkshopPanel-emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}

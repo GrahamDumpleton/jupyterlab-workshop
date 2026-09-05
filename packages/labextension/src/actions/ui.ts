@@ -165,9 +165,13 @@ export class SettingsSetAction implements IActionImplementation {
     const key = requireOption(request, 'key');
     const value = JSON.parse(requireBody(request, 'a JSON value')) as JSONValue;
 
+    // Remember the learner's own value so uninstalling can put it back.
+    const settings = await this._settings.load(plugin);
+    const previous = settings.user[key];
+
     await this._settings.set(plugin, key, value);
 
-    return { status: 'ok' };
+    return { status: 'ok', setting: { plugin, key, previous } };
   }
 
   private _settings: ISettingRegistry | null;

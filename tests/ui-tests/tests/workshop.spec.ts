@@ -22,6 +22,32 @@ interface IExposedApp {
   };
 }
 
+/** Open a workshop and answer the trust dialog with the given level. */
+async function openWorkshop(
+  page: import('@playwright/test').Page,
+  target: string,
+  level: 'Trust' | 'Restricted' | 'Ask each time' = 'Trust'
+): Promise<void> {
+  // The command waits for the trust dialog, so it must not be awaited.
+  await page.evaluate((path: string) => {
+    const exposed = window as unknown as IExposedApp;
+
+    void exposed.jupyterapp.commands.execute('workshop:open', { path });
+  }, target);
+
+  const dialog = page.locator('.jp-Dialog');
+
+  await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+  await dialog.getByRole('button', { name: level, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // Loading finishes after the dialog closes and may apply a layout that
+  // toggles the sidebar; wait for the panel to show the workshop first.
+  await expect(
+    page.locator('#educates-workshop-panel .jp-WorkshopPanel-title')
+  ).toBeAttached();
+}
+
 test.describe('workshop panel', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
     await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
@@ -37,17 +63,75 @@ test.describe('workshop panel', () => {
     }
   });
 
+  test('degrades actions when the workshop is restricted', async ({
+    page,
+    tmpPath
+  }) => {
+    const workshopPath = `${tmpPath}/${WORKSHOP}`;
+
+    await openWorkshop(page, workshopPath, 'Restricted');
+    await page.sidebar.openTab('educates-workshop-panel');
+
+    const panel = page.locator(PANEL);
+
+    await expect(panel.locator('.jp-WorkshopPanel-trust')).toHaveText(
+      'restricted'
+    );
+
+    // Commands are typed into the terminal but not run.
+    const actions = panel.locator('.jp-WorkshopPanel-action');
+
+    await expect(actions.nth(1)).toContainText('git init -b main demo');
+    await expect(actions.nth(1).locator('.jp-WorkshopPanel-badge')).toHaveText(
+      'types only'
+    );
+    await actions.nth(1).click();
+    await expect(actions.nth(1)).toHaveClass(/jp-mod-status-ok/);
+    await expect(page.locator('.jp-Terminal').first()).toBeVisible();
+
+    // The terminal renders on a canvas, so the typed text cannot be read
+    // back; give the command time to have run if it were going to, then
+    // check that nothing was created.
+    await page.waitForTimeout(3000);
+    expect(await page.contents.directoryExists(`${workshopPath}/demo`)).toBe(
+      false
+    );
+
+    // Writes ask first and can be declined.
+    const write = panel.locator('.jp-WorkshopPanel-action.jp-mod-file-write');
+
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:next-page', {});
+    });
+    await expect(write.first().locator('.jp-WorkshopPanel-badge')).toHaveText(
+      'confirms'
+    );
+    await write.first().click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-WorkshopConfirm-detail')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Skip' }).click();
+    await expect(write.first()).toHaveClass(/jp-mod-status-skipped/);
+
+    // Trusting the workshop from the badge lifts the restrictions.
+    await panel.locator('.jp-WorkshopPanel-trust').click();
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await expect(panel.locator('.jp-WorkshopPanel-trust')).toHaveText(
+      'trusted'
+    );
+    await expect(write.first().locator('.jp-WorkshopPanel-badge')).toHaveCount(
+      0
+    );
+  });
+
   test('walks through the start of git-basics', async ({ page, tmpPath }) => {
     const workshopPath = `${tmpPath}/${WORKSHOP}`;
 
     // Open the uploaded workshop through the command the panel uses.
-    await page.evaluate(async (target: string) => {
-      const exposed = window as unknown as IExposedApp;
-
-      await exposed.jupyterapp.commands.execute('workshop:open', {
-        path: target
-      });
-    }, workshopPath);
+    await openWorkshop(page, workshopPath);
 
     await page.sidebar.openTab('educates-workshop-panel');
 

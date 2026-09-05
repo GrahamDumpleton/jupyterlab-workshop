@@ -1,7 +1,18 @@
 import {
+  ActionDisposition,
+  Capability,
   IDirectiveNode,
   IPage,
+  IWorkshopManifest,
+  TrustLevel,
   Variables,
+  actionCapability,
+  decideAction,
+  declaredCapabilities,
+  declaredVariables,
+  formatDiff,
+  isAutomatic,
+  lineDiff,
   parseManifest,
   parsePage,
   renderEnvPs1,
@@ -9,11 +20,13 @@ import {
 } from '@educates/workshop-core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
+import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
+import { PartialJSONValue } from '@lumino/coreutils';
 import { Debouncer } from '@lumino/polling';
 import { ISignal, Signal } from '@lumino/signaling';
 
-import { readTextFile, writeTextFile } from './actions/contents';
+import { readIfExists, readTextFile, writeTextFile } from './actions/contents';
 import { requestAPI } from './request';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
@@ -23,12 +36,21 @@ import {
   IActionRequest,
   IActionResult,
   IActionStatus,
+  IFetchRequest,
+  IFetchResult,
   ILoadedWorkshop,
   IPageProgress,
   IPlatformInfo,
+  ITrustDecision,
+  ITrustPrompts,
+  ITrustStore,
+  ITrustSummary,
+  IUninstallPlan,
   IWorkshopManager,
+  IWorkshopSource,
   errorMessage
 } from './tokens';
+import { buildTrustSummary, readSourceRecord } from './trust/summary';
 import {
   conditionHolds,
   parseDuration,
@@ -60,6 +82,9 @@ export class WorkshopManager implements IWorkshopManager {
     this._contents = options.contents;
     this._serverSettings = options.serverSettings;
     this._stateDB = options.stateDB;
+    this._trustStore = options.trustStore;
+    this._prompts = options.prompts;
+    this._settings = options.settings ?? null;
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
 
@@ -98,6 +123,10 @@ export class WorkshopManager implements IWorkshopManager {
 
   get error(): string | null {
     return this._error;
+  }
+
+  get trust(): TrustLevel | null {
+    return this._decision?.level ?? null;
   }
 
   get visiblePages(): IPage[] {
@@ -142,10 +171,8 @@ export class WorkshopManager implements IWorkshopManager {
     try {
       const platform = await this._ensurePlatform();
       const manifestPath = PathExt.join(workshopPath, MANIFEST_FILE);
-      const manifest = parseManifest(
-        await readTextFile(this._contents, manifestPath),
-        manifestPath
-      );
+      const manifestSource = await readTextFile(this._contents, manifestPath);
+      const manifest = parseManifest(manifestSource, manifestPath);
 
       // Read every page up front so navigation is instant.
       const sources: Record<string, string> = {};
@@ -159,13 +186,63 @@ export class WorkshopManager implements IWorkshopManager {
         })
       );
 
+      // Work out where the workshop came from and what it asks for, then
+      // settle the trust level before anything else happens.
+      const record = await readSourceRecord(this._contents, workshopPath);
+      const source: IWorkshopSource = record?.source ?? {
+        kind: 'local',
+        url: workshopPath
+      };
+      const pathSep = platform.path_sep;
+      const declared = this._collectDeclared(manifest, sources);
+      const preview = manifest.pages.map(pagePath =>
+        parsePage(sources[pagePath], {
+          path: pagePath,
+          variables: {},
+          pathSep,
+          declared
+        })
+      );
+      const trust = buildTrustSummary({
+        manifest,
+        manifestSource,
+        pages: preview,
+        sources,
+        source,
+        hash: record?.sha256
+      });
+      const decision = await this._resolveTrust(trust);
+
+      if (!decision) {
+        this._workshop = null;
+        this._currentPageId = '';
+        this._decision = null;
+        this._loading = false;
+        await this._saveStateDB();
+        this._changed.emit();
+
+        return;
+      }
+
       const state = await this._state.load(
         workshopPath,
         manifest.name,
         manifest.version ?? ''
       );
 
-      this._workshop = { path: workshopPath, manifest, sources, pages: [] };
+      state.trust = decision.level;
+      state.workshop.hash = trust.hash;
+      state.workshop.source = source;
+
+      this._decision = decision;
+      this._workshop = {
+        path: workshopPath,
+        manifest,
+        sources,
+        pages: [],
+        source,
+        trust
+      };
       this._store.load(
         buildBuiltins(workshopPath, platform),
         manifest.variables,
@@ -187,6 +264,7 @@ export class WorkshopManager implements IWorkshopManager {
     } catch (error) {
       this._workshop = null;
       this._currentPageId = '';
+      this._decision = null;
       this._error = `Unable to open workshop "${workshopPath}": ${errorMessage(error)}`;
     }
 
@@ -196,6 +274,23 @@ export class WorkshopManager implements IWorkshopManager {
     this._changed.emit();
   }
 
+  async fetch(request: IFetchRequest): Promise<IFetchResult> {
+    const body = {
+      source: {
+        url: request.url,
+        ref: request.ref ?? '',
+        subdir: request.subdir ?? ''
+      },
+      directory: request.directory,
+      overwrite: request.overwrite ?? false
+    };
+
+    return requestAPI<IFetchResult>('fetch', this._serverSettings, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
+
   async close(): Promise<void> {
     this.stopChain();
     await this._state.flush();
@@ -203,11 +298,163 @@ export class WorkshopManager implements IWorkshopManager {
 
     this._workshop = null;
     this._currentPageId = '';
+    this._decision = null;
     this._error = null;
     this._store.load({}, []);
 
     await this._saveStateDB();
     this._changed.emit();
+  }
+
+  async setTrust(level: TrustLevel): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      return;
+    }
+
+    const decision: ITrustDecision = {
+      level,
+      allowed: [],
+      decidedAt: new Date().toISOString(),
+      sourceKey: workshop.trust.sourceKey,
+      hash: workshop.trust.hash,
+      name: workshop.manifest.name
+    };
+
+    await this._trustStore.set(decision);
+
+    this._decision = decision;
+
+    const state = this._state.state;
+
+    if (state) {
+      state.trust = level;
+      this._state.save();
+    }
+
+    // Anything queued under the old level should not run under the new.
+    this.stopChain();
+    this._changed.emit();
+  }
+
+  async reviewTrust(): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      return;
+    }
+
+    const level = await this._prompts.decide(
+      workshop.trust,
+      this._decision?.level ?? this._trustStore.policy.defaultLevel
+    );
+
+    if (level) {
+      await this.setTrust(level);
+    }
+  }
+
+  disposition(node: IDirectiveNode): ActionDisposition {
+    return this._decide(node.name, isAutomatic(node));
+  }
+
+  uninstallPlan(): IUninstallPlan | null {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      return null;
+    }
+
+    const steps: string[] = [];
+    const settings = this._state.state?.installed.settings ?? [];
+    const removesDirectory = workshop.source.kind !== 'local';
+
+    if (removesDirectory) {
+      steps.push(
+        `Delete the workshop directory ${workshop.path} and everything in it`
+      );
+    } else {
+      steps.push(
+        `Delete the progress and environment files in ${PathExt.join(workshop.path, WORKSHOP_STATE_DIR)}`
+      );
+      steps.push(
+        'Leave the workshop directory in place because it was opened from a local directory'
+      );
+    }
+
+    for (const change of settings) {
+      steps.push(`Restore the setting ${change.plugin} ${change.key}`);
+    }
+
+    steps.push('Forget the trust decision for this workshop');
+
+    return { steps, removesDirectory };
+  }
+
+  async uninstall(): Promise<void> {
+    const workshop = this._workshop;
+    const plan = this.uninstallPlan();
+
+    if (!workshop || !plan) {
+      return;
+    }
+
+    this.stopChain();
+
+    const settings = this._state.state?.installed.settings ?? [];
+    const sourceKey = workshop.trust.sourceKey;
+    const path = workshop.path;
+    const stateDir = PathExt.join(path, WORKSHOP_STATE_DIR);
+
+    // Put settings back first while the registry still knows about them.
+    await this._restoreSettings(settings);
+
+    // Drop the workshop before touching files so nothing writes them back.
+    await this._state.unload();
+
+    this._workshop = null;
+    this._currentPageId = '';
+    this._decision = null;
+    this._error = null;
+    this._store.load({}, []);
+
+    await this._saveStateDB();
+    this._changed.emit();
+
+    if (plan.removesDirectory) {
+      await requestAPI<{ removed: string }>(
+        `workshops?path=${encodeURIComponent(path)}`,
+        this._serverSettings,
+        { method: 'DELETE' }
+      );
+    } else {
+      await this._deleteTree(stateDir);
+    }
+
+    await this._trustStore.forget(sourceKey);
+  }
+
+  async reset(): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop) {
+      return;
+    }
+
+    const path = workshop.path;
+    const settings = this._state.state?.installed.settings ?? [];
+
+    this.stopChain();
+    await this._restoreSettings(settings);
+    await this._state.unload();
+    await this._deleteTree(PathExt.join(path, WORKSHOP_STATE_DIR));
+
+    this._workshop = null;
+    this._currentPageId = '';
+    this._store.load({}, []);
+
+    await this.open(path);
   }
 
   /**
@@ -311,7 +558,7 @@ export class WorkshopManager implements IWorkshopManager {
     });
     this._actionChanged.emit(request.id);
 
-    const result = await registry.run(request);
+    const result = await this._runGated(registry, request, trigger);
 
     if (result.captured) {
       for (const [name, value] of Object.entries(result.captured)) {
@@ -359,8 +606,17 @@ export class WorkshopManager implements IWorkshopManager {
         ? !resolved.startsWith('..')
         : resolved === root || resolved.startsWith(`${root}/`);
 
+    // A wider write scope lets paths reach anywhere JupyterLab can serve,
+    // but never above its root.
     if (!inside) {
-      throw new Error(`Path "${path}" is outside the workshop directory`);
+      const scopes = declaredCapabilities(this._workshop.manifest).get(
+        'write-files'
+      );
+      const wide = scopes?.some(scope => scope === 'home' || scope === 'any');
+
+      if (!wide || resolved.startsWith('..')) {
+        throw new Error(`Path "${path}" is outside the workshop directory`);
+      }
     }
 
     return resolved;
@@ -415,6 +671,18 @@ export class WorkshopManager implements IWorkshopManager {
     };
 
     state.actions[request.id] = status;
+
+    // Keep the first pre-change value of a setting for uninstall.
+    if (result.setting && result.status === 'ok') {
+      const { plugin, key } = result.setting;
+      const known = state.installed.settings.some(
+        change => change.plugin === plugin && change.key === key
+      );
+
+      if (!known) {
+        state.installed.settings.push(result.setting);
+      }
+    }
 
     this._state.appendLog({
       time: new Date().toISOString(),
@@ -574,6 +842,32 @@ export class WorkshopManager implements IWorkshopManager {
     }
   }
 
+  private _collectDeclared(
+    manifest: IWorkshopManifest,
+    sources: Record<string, string>
+  ): Set<string> {
+    // Names set by captures, choices and env-set anywhere in the workshop
+    // render as placeholders rather than warnings before they have values.
+    const declared = new Set<string>(
+      manifest.variables.map(definition => definition.name)
+    );
+
+    for (const pagePath of manifest.pages) {
+      const page = parsePage(sources[pagePath], {
+        path: pagePath,
+        variables: {}
+      });
+
+      for (const name of declaredVariables(page.nodes)) {
+        declared.add(name);
+      }
+    }
+
+    this._declared = declared;
+
+    return declared;
+  }
+
   private _renderPages(): void {
     const workshop = this._workshop;
 
@@ -669,6 +963,206 @@ export class WorkshopManager implements IWorkshopManager {
     return this._platform;
   }
 
+  private _decide(type: string, automatic: boolean): ActionDisposition {
+    const workshop = this._workshop;
+    const decision = this._decision;
+
+    if (!workshop || !decision) {
+      return { kind: 'reject', reason: 'No workshop is open' };
+    }
+
+    return decideAction({
+      type,
+      level: decision.level,
+      automatic,
+      declared: workshop.manifest.capabilities,
+      allowed: decision.allowed,
+      disabled: this._trustStore.policy.disabledCapabilities
+    });
+  }
+
+  private async _runGated(
+    registry: IActionRegistry,
+    request: IActionRequest,
+    trigger: ActionTrigger
+  ): Promise<IActionResult> {
+    const automatic = trigger === 'auto' || trigger === 'cascade';
+    const disposition = this._decide(request.type, automatic);
+
+    switch (disposition.kind) {
+      case 'run':
+        return registry.run(request);
+
+      case 'reject':
+        return { status: 'error', message: disposition.reason };
+
+      case 'skip':
+        return { status: 'skipped', message: disposition.reason };
+
+      case 'downgrade': {
+        const result = await registry.run({
+          ...request,
+          type: disposition.type
+        });
+
+        return result.status === 'ok'
+          ? { ...result, message: disposition.reason }
+          : result;
+      }
+
+      case 'confirm': {
+        const capability = actionCapability(request.type) ?? 'none';
+        const answer = await this._prompts.confirm({
+          description: registry.describe(request),
+          reason: disposition.reason,
+          capability,
+          detail: await this._confirmDetail(request),
+          offerAlways: this._decision?.level === 'ask'
+        });
+
+        if (answer === 'no') {
+          return { status: 'skipped', message: 'Not allowed by the learner' };
+        }
+
+        if (answer === 'always') {
+          await this._allowCapability(capability);
+        }
+
+        return registry.run(request);
+      }
+    }
+  }
+
+  private async _confirmDetail(request: IActionRequest): Promise<string> {
+    // A file write shows what will change; everything else shows its body.
+    if (request.type === 'file-write' && request.options.path) {
+      try {
+        const target = this.resolvePath(request.options.path);
+        const existing = (await readIfExists(this._contents, target)) ?? '';
+        const content = request.options.from
+          ? await readTextFile(
+              this._contents,
+              this.resolvePath(request.options.from)
+            )
+          : request.body;
+        const next =
+          request.options.mode === 'append' ? existing + content : content;
+
+        return formatDiff(lineDiff(existing, next));
+      } catch (error) {
+        return `${request.body}\n\n(${errorMessage(error)})`;
+      }
+    }
+
+    return request.body;
+  }
+
+  private async _allowCapability(capability: Capability): Promise<void> {
+    const decision = this._decision;
+
+    if (!decision || decision.allowed.includes(capability)) {
+      return;
+    }
+
+    decision.allowed = [...decision.allowed, capability];
+
+    await this._trustStore.set(decision);
+  }
+
+  private async _resolveTrust(
+    summary: ITrustSummary
+  ): Promise<ITrustDecision | null> {
+    const policy = this._trustStore.policy;
+    const stored = await this._trustStore.get(summary.sourceKey, summary.hash);
+    const decision = (level: TrustLevel): ITrustDecision => ({
+      level,
+      allowed: stored?.allowed ?? [],
+      decidedAt: new Date().toISOString(),
+      sourceKey: summary.sourceKey,
+      hash: summary.hash,
+      name: summary.name
+    });
+
+    // Administrator policy comes first, then the learner's earlier choice.
+    if (policy.forcedLevel) {
+      return decision(policy.forcedLevel);
+    }
+
+    if (
+      policy.trustedSources.some(prefix => summary.sourceKey.startsWith(prefix))
+    ) {
+      return decision('trusted');
+    }
+
+    if (stored) {
+      return stored;
+    }
+
+    const level = await this._prompts.decide(summary, policy.defaultLevel);
+
+    if (!level) {
+      return null;
+    }
+
+    const chosen = decision(level);
+
+    await this._trustStore.set(chosen);
+
+    return chosen;
+  }
+
+  private async _restoreSettings(
+    changes: { plugin: string; key: string; previous?: unknown }[]
+  ): Promise<void> {
+    if (!this._settings) {
+      return;
+    }
+
+    for (const change of changes) {
+      try {
+        if (change.previous === undefined) {
+          await this._settings.remove(change.plugin, change.key);
+        } else {
+          await this._settings.set(
+            change.plugin,
+            change.key,
+            change.previous as PartialJSONValue
+          );
+        }
+      } catch (error) {
+        console.warn(`Unable to restore ${change.plugin} ${change.key}`, error);
+      }
+    }
+  }
+
+  private async _deleteTree(path: string): Promise<void> {
+    // The contents API refuses non-empty directories on some servers, so
+    // delete the files first and then the directory.
+    let model: Contents.IModel | null = null;
+
+    try {
+      model = await this._contents.get(path, { content: true });
+    } catch {
+      return;
+    }
+
+    if (model.type === 'directory' && Array.isArray(model.content)) {
+      for (const child of model.content as Contents.IModel[]) {
+        if (child.type === 'directory') {
+          await this._deleteTree(child.path);
+        } else {
+          await this._contents.delete(child.path);
+        }
+      }
+    }
+
+    try {
+      await this._contents.delete(path);
+    } catch (error) {
+      console.warn(`Unable to delete ${path}`, error);
+    }
+  }
+
   private async _saveStateDB(): Promise<void> {
     if (!this._stateDB) {
       return;
@@ -692,6 +1186,10 @@ export class WorkshopManager implements IWorkshopManager {
   private _contents: Contents.IManager;
   private _serverSettings: ServerConnection.ISettings;
   private _stateDB: IStateDB | null;
+  private _trustStore: ITrustStore;
+  private _prompts: ITrustPrompts;
+  private _settings: ISettingRegistry | null;
+  private _decision: ITrustDecision | null = null;
   private _state: StateStore;
   private _store = new VariableStore();
   private _envWriter: Debouncer;
@@ -712,6 +1210,15 @@ export namespace WorkshopManager {
     contents: Contents.IManager;
     serverSettings: ServerConnection.ISettings;
     stateDB: IStateDB | null;
+
+    /** Where trust decisions and the administrator policy live. */
+    trustStore: ITrustStore;
+
+    /** Dialogs used to decide trust and confirm actions. */
+    prompts: ITrustPrompts;
+
+    /** Setting registry, used to restore settings on uninstall. */
+    settings?: ISettingRegistry | null;
   }
 }
 
