@@ -12,6 +12,7 @@ import {
 } from '../tokens';
 import { parseDuration } from '../util';
 import { ensureDirectory } from './contents';
+import { documentPlacement } from './files';
 import { WorkshopKernel, executeInKernel } from './kernel';
 import { requireBody, requireOption } from './registry';
 import { TerminalSessions } from './terminal';
@@ -46,14 +47,11 @@ export async function openNotebook(
 ): Promise<NotebookPanel> {
   const existing = context.docManager.findWidget(serverPath, NOTEBOOK_FACTORY);
   const current = context.app.shell.currentWidget;
-  const terminal = context.terminals.first;
   const options = existing
     ? undefined
     : (split === 'right' || split === 'bottom') && current
       ? { mode: `split-${split}` as const, ref: current.id }
-      : terminal
-        ? { mode: 'split-top' as const, ref: terminal.id }
-        : undefined;
+      : documentPlacement(context);
 
   const widget = context.docManager.openOrReveal(
     serverPath,

@@ -1,4 +1,4 @@
-import { environmentVariables } from '@jupyterlab-workshop/core';
+import { terminalEnvironment } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Terminal as TerminalService } from '@jupyterlab/services';
@@ -376,7 +376,10 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
       return `call "${path}"`;
     }
     case 'cockle':
-      return cockleExports(manager.variables.values);
+      return cockleExports(
+        manager.variables.values,
+        manager.workshop.manifest.env
+      );
     default:
       return null;
   }
@@ -389,11 +392,14 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
  * out.
  */
 export function cockleExports(
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  env: Readonly<Record<string, string>> = {}
 ): string | null {
   const parts: string[] = [];
 
-  for (const [name, value] of Object.entries(environmentVariables(variables))) {
+  for (const [name, value] of Object.entries(
+    terminalEnvironment(variables, env)
+  )) {
     if (!value.includes("'")) {
       parts.push(`export ${name}='${value}'`);
     } else if (!value.includes('"')) {

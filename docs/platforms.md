@@ -103,6 +103,22 @@ with `:wait: prompt`.
 In JupyterLite terminals run cockle, a small shell described in
 [JupyterLite](lite.md); variables reach it through `export` commands.
 
+A manifest `env` mapping exports further environment variables through
+the same file, after the variables. The usual reason is a pager: in a
+terminal a few lines tall, `git diff` or `man` waits for a key press and
+holds up the next action until it is dismissed, so a workshop that runs
+them sets:
+
+```yaml
+env:
+  PAGER: cat
+  GIT_PAGER: cat
+```
+
+Nothing is set unless the manifest asks for it, so a workshop that
+teaches `less` keeps it. The self-test runs with the same environment,
+and a command that pages there is reported as one that did not finish.
+
 A manifest may require a shell:
 
 ```yaml

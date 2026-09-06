@@ -222,16 +222,20 @@ def _drive(
         page = browser.new_page()
 
         # Browser-side failures are the likeliest reason for a run that
-        # never starts, so surface them in the harness output.
-        page.on(
-            "console",
-            lambda message: (
-                _say(f"browser console error: {message.text}")
-                if message.type == "error"
-                and not _is_routine_console_noise(message.text)
-                else None
-            ),
-        )
+        # never starts, so surface them in the harness output. A message
+        # that arrives as the browser closes can no longer be read, and
+        # is not worth failing the run over.
+        def report_console(message: Any) -> None:
+            try:
+                kind = message.type
+                text = message.text
+            except Exception:
+                return
+
+            if kind == "error" and not _is_routine_console_noise(text):
+                _say(f"browser console error: {text}")
+
+        page.on("console", report_console)
         page.on("pageerror", lambda error: _say(f"browser page error: {error}"))
 
         _say(f"loading {url.split('?')[0]}")
@@ -492,9 +496,10 @@ def _start_server(
         f"--LabApp.app_settings_dir={settings}",
     ]
 
-    # Pagers would wait for a key press nobody presses, so terminals
-    # started by this server get non-interactive ones.
-    env = {**os.environ, "PAGER": "cat", "GIT_PAGER": "cat"}
+    # Nothing is added to the environment: a command that pages, in a
+    # workshop that has not set PAGER in its manifest, should hang here
+    # as it would for a learner and be reported as a timeout.
+    env = {**os.environ}
 
     # The log goes to a file: a pipe nobody reads would fill up and block
     # the server once it had printed enough.

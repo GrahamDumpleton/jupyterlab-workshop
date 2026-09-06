@@ -2,7 +2,8 @@ import {
   environmentVariables,
   renderEnvCmd,
   renderEnvPs1,
-  renderEnvSh
+  renderEnvSh,
+  terminalEnvironment
 } from '../variables/envfile';
 
 const variables = {
@@ -20,6 +21,13 @@ describe('environment files', () => {
       REPO_DIR: "it's",
       TOKEN: ''
     });
+  });
+
+  it('adds the manifest environment after the variables', () => {
+    expect(terminalEnvironment({ token: 'x' })).toEqual({ TOKEN: 'x' });
+    expect(
+      terminalEnvironment({ token: 'x' }, { PAGER: 'cat', TOKEN: 'y' })
+    ).toEqual({ TOKEN: 'y', PAGER: 'cat' });
   });
 
   it('renders a POSIX file with quoting', () => {

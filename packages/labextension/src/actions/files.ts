@@ -489,11 +489,33 @@ function placementFor(
     return { mode: `split-${split}`, ref: current.id };
   }
 
-  // Keep documents together as tabs, above the first workshop terminal.
+  // Keep documents together as tabs: beside the current editor, else
+  // beside whatever document is already open (a README preview, a
+  // notebook), and only above the first workshop terminal when there is
+  // no document at all.
   const editor = context.editorTracker?.currentWidget;
 
   if (editor && !editor.isDisposed) {
     return { mode: 'tab-after', ref: editor.id };
+  }
+
+  return documentPlacement(context);
+}
+
+/**
+ * Where a new document goes: as a tab after the first document open in
+ * the main area, or split above the first workshop terminal, or, with
+ * neither, wherever JupyterLab puts it.
+ */
+export function documentPlacement(context: {
+  app: JupyterFrontEnd;
+  docManager: IDocumentManager;
+  terminals: TerminalSessions;
+}): DocumentRegistry.IOpenOptions | undefined {
+  for (const widget of context.app.shell.widgets('main')) {
+    if (!widget.isDisposed && context.docManager.contextForWidget(widget)) {
+      return { mode: 'tab-after', ref: widget.id };
+    }
   }
 
   const terminal = context.terminals.first;

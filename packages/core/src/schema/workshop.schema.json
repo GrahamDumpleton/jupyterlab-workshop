@@ -206,6 +206,12 @@
         }
       }
     },
+    "env": {
+      "type": "object",
+      "description": "Environment variables exported to the workshop terminals alongside the variables, such as PAGER: cat so that git and man do not wait for a key press in a small terminal.",
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
     "defaults": {
       "type": "object",
       "additionalProperties": false,

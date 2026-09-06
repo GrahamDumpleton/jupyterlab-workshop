@@ -314,6 +314,17 @@ test.describe('workshop panel', () => {
       await page.contents.fileExists(`${workshopPath}/demo/README.md`)
     ).toBe(true);
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
+
+    // The editor tabs beside the README preview the layout opened rather
+    // than splitting the terminal's pane.
+    await expect(
+      page
+        .locator('#jp-main-dock-panel .lm-DockPanel-tabBar', {
+          has: page.locator('.lm-TabBar-tab', { hasText: 'README.md' })
+        })
+        .first()
+        .locator('.lm-TabBar-tab')
+    ).toHaveCount(2);
     await expect(page.locator('.jp-FileEditor .cm-content')).toContainText(
       'Demo project'
     );

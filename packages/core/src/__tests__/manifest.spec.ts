@@ -42,6 +42,16 @@ variables:
 `;
 
 describe('parseManifest', () => {
+  it('parses the terminal environment', () => {
+    expect(parseManifest(VALID).env).toEqual({});
+    expect(
+      parseManifest(`${VALID}\nenv:\n  PAGER: less\n  RETRIES: 3\n`).env
+    ).toEqual({ PAGER: 'less', RETRIES: '3' });
+    expect(() => parseManifest(`${VALID}\nenv:\n  bad-name: x\n`)).toThrow(
+      WorkshopFormatError
+    );
+  });
+
   it('parses the finish message', () => {
     expect(parseManifest(VALID).finish).toBeUndefined();
     expect(

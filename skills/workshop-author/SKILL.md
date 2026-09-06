@@ -67,6 +67,7 @@ requires:
   tools:
     - { name: git, version: '>=2.30', hint: { linux: apt install git } }
 gating: soft # off, soft or strict
+env: { PAGER: cat, GIT_PAGER: cat } # exported to terminals; nothing by default
 variables:
   - {
       name: repo_dir,
@@ -240,7 +241,9 @@ pass, `soft` only shows what is missing.
 
 - Every `execute` body is a real command the learner could paste. Commands
   must not wait for input: no pagers, editors or prompts (`git commit -m`,
-  not `git commit`). Terminals in the self-test have `PAGER=cat`.
+  not `git commit`). Pagers count: a workshop that runs `git diff`,
+  `git log` or `man` sets `env: { PAGER: cat, GIT_PAGER: cat }` in the
+  manifest, or the self-test reports the command as never finishing.
 
 - Give forms defaults so the self-test can submit them; give quizzes at
   least one `correct` option.

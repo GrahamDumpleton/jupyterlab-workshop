@@ -123,6 +123,9 @@ export interface IWorkshopManifest {
   /** Markdown shown in the dialog when the learner finishes the workshop. */
   finish?: string;
   duration?: string;
+
+  /** Environment variables exported to the workshop terminals. */
+  env: Record<string, string>;
   authors: string[];
   tags: string[];
   platforms: string[];
@@ -234,7 +237,8 @@ export function parseManifest(
     gating,
     tracks: parseTracks(data.tracks, path),
     pages,
-    defaults: parseDefaults(data.defaults, path)
+    defaults: parseDefaults(data.defaults, path),
+    env: parseEnv(data.env, path)
   };
 }
 
@@ -658,6 +662,44 @@ function parseTracks(value: unknown, path: string): ITrack[] {
       label: typeof item.label === 'string' ? item.label : item.id
     };
   });
+}
+
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function parseEnv(value: unknown, path: string): Record<string, string> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "env" must be a mapping', path);
+  }
+
+  const env: Record<string, string> = {};
+
+  for (const [name, entry] of Object.entries(value)) {
+    if (!ENV_NAME.test(name)) {
+      throw new WorkshopFormatError(
+        `Field "env" has an invalid variable name "${name}"`,
+        path
+      );
+    }
+
+    if (
+      typeof entry !== 'string' &&
+      typeof entry !== 'number' &&
+      typeof entry !== 'boolean'
+    ) {
+      throw new WorkshopFormatError(
+        `Field "env.${name}" must be a string, number or boolean`,
+        path
+      );
+    }
+
+    env[name] = String(entry);
+  }
+
+  return env;
 }
 
 function parseDefaults(value: unknown, path: string): Record<string, string> {

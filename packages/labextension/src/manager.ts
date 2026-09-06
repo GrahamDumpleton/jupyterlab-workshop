@@ -1680,23 +1680,24 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     const values = this._store.values;
+    const env = workshop.manifest.env;
     const directory = PathExt.join(workshop.path, WORKSHOP_STATE_DIR);
 
     try {
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.sh'),
-        renderEnvSh(values)
+        renderEnvSh(values, env)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.ps1'),
-        renderEnvPs1(values)
+        renderEnvPs1(values, env)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.cmd'),
-        renderEnvCmd(values)
+        renderEnvCmd(values, env)
       );
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);
