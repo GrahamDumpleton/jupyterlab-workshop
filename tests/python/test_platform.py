@@ -1,4 +1,10 @@
-from jupyterlab_workshop.platform import PlatformInfo, detect_platform
+from pathlib import Path
+
+from jupyterlab_workshop.platform import (
+    PlatformInfo,
+    detect_container,
+    detect_platform,
+)
 
 
 def detect(**overrides: object) -> PlatformInfo:
@@ -72,4 +78,42 @@ def test_to_dict_round_trips_all_fields() -> None:
         "path_sep": "/",
         "root_dir": "/home/learner/work",
         "hub_user": "",
+        "host": "local",
+        "container": False,
     }
+
+
+def test_host_is_read_from_the_environment() -> None:
+    assert detect().host == "local"
+    assert detect(environ={"JUPYTERHUB_USER": "ada"}).host == "jupyterhub"
+    assert detect(environ={"JUPYTERHUB_API_URL": "http://hub"}).host == "jupyterhub"
+
+    binder = {"JUPYTERHUB_USER": "jovyan", "BINDER_REPO_URL": "https://x/y"}
+
+    assert detect(environ=binder).host == "binder"
+    assert detect(environ=binder).hub_user == "jovyan"
+
+
+def test_container_flag_is_passed_through() -> None:
+    assert detect().container is False
+    assert detect(container=True).container is True
+
+
+def test_detect_container_looks_for_runtime_markers(tmp_path: Path) -> None:
+    assert detect_container({}, tmp_path) is False
+    assert detect_container({"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, tmp_path)
+
+    (tmp_path / ".dockerenv").write_text("")
+
+    assert detect_container({}, tmp_path) is True
+
+    (tmp_path / ".dockerenv").unlink()
+    cgroup = tmp_path / "proc" / "1" / "cgroup"
+    cgroup.parent.mkdir(parents=True)
+    cgroup.write_text("0::/system.slice/session.scope\n")
+
+    assert detect_container({}, tmp_path) is False
+
+    cgroup.write_text("0::/kubepods/burstable/pod1/abc\n")
+
+    assert detect_container({}, tmp_path) is True

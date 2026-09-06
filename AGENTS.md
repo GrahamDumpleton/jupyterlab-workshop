@@ -119,10 +119,12 @@ underlying commands yourself; run `just --list` to see everything.
   page from `github-pages/`, the JSON schemas under `schemas/v1alpha1/`,
   and the example workshop as a JupyterLite site under `demo/`.
 
-- `just clean` removes build outputs only. `just distclean` also removes
-  `node_modules`, `.venv`, caches, built docs and sites, and files left
-  by running the examples, returning the tree to a fresh checkout; run
-  `just install` afterwards.
+- `just clean` removes build outputs only. `just clean-examples` removes
+  what running the example workshops leaves behind (`_workshop` state,
+  `scratch` and `demo` directories) so a later run starts fresh.
+  `just distclean` does both and also removes `node_modules`, `.venv`,
+  caches, built docs and sites, returning the tree to a fresh checkout;
+  run `just install` afterwards.
 
 ## Style
 

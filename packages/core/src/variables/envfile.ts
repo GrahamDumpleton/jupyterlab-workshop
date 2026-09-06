@@ -14,8 +14,8 @@ export const BUILTIN_VARIABLES: readonly string[] = [
   'workshop_dir',
   'home',
   'user',
-  'lite',
-  'hub'
+  'host',
+  'container'
 ];
 
 /**

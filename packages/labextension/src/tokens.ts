@@ -26,6 +26,12 @@ export interface IPlatformInfo {
 
   /** The JupyterHub user name when running under a hub, else empty. */
   hub_user: string;
+
+  /** The service hosting the session: binder, jupyterhub, local or lite. */
+  host: string;
+
+  /** Whether the server runs inside a container. */
+  container: boolean;
 }
 
 /** Where a workshop came from. */

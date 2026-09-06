@@ -1571,7 +1571,9 @@ export class WorkshopManager implements IWorkshopManager {
         user: '',
         path_sep: '/',
         root_dir: '',
-        hub_user: ''
+        hub_user: '',
+        host: 'local',
+        container: false
       };
     }
 
@@ -1866,8 +1868,8 @@ function buildBuiltins(
     workshop_dir: workshopPath,
     home: platform.home,
     user: platform.user,
-    lite: platform.os === 'lite' ? 'true' : 'false',
-    hub: platform.hub_user ? 'true' : 'false'
+    host: platform.host,
+    container: platform.container ? 'true' : 'false'
   };
 }
 

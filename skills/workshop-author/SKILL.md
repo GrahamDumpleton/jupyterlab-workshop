@@ -136,8 +136,10 @@ Inline roles: `{copy}`git status``, `{open}`README.md``, `{var}`repo_dir``.
 Variables: `{{ name }}` with filters `lower`, `upper`, `slug`, `default`,
 `shell`, `path`; `{{ path "src/app.py" }}` renders the platform's
 separator; `\{{` escapes. Built-ins: `platform`, `shell`, `path_sep`,
-`home`, `user`, `workshop_dir`. Values come from the manifest defaults,
-launch links, forms, captures and the variables panel.
+`home`, `user`, `workshop_dir`, `host` (`binder`, `jupyterhub`, `local`
+or `lite`) and `container` (`true` inside a container). Values come from
+the manifest defaults, launch links, forms, captures and the variables
+panel.
 
 Conditional content: `{when}` blocks (` ```{when} track == "pip" `) and
 the `:when:` option on any directive. Conditions use `==`, `!=`, `in`,

@@ -15,7 +15,9 @@ export const LITE_PLATFORM: IPlatformInfo = {
   user: 'web_user',
   path_sep: '/',
   root_dir: '/drive',
-  hub_user: ''
+  hub_user: '',
+  host: 'lite',
+  container: false
 };
 
 /**

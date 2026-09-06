@@ -23,6 +23,8 @@ async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_roo
         "path_sep",
         "root_dir",
         "hub_user",
+        "host",
+        "container",
     }
     assert payload["os"] in {"linux", "macos", "windows"}
     assert payload["root_dir"] == str(jp_root_dir)

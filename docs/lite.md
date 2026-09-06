@@ -39,7 +39,7 @@ List `lite` among the manifest's platforms and run `jupyter workshop lint
 
 - `lite-unsupported` warns about `environment-create`, `script` verifies
   and Python bodies that start processes. Hide them with
-  `:when: not lite` or give them a variant.
+  `:when: platform != "lite"` or give them a variant.
 
 The shell has the coreutils commands (`ls`, `cat`, `echo`, `env`,
 `mkdir`, `sed`, `grep`, `expr` and so on), `cd`, `export` and a few other
@@ -47,8 +47,9 @@ builtins, but no `python`, `git` or package managers. Variables reach the
 terminal through `export` rather than a sourced file. A `requires.tools`
 list naming anything but Python shows the preflight banner in Lite.
 
-The `lite` built-in variable is `true`, so prose can adapt with
-` ```{when} lite ` blocks, and `:when: not lite` hides an action.
+The `platform` built-in variable is `lite`, so prose can adapt with
+` ```{when} platform == "lite" ` blocks, and `:when: platform != "lite"`
+hides an action.
 
 ## Building a site
 

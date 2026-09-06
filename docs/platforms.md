@@ -18,12 +18,32 @@ command has a version for each listed platform.
 The built-in variables `platform` (`linux`, `macos`, `windows` or
 `lite`), `shell` (`bash`, `zsh`, `sh`, `fish`, `powershell`, `cmd` or
 `cockle` in JupyterLite), `path_sep`, `home` and `user` describe the
-machine, `lite` and `hub` are `true` in JupyterLite and under JupyterHub,
-and `when` conditions can test them:
+machine, and `when` conditions can test them:
 
 ````markdown
 ```{when} platform == "windows"
 Windows users: run the commands in PowerShell.
+```
+````
+
+Two more describe where the session is hosted rather than what it runs
+on. `host` is `binder` under BinderHub, `jupyterhub` under any other
+JupyterHub, `lite` in JupyterLite and `local` otherwise; Binder is
+recognised by the `BINDER_*` environment variables it sets, and
+JupyterHub by `JUPYTERHUB_USER` or `JUPYTERHUB_API_URL`. `container` is
+`true` when the server runs inside a container, found from the Docker and
+Podman marker files, the Kubernetes service variable or the cgroup of
+process 1, and is what to test for advice about disposable filesystems or
+installing tools, since that holds on a Kubernetes hub as much as on
+Binder:
+
+````markdown
+```{when} host == "binder"
+This session is temporary: download your work before it ends.
+```
+
+```{when} container
+You can install packages freely; nothing here outlives the session.
 ```
 ````
 

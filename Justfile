@@ -109,13 +109,17 @@ clean:
     uv run jlpm clean
     uv run jlpm clean:lintcache
 
+# Remove what running the example workshops leaves behind (_workshop state, scratch and demo directories).
+clean-examples:
+    rm -rf examples/*/_workshop examples/*/scratch examples/*/demo
+
 # Return to a fresh checkout: also removes node_modules, .venv, caches, built docs and sites.
-distclean:
+distclean: clean-examples
     rm -rf packages/core/lib packages/labextension/lib packages/*/tsconfig.tsbuildinfo
     rm -rf jupyterlab_workshop/labextension jupyterlab_workshop/nodejs jupyterlab_workshop/schema
     rm -rf .eslintcache .stylelintcache packages/core/coverage
     rm -rf node_modules packages/*/node_modules tests/ui-tests/node_modules .venv
     rm -rf site docs/_build docs/reference build dist lite-site .jupyterlite.doit.db .coverage htmlcov
     rm -rf tests/ui-tests/test-results tests/ui-tests/playwright-report
-    rm -rf examples/*/_workshop examples/*/scratch examples/*/demo workshops
+    rm -rf workshops
     find . -type d \( -name __pycache__ -o -name .ipynb_checkpoints -o -name '*.egg-info' -o -name .yarn -o -name .mypy_cache -o -name .ruff_cache -o -name .pytest_cache \) -prune -exec rm -rf {} +

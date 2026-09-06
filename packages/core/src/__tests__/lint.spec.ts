@@ -365,7 +365,7 @@ echo {{ user_name }}
       'lite-shell-syntax'
     );
     expect(
-      rules(execute(':when: not lite\nmkdir x && cd x'), manifest)
+      rules(execute(':when: platform != "lite"\nmkdir x && cd x'), manifest)
     ).not.toContain('lite-shell-syntax');
 
     // Server-only substrates and processes are flagged too.
