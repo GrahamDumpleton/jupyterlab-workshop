@@ -11,6 +11,13 @@ concept comes from the [Educates Training Platform](https://educates.dev),
 re-imagined so that a single workshop runs wherever JupyterLab runs,
 without Kubernetes or containers.
 
+```{warning}
+This project is in an early phase of development. The documentation is
+still being improved, the experience is still being polished, and the
+workshop format, settings and command line can change between releases
+without a compatibility path.
+```
+
 A workshop is a directory with a `workshop.yaml` manifest and Markdown
 pages. The format is text based and git friendly:
 
