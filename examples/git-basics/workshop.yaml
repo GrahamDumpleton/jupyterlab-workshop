@@ -3,6 +3,10 @@ name: git-basics
 title: Git from the command line
 version: 0.1.0
 description: Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.
+finish: |
+  You now have the everyday git commands under your fingers. Try the
+  **Hello JupyterLab** workshop next to see what actions can do with
+  notebooks and kernels, or come back to any page here to review it.
 authors: [Graham Dumpleton]
 tags: [git, cli, beginner]
 duration: 30m
@@ -11,6 +15,7 @@ capabilities:
   - terminal
   - write-files: [workspace]
   - kernel-exec
+  - auto-run
 requires:
   tools:
     - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git", windows: "winget install Git.Git" } }

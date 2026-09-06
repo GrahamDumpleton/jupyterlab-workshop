@@ -441,7 +441,6 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'required',
         ['name', 'value']
       ),
-      spec('mark-done', 'flow', 'Mark the current page done.', 'none', 'none'),
       spec('next-page', 'flow', 'Go to the next page.', 'none', 'none'),
 
       // Checks, forms and checkpoints.

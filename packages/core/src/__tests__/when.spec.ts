@@ -50,7 +50,6 @@ describe('when directives', () => {
       optional: true,
       when: 'platform != "windows"',
       requires: ['verify:done'],
-      checkpoint: false,
       estimated: '5m'
     });
   });

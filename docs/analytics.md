@@ -14,7 +14,7 @@ and `trust`. The kinds and their extra fields:
 | --------------------- | ----------------------------------------------- | ------------------------------------------------------ |
 | `workshop-start`      | `page`                                          | A workshop is opened for the first time.               |
 | `workshop-resume`     | `page`                                          | A workshop with recorded progress is opened again.     |
-| `workshop-finish`     | `pages`                                         | The last page is marked done.                          |
+| `workshop-finish`     | `pages`                                         | Finish is pressed on the last page.                    |
 | `workshop-abandon`    | `page`                                          | The workshop is closed or replaced before finishing.   |
 | `page-enter`          | `page`                                          | A page is shown.                                       |
 | `page-leave`          | `page`, `active_ms`                             | A page is left, with the time spent on it.             |

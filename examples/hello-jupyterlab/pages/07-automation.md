@@ -39,8 +39,3 @@ The cascade wrote and opened this file.
 ```
 
 Use the stop icon in the panel header to interrupt a running chain.
-Finally, mark this page done.
-
-```{mark-done}
-
-```

@@ -329,14 +329,25 @@
   padding: 6px 8px;
 }
 
-.jp-WorkshopPanel-doneButton {
+.jp-WorkshopPanel-finished {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  color: var(--jp-success-color1);
+  font-weight: 600;
 }
 
-.jp-WorkshopPanel-doneButton.jp-mod-done {
-  color: var(--jp-success-color1);
+.jp-WorkshopPanel-finished a {
+  font-weight: normal;
+  color: var(--jp-content-link-color);
+}
+
+.jp-WorkshopFinish {
+  max-width: 480px;
+}
+
+.jp-WorkshopFinish-message p:last-child {
+  margin-bottom: 0;
 }
 
 .jp-Workshop-callout.jp-mod-interactive {

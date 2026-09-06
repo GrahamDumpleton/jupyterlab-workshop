@@ -16,6 +16,10 @@
     "title": { "type": "string", "minLength": 1 },
     "version": { "type": ["string", "number"] },
     "description": { "type": "string" },
+    "finish": {
+      "type": "string",
+      "description": "Markdown shown in the dialog when the learner presses Finish on the last page, such as where to go next."
+    },
     "duration": {
       "type": "string",
       "description": "Expected duration such as 45m or 2h."

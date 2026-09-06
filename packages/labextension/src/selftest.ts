@@ -110,7 +110,11 @@ export async function runAll(
       break;
     }
 
-    manager.markDone(pageId, true);
+    // Moving on marks the page done; the last page is finished instead.
+    if (index === manager.visiblePages.length - 1) {
+      manager.finish();
+    }
+
     index += 1;
   }
 

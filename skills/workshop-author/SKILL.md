@@ -105,7 +105,6 @@ A page is Markdown with YAML front matter:
 title: Your first commit
 requires: [verify:first-commit, quiz:staging] # gates leaving the page
 optional: false
-checkpoint: false
 when: track == "cli" # hide the page otherwise
 ---
 
@@ -263,6 +262,12 @@ pass, `soft` only shows what is missing.
   under that name when a workshop is first opened and "Restart" restores
   it (`reserved-checkpoint-name`). Restart only puts back files inside
   the workshop directory, so keep what a workshop creates inside it.
+
+- A page is done when the learner leaves it forwards with its `requires`
+  met; there is no button to mark it. The last page shows Finish, which
+  opens a dialog with the manifest's optional `finish` Markdown (say
+  where to go next) and what to do now. To checkpoint after a check,
+  give the `verify` a `:cascade:` naming a `checkpoint` block.
 
 - Keep `write-files` paths inside the workshop directory unless the
   scope is wider; lint warns on `..`, `~` and absolute paths.

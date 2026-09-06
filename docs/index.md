@@ -50,7 +50,8 @@ assert out.strip(), "No commits yet: run git commit"
 - [Actions](actions.md) lists every directive a page can use.
 
 - [Checks, forms and checkpoints](checks.md) covers verifying progress,
-  quizzes, forms, gating and checkpoints.
+  quizzes, forms, gating, how progress and finishing work, and
+  checkpoints.
 
 - [Layouts](layouts.md) covers arranging the JupyterLab window when a
   workshop opens: sidebars, their widths, and what the main area holds.

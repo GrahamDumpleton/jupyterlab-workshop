@@ -42,6 +42,14 @@ variables:
 `;
 
 describe('parseManifest', () => {
+  it('parses the finish message', () => {
+    expect(parseManifest(VALID).finish).toBeUndefined();
+    expect(
+      parseManifest(`${VALID}\nfinish: |\n  Well done. Try the *next* one.\n`)
+        .finish
+    ).toBe('Well done. Try the *next* one.\n');
+  });
+
   it('parses a valid manifest', () => {
     const manifest = parseManifest(VALID);
 

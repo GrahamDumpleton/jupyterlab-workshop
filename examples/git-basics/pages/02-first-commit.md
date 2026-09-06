@@ -1,7 +1,6 @@
 ---
 title: Your first commit
 requires: [verify:first-commit, quiz:staging]
-checkpoint: true
 ---
 
 # Your first commit
@@ -74,6 +73,7 @@ so it turns green a moment after the commit runs.
 :id: first-commit
 :label: You have made a commit
 :trigger: terminal-output "Add README"; interval 10s
+:cascade: after-first-commit
 import subprocess
 
 out = subprocess.run(
@@ -99,5 +99,11 @@ options:
 explanation: git add stages changes; git commit records what is staged.
 ```
 
-Marking this page done also saves a checkpoint named after the page, so
-you can come back to this state with a `restore` action later.
+Once the check passes it saves a checkpoint of the repository, so a
+`restore` action on a later page can bring you back to this state. You
+can also take one yourself by clicking it.
+
+```{checkpoint}
+:id: after-first-commit
+:name: after-first-commit
+```

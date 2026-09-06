@@ -620,7 +620,16 @@ export interface IWorkshopManager {
   previous(): void;
 
   pageProgress(id: string): IPageProgress;
-  markDone(id?: string, done?: boolean): void;
+
+  /**
+   * Mark the last page done, as the Finish button does. A page is
+   * otherwise done when the learner leaves it forwards with its
+   * requirements met.
+   */
+  finish(): void;
+
+  /** Whether the last visible page is done. */
+  readonly finished: boolean;
 
   actionStatus(id: string): IActionStatus;
 
@@ -827,7 +836,7 @@ export namespace CommandIDs {
   export const close = 'workshop:close';
   export const nextPage = 'workshop:next-page';
   export const previousPage = 'workshop:previous-page';
-  export const markDone = 'workshop:mark-done';
+  export const finish = 'workshop:finish';
   export const variables = 'workshop:variables';
   export const showLog = 'workshop:show-log';
   export const stopChain = 'workshop:stop-chain';

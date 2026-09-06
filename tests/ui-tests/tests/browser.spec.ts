@@ -381,17 +381,14 @@ test.describe('locked-down browser', () => {
       panel.locator('button[title="Close this workshop"]')
     ).toHaveCount(1);
 
-    // Make progress and add a file, then restart: the file goes, the
+    // Move to page two and add a file, then restart: the file goes, the
     // progress is forgotten and the workshop reopens at page one.
-    await page.evaluate(() => {
-      const exposed = window as unknown as IExposedApp;
+    const pageSelect = panel.locator('.jp-WorkshopPanel-pageSelect');
 
-      void exposed.jupyterapp.commands.execute('workshop:mark-done', {});
-    });
-    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
-      'title',
-      /^1 of/
-    );
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
+      .click();
+    await expect(pageSelect).toHaveValue('1');
 
     const added = `${WORKSHOPS_DIR}/${WORKSHOP}/added.txt`;
 
@@ -402,10 +399,7 @@ test.describe('locked-down browser', () => {
     await expect(dialog).toContainText('Restart workshop');
     await dialog.getByRole('button', { name: 'Restart' }).click();
 
-    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
-      'title',
-      /^0 of/
-    );
+    await expect(pageSelect).toHaveValue('0');
     await expect
       .poll(() => page.contents.fileExists(added), { timeout: 15000 })
       .toBe(false);
@@ -414,5 +408,37 @@ test.describe('locked-down browser', () => {
         `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/snapshots/pristine.tar`
       )
     ).toBe(true);
+
+    // The last page offers Finish in place of Next. Finishing shows the
+    // dialog, and browsing from it closes the workshop for the browser.
+    const options = await pageSelect.locator('option').count();
+
+    await pageSelect.selectOption(String(options - 1));
+    await expect(
+      panel.locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
+    ).toHaveCount(0);
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Finish' })
+      .click();
+    await expect(dialog).toContainText('Finished: Git from the command line');
+    await expect(dialog).toContainText('everyday git commands');
+    await expect(dialog.getByRole('button', { name: 'Shut down' })).toHaveCount(
+      0
+    );
+    await dialog.getByRole('button', { name: 'Keep reading' }).click();
+    await expect(panel.locator('.jp-WorkshopPanel-finished')).toContainText(
+      'Finished'
+    );
+    // Only the finished page counts: page one was left with its
+    // requirements unmet and the pages in between were never visited.
+    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
+      'title',
+      new RegExp(`^1 of ${options}`)
+    );
+
+    await panel.locator('.jp-WorkshopPanel-finished a').click();
+    await dialog.getByRole('button', { name: 'Browse workshops' }).click();
+    await expect(browser).toBeVisible();
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveCount(0);
   });
 });

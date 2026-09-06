@@ -199,6 +199,32 @@ def test_list_installed_describes_workshops_with_progress(tmp_path: Path) -> Non
         list_installed(tmp_path, "../up")
 
 
+def test_describe_installed_counts_only_the_visible_pages(tmp_path: Path) -> None:
+    workshop = tmp_path / "ws"
+    state = workshop / "_workshop"
+
+    state.mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: ws\ntitle: Ws\n"
+        "pages: [pages/01.md, pages/02.md, pages/03.md]\n"
+    )
+    (state / "state.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "visiblePages": ["01", "03"],
+                "pages": {"01": {"done": True}, "02": {"done": True}},
+            }
+        )
+    )
+
+    record = describe_installed(tmp_path, workshop)
+
+    assert record is not None
+    assert record["pages"] == 2
+    assert record["done"] == 1
+
+
 def test_describe_installed_ignores_broken_manifests(tmp_path: Path) -> None:
     broken = tmp_path / "broken"
 

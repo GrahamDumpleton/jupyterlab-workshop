@@ -157,12 +157,39 @@ before leaving the page. The manifest's `gating` chooses what that means:
 
 - `soft`: the footer lists what is not yet done, with links that scroll
   to the block, but Next still works. Moving on with unmet requirements
-  is recorded in the page's progress as `skipped`.
+  is recorded in the page's progress as `skipped`, and the page does not
+  count as done.
 
 - `strict`: Next is disabled until every requirement is met.
 
 The page selector still allows moving backwards, and jumping ahead is
 gated the same way as Next.
+
+## Progress and finishing
+
+A page is done once the learner leaves it forwards, by Next or by
+jumping ahead, with its requirements met (under `off` gating there are
+none to meet). The progress bar in the panel header, the tick in the
+page selector and the "pages done" count on the workshop browser's card
+all come from that, so a learner who reads through a workshop sees it
+fill in without pressing anything else.
+
+The last page shows Finish in place of Next. Pressing it marks the page
+done, records the `workshop-finish` event and opens a dialog saying the
+workshop is complete, with what to do next: browse other workshops,
+close this one, or on Binder shut the session down. Which of those
+appear depends on the host and the
+[disabled features](registry.md#locking-down-a-deployment); "Keep
+reading" is always there. The footer then shows "Finished" with a "What
+next?" link that brings the dialog back. A `finish` field in the
+manifest holds Markdown shown in the dialog, for example where to go
+from here:
+
+```yaml
+finish: |
+  Well done. The [next workshop](https://example.org/workshops) picks
+  up from here with branches and remotes.
+```
 
 ## Checkpoints
 
@@ -179,9 +206,10 @@ gated the same way as Next.
 A checkpoint archives everything in the workshop directory except its
 `_workshop` state directory, together with the learner's variables, into
 `_workshop/snapshots/<name>.tar` and `<name>.json` through the server.
-Without `:name:` the current page id is used. A page with `checkpoint:
-true` in its front matter is checkpointed when it is marked done. The
-name `pristine` is reserved: the extension takes a checkpoint under it
+Without `:name:` the current page id is used. To checkpoint once a check
+passes rather than on a click, give the `verify` a `:cascade:` naming
+the checkpoint block's id, and say in the page what is being saved and
+why. The name `pristine` is reserved: the extension takes a checkpoint under it
 when a workshop is first opened, and "Restart" restores it, so lint
 reports a workshop that uses it (`reserved-checkpoint-name`).
 

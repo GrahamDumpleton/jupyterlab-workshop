@@ -41,12 +41,7 @@ import {
   IFileActionContext,
   UploadPromptAction
 } from './actions/files';
-import {
-  ChoiceAction,
-  EnvSetAction,
-  MarkDoneAction,
-  NextPageAction
-} from './actions/flow';
+import { ChoiceAction, EnvSetAction, NextPageAction } from './actions/flow';
 import {
   CopyAction,
   DialogAction,
@@ -114,6 +109,7 @@ import { isJupyterLite } from './lite/detect';
 import { WorkshopManager, normalizeWorkshopPath } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { ISelfTestProgress, runAll } from './selftest';
+import { showFinishDialog } from './panel/finish';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { WORKSHOP_STATE_DIR } from './state';
@@ -340,7 +336,6 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       new RestoreAction(manager),
       new ChoiceAction(manager),
       new EnvSetAction(manager),
-      new MarkDoneAction(manager),
       new NextPageAction(manager),
       new EnvironmentCreateAction(manager)
     ];
@@ -1023,10 +1018,30 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       execute: () => manager.previous()
     });
 
-    app.commands.addCommand(CommandIDs.markDone, {
-      label: 'Workshop: Mark Page Done',
-      isEnabled: () => manager.currentPage !== null,
-      execute: () => manager.markDone()
+    // Finish marks the last page done and offers what to do next; the
+    // panel's "What next?" link reopens the dialog after that.
+    app.commands.addCommand(CommandIDs.finish, {
+      label: 'Workshop: Finish…',
+      caption: 'Mark the last page done and choose what to do next',
+      isEnabled: () =>
+        manager.currentPage !== null &&
+        manager.pageIndex === manager.visiblePages.length - 1,
+      execute: async (): Promise<void> => {
+        if (!manager.workshop) {
+          return;
+        }
+
+        manager.finish();
+        await showFinishDialog({
+          manager,
+          features,
+          commands: app.commands,
+          browse: async (): Promise<void> => {
+            await manager.close();
+            await startBrowsing();
+          }
+        });
+      }
     });
 
     app.commands.addCommand(CommandIDs.variables, {

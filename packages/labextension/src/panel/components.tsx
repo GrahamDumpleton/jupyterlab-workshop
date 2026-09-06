@@ -131,7 +131,7 @@ function PanelContent({
   const doneCount = visible.filter(
     item => manager.pageProgress(item.id).done
   ).length;
-  const done = manager.pageProgress(page.id).done;
+  const last = index >= count - 1;
   const gate = manager.gate(page.id);
   const run = (command: string): void => void commands.execute(command);
   const jumpTo = (id: string): void => manager.focusAction(id);
@@ -283,24 +283,31 @@ function PanelContent({
         >
           Previous
         </button>
-        <button
-          type="button"
-          className={`jp-Button jp-mod-styled jp-WorkshopPanel-doneButton${done ? ' jp-mod-done' : ''}`}
-          title={done ? 'Mark this page as not done' : 'Mark this page as done'}
-          onClick={() => manager.markDone(page.id, !done)}
-        >
-          <checkIcon.react tag="span" width="14px" height="14px" />
-          {done ? 'Done' : 'Mark done'}
-        </button>
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={index >= count - 1 || gate.blocked}
-          title={gate.blocked ? 'Complete the requirements above first' : ''}
-          onClick={() => manager.next()}
-        >
-          Next
-        </button>
+        {last && manager.finished ? (
+          <span className="jp-WorkshopPanel-finished">
+            <checkIcon.react tag="span" width="14px" height="14px" />
+            Finished
+            <a
+              href="#"
+              onClick={event => {
+                event.preventDefault();
+                run(CommandIDs.finish);
+              }}
+            >
+              What next?
+            </a>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-accept"
+            disabled={gate.blocked}
+            title={gate.blocked ? 'Complete the requirements above first' : ''}
+            onClick={() => (last ? run(CommandIDs.finish) : manager.next())}
+          >
+            {last ? 'Finish' : 'Next'}
+          </button>
+        )}
       </div>
     </div>
   );

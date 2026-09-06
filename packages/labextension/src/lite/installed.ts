@@ -80,6 +80,7 @@ export async function describeInstalled(
   );
   let state: {
     pages?: Record<string, { done?: boolean }>;
+    visiblePages?: string[];
     currentPage?: string;
     trust?: string;
   } = {};
@@ -92,9 +93,12 @@ export async function describeInstalled(
     }
   }
 
-  const done = Object.values(state.pages ?? {}).filter(
-    page => page?.done === true
-  ).length;
+  // Count the pages the learner can see when the state records them.
+  const visible = Array.isArray(state.visiblePages) ? state.visiblePages : null;
+  const done = visible
+    ? visible.filter(id => state.pages?.[id]?.done === true).length
+    : Object.values(state.pages ?? {}).filter(page => page?.done === true)
+        .length;
 
   return {
     path,
@@ -106,7 +110,7 @@ export async function describeInstalled(
     platforms: manifest.platforms,
     source: source?.source ?? null,
     sha256: source?.sha256 ?? '',
-    pages: manifest.pages.length,
+    pages: visible ? visible.length : manifest.pages.length,
     done,
     currentPage: state.currentPage ?? '',
     trust: state.trust ?? '',

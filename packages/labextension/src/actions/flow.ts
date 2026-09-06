@@ -82,29 +82,6 @@ export class EnvSetAction implements IActionImplementation {
 }
 
 /**
- * The `mark-done` action.
- */
-export class MarkDoneAction implements IActionImplementation {
-  readonly type = 'mark-done';
-
-  constructor(manager: IWorkshopManager) {
-    this._manager = manager;
-  }
-
-  describe(): string {
-    return 'Mark this page done';
-  }
-
-  async run(request: IActionRequest): Promise<IActionResult> {
-    this._manager.markDone(request.page);
-
-    return { status: 'ok' };
-  }
-
-  private _manager: IWorkshopManager;
-}
-
-/**
  * The `next-page` action.
  */
 export class NextPageAction implements IActionImplementation {

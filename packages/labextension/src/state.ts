@@ -44,6 +44,12 @@ export interface IWorkshopState {
   installed: IInstalled;
   currentPage: string;
   pages: Record<string, IPageProgress>;
+
+  /**
+   * Ids of the pages visible under the current variables, so that the
+   * installed listing, which cannot evaluate `when`, counts only them.
+   */
+  visiblePages?: string[];
   actions: Record<string, IActionStatus>;
   variables: Record<string, { value: string; source: VariableSource }>;
   checkpoints: string[];

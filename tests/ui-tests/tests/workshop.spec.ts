@@ -348,6 +348,17 @@ test.describe('workshop panel', () => {
     await expect(commitCheck).toHaveClass(/jp-mod-verify-pass/, {
       timeout: 60000
     });
+
+    // The passing check cascades to the checkpoint on the page.
+    await expect
+      .poll(
+        () =>
+          page.contents.fileExists(
+            `${workshopPath}/_workshop/snapshots/after-first-commit.tar`
+          ),
+        { timeout: 20000 }
+      )
+      .toBe(true);
     await expect(commitCheck).toContainText('1 commit(s) so far');
 
     const quiz = panel.locator('.jp-WorkshopPanel-quiz');
@@ -366,25 +377,17 @@ test.describe('workshop panel', () => {
     );
     await expect(gate).toHaveCount(0);
 
-    // Marking the page done takes a checkpoint.
-    await panel
-      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Mark done' })
-      .click();
-    await expect
-      .poll(
-        () =>
-          page.contents.fileExists(
-            `${workshopPath}/_workshop/snapshots/02-first-commit.tar`
-          ),
-        { timeout: 20000 }
-      )
-      .toBe(true);
-
-    // Inline roles render as buttons, and editor-insert appends through the
-    // open editor and saves.
+    // Leaving the page with its requirements met marks it done. Inline
+    // roles render as buttons, and editor-insert appends through the open
+    // editor and saves.
     await panel
       .locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
       .click();
+    await expect(
+      panel.locator('.jp-WorkshopPanel-pageSelect option', {
+        hasText: 'Your first commit ✓'
+      })
+    ).toHaveCount(1);
     await expect(panel.locator('.jp-Workshop-role-open')).toHaveText(
       'demo/README.md'
     );

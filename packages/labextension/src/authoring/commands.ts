@@ -376,7 +376,6 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         title: page.title,
         optional: page.frontmatter.optional,
         requires: page.frontmatter.requires.join(', '),
-        checkpoint: page.frontmatter.checkpoint,
         isNew: false,
         removed: false
       }));
@@ -410,8 +409,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
             workshopFile(path),
             setFrontmatter(newPageSource(entry.title), {
               optional: entry.optional,
-              requires,
-              checkpoint: entry.checkpoint
+              requires
             })
           );
           paths.push(path);
@@ -424,8 +422,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
           before &&
           (before.title !== entry.title ||
             before.optional !== entry.optional ||
-            before.requires !== entry.requires ||
-            before.checkpoint !== entry.checkpoint);
+            before.requires !== entry.requires);
 
         if (changed) {
           const source = await readTextFile(contents, workshopFile(entry.path));
@@ -439,8 +436,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
                   ? entry.title
                   : undefined,
               optional: entry.optional,
-              requires,
-              checkpoint: entry.checkpoint
+              requires
             })
           );
         }

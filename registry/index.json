@@ -8,7 +8,12 @@
       "description": "Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.",
       "tags": ["git", "cli", "beginner"],
       "platforms": ["linux", "macos", "windows"],
-      "capabilities": ["terminal", "write-files:workspace", "kernel-exec"],
+      "capabilities": [
+        "terminal",
+        "write-files:workspace",
+        "kernel-exec",
+        "auto-run"
+      ],
       "duration": "30m",
       "authors": ["Graham Dumpleton"],
       "versions": [

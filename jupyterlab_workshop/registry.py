@@ -361,13 +361,29 @@ def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:
     state = _read_json(workshop / STATE_DIR / "state.json")
     raw_progress = state.get("pages")
     progress: dict[str, Any] = raw_progress if isinstance(raw_progress, dict) else {}
-    done = len(
-        [
-            item
-            for item in progress.values()
-            if isinstance(item, dict) and item.get("done") is True
-        ]
-    )
+
+    # The frontend records which pages its `when` conditions leave
+    # visible; progress counts those, or every page for older state.
+    visible = state.get("visiblePages")
+
+    if isinstance(visible, list) and all(isinstance(item, str) for item in visible):
+        page_count = len(visible)
+        done = len(
+            [
+                page_id
+                for page_id in visible
+                if isinstance(progress.get(page_id), dict)
+                and progress[page_id].get("done") is True
+            ]
+        )
+    else:
+        done = len(
+            [
+                item
+                for item in progress.values()
+                if isinstance(item, dict) and item.get("done") is True
+            ]
+        )
 
     return {
         "path": _relative(root_dir, workshop),

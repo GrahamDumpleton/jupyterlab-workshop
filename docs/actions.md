@@ -77,7 +77,6 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 | ----------- | ---------- | -------- | --------------------------------------- | ---------------------------------------------------------- |
 | `choice`    | none       | optional | `variable`, `options`, `track`, `label` | Let the learner pick a value, optionally choosing a track. |
 | `env-set`   | none       | required | `name`, `value`                         | Set a variable, with the value in the body.                |
-| `mark-done` | none       | none     | (none)                                  | Mark the current page done.                                |
 | `next-page` | none       | none     | (none)                                  | Go to the next page.                                       |
 
 ## Checks, forms and checkpoints

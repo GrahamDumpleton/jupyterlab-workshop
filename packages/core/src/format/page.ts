@@ -21,7 +21,6 @@ export interface IPageFrontmatter {
   optional: boolean;
   when?: string;
   requires: string[];
-  checkpoint: boolean;
   estimated?: string;
 }
 
@@ -186,7 +185,6 @@ function parseFrontmatter(
     optional: data.optional === true,
     when: data.when as string | undefined,
     requires: (requires as string[] | undefined) ?? [],
-    checkpoint: data.checkpoint === true,
     estimated:
       typeof data.estimated === 'string' || typeof data.estimated === 'number'
         ? String(data.estimated)

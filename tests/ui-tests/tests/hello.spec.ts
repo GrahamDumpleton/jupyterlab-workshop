@@ -189,11 +189,10 @@ test.describe('hello-jupyterlab workshop', () => {
       /jp-mod-status-ok/
     );
 
-    // Marking the page done shows in the footer and the page list.
-    await panel.locator('.jp-WorkshopPanel-action.jp-mod-mark-done').click();
-    await expect(panel.locator('.jp-WorkshopPanel-doneButton')).toHaveText(
-      /Done/
-    );
+    // Moving on marks the page done in the page list.
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
+      .click();
     await expect(
       pageSelect.locator('option', { hasText: 'Automation ✓' })
     ).toHaveCount(1);

@@ -269,7 +269,6 @@ export interface IPageEntry {
   title: string;
   optional: boolean;
   requires: string;
-  checkpoint: boolean;
   isNew: boolean;
   removed: boolean;
 }
@@ -318,7 +317,6 @@ export async function showPageManagerDialog(
               title,
               optional: false,
               requires: '',
-              checkpoint: false,
               isNew: true,
               removed: false
             }
@@ -339,12 +337,6 @@ export async function showPageManagerDialog(
                   title="Optional page"
                 >
                   Opt.
-                </th>
-                <th
-                  className="jp-WorkshopAuthor-pageCell"
-                  title="Checkpoint when done"
-                >
-                  Chk.
                 </th>
                 <th className="jp-WorkshopAuthor-pageCell">Requires</th>
                 <th className="jp-WorkshopAuthor-pageCell"></th>
@@ -377,16 +369,6 @@ export async function showPageManagerDialog(
                       disabled={page.removed}
                       onChange={event =>
                         setPage(index, { optional: event.target.checked })
-                      }
-                    />
-                  </td>
-                  <td className="jp-WorkshopAuthor-pageCell">
-                    <input
-                      type="checkbox"
-                      checked={page.checkpoint}
-                      disabled={page.removed}
-                      onChange={event =>
-                        setPage(index, { checkpoint: event.target.checked })
                       }
                     />
                   </td>

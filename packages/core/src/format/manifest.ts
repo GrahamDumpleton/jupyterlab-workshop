@@ -119,6 +119,9 @@ export interface IWorkshopManifest {
   title: string;
   version?: string;
   description?: string;
+
+  /** Markdown shown in the dialog when the learner finishes the workshop. */
+  finish?: string;
   duration?: string;
   authors: string[];
   tags: string[];
@@ -216,6 +219,7 @@ export function parseManifest(
     title,
     version: optionalString(data, 'version', path),
     description: optionalString(data, 'description', path),
+    finish: optionalString(data, 'finish', path),
     duration: optionalString(data, 'duration', path),
     authors: optionalStringList(data, 'authors', path),
     tags: optionalStringList(data, 'tags', path),

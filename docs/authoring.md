@@ -17,7 +17,7 @@ to the panel:
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Edit page               | Opens the page source in the editor beside the panel. Saving re-renders the panel.                                                                                        |
 | New page                | Adds a page after the last one and lists it in the manifest.                                                                                                              |
-| Pages                   | Reorders, renames, adds and removes pages, and sets `optional`, `requires` and `checkpoint` in their front matter. Removed pages stay on disk.                            |
+| Pages                   | Reorders, renames, adds and removes pages, and sets `optional` and `requires` in their front matter. Removed pages stay on disk.                                          |
 | Manifest                | Opens `workshop.yaml` in the editor. Saving reloads the workshop.                                                                                                         |
 | Insert                  | A form for an action: pick the type, fill in its options, write the body. The block goes at the cursor of the page open in the editor, or at the end of the current page. |
 | Capture                 | Adds what you just did in the session, the last terminal commands, files saved and cells run, to the page as actions.                                                     |

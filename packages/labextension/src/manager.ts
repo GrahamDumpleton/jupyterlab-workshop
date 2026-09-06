@@ -369,7 +369,7 @@ export class WorkshopManager implements IWorkshopManager {
       );
 
       this._sessionId = randomId();
-      this._finished = false;
+      this._finished = this.finished;
       this._emit(resumed ? 'workshop-resume' : 'workshop-start', {
         page: first?.id ?? ''
       });
@@ -884,17 +884,18 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
-    // Moving forward past unmet requirements is refused under strict
+    // Leaving a page forwards with its requirements met is what makes it
+    // done. Moving on past unmet requirements is refused under strict
     // gating and recorded as a skip under soft gating, unless forced by
-    // the self-test harness.
-    if (index > this.pageIndex && !force) {
-      const gate = this.gate();
+    // the self-test harness, which counts the page done regardless.
+    if (index > this.pageIndex) {
+      const gate = force ? null : this.gate();
 
-      if (gate.blocked) {
+      if (gate?.blocked) {
         return;
       }
 
-      if (gate.unmet.length > 0) {
+      if (gate && gate.unmet.length > 0) {
         const state = this._state.state;
         const skipped = gate.unmet.map(item => `${item.kind}:${item.id}`);
 
@@ -912,6 +913,8 @@ export class WorkshopManager implements IWorkshopManager {
           page: this._currentPageId,
           requirements: skipped
         });
+      } else {
+        this._setDone(this._currentPageId);
       }
     }
 
@@ -1026,37 +1029,39 @@ export class WorkshopManager implements IWorkshopManager {
     return this._state.state?.pages[id] ?? { done: false };
   }
 
-  markDone(id?: string, done = true): void {
-    const state = this._state.state;
-    const pageId = id ?? this._currentPageId;
+  get finished(): boolean {
+    const visible = this.visiblePages;
+    const last = visible[visible.length - 1];
 
-    if (!state || !pageId) {
+    return last !== undefined && this.pageProgress(last.id).done;
+  }
+
+  finish(): void {
+    const visible = this.visiblePages;
+    const last = visible[visible.length - 1];
+
+    if (!last || this._finished) {
       return;
     }
 
-    state.pages[pageId] = { ...state.pages[pageId], done };
-    this._state.save();
+    this._setDone(last.id);
+    this._finished = true;
+    this._emit('workshop-finish', { pages: visible.length });
     this._changed.emit();
+  }
 
-    // Pages that ask for it are checkpointed when marked done.
-    const page = this._workshop?.pages.find(item => item.id === pageId);
+  /**
+   * Record a page as done. Progress is the count of done pages.
+   */
+  private _setDone(pageId: string): void {
+    const state = this._state.state;
 
-    if (done && page?.frontmatter.checkpoint) {
-      this.checkpoint(pageId).catch(error => {
-        console.warn(`Unable to checkpoint page ${pageId}`, error);
-      });
+    if (!state || !pageId || state.pages[pageId]?.done) {
+      return;
     }
 
-    // Finishing the last page finishes the workshop, once.
-    const visible = this.visiblePages;
-    const allDone =
-      visible.length > 0 &&
-      visible.every(item => state.pages[item.id]?.done === true);
-
-    if (done && allDone && !this._finished) {
-      this._finished = true;
-      this._emit('workshop-finish', { pages: visible.length });
-    }
+    state.pages[pageId] = { ...state.pages[pageId], done: true };
+    this._state.save();
   }
 
   actionStatus(id: string): IActionStatus {
@@ -1593,6 +1598,31 @@ export class WorkshopManager implements IWorkshopManager {
         platform: this._platform?.os
       })
     );
+
+    this._recordVisiblePages();
+  }
+
+  /**
+   * Keep the list of visible page ids in the state file so the installed
+   * listing can report progress out of the pages the learner can see.
+   */
+  private _recordVisiblePages(): void {
+    const state = this._state.state;
+
+    if (!state) {
+      return;
+    }
+
+    const ids = this.visiblePages.map(page => page.id);
+    const previous = state.visiblePages ?? [];
+    const same =
+      ids.length === previous.length &&
+      ids.every((id, index) => id === previous[index]);
+
+    if (!same) {
+      state.visiblePages = ids;
+      this._state.save();
+    }
   }
 
   private _onFileChanged(
