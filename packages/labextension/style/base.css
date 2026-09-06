@@ -649,6 +649,13 @@
   cursor: default;
 }
 
+/* Quiz and form contents sit inside the block with the same side padding
+   as the command text of other actions. */
+.jp-WorkshopPanel-quizBody,
+.jp-WorkshopPanel-formBody {
+  padding: 0 8px 6px;
+}
+
 .jp-WorkshopPanel-quizQuestion {
   margin: 6px 0;
 }

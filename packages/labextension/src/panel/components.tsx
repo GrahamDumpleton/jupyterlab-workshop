@@ -1241,45 +1241,47 @@ function QuizBlock({
           {passed ? 'correct' : exhausted ? 'no attempts left' : ''}
         </span>
       </div>
-      <div className="jp-WorkshopPanel-quizQuestion">{quiz.question}</div>
-      <div className="jp-WorkshopPanel-quizOptions">
-        {order.map(index => (
-          <label key={index} className="jp-WorkshopPanel-quizOption">
-            <input
-              type={quiz.type === 'single' ? 'radio' : 'checkbox'}
-              name={`quiz-${node.id}`}
-              checked={picked.includes(index)}
-              disabled={locked}
-              onChange={() => toggle(index)}
-            />{' '}
-            {quiz.options[index].text}
-          </label>
-        ))}
-      </div>
-      <div className="jp-WorkshopPanel-quizFooter">
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={locked || picked.length === 0}
-          onClick={() =>
-            void manager.runAction(node, 'click', JSON.stringify(picked))
-          }
-        >
-          Submit
-        </button>
-        {remaining !== null && !passed ? (
-          <span className="jp-WorkshopPanel-quizAttempts">
-            {remaining} {remaining === 1 ? 'attempt' : 'attempts'} left
-          </span>
+      <div className="jp-WorkshopPanel-quizBody">
+        <div className="jp-WorkshopPanel-quizQuestion">{quiz.question}</div>
+        <div className="jp-WorkshopPanel-quizOptions">
+          {order.map(index => (
+            <label key={index} className="jp-WorkshopPanel-quizOption">
+              <input
+                type={quiz.type === 'single' ? 'radio' : 'checkbox'}
+                name={`quiz-${node.id}`}
+                checked={picked.includes(index)}
+                disabled={locked}
+                onChange={() => toggle(index)}
+              />{' '}
+              {quiz.options[index].text}
+            </label>
+          ))}
+        </div>
+        <div className="jp-WorkshopPanel-quizFooter">
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-accept"
+            disabled={locked || picked.length === 0}
+            onClick={() =>
+              void manager.runAction(node, 'click', JSON.stringify(picked))
+            }
+          >
+            Submit
+          </button>
+          {remaining !== null && !passed ? (
+            <span className="jp-WorkshopPanel-quizAttempts">
+              {remaining} {remaining === 1 ? 'attempt' : 'attempts'} left
+            </span>
+          ) : null}
+        </div>
+        {status.message && status.status !== 'running' ? (
+          <div
+            className={`jp-WorkshopPanel-quizFeedback${passed ? ' jp-mod-pass' : ' jp-mod-fail'}`}
+          >
+            {status.message}
+          </div>
         ) : null}
       </div>
-      {status.message && status.status !== 'running' ? (
-        <div
-          className={`jp-WorkshopPanel-quizFeedback${passed ? ' jp-mod-pass' : ' jp-mod-fail'}`}
-        >
-          {status.message}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1379,30 +1381,32 @@ function FormBlock({
           {status.status === 'ok' ? 'saved' : ''}
         </span>
       </div>
-      {form.fields.map(field => (
-        <FormFieldInput
-          key={field.name}
-          field={field}
-          value={values[field.name] ?? ''}
-          problem={problems[field.name]}
-          revealed={revealed[field.name] ?? false}
-          onReveal={() =>
-            setRevealed(current => ({
-              ...current,
-              [field.name]: !current[field.name]
-            }))
-          }
-          onChange={value => update(field.name, value)}
-        />
-      ))}
-      <div className="jp-WorkshopPanel-formFooter">
-        <button
-          type="submit"
-          className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={status.status === 'running'}
-        >
-          {status.status === 'ok' ? 'Update' : 'Save'}
-        </button>
+      <div className="jp-WorkshopPanel-formBody">
+        {form.fields.map(field => (
+          <FormFieldInput
+            key={field.name}
+            field={field}
+            value={values[field.name] ?? ''}
+            problem={problems[field.name]}
+            revealed={revealed[field.name] ?? false}
+            onReveal={() =>
+              setRevealed(current => ({
+                ...current,
+                [field.name]: !current[field.name]
+              }))
+            }
+            onChange={value => update(field.name, value)}
+          />
+        ))}
+        <div className="jp-WorkshopPanel-formFooter">
+          <button
+            type="submit"
+            className="jp-Button jp-mod-styled jp-mod-accept"
+            disabled={status.status === 'running'}
+          >
+            {status.status === 'ok' ? 'Update' : 'Save'}
+          </button>
+        </div>
       </div>
       {status.status === 'error' && status.message ? (
         <div className="jp-WorkshopPanel-actionMessage">{status.message}</div>
