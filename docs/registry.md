@@ -131,6 +131,66 @@ Host `index.json` and the archives anywhere that serves files over
 HTTPS, such as GitHub Pages or an object store, and list the index URL
 in the `registries` setting.
 
+## Several workshops in one repository
+
+A repository can hold a set of related workshops side by side, each in
+its own directory, with one index at the root that lists them all:
+
+```
+workshops-repo/
+  registry.json
+  binder/
+    requirements.txt
+    postBuild
+  workshops/
+    git-basics/
+      workshop.yaml
+      pages/
+    pandas-intro/
+      workshop.yaml
+      pages/
+```
+
+`jupyter workshop index` writes and updates `registry.json` from the
+manifests, giving each entry a git source pointing at its directory in
+the repository, so no archives are built or published:
+
+```
+jupyter workshop index workshops --repo https://github.com/example-org/workshops --ref main
+```
+
+Run from the checkout, the repository URL and branch are read from git
+and can be left out, and the paths in the index are relative to the
+checkout root; give `--ref` a tag when a course is pinned to a release. Commit the index with the workshops. Anyone can then add the
+raw URL of `registry.json` to their `registries` setting, or start a
+session in it with a `registry` launch link, and Install fetches each
+workshop from the forge.
+
+The same checkout serves as a [Binder](https://mybinder.org) image. Add
+`binder/requirements.txt` installing `jupyterlab` and
+`jupyterlab-workshop`, and a `binder/postBuild` that writes an
+`overrides.json` such as this into `$NB_PYTHON_PREFIX/share/jupyter/lab/settings/`:
+
+```json
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "defaultWorkshop": "",
+    "browseOnStart": true,
+    "workshopsDirectory": "workshops",
+    "trustPolicy": { "forcedLevel": "trusted" }
+  }
+}
+```
+
+The session then starts in the browser with every workshop in the
+checkout listed as installed and ready to open, with no download and no
+trust dialog, since the visitor chose the repository. A launch link of
+`urlpath=lab%3Fregistry%3Dregistry.json` gives the same start without
+the override, apart from the trust dialog, and
+`urlpath=lab%3Fworkshop%3Dworkshops%2Fgit-basics` opens one workshop
+directly. This repository's own `examples/` directory, `registry/` index
+and `binder/` files follow this pattern.
+
 ## Launch links
 
 A JupyterLab URL with a `workshop` query parameter fetches and opens a

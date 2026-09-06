@@ -11,6 +11,8 @@ that ``jupyter workshop publish`` writes.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from .fetch import Downloader, FetchError, _relative, _resolve_inside, download
+from .publish import PublishError, flatten_capabilities, read_manifest
 
 REGISTRY_VERSION = 1
 
@@ -27,6 +30,12 @@ MANIFEST_FILE = "workshop.yaml"
 STATE_DIR = "_workshop"
 
 MAX_INDEX_BYTES = 5 * 1024 * 1024
+
+#: Directories never searched for workshops when indexing a repository.
+INDEX_EXCLUDES = {"node_modules", STATE_DIR, "site", "dist", "build"}
+
+#: Remote URLs in scp-like form, such as git@github.com:org/repo.git.
+SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^:/]+):(.+)$")
 
 
 class RegistryError(Exception):
@@ -141,6 +150,167 @@ def build_registry(
     index["workshops"] = [workshops[name] for name in sorted(workshops)]
 
     return index
+
+
+def find_workshops(root: Path) -> list[Path]:
+    """Find every workshop directory below ``root``, in path order.
+
+    Hidden directories, build outputs and workshop state directories are
+    skipped, and a workshop's own subdirectories are not searched.
+    """
+
+    found: list[Path] = []
+
+    def walk(directory: Path) -> None:
+        if (directory / MANIFEST_FILE).is_file():
+            found.append(directory)
+
+            return
+
+        for child in sorted(directory.iterdir()):
+            if (
+                child.is_dir()
+                and not child.name.startswith(".")
+                and child.name not in INDEX_EXCLUDES
+            ):
+                walk(child)
+
+    walk(root)
+
+    return found
+
+
+def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, Any]:
+    """Build the registry entry for a workshop fetched from a repository.
+
+    The metadata comes from the manifest and the single version points at
+    ``subdir`` of ``repo`` at ``ref``.
+    """
+
+    try:
+        manifest = read_manifest(directory)
+    except PublishError as error:
+        raise RegistryError(str(error)) from error
+
+    name = str(manifest.get("name") or "")
+
+    if not name:
+        raise RegistryError(f"The manifest in {directory} has no name")
+
+    source: dict[str, str] = {"git": repo, "ref": ref}
+
+    if subdir not in ("", "."):
+        source["subdir"] = subdir
+
+    return {
+        "name": name,
+        "title": manifest.get("title", name),
+        "description": manifest.get("description", ""),
+        "tags": manifest.get("tags", []),
+        "platforms": manifest.get("platforms", []),
+        "capabilities": flatten_capabilities(manifest.get("capabilities")),
+        "duration": manifest.get("duration", ""),
+        "authors": manifest.get("authors", []),
+        "versions": [
+            {"version": str(manifest.get("version") or "0.0.0"), "source": source}
+        ],
+    }
+
+
+def index_repository(
+    root: Path,
+    directories: Iterable[Path],
+    repo: str,
+    ref: str,
+    existing: dict[str, Any] | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
+    """Build or update an index of the workshops under ``directories``.
+
+    ``root`` is the repository checkout; each workshop becomes an entry
+    whose source is its directory relative to the root, so learners fetch
+    it straight from the forge. Entries for names already in ``existing``
+    are replaced and their other versions kept.
+    """
+
+    root = root.resolve()
+    found: list[Path] = []
+
+    for directory in directories:
+        resolved = directory.resolve()
+
+        if not resolved.is_dir():
+            raise RegistryError(f"{directory} is not a directory")
+
+        if not resolved.is_relative_to(root):
+            raise RegistryError(f"{directory} is outside the repository root {root}")
+
+        found.extend(find_workshops(resolved))
+
+    if not found:
+        raise RegistryError("No workshop.yaml found in the directories given")
+
+    entries = [
+        index_entry(directory, directory.relative_to(root).as_posix(), repo, ref)
+        for directory in found
+    ]
+
+    return build_registry(existing, entries, title=title)
+
+
+def checkout_root(path: Path) -> Path | None:
+    """The top of the git checkout containing ``path``, or None."""
+
+    output = _git(path, "rev-parse", "--show-toplevel")
+
+    return Path(output) if output else None
+
+
+def guess_repository(root: Path) -> tuple[str, str]:
+    """The origin URL and current branch of the git checkout at ``root``.
+
+    Either is empty when git or the information is unavailable. An SSH
+    remote is rewritten as the https URL learners can fetch archives from.
+    """
+
+    # The symbolic ref names the branch even before its first commit, and
+    # is empty on a detached HEAD, where no branch name would be right.
+    remote = _git(root, "remote", "get-url", "origin")
+    branch = _git(root, "symbolic-ref", "--short", "HEAD")
+
+    return https_remote(remote), branch
+
+
+def _git(path: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def https_remote(remote: str) -> str:
+    """Rewrite a git remote URL as a plain https URL without ``.git``."""
+
+    if not remote:
+        return ""
+
+    if remote.startswith("ssh://"):
+        parts = urlsplit(remote)
+        remote = f"https://{parts.hostname}{parts.path}"
+    elif not re.match(r"^[a-z]+://", remote):
+        match = SCP_REMOTE.match(remote)
+
+        if match:
+            remote = f"https://{match.group(1)}/{match.group(2)}"
+
+    return remote.removesuffix(".git").rstrip("/")
 
 
 def list_installed(root_dir: Path, directory: str) -> list[dict[str, Any]]:

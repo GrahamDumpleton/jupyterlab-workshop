@@ -38,7 +38,9 @@ def test_tools_and_resources_are_listed() -> None:
 
     tools, resources = _run(scenario())
 
-    assert {"lint", "test", "init", "publish", "draft", "run_action"} <= set(tools)
+    assert {"lint", "test", "init", "publish", "index", "draft", "run_action"} <= set(
+        tools
+    )
     assert "workshop://schema/workshop" in resources
     assert "workshop://skill" in resources
 
@@ -76,6 +78,40 @@ def test_init_tool_writes_a_workshop_and_live_tools_need_a_session(
     assert "workshop.yaml" in created
     assert skill.startswith("---\nname: workshop-author")
     assert "No running JupyterLab" in status
+
+
+def test_index_tool_writes_a_registry(tmp_path: Path) -> None:
+    server = create_server(lambda: None)
+
+    cli.main(["init", str(tmp_path / "workshops" / "one"), "--title", "One"])
+
+    async def scenario() -> tuple[str, str]:
+        async with Client(server) as client:
+            missing = await client.call_tool(
+                "index", {"directories": [str(tmp_path / "workshops")]}
+            )
+            written = await client.call_tool(
+                "index",
+                {
+                    "directories": [str(tmp_path / "workshops")],
+                    "root": str(tmp_path),
+                    "repo": "https://github.com/org/repo",
+                    "ref": "v1",
+                    "title": "Mine",
+                },
+            )
+
+            return _text(missing), _text(written)
+
+    missing, written = _run(scenario())
+
+    assert "no git origin" in missing
+    assert "workshops/one" in written
+
+    index = json.loads((tmp_path / "registry.json").read_text())
+
+    assert index["title"] == "Mine"
+    assert index["workshops"][0]["versions"][0]["source"]["subdir"] == "workshops/one"
 
 
 @needs_node

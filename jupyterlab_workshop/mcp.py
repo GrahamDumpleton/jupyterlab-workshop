@@ -29,7 +29,14 @@ from .cli import (
     run_node,
 )
 from .publish import PublishError, publish_workshop
-from .registry import RegistryError, load_registry
+from .registry import (
+    RegistryError,
+    checkout_root,
+    guess_repository,
+    index_repository,
+    load_registry,
+    parse_registry,
+)
 from .scaffold import slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -296,6 +303,66 @@ def create_server(
             return {"error": str(error)}
 
         return result.to_dict()
+
+    @server.tool()
+    def index(
+        directories: list[str] | None = None,
+        root: str = "",
+        out: str = "",
+        repo: str = "",
+        ref: str = "",
+        title: str = "",
+    ) -> Any:
+        """Build or update a registry index of the workshops in a repository.
+
+        Every workshop found under the directories (the current directory
+        by default) becomes an entry fetched from its path within the
+        checkout at the repository URL and ref, which default to the git
+        origin and branch of the checkout holding the first directory. The
+        index is written to registry.json under the checkout unless out
+        names another file.
+        """
+
+        searched = [Path(item) for item in directories or ["."]]
+        root_path = (
+            Path(root) if root else checkout_root(searched[0]) or searched[0]
+        ).resolve()
+        guessed_repo, guessed_ref = guess_repository(root_path)
+        chosen_repo = repo or guessed_repo
+        chosen_ref = ref or guessed_ref or "main"
+
+        if not chosen_repo:
+            return {"error": f"{root} has no git origin; give repo"}
+
+        index_path = Path(out) if out else root_path / "registry.json"
+        existing = None
+
+        try:
+            if index_path.is_file():
+                existing = parse_registry(
+                    index_path.read_text(encoding="utf-8"), str(index_path)
+                )
+
+            data = index_repository(
+                root_path,
+                searched,
+                chosen_repo,
+                chosen_ref,
+                existing,
+                title=title or None,
+            )
+        except RegistryError as error:
+            return {"error": str(error)}
+
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        index_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+        return {
+            "path": str(index_path),
+            "repo": chosen_repo,
+            "ref": chosen_ref,
+            "index": data,
+        }
 
     @server.tool()
     def draft(recording: str, directory: str, name: str = "", title: str = "") -> Any:

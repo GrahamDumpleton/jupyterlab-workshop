@@ -224,6 +224,57 @@ def test_registry_command_builds_an_index_from_entries(
     assert cli.main(["registry", str(index), str(entry)]) == 2
 
 
+def test_index_command_indexes_a_repository(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.main(["init", str(tmp_path / "workshops" / "one"), "--title", "One"])
+    cli.main(["init", str(tmp_path / "workshops" / "two"), "--title", "Two"])
+
+    # Without a git origin the repository must be given, and the sources
+    # are relative to the root, which is the directory itself when it is
+    # not a checkout.
+    assert cli.main(["index", str(tmp_path / "workshops")]) == 2
+    assert (
+        cli.main(
+            [
+                "index",
+                str(tmp_path / "workshops"),
+                "--root",
+                str(tmp_path),
+                "--repo",
+                "https://github.com/org/workshops",
+                "--ref",
+                "v1",
+                "--title",
+                "Class",
+            ]
+        )
+        == 0
+    )
+    assert "2 workshop(s)" in capsys.readouterr().out
+
+    data = json.loads((tmp_path / "registry.json").read_text())
+
+    assert data["title"] == "Class"
+    assert [entry["name"] for entry in data["workshops"]] == ["one", "two"]
+    assert data["workshops"][0]["versions"][0]["source"] == {
+        "git": "https://github.com/org/workshops",
+        "ref": "v1",
+        "subdir": "workshops/one",
+    }
+
+    # An explicit output path is honoured and a bad existing index refused.
+    out = tmp_path / "site" / "index.json"
+    command = ["index", str(tmp_path), "--repo", "https://x/y", "--out", str(out)]
+
+    assert cli.main(command) == 0
+    assert out.is_file()
+
+    out.write_text("{}")
+
+    assert cli.main(command) == 2
+
+
 def test_init_templates_and_options(tmp_path: Path) -> None:
     target = tmp_path / "nb"
 

@@ -44,7 +44,9 @@ from `jupyter workshop mcp`.
    per action. Fix failures and run again until it is green.
 
 6. Publish when asked: `jupyter workshop publish my-workshop` writes an
-   archive, its hash and a registry entry.
+   archive, its hash and a registry entry. For a repository holding
+   several workshops, `jupyter workshop index` writes a `registry.json`
+   listing them all instead (see below).
 
 ## Manifest (`workshop.yaml`)
 
@@ -294,6 +296,28 @@ one `#` per page matching the front matter title, `##` sparingly. Use
 present tense and second person. Do not use emdashes. See
 `references/style-guide.md` and `references/page-template.md`.
 
+## Several workshops in one repository
+
+Put each workshop in its own directory (for example `workshops/<name>/`)
+and keep one `registry.json` at the repository root. Build and update it
+with `jupyter workshop index workshops` from the checkout; it reads every
+manifest under the directories given and gives each entry a git source
+with the path relative to the checkout (`--repo` and `--ref` default to
+the git origin and branch, so pass `--ref` a tag to pin a release).
+Commit the index. Learners add the raw URL of `registry.json` to the
+`registries` setting or open `lab?registry=<url>`.
+
+To make the repository launch on Binder, add `binder/requirements.txt`
+(`jupyterlab>=4.6,<5` and `jupyterlab-workshop`), `binder/runtime.txt`
+(`python-3.14`) and an executable `binder/postBuild` that writes
+`$NB_PYTHON_PREFIX/share/jupyter/lab/settings/overrides.json` with
+`"@jupyterlab-workshop/labextension:panel": {"defaultWorkshop": "",
+"browseOnStart": true, "workshopsDirectory": "workshops",
+"trustPolicy": {"forcedLevel": "trusted"}}`. The session then starts in
+the workshop browser with the checkout's workshops listed as installed.
+The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;
+add `%3Fworkshop%3Dworkshops%2F<name>` to open one workshop directly.
+
 ## Author mode and live tools
 
 In JupyterLab, "Workshop: Author Mode" adds a toolbar to the panel
@@ -304,7 +328,7 @@ runs into draft pages (`jupyter workshop record` turns a saved recording
 into pages). Edits to the files re-render the panel as they are saved.
 
 Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
-`init`, `publish`, `draft`, `get_schema` and `list_registry` work on
-directories; `open_workshop`, `session_status`, `run_action`, `run_page`
+`init`, `publish`, `index`, `draft`, `get_schema` and `list_registry`
+work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`
 and `run_workshop` act on a running JupyterLab that has the workshop
 open in author mode.

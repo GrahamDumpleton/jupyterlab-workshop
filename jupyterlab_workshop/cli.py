@@ -19,7 +19,14 @@ from pathlib import Path
 from . import __version__ as VERSION
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
-from .registry import RegistryError, build_registry, parse_registry
+from .registry import (
+    RegistryError,
+    build_registry,
+    checkout_root,
+    guess_repository,
+    index_repository,
+    parse_registry,
+)
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -156,6 +163,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     registry.add_argument("--title", help="title of the registry")
     registry.set_defaults(func=command_registry)
+
+    index = commands.add_parser(
+        "index", help="build a registry index for the workshops in a repository"
+    )
+    index.add_argument(
+        "directories",
+        type=Path,
+        nargs="*",
+        default=[Path(".")],
+        help="directories searched for workshops (default: .)",
+    )
+    index.add_argument(
+        "--root",
+        type=Path,
+        help="checkout the sources are relative to (default: the git checkout)",
+    )
+    index.add_argument(
+        "--out",
+        type=Path,
+        help="index file to create or update (default: registry.json under the root)",
+    )
+    index.add_argument(
+        "--repo", help="repository URL learners fetch from (default: the git origin)"
+    )
+    index.add_argument(
+        "--ref", help="branch or tag learners fetch (default: the checked-out branch)"
+    )
+    index.add_argument("--title", help="title of the registry")
+    index.set_defaults(func=command_index)
 
     publish = commands.add_parser(
         "publish", help="build an archive, its sha256 and a registry entry"
@@ -435,6 +471,53 @@ def command_registry(args: argparse.Namespace) -> int:
     index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
 
     print(f"wrote {index_path} with {len(index['workshops'])} workshop(s)")
+
+    return 0
+
+
+def command_index(args: argparse.Namespace) -> int:
+    """Index every workshop in a repository checkout."""
+
+    directories: list[Path] = args.directories
+    first: Path = directories[0]
+
+    if not first.is_dir():
+        raise CliError(f"{first} is not a directory")
+
+    # Sources are relative to the checkout, whose origin and branch are
+    # the default repository and ref.
+    root: Path = (args.root or checkout_root(first) or first).resolve()
+    guessed_repo, guessed_ref = guess_repository(root)
+    repo = args.repo or guessed_repo
+    ref = args.ref or guessed_ref or "main"
+
+    if not repo:
+        raise CliError(f"{root} has no git origin; give the repository URL with --repo")
+
+    index_path: Path = args.out or root / "registry.json"
+    existing = None
+
+    if index_path.is_file():
+        try:
+            existing = parse_registry(
+                index_path.read_text(encoding="utf-8"), str(index_path)
+            )
+        except RegistryError as error:
+            raise CliError(str(error)) from error
+
+    try:
+        index = index_repository(
+            root, directories, repo, ref, existing, title=args.title
+        )
+    except RegistryError as error:
+        raise CliError(str(error)) from error
+
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
+
+    count = len(index["workshops"])
+
+    print(f"wrote {index_path} with {count} workshop(s) from {repo} at {ref}")
 
     return 0
 

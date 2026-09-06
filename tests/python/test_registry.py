@@ -1,4 +1,6 @@
 import json
+import shutil
+import subprocess
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -10,6 +12,10 @@ from jupyterlab_workshop.registry import (
     RegistryError,
     build_registry,
     describe_installed,
+    find_workshops,
+    guess_repository,
+    https_remote,
+    index_repository,
     list_installed,
     load_registry,
     parse_registry,
@@ -200,3 +206,109 @@ def test_describe_installed_ignores_broken_manifests(tmp_path: Path) -> None:
     (broken / "workshop.yaml").write_text("- not: [a mapping")
 
     assert describe_installed(tmp_path, broken) is None
+
+
+def test_find_workshops_skips_hidden_state_and_nested_directories(
+    tmp_path: Path,
+) -> None:
+    for name in ["workshops/a", "workshops/b", "extra/deep/c"]:
+        (tmp_path / name).mkdir(parents=True)
+        (tmp_path / name / "workshop.yaml").write_text("name: x\n")
+
+    (tmp_path / "workshops/a/nested").mkdir()
+    (tmp_path / "workshops/a/nested/workshop.yaml").write_text("name: n\n")
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden/workshop.yaml").write_text("name: h\n")
+    (tmp_path / "node_modules/pkg").mkdir(parents=True)
+    (tmp_path / "node_modules/pkg/workshop.yaml").write_text("name: m\n")
+
+    found = [path.relative_to(tmp_path).as_posix() for path in find_workshops(tmp_path)]
+
+    assert found == ["extra/deep/c", "workshops/a", "workshops/b"]
+
+
+def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
+    workshop = tmp_path / "workshops" / "git-basics"
+    workshop.mkdir(parents=True)
+    workshop.joinpath("workshop.yaml").write_text(
+        "name: git-basics\ntitle: Git\nversion: 1.2.0\ntags: [git]\n"
+        "capabilities:\n  - terminal\n  - write-files: [workspace]\n"
+        "pages: [pages/01.md]\n"
+    )
+
+    index = index_repository(
+        tmp_path,
+        [tmp_path / "workshops"],
+        "https://github.com/org/repo",
+        "main",
+        title="Mine",
+    )
+    entry = index["workshops"][0]
+
+    assert index["title"] == "Mine"
+    assert entry["name"] == "git-basics"
+    assert entry["capabilities"] == ["terminal", "write-files:workspace"]
+    assert entry["versions"] == [
+        {
+            "version": "1.2.0",
+            "source": {
+                "git": "https://github.com/org/repo",
+                "ref": "main",
+                "subdir": "workshops/git-basics",
+            },
+        }
+    ]
+
+    # A workshop at the root has no subdir, and re-indexing at another ref
+    # keeps the earlier version.
+    (tmp_path / "workshops").rename(tmp_path / "old")
+    shutil.rmtree(tmp_path / "old")
+    (tmp_path / "workshop.yaml").write_text(
+        "name: git-basics\ntitle: Git\nversion: 1.3.0\npages: [pages/01.md]\n"
+    )
+
+    again = index_repository(
+        tmp_path, [tmp_path], "https://github.com/org/repo", "v1.3", index
+    )
+    versions = again["workshops"][0]["versions"]
+
+    assert [item["version"] for item in versions] == ["1.3.0", "1.2.0"]
+    assert versions[0]["source"] == {
+        "git": "https://github.com/org/repo",
+        "ref": "v1.3",
+    }
+
+    with pytest.raises(RegistryError):
+        index_repository(tmp_path, [tmp_path / "missing"], "https://x", "main")
+
+    with pytest.raises(RegistryError):
+        index_repository(tmp_path / "sub", [tmp_path], "https://x", "main")
+
+
+def test_https_remote_rewrites_ssh_forms() -> None:
+    assert https_remote("git@github.com:org/repo.git") == "https://github.com/org/repo"
+    assert (
+        https_remote("ssh://git@gitlab.com/org/repo.git")
+        == "https://gitlab.com/org/repo"
+    )
+    assert (
+        https_remote("https://github.com/org/repo.git") == "https://github.com/org/repo"
+    )
+    assert https_remote("https://github.com/org/repo/") == "https://github.com/org/repo"
+    assert https_remote("") == ""
+
+
+def test_guess_repository_reads_the_checkout(tmp_path: Path) -> None:
+    if shutil.which("git") is None:
+        pytest.skip("needs git")
+
+    assert guess_repository(tmp_path) == ("", "")
+
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    remote = "git@github.com:o/r.git"
+
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "remote", "add", "origin", remote], check=True
+    )
+
+    assert guess_repository(tmp_path) == ("https://github.com/o/r", "main")

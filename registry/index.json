@@ -27,7 +27,7 @@
       "title": "Hello JupyterLab",
       "description": "A tour of what workshop actions can do with notebooks, kernels, the interface and variables.",
       "tags": ["jupyterlab", "notebooks", "demo"],
-      "platforms": ["linux", "macos", "windows"],
+      "platforms": ["linux", "macos", "windows", "lite"],
       "capabilities": [
         "terminal",
         "write-files:workspace",

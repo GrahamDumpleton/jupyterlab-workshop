@@ -95,6 +95,25 @@ replaces the listing and keeps the earlier versions, newest first. See
 [Finding and installing workshops](registry.md) for the index format and
 how the extension uses it.
 
+## index
+
+```
+jupyter workshop index [DIRECTORY...] [--root ROOT] [--out FILE] [--repo URL] [--ref REF] [--title TITLE]
+```
+
+Builds a registry index of every workshop found under the directories
+given (the current directory by default), so a repository holding
+several workshops can list them all without publishing archives. Each
+entry's source is the workshop's path relative to `--root`, the git
+checkout holding the first directory unless given, fetched from `--repo`
+at `--ref`, which default to the checkout's origin and current branch; an
+SSH remote is rewritten as the https URL. The index is written to
+`registry.json` under the root, or `--out`, and an existing index is
+updated: entries are replaced by name and their other versions kept.
+Hidden directories, `node_modules`, build outputs and `_workshop` state
+are not searched, nor are the contents of a workshop.
+See [Several workshops in one repository](registry.md#several-workshops-in-one-repository).
+
 ## record
 
 ```
