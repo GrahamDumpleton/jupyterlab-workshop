@@ -9,14 +9,14 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - name: Install
         run: just install
       - name: Lint
@@ -29,7 +29,7 @@ jobs:
         run: just docs
       - name: Build the distribution
         run: uv build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/*
@@ -37,14 +37,14 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - name: Install
         run: just install
       - name: Install browsers
@@ -55,7 +55,7 @@ jobs:
         run: just test-ui
       - name: Workshop self-tests
         run: just selftest
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-results
@@ -64,14 +64,14 @@ jobs:
   lite:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - name: Install micromamba for the JupyterLite terminal build
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -85,7 +85,7 @@ jobs:
         run: uv run jupyter workshop lint examples/hello-jupyterlab --platform lite
       - name: Workshop self-test in JupyterLite
         run: uv run jupyter workshop test examples/hello-jupyterlab --lite --junit results-lite.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: selftest-lite
@@ -94,14 +94,14 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - name: Install
         run: just install
       - name: Unit tests
@@ -115,7 +115,7 @@ jobs:
         run: uv run playwright install chromium
       - name: Workshop self-test
         run: uv run jupyter workshop test examples/git-basics --junit results-windows.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: selftest-windows
