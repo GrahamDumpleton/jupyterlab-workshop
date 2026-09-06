@@ -77,3 +77,7 @@ and `micromamba` on the path; pass `--no-terminal` to leave it out.
 
 The version is read from the root `package.json` by the Python build, so
 bump it there and in the two workspace `package.json` files together.
+Releases are made by pushing a tag that is the bare version string, such
+as `0.1.0`, with no `v` prefix. The release workflow refuses to build if
+the tag does not match the version in `package.json`, then builds the
+wheel and sdist, attaches them to a GitHub release and publishes to PyPI.
