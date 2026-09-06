@@ -43,6 +43,15 @@ PROGRESS_COMMAND = "workshop:self-test-progress"
 #: harness polls for it.
 RESULT_SLOT = "__jupyterlabWorkshopSelfTest"
 
+#: How often the harness polls the page for progress, in milliseconds.
+POLL_MS = 2000
+
+
+def _say(message: str) -> None:
+    """Print a progress line straight away, so a CI log shows where a run is."""
+
+    print(f"[self-test] {message}", flush=True)
+
 
 @dataclass(frozen=True)
 class SelfTestOptions:
@@ -123,20 +132,41 @@ def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> o
     port = _free_port()
     token = secrets.token_hex(16)
     log = work / "jupyterlab.log"
+
+    _say(f"starting JupyterLab on port {port} with root {root}")
+
     server = _start_server(root, port, token, settings, log)
 
     try:
         _wait_for_server(port, token, server, log)
+        _say("server is answering; opening the browser")
 
-        return _drive(
+        raw = _drive(
             sync_playwright,
             f"http://127.0.0.1:{port}/lab?token={token}",
             name,
             options,
             ready_timeout=120000,
         )
+    except BaseException:
+        _dump_server_log(log)
+
+        raise
+    else:
+        if isinstance(raw, dict) and raw.get("timedOut"):
+            _dump_server_log(log)
+
+        return raw
     finally:
         _stop_server(server)
+
+
+def _dump_server_log(log: Path) -> None:
+    tail = _tail(log).strip()
+
+    if tail:
+        print("[self-test] JupyterLab server log (tail):", flush=True)
+        print(tail, flush=True)
 
 
 def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> object:
@@ -187,14 +217,56 @@ def _drive(
         browser = playwright.chromium.launch(headless=not options.headed)
         page = browser.new_page()
 
-        page.goto(url)
-        page.wait_for_function(
-            "() => window.jupyterapp !== undefined", timeout=ready_timeout
+        # Browser-side failures are the likeliest reason for a run that
+        # never starts, so surface them in the harness output.
+        page.on(
+            "console",
+            lambda message: (
+                _say(f"browser console error: {message.text}")
+                if message.type == "error"
+                and not _is_routine_console_noise(message.text)
+                else None
+            ),
         )
-        page.evaluate("() => window.jupyterapp.restored")
+        page.on("pageerror", lambda error: _say(f"browser page error: {error}"))
+
+        _say(f"loading {url.split('?')[0]}")
+        page.goto(url)
+
+        try:
+            page.wait_for_function(
+                "() => window.jupyterapp !== undefined", timeout=ready_timeout
+            )
+        except PlaywrightTimeoutError as error:
+            raise SystemExit(
+                f"JupyterLab did not expose its application object within "
+                f"{ready_timeout / 1000:.0f}s"
+            ) from error
+
+        _say("application object present; waiting for JupyterLab to restore")
+
+        # The restore promise is awaited through a flag so the wait can carry
+        # a deadline; a bare evaluate of the promise would block forever.
+        page.evaluate(
+            f"() => {{ window.{RESULT_SLOT}Restored = false;"
+            f" window.jupyterapp.restored.then("
+            f"() => {{ window.{RESULT_SLOT}Restored = true; }}); }}"
+        )
+
+        try:
+            page.wait_for_function(
+                f"() => window.{RESULT_SLOT}Restored === true", timeout=ready_timeout
+            )
+        except PlaywrightTimeoutError as error:
+            raise SystemExit(
+                f"JupyterLab did not finish restoring within "
+                f"{ready_timeout / 1000:.0f}s"
+            ) from error
+
+        _say(f"JupyterLab restored; starting {RUN_ALL_COMMAND} for {name}")
 
         # Start the run and park its outcome on the window rather than
-        # awaiting the promise, so the wait below can carry a deadline.
+        # awaiting the promise, so the polling below can carry a deadline.
         page.evaluate(
             "([command, path, actionTimeout, slot]) => {"
             "  window[slot] = { done: false };"
@@ -210,12 +282,9 @@ def _drive(
             [RUN_ALL_COMMAND, name, options.action_timeout, RESULT_SLOT],
         )
 
-        try:
-            page.wait_for_function(
-                f"() => window.{RESULT_SLOT} && window.{RESULT_SLOT}.done",
-                timeout=options.timeout * 1000,
-            )
-        except PlaywrightTimeoutError:
+        outcome = _poll_until_done(page, options.timeout)
+
+        if outcome is None:
             progress = page.evaluate(
                 "command => window.jupyterapp.commands.execute(command)",
                 PROGRESS_COMMAND,
@@ -224,15 +293,75 @@ def _drive(
 
             return timed_out_report(name, progress, options.timeout)
 
-        outcome = page.evaluate(f"() => window.{RESULT_SLOT}")
         browser.close()
 
     if not isinstance(outcome, dict) or "result" not in outcome:
-        error = outcome.get("error") if isinstance(outcome, dict) else outcome
+        failure = outcome.get("error") if isinstance(outcome, dict) else outcome
 
-        raise SystemExit(f"{RUN_ALL_COMMAND} failed: {error}")
+        raise SystemExit(f"{RUN_ALL_COMMAND} failed: {failure}")
 
     return outcome["result"]
+
+
+def _is_routine_console_noise(text: str) -> bool:
+    # JupyterLab logs a 404 for every optional resource it probes, such as
+    # workspaces and per-user settings, so those say nothing about a run.
+    return text.startswith("Failed to load resource:")
+
+
+def _poll_until_done(page: Any, timeout: float) -> object:
+    """Poll the page until the run finishes, echoing progress as it goes.
+
+    Returns the outcome parked on the window, or None once ``timeout``
+    seconds pass without it.
+    """
+
+    deadline = time.monotonic() + timeout
+    reported = 0
+    running: str | None = None
+
+    while True:
+        outcome = page.evaluate(f"() => window.{RESULT_SLOT}")
+
+        if isinstance(outcome, dict) and outcome.get("done"):
+            return outcome
+
+        progress = page.evaluate(
+            "command => window.jupyterapp.commands.execute(command)",
+            PROGRESS_COMMAND,
+        )
+
+        if isinstance(progress, dict):
+            results = progress.get("results")
+            current = progress.get("current")
+
+            if isinstance(results, list):
+                for item in results[reported:]:
+                    if isinstance(item, dict):
+                        _say(
+                            f"{item.get('status')}: {item.get('page')}/"
+                            f"{item.get('id')} ({item.get('type')})"
+                        )
+
+                reported = len(results)
+
+            label = (
+                f"{current.get('page')}/{current.get('id')} ({current.get('type')})"
+                if isinstance(current, dict)
+                else None
+            )
+
+            if label is not None and label != running:
+                _say(f"running: {label}")
+
+            running = label
+
+        if time.monotonic() > deadline:
+            _say(f"time limit of {timeout:.0f}s reached; abandoning the run")
+
+            return None
+
+        page.wait_for_timeout(POLL_MS)
 
 
 def timed_out_report(name: str, progress: object, timeout: float) -> dict[str, Any]:
