@@ -146,6 +146,13 @@ the behaviour for every learner:
 
 ## Removing and resetting
 
+Closing a workshop, from the header button or the Finish dialog, also
+closes the documents it put on screen (every open file under its
+directory, such as the README preview and editors a layout or an action
+opened) and shuts down its terminals, so the next workshop or the
+browser starts in a clear window. A file with unsaved changes asks
+first. Restart and Remove do the same before touching the files.
+
 "Workshop: Remove…" lists what it will do before doing it: delete the
 workshop directory for downloaded workshops (for local directories only
 the `_workshop` state directory is removed), restore any JupyterLab

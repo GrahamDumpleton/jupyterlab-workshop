@@ -90,11 +90,13 @@ export class TerminalSessions {
     return this._input;
   }
 
-  /** The names of the terminals that are open. */
+  /** The names of the terminals that are open or still starting. */
   names(): string[] {
-    return [...this._widgets.entries()]
+    const open = [...this._widgets.entries()]
       .filter(([, widget]) => !widget.isDisposed)
       .map(([name]) => name);
+
+    return [...new Set([...open, ...this._pending.keys()])];
   }
 
   /**
@@ -111,7 +113,10 @@ export class TerminalSessions {
    * happens when no such terminal is open.
    */
   async close(name: string): Promise<void> {
-    const widget = this._widgets.get(name);
+    // A terminal still starting is waited for, so that it cannot appear
+    // after everything else has been cleared away.
+    const pending = this._pending.get(name);
+    const widget = pending ? await pending : this._widgets.get(name);
 
     if (!widget || widget.isDisposed) {
       return;

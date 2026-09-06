@@ -99,6 +99,7 @@ import {
 import { AnalyticsRecorder } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
+import { closeWorkshopWidgets } from './cleanup';
 import { featuresPlugin } from './features';
 import {
   BROWSER_ID,
@@ -358,15 +359,17 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
 
     // When the workshop changes, shut the hidden kernel down, check the
     // tools a newly opened workshop requires, and arrange the panels as its
-    // layout asks (the first time it is opened here, or from a launch link).
-    let openPath: string | null = null;
+    // layout asks (the first time it is opened here, from a launch link, or
+    // after a restart). Each opening has its own session id, so a restart
+    // of the same workshop counts as a new one.
+    let openSession = '';
 
     manager.changed.connect(() => {
       const workshop = manager.workshop;
-      const path = workshop?.path ?? null;
+      const session = manager.sessionId;
 
-      if (path !== openPath) {
-        openPath = path;
+      if (session !== openSession) {
+        openSession = session;
         void kernel.shutdown();
 
         if (workshop) {
@@ -395,7 +398,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     IActionRegistry,
     ILabShell,
     IDocumentManager,
-    IFeaturePolicy
+    IFeaturePolicy,
+    ITerminalSessions
   ],
   optional: [
     ISettingRegistry,
@@ -412,6 +416,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     shell: ILabShell,
     docManager: IDocumentManager,
     features: IFeaturePolicy,
+    terminals: TerminalSessions,
     settingRegistry: ISettingRegistry | null,
     palette: ICommandPalette | null,
     restorer: ILayoutRestorer | null,
@@ -427,6 +432,19 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     // Disabling a feature greys out its commands everywhere at once.
     features.changed.connect(() => app.commands.notifyCommandChanged());
+
+    // Leaving a workshop takes its documents and terminals off the screen
+    // too, so the next thing opened does not land among them.
+    const cleanup = { shell, docManager, terminals };
+    const closeWorkshop = async (): Promise<void> => {
+      const path = manager.workshop?.path;
+
+      if (path !== undefined) {
+        await closeWorkshopWidgets(cleanup, path);
+      }
+
+      await manager.close();
+    };
 
     // Start on the right; a saved layout or the setting may move it.
     shell.add(panel, 'right', { rank: 600 });
@@ -893,7 +911,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.close, {
       label: 'Close Workshop',
       isEnabled: () => manager.workshop !== null && features.enabled('close'),
-      execute: () => manager.close()
+      execute: () => closeWorkshop()
     });
 
     app.commands.addCommand(CommandIDs.trust, {
@@ -946,6 +964,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         }
 
         try {
+          const path = manager.workshop?.path;
+
+          if (path !== undefined) {
+            await closeWorkshopWidgets(cleanup, path);
+          }
+
           await manager.uninstall();
           Notification.success(`Removed workshop "${title}"`, {
             autoClose: 4000
@@ -992,6 +1016,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         }
 
         try {
+          const target = path ?? manager.workshop?.path;
+
+          if (target !== undefined) {
+            await closeWorkshopWidgets(cleanup, target);
+          }
+
           const outcome = await manager.restart(path);
 
           if (!outcome.files) {
@@ -1040,8 +1070,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           manager,
           features,
           commands: app.commands,
+          close: closeWorkshop,
           browse: async (): Promise<void> => {
-            await manager.close();
+            await closeWorkshop();
             await startBrowsing();
           }
         });

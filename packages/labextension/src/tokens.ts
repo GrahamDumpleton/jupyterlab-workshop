@@ -459,8 +459,9 @@ export interface IOpenOptions {
   variables?: Record<string, string>;
 
   /**
-   * Whether the open comes from a launch link, which applies the workshop
-   * layout even when it has been applied in this workspace before.
+   * Whether the open comes from a launch link or a restart, which apply
+   * the workshop layout even when it has been applied in this workspace
+   * before.
    */
   launch?: boolean;
 }
@@ -630,6 +631,12 @@ export interface IWorkshopManager {
 
   /** Whether the last visible page is done. */
   readonly finished: boolean;
+
+  /**
+   * Identifies one opening of a workshop: new each time one is opened,
+   * including a restart of the same one, and kept across a reload.
+   */
+  readonly sessionId: string;
 
   actionStatus(id: string): IActionStatus;
 

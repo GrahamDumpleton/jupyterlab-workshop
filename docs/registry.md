@@ -246,8 +246,9 @@ The first time a workshop is opened, before any action runs, its files
 are archived as the reserved `pristine` checkpoint under `_workshop`.
 "Workshop: Restart…", the restart button in the panel header and the
 Restart button on an installed workshop's card put those files back,
-deleting anything added to the directory since, forget all progress and
-reopen the workshop at its first page. This works offline, for
+deleting anything added to the directory since, forget all progress,
+close the documents and terminals the workshop had open, and reopen the
+workshop at its first page with its layout applied afresh. This works offline, for
 workshops shipped in an image or opened from a local directory, and in
 JupyterLite; it is the way to start over in a locked-down deployment
 where Remove is unavailable. Update, shown on an installed workshop's

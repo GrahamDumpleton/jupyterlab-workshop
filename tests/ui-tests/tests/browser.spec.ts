@@ -440,9 +440,20 @@ test.describe('locked-down browser', () => {
       new RegExp(`^1 of ${options}`)
     );
 
+    // Browsing from the dialog closes the workshop's preview and terminal
+    // with it, so the browser fills a fresh window with both sidebars
+    // collapsed.
+    await expect(
+      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
+    ).toHaveCount(1);
     await panel.locator('.jp-WorkshopPanel-finished a').click();
     await dialog.getByRole('button', { name: 'Browse workshops' }).click();
     await expect(browser).toBeVisible();
     await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveCount(0);
+    await expect(
+      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
+    ).toHaveCount(0);
+    await expect(page.locator('.jp-Terminal')).toHaveCount(0);
+    expect(await page.sidebar.isOpen('right')).toBe(false);
   });
 });

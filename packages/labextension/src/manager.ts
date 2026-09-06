@@ -848,8 +848,10 @@ export class WorkshopManager implements IWorkshopManager {
 
     await deleteTree(this._contents, PathExt.join(target, WORKSHOP_STATE_DIR));
 
+    // Reopening as a launch does applies the layout again, so the window
+    // looks as it did the first time.
     if (open) {
-      await this.open(target);
+      await this.open(target, { launch: true });
     }
 
     return { files };
@@ -1027,6 +1029,10 @@ export class WorkshopManager implements IWorkshopManager {
 
   pageProgress(id: string): IPageProgress {
     return this._state.state?.pages[id] ?? { done: false };
+  }
+
+  get sessionId(): string {
+    return this._workshop ? this._sessionId : '';
   }
 
   get finished(): boolean {

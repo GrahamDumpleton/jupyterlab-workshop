@@ -14,6 +14,9 @@ export interface IFinishDialogOptions {
   features: IFeaturePolicy;
   commands: CommandRegistry;
 
+  /** Close the workshop, taking its documents and terminals with it. */
+  close: () => Promise<void>;
+
   /** Close the workshop and open the browser. */
   browse: () => Promise<void>;
 }
@@ -73,7 +76,7 @@ export async function showFinishDialog(
       await options.browse();
       break;
     case 'Close workshop':
-      await manager.close();
+      await options.close();
       break;
     default:
       break;
