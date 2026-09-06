@@ -1,6 +1,6 @@
 {
     "name": "@jupyterlab-workshop/labextension",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Guided interactive workshops inside JupyterLab.",
     "keywords": [
         "jupyter",
