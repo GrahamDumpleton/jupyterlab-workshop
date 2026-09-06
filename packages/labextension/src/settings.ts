@@ -28,6 +28,30 @@ export async function readSetting(
 }
 
 /**
+ * Read a boolean setting of the panel plugin, or the fallback.
+ */
+export async function readFlag(
+  settingRegistry: ISettingRegistry | null,
+  key: string,
+  fallback: boolean
+): Promise<boolean> {
+  if (!settingRegistry) {
+    return fallback;
+  }
+
+  try {
+    const settings = await settingRegistry.load(PANEL_PLUGIN_ID);
+    const value = settings.get(key).composite;
+
+    return typeof value === 'boolean' ? value : fallback;
+  } catch (error) {
+    console.error('Failed to load workshop settings', error);
+
+    return fallback;
+  }
+}
+
+/**
  * Read a list-of-strings setting of the panel plugin, or an empty list.
  */
 export async function readSettingList(

@@ -3,9 +3,9 @@
 The quickest look is the
 [JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/),
 which runs entirely in the browser, or
-[Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab%3Fworkshop%3Dexamples%2Fgit-basics),
-which starts a full JupyterLab with the git-basics example open. Both
-use the released package.
+[Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab),
+which starts a full JupyterLab in the workshop browser with the examples
+ready to open. Both use the released package.
 
 The rest of this page walks through the proof of concept by hand from a
 checkout. It needs [uv](https://docs.astral.sh/uv/),

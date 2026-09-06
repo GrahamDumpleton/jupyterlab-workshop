@@ -29,6 +29,27 @@ two sections:
 and "Manage registries" opens the settings editor at the workshop
 settings.
 
+Once a workshop is opened, from the browser or anywhere else, the browser
+tab closes and the workshop's instructions and [layout](layouts.md) take
+over. It stays open while a workshop that is already open is browsed
+alongside.
+
+### Starting in the browser
+
+An image that offers a choice of workshops can start JupyterLab in the
+browser rather than at the launcher. With the `browseOnStart` setting
+true, a session that has no workshop to restore, no `defaultWorkshop` and
+no launch link opens the browser in place of the launcher and collapses
+both sidebars, so the learner sees only the catalogue until they pick a
+workshop; the instructions panel then appears on the right. Pointing
+`workshopsDirectory` at a directory of workshops shipped in the image
+lists them as installed and ready to open without a download.
+
+A launch link can do the same for one session with a `registry`
+parameter naming an index by URL or by a path relative to the JupyterLab
+root: `/lab?registry=https://example.org/workshops/index.json`. The
+registry is shown alongside the configured ones for that session only.
+
 ## Registries
 
 A registry is a JSON index file. The `registries` setting lists where to
@@ -143,13 +164,15 @@ this package can open any workshop:
 https://mybinder.org/v2/gh/example-org/launcher/main?urlpath=lab%3Fworkshop%3Dhttps%3A%2F%2Fgithub.com%2Fexample-org%2Fworkshops%26subdir%3Dgit-basics
 ```
 
-The `urlpath` is `lab?workshop=…` URL-encoded. This repository's own
+The `urlpath` is `lab?workshop=…` URL-encoded; `lab?registry=…` works
+the same way and lands in the browser instead. This repository's own
 `binder/` directory is an example: `runtime.txt` selects a Python the
 package supports, `requirements.txt` installs JupyterLab and the package,
-and `postBuild` writes a settings override that opens `examples/git-basics`
-on start, lists the examples in the browser and trusts them. A workshop repository can carry the same two files and a
-launch badge, with the `workshop` parameter naming a directory in the
-checkout rather than a URL.
+and `postBuild` writes a settings override that starts in the browser
+with the examples listed as installed, and trusts them. A workshop
+repository can carry the same files and a launch badge, with the
+`workshop` parameter naming a directory in the checkout rather than a
+URL.
 
 ## Installed workshops and the server
 

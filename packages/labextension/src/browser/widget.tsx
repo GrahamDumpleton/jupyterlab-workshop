@@ -53,6 +53,21 @@ export class WorkshopBrowser extends ReactWidget {
     this.title.icon = workshopIcon;
     this.title.closable = true;
     this.addClass('jp-WorkshopBrowser');
+
+    // Once a workshop is opened, from here or anywhere else, it takes over
+    // the main area and the browser gets out of the way. It stays open
+    // while a workshop that was already open is browsed alongside.
+    this._openPath = options.manager.workshop?.path ?? null;
+    options.manager.changed.connect(this._onWorkshopChanged, this);
+  }
+
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
+    }
+
+    this._options.manager.changed.disconnect(this._onWorkshopChanged, this);
+    super.dispose();
   }
 
   /** Emitted to ask the component to reload registries and installs. */
@@ -84,8 +99,23 @@ export class WorkshopBrowser extends ReactWidget {
     );
   }
 
+  private _onWorkshopChanged(): void {
+    const path = this._options.manager.workshop?.path ?? null;
+
+    if (path === this._openPath) {
+      return;
+    }
+
+    this._openPath = path;
+
+    if (path !== null && this.isAttached) {
+      this.close();
+    }
+  }
+
   private _options: WorkshopBrowser.IOptions;
   private _refreshRequested = new Signal<this, void>(this);
+  private _openPath: string | null;
 }
 
 export namespace WorkshopBrowser {

@@ -59,8 +59,9 @@ JupyterLite site.
 - [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/):
   the example workshop running in JupyterLite.
 
-- [Launch on Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab%3Fworkshop%3Dexamples%2Fgit-basics):
-  the git-basics example in a full JupyterLab with a real terminal.
+- [Launch on Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab):
+  pick one of the example workshops in a full JupyterLab with a real
+  terminal.
 
 - [Source, issues and contributing](https://github.com/GrahamDumpleton/jupyterlab-workshop):
   see `CONTRIBUTING.md` in the repository for the development setup.

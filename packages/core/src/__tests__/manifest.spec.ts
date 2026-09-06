@@ -73,7 +73,7 @@ describe('parseManifest', () => {
     });
     expect(manifest.layout).toBe('default');
     expect(manifest.layouts.default).toEqual({
-      left: 'instructions',
+      left: { widget: 'instructions' },
       right: undefined,
       main: [
         { area: 'top', widgets: ['editor'], size: undefined },
@@ -151,5 +151,44 @@ describe('parseManifest', () => {
     expect(() =>
       parseManifest(VALID.replace('area: top', 'area: middle'))
     ).toThrow(/Layout/);
+    expect(() =>
+      parseManifest(VALID.replace('size: 0.35', 'size: 1.5'))
+    ).toThrow(/between 0 and 1/);
+  });
+
+  it('parses layout sides given as words or mappings', () => {
+    const manifest = parseManifest(
+      VALID.replace(
+        '    left: instructions\n',
+        '    left: collapsed\n    right: { widget: instructions, size: 0.2 }\n'
+      )
+    );
+
+    expect(manifest.layouts.default.left).toEqual({ collapsed: true });
+    expect(manifest.layouts.default.right).toEqual({
+      widget: 'instructions',
+      size: 0.2
+    });
+    expect(
+      parseManifest(VALID.replace('left: instructions', 'left: filebrowser'))
+        .layouts.default.left
+    ).toEqual({ widget: 'filebrowser' });
+  });
+
+  it('rejects malformed layout sides', () => {
+    expect(() =>
+      parseManifest(VALID.replace('left: instructions', 'left: [a, b]'))
+    ).toThrow(/"left" must be/);
+    expect(() =>
+      parseManifest(VALID.replace('left: instructions', 'left: { panel: x }'))
+    ).toThrow(/unknown field "panel"/);
+    expect(() =>
+      parseManifest(
+        VALID.replace('left: instructions', 'left: { collapsed: yes }')
+      )
+    ).toThrow(/"collapsed" must be/);
+    expect(() =>
+      parseManifest(VALID.replace('left: instructions', 'left: { size: 0 }'))
+    ).toThrow(/between 0 and 1/);
   });
 });

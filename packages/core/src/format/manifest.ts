@@ -80,15 +80,32 @@ export interface IAnalytics {
 
 /** One region of a named layout. */
 export interface ILayoutArea {
+  /** Edge of the main area the region splits off. */
   area: 'top' | 'bottom' | 'left' | 'right';
+
+  /** Widget references such as `terminal:git` or `markdown:README.md`. */
   widgets: string[];
+
+  /** Fraction of the main area the region takes, between 0 and 1. */
+  size?: number;
+}
+
+/** What a named layout does with one sidebar. */
+export interface ILayoutSide {
+  /** `instructions` for the workshop panel, or a sidebar widget id to show. */
+  widget?: string;
+
+  /** Whether the sidebar starts collapsed. */
+  collapsed?: boolean;
+
+  /** Fraction of the window width the sidebar takes, between 0 and 1. */
   size?: number;
 }
 
 /** A named arrangement of JupyterLab panels. */
 export interface ILayoutSpec {
-  left?: string;
-  right?: string;
+  left?: ILayoutSide;
+  right?: ILayoutSide;
   main: ILayoutArea[];
 }
 
@@ -511,19 +528,111 @@ function parseLayouts(
         main.push({
           area: item.area as ILayoutArea['area'],
           widgets: item.widgets,
-          size: typeof item.size === 'number' ? item.size : undefined
+          size: parseFraction(item.size, `Layout "${name}": "size"`, path)
         });
       }
     }
 
     layouts[name] = {
-      left: optionalString(spec, 'left', path),
-      right: optionalString(spec, 'right', path),
+      left: parseLayoutSide(spec.left, `Layout "${name}": "left"`, path),
+      right: parseLayoutSide(spec.right, `Layout "${name}": "right"`, path),
       main
     };
   }
 
   return layouts;
+}
+
+const LAYOUT_SIDE_FIELDS: ReadonlySet<string> = new Set([
+  'widget',
+  'collapsed',
+  'size'
+]);
+
+/**
+ * Parse one side of a layout: the word `collapsed`, the name of a widget
+ * to show (`instructions` for the workshop panel), or a mapping with
+ * `widget`, `collapsed` and `size` fields.
+ */
+function parseLayoutSide(
+  value: unknown,
+  label: string,
+  path: string
+): ILayoutSide | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value === 'collapsed' ? { collapsed: true } : { widget: value };
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError(
+      `${label} must be "collapsed", a widget name or a mapping`,
+      path
+    );
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!LAYOUT_SIDE_FIELDS.has(key)) {
+      throw new WorkshopFormatError(
+        `${label} has unknown field "${key}"`,
+        path
+      );
+    }
+  }
+
+  if (value.widget !== undefined && typeof value.widget !== 'string') {
+    throw new WorkshopFormatError(`${label}: "widget" must be a string`, path);
+  }
+
+  if (value.collapsed !== undefined && typeof value.collapsed !== 'boolean') {
+    throw new WorkshopFormatError(
+      `${label}: "collapsed" must be true or false`,
+      path
+    );
+  }
+
+  const side: ILayoutSide = {};
+
+  if (typeof value.widget === 'string') {
+    side.widget = value.widget;
+  }
+
+  if (typeof value.collapsed === 'boolean') {
+    side.collapsed = value.collapsed;
+  }
+
+  const size = parseFraction(value.size, `${label}: "size"`, path);
+
+  if (size !== undefined) {
+    side.size = size;
+  }
+
+  return side;
+}
+
+/**
+ * Parse a size given as a fraction strictly between 0 and 1.
+ */
+function parseFraction(
+  value: unknown,
+  label: string,
+  path: string
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'number' || !(value > 0 && value < 1)) {
+    throw new WorkshopFormatError(
+      `${label} must be a number between 0 and 1`,
+      path
+    );
+  }
+
+  return value;
 }
 
 function parseTracks(value: unknown, path: string): ITrack[] {

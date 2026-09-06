@@ -146,14 +146,22 @@
     },
     "layouts": {
       "type": "object",
+      "description": "Named arrangements of the JupyterLab window, applied by the layout field when the workshop is first opened and by the layout directive. The built-in layouts are default (a terminal below the main area), terminal-only (a terminal filling the main area) and notebook (the main area left alone).",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "left": { "type": "string" },
-          "right": { "type": "string" },
+          "left": {
+            "$ref": "#/definitions/layoutSide",
+            "description": "What to do with the left sidebar: instructions, collapsed, a sidebar widget id such as filebrowser, or a mapping."
+          },
+          "right": {
+            "$ref": "#/definitions/layoutSide",
+            "description": "What to do with the right sidebar: instructions, collapsed, a sidebar widget id such as jp-property-inspector, or a mapping."
+          },
           "main": {
             "type": "array",
+            "description": "Regions split off the main area in order, each holding widgets as tabs.",
             "items": {
               "type": "object",
               "required": ["area", "widgets"],
@@ -161,13 +169,19 @@
               "properties": {
                 "area": {
                   "type": "string",
-                  "enum": ["top", "bottom", "left", "right"]
+                  "enum": ["top", "bottom", "left", "right"],
+                  "description": "Edge of the main area the region splits off."
                 },
-                "widgets": { "type": "array", "items": { "type": "string" } },
+                "widgets": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Widget references: terminal:<name>, file:<path>, markdown:<path>, notebook:<path>, launcher or editor."
+                },
                 "size": {
                   "type": "number",
                   "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "exclusiveMaximum": 1,
+                  "description": "Fraction of the main area the region takes."
                 }
               }
             }
@@ -207,6 +221,34 @@
     }
   },
   "definitions": {
+    "layoutSide": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "instructions for the workshop panel, collapsed, or a sidebar widget id."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "widget": {
+              "type": "string",
+              "description": "instructions for the workshop panel, or a sidebar widget id such as filebrowser."
+            },
+            "collapsed": {
+              "type": "boolean",
+              "description": "Whether the sidebar starts collapsed."
+            },
+            "size": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1,
+              "description": "Fraction of the window width the sidebar takes."
+            }
+          }
+        }
+      ]
+    },
     "capabilityName": {
       "type": "string",
       "enum": [

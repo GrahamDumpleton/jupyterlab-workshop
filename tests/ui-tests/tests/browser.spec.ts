@@ -189,4 +189,47 @@ test.describe('workshop browser', () => {
     // The parameters are gone from the address so a reload is harmless.
     expect(page.url()).not.toContain('workshop=');
   });
+
+  test('starts in the browser from a registry launch link', async ({
+    page
+  }) => {
+    // The link names a registry file under the root. In a fresh workspace
+    // the browser takes the launcher's place and both sidebars collapse.
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?registry=${REGISTRY_FILE}`)
+      .catch(() => undefined);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    await expect(browser).toBeVisible({ timeout: 60000 });
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-card', {
+        hasText: 'Pandas for beginners'
+      })
+    ).toHaveCount(1);
+    await expect(page.locator('#jp-main-dock-panel .jp-Launcher')).toHaveCount(
+      0
+    );
+    expect(await page.sidebar.isOpen('left')).toBe(false);
+    expect(await page.sidebar.isOpen('right')).toBe(false);
+    expect(page.url()).not.toContain('registry=');
+
+    // Opening a workshop closes the browser and reveals the instructions.
+    await browser
+      .locator('.jp-WorkshopBrowser-card', { hasText: WORKSHOPS_DIR })
+      .getByRole('button', { name: 'Open' })
+      .click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('Git from the command line');
+    await expect(browser).toHaveCount(0);
+    expect(await page.sidebar.isOpen('right')).toBe(true);
+  });
 });

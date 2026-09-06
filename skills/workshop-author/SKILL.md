@@ -85,10 +85,14 @@ files; scope `workspace` keeps writes inside the workshop directory),
 `ui-settings`. Declare exactly what the pages use; lint reports both
 missing and unused capabilities.
 
-Other fields: `layout` and `layouts` (named panel arrangements), `tracks`
-(alternative paths chosen with `choice` or a form field), `defaults`
-(`actions: { delay: 1s }`), `environment` (`requirements`, `kernel`),
-`analytics` (`sink`).
+Other fields: `layout` and `layouts` (named panel arrangements: `left` and
+`right` take `instructions`, `collapsed`, a sidebar widget id, or a mapping
+of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
+`widgets` such as `terminal:git`, `markdown:README.md`, `file:<path>`,
+`notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
+`terminal-only` and `notebook`), `tracks` (alternative paths chosen with
+`choice` or a form field), `defaults` (`actions: { delay: 1s }`),
+`environment` (`requirements`, `kernel`), `analytics` (`sink`).
 
 ## Pages
 

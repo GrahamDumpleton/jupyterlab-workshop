@@ -52,6 +52,9 @@ assert out.strip(), "No commits yet: run git commit"
 - [Checks, forms and checkpoints](checks.md) covers verifying progress,
   quizzes, forms, gating and checkpoints.
 
+- [Layouts](layouts.md) covers arranging the JupyterLab window when a
+  workshop opens: sidebars, their widths, and what the main area holds.
+
 - [Platforms](platforms.md) covers command variants for Linux, macOS,
   Windows and JupyterLite, paths and terminal shells.
 
@@ -109,6 +112,7 @@ demo
 
 actions
 checks
+layouts
 platforms
 lite
 environment

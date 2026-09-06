@@ -5,6 +5,7 @@ export * from './diff';
 export * from './errors';
 export * from './format/directives';
 export * from './format/frontmatter';
+export * from './format/layouts';
 export * from './format/manifest';
 export * from './format/page';
 export * from './format/variants';

@@ -19,6 +19,12 @@ import {
   parseTriggers,
   verifySubstrate
 } from '../checks/verify';
+import {
+  findLayout,
+  LAYOUT_WIDGET_KINDS,
+  LAYOUT_WIDGET_PATH_KINDS,
+  parseLayoutWidget
+} from '../format/layouts';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import { liteShellProblems, usesSubprocess } from '../lite';
@@ -81,6 +87,7 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintChecks(input, messages);
   lintRequirements(input, messages);
   lintFormOrder(input, messages);
+  lintLayouts(input, manifestPath, messages);
   lintCapabilities(input, manifestPath, messages);
 
   return messages;
@@ -542,6 +549,70 @@ function lintHosts(
         message: `Uses host ${host} in ${node.name} "${node.id}" which is not in the declared network hosts`,
         ...where
       });
+    }
+  }
+}
+
+function lintLayouts(
+  input: ILintInput,
+  manifestPath: string,
+  messages: ILintMessage[]
+): void {
+  const { manifest } = input;
+
+  // Every layout named, by the manifest or a layout directive, must be
+  // declared or built in.
+  if (manifest.layout && !findLayout(manifest.layouts, manifest.layout)) {
+    messages.push({
+      level: 'error',
+      rule: 'unknown-layout',
+      message: `The manifest names layout "${manifest.layout}" which is not declared or built in`,
+      path: manifestPath
+    });
+  }
+
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      if (node.name !== 'layout') {
+        continue;
+      }
+
+      const name = node.options.name || node.argument || 'default';
+
+      if (!findLayout(manifest.layouts, name)) {
+        messages.push({
+          level: 'error',
+          rule: 'unknown-layout',
+          message: `The layout directive names layout "${name}" which is not declared or built in`,
+          path: page.path,
+          line: node.line
+        });
+      }
+    }
+  }
+
+  // Widget references must name a known kind, and file kinds need a path.
+  for (const [name, spec] of Object.entries(manifest.layouts)) {
+    for (const area of spec.main) {
+      for (const reference of area.widgets) {
+        const { kind, target } = parseLayoutWidget(reference);
+
+        if (!LAYOUT_WIDGET_KINDS.has(kind)) {
+          messages.push({
+            level: 'error',
+            rule: 'unknown-layout-widget',
+            message: `Layout "${name}" names widget "${reference}" of unknown kind "${kind}"; use ${[...LAYOUT_WIDGET_KINDS].join(', ')}`,
+            path: manifestPath
+          });
+        } else if (LAYOUT_WIDGET_PATH_KINDS.has(kind) && target === '') {
+          messages.push({
+            level: 'error',
+            rule: 'unknown-layout-widget',
+            message: `Layout "${name}" names widget "${reference}" without the path it needs, such as "${kind}:README.md"`,
+            path: manifestPath
+          });
+        }
+      }
     }
   }
 }

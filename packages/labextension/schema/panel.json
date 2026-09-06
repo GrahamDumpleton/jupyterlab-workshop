@@ -10,6 +10,12 @@
       "description": "Directory of the workshop to open when JupyterLab starts and no workshop was open before, relative to the JupyterLab root directory. Leave empty to open nothing.",
       "default": "examples/git-basics"
     },
+    "browseOnStart": {
+      "type": "boolean",
+      "title": "Browse workshops on start",
+      "description": "Open the workshop browser in place of the launcher, with both sidebars collapsed, when JupyterLab starts with no workshop to open or restore. Used by images that offer a choice of workshops.",
+      "default": false
+    },
     "panelSide": {
       "type": "string",
       "title": "Panel side",

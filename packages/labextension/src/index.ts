@@ -106,7 +106,7 @@ import {
   IBrowserSettings,
   WorkshopBrowser
 } from './browser/widget';
-import { LayoutManager } from './layout';
+import { closePlaceholders, isPlaceholderMain, LayoutManager } from './layout';
 import { LiteBackend } from './lite/backend';
 import { isJupyterLite } from './lite/detect';
 import { WorkshopManager } from './manager';
@@ -123,7 +123,7 @@ import {
   IWorkshopManager,
   errorMessage
 } from './tokens';
-import { readSetting, readSettingList } from './settings';
+import { readFlag, readSetting, readSettingList } from './settings';
 import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
 import { TriggerBus } from './verify/triggers';
@@ -217,7 +217,7 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
   autoStart: true,
   provides: IActionRegistry,
   requires: [IWorkshopManager, ILabShell, IDocumentManager, ITerminalSessions],
-  optional: [IEditorTracker, ISettingRegistry],
+  optional: [IEditorTracker, ISettingRegistry, IStateDB],
   activate: (
     app: JupyterFrontEnd,
     manager: IWorkshopManager,
@@ -225,7 +225,8 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     docManager: IDocumentManager,
     terminals: TerminalSessions,
     editorTracker: IEditorTracker | null,
-    settingRegistry: ISettingRegistry | null
+    settingRegistry: ISettingRegistry | null,
+    stateDB: IStateDB | null
   ): IActionRegistry => {
     const kernel = new WorkshopKernel(app, manager);
 
@@ -241,7 +242,21 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       manager,
       terminals,
       docManager,
+      stateDB,
       panelId: PANEL_ID
+    });
+
+    app.commands.addCommand(CommandIDs.applyLayout, {
+      label: 'Workshop: Reset Layout',
+      caption: 'Arrange the JupyterLab panels as the open workshop asks',
+      isEnabled: () => manager.workshop?.manifest.layout !== undefined,
+      execute: async (): Promise<void> => {
+        const name = manager.workshop?.manifest.layout;
+
+        if (name) {
+          await layouts.apply(name);
+        }
+      }
     });
     const files: IFileActionContext = {
       app,
@@ -336,8 +351,9 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     // Verifies re-run on the events they listen for.
     new TriggerBus({ app, manager, terminals });
 
-    // Shut the hidden kernel down when the workshop changes, and check the
-    // tools a newly opened workshop requires.
+    // When the workshop changes, shut the hidden kernel down, check the
+    // tools a newly opened workshop requires, and arrange the panels as its
+    // layout asks (the first time it is opened here, or from a launch link).
     let openPath: string | null = null;
 
     manager.changed.connect(() => {
@@ -350,6 +366,9 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
 
         if (workshop) {
           void runPreflight(manager);
+          layouts.applyOnOpen(workshop).catch(error => {
+            console.warn('Unable to apply the workshop layout', error);
+          });
         }
       }
     });
@@ -516,6 +535,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         const variables = isStringRecord(args.variables)
           ? args.variables
           : undefined;
+        const launch = args.launch === true;
 
         if (!url) {
           const result = await InputDialog.getText({
@@ -547,15 +567,21 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         });
 
         if (path) {
-          await manager.open(path, { variables });
+          await manager.open(path, { variables, launch });
           shell.activateById(panel.id);
         }
       }
     });
 
-    // The browser lists registries and installed workshops in the main area.
+    // The browser lists registries and installed workshops in the main
+    // area. A launch link can add a registry for the session.
+    const sessionRegistries: string[] = [];
     const readBrowserSettings = async (): Promise<IBrowserSettings> => {
-      const registries = await readSettingList(settingRegistry, 'registries');
+      const configured = await readSettingList(settingRegistry, 'registries');
+      const registries = [
+        ...configured,
+        ...sessionRegistries.filter(url => !configured.includes(url))
+      ];
       const workshopsDirectory = await readSetting(
         settingRegistry,
         'workshopsDirectory',
@@ -565,6 +591,20 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       return { registries, workshopsDirectory };
     };
     let browser: WorkshopBrowser | null = null;
+
+    // Start a session in the browser: in a fresh workspace it takes the
+    // launcher's place and both sidebars collapse until a workshop opens.
+    const startBrowsing = async (): Promise<void> => {
+      const fresh = isPlaceholderMain(shell);
+
+      await app.commands.execute(CommandIDs.browse);
+
+      if (fresh) {
+        closePlaceholders(shell);
+        shell.collapseLeft();
+        shell.collapseRight();
+      }
+    };
 
     app.commands.addCommand(CommandIDs.browse, {
       label: 'Browse Workshops',
@@ -599,7 +639,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     }
 
     // A launch link such as `/lab?workshop=<url>&ref=<ref>&var.x=y`
-    // fetches (or opens, for a path) the workshop and applies the values.
+    // fetches (or opens, for a path) the workshop and applies the values;
+    // `/lab?registry=<url>` opens the browser showing that registry.
     app.commands.addCommand(CommandIDs.launch, {
       label: 'Open Workshop from Launch Link',
       execute: (args): void => {
@@ -608,8 +649,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             ? args.search
             : window.location.search;
         const request = parseLaunchLink(search);
+        const registry = parseRegistryLink(search);
 
-        if (!request) {
+        if (registry && !sessionRegistries.includes(registry)) {
+          sessionRegistries.push(registry);
+        }
+
+        if (!request && !registry) {
           return;
         }
 
@@ -628,8 +674,17 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             });
           }
 
+          if (!request) {
+            await startBrowsing();
+
+            return;
+          }
+
           if (request.path !== undefined) {
-            await manager.open(request.path, { variables: request.variables });
+            await manager.open(request.path, {
+              variables: request.variables,
+              launch: true
+            });
             shell.activateById(panel.id);
 
             return;
@@ -640,7 +695,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             ref: request.ref,
             subdir: request.subdir,
             sha256: request.sha256,
-            variables: request.variables
+            variables: request.variables,
+            launch: true
           });
         };
 
@@ -656,7 +712,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     if (router) {
       router.register({
         command: CommandIDs.launch,
-        pattern: /(\?|&)workshop=/,
+        pattern: /(\?|&)(workshop|registry)=/,
         rank: 20
       });
     }
@@ -890,35 +946,14 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       }
     }
 
-    // Apply the manifest's layout whenever a workshop is opened.
-    let openPath: string | null = null;
-
-    manager.changed.connect(() => {
-      const workshop = manager.workshop;
-      const path = workshop?.path ?? null;
-
-      if (path === openPath) {
-        return;
-      }
-
-      openPath = path;
-
-      if (workshop?.manifest.layout) {
-        void registry.run({
-          type: 'layout',
-          id: 'layout',
-          argument: '',
-          options: { name: workshop.manifest.layout },
-          body: ''
-        });
-      }
-    });
-
     // Once JupyterLab has restored its layout, reopen the previous workshop
-    // or fall back to the configured default. A launch link in the URL
-    // takes precedence and is handled by the router.
+    // or fall back to the configured default, or to the browser when the
+    // settings ask for it. A launch link in the URL takes precedence and
+    // is handled by the router.
     void app.restored.then(async () => {
-      if (parseLaunchLink(window.location.search)) {
+      const search = window.location.search;
+
+      if (parseLaunchLink(search) || parseRegistryLink(search)) {
         return;
       }
 
@@ -932,6 +967,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
       if (defaultWorkshop) {
         await manager.open(defaultWorkshop);
+
+        return;
+      }
+
+      if (await readFlag(settingRegistry, 'browseOnStart', false)) {
+        await startBrowsing();
       }
     });
   }
@@ -968,13 +1009,24 @@ const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
   'workshop',
   'ref',
   'subdir',
-  'sha256'
+  'sha256',
+  'registry'
 ]);
 
 /**
  * Parse the query string of a launch link, or return null when it has no
  * `workshop` parameter.
  */
+/**
+ * The registry a launch link asks the browser to show, from a `registry`
+ * query parameter, or null.
+ */
+export function parseRegistryLink(search: string): string | null {
+  const registry = URLExt.queryStringToObject(search).registry?.trim() ?? '';
+
+  return registry === '' ? null : registry;
+}
+
 export function parseLaunchLink(search: string): ILaunchRequest | null {
   const params = URLExt.queryStringToObject(search);
   const workshop = params.workshop?.trim() ?? '';

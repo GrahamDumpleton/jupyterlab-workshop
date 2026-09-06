@@ -136,8 +136,36 @@ test.describe('workshop panel', () => {
   test('walks through the start of git-basics', async ({ page, tmpPath }) => {
     const workshopPath = `${tmpPath}/${WORKSHOP}`;
 
+    // Sidebars have a minimum width, so a quarter of the window only
+    // measures as a quarter when the window is wide enough.
+    await page.setViewportSize({ width: 1600, height: 900 });
+
     // Open the uploaded workshop through the command the panel uses.
     await openWorkshop(page, workshopPath);
+
+    // The manifest layout collapses the left sidebar, shows the
+    // instructions on the right at a quarter of the width, and replaces the
+    // launcher with the README preview above a terminal.
+    await expect(
+      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
+    ).toBeVisible();
+    await expect(page.locator('#jp-main-dock-panel .jp-Launcher')).toHaveCount(
+      0
+    );
+    await expect(page.locator('.jp-Terminal').first()).toBeVisible();
+    expect(await page.sidebar.isOpen('left')).toBe(false);
+    expect(await page.sidebar.isOpen('right')).toBe(true);
+
+    const rightWidth = (await page.locator('#jp-right-stack').boundingBox())
+      ?.width;
+    const splitWidth = (
+      await page.locator('#jp-main-split-panel').boundingBox()
+    )?.width;
+
+    expect(rightWidth).toBeDefined();
+    expect(splitWidth).toBeDefined();
+    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeGreaterThan(0.2);
+    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeLessThan(0.3);
 
     await page.sidebar.openTab('jupyterlab-workshop-panel');
 

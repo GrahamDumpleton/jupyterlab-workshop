@@ -78,7 +78,7 @@ def render_properties(
             f"{'yes' if name in required else 'no'} | {description} |"
         )
 
-        inner = nested_object(prop)
+        inner = nested_object(prop, definitions)
 
         if inner is not None:
             nested.append((name, inner))
@@ -101,8 +101,24 @@ def render_properties(
         )
 
 
-def nested_object(prop: dict[str, Any]) -> dict[str, Any] | None:
+def nested_object(
+    prop: dict[str, Any], definitions: dict[str, Any]
+) -> dict[str, Any] | None:
     """The object schema inside a property, for arrays of objects or objects."""
+
+    if "$ref" in prop:
+        name = str(prop["$ref"]).split("/")[-1]
+
+        return nested_object(definitions.get(name, {}), definitions)
+
+    if "oneOf" in prop:
+        for item in prop["oneOf"]:
+            inner = nested_object(item, definitions)
+
+            if inner is not None:
+                return inner
+
+        return None
 
     if prop.get("type") == "array":
         items = prop.get("items", {})

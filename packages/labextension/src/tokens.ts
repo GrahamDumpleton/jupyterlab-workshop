@@ -138,6 +138,9 @@ export interface ILoadedWorkshop {
 
   /** What the learner was asked to trust. */
   trust: ITrustSummary;
+
+  /** Whether the workshop was opened from a launch link. */
+  launched: boolean;
 }
 
 /** Answer to a confirmation prompt. */
@@ -402,6 +405,12 @@ export interface IInstalledWorkshop {
 export interface IOpenOptions {
   /** Values applied over the manifest defaults, as a launch link provides. */
   variables?: Record<string, string>;
+
+  /**
+   * Whether the open comes from a launch link, which applies the workshop
+   * layout even when it has been applied in this workspace before.
+   */
+  launch?: boolean;
 }
 
 /** Loads workshops, tracks progress and runs actions. */
@@ -777,6 +786,7 @@ export namespace CommandIDs {
   export const createEnvironment = 'workshop:create-environment';
   export const authorMode = 'workshop:author-mode';
   export const newWorkshop = 'workshop:new';
+  export const applyLayout = 'workshop:apply-layout';
   export const editPage = 'workshop:edit-page';
   export const editManifest = 'workshop:edit-manifest';
   export const openSource = 'workshop:open-source';

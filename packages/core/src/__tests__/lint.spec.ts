@@ -402,3 +402,45 @@ echo {{ user_name }}
     ).toEqual(['unused-capability']);
   });
 });
+
+describe('layout rules', () => {
+  const withLayouts = (layouts: string) =>
+    `${MANIFEST}layout: custom\nlayouts:\n${layouts}`;
+
+  it('accepts declared and built-in layouts', () => {
+    expect(
+      rules(
+        '```{layout}\n:name: terminal-only\n```\n',
+        withLayouts(
+          '  custom:\n    left: collapsed\n    right: { widget: instructions, size: 0.2 }\n    main:\n      - { area: top, widgets: ["markdown:README.md"] }\n      - { area: bottom, widgets: ["terminal:git"], size: 0.3 }\n'
+        )
+      ).filter(rule => rule.includes('layout'))
+    ).toEqual([]);
+  });
+
+  it('reports layouts that are neither declared nor built in', () => {
+    const findings = lint(
+      '```{layout}\n:name: missing\n```\n',
+      `${MANIFEST}layout: nowhere\n`
+    ).filter(message => message.rule === 'unknown-layout');
+
+    expect(findings.map(message => message.message)).toEqual([
+      expect.stringContaining('"nowhere"'),
+      expect.stringContaining('"missing"')
+    ]);
+    expect(findings[1].path).toBe('pages/01.md');
+  });
+
+  it('reports widget references of unknown kind or without a path', () => {
+    const findings = rules(
+      'text',
+      withLayouts(
+        '  custom:\n    main:\n      - { area: top, widgets: ["window:x", "markdown", "launcher"] }\n'
+      )
+    );
+
+    expect(
+      findings.filter(rule => rule === 'unknown-layout-widget')
+    ).toHaveLength(2);
+  });
+});
