@@ -69,6 +69,15 @@ separated by semicolons, that run it while its page is showing:
 - `interval <duration>` on a timer, for example `interval 10s`, with a
   minimum of one second.
 
+A trigger fires as soon as its event happens, and for `after:` that is
+when the action reports completion, which for a terminal command is the
+moment it has been typed, not when it has finished. A triggered verify
+that fails is therefore given time to settle: it is tried again over the
+next few seconds, showing as still checking, before the failure stands.
+A command that takes longer than that, such as a build, is better given
+`:wait: prompt` on its `execute` action so the trigger fires when the
+shell is back at its prompt. Clicking Check runs the verify once.
+
 `:timeout:` bounds script and shell runs. Code substrates, `shell`
 included, need the `kernel-exec` capability; the `contents` and `ui`
 substrates need nothing. Under the

@@ -250,6 +250,12 @@ pass, `soft` only shows what is missing.
   have run, in order, on a fresh copy of the workshop. Do not depend on
   state from a previous run.
 
+- An `after:<id>` trigger fires when the command has been typed, not
+  when it has finished; a failing triggered verify is retried for a few
+  seconds, so quick commands need nothing, but give a slow command
+  (`:wait: prompt`) so the check runs once the shell is back at its
+  prompt.
+
 - Ids referred to elsewhere (`requires`, `after:`, `cascade`) must exist;
   lint reports `unknown-requirement` and `unknown-action-id`.
 

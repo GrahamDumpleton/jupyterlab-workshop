@@ -133,6 +133,69 @@ test.describe('workshop panel', () => {
     );
   });
 
+  test('retries a triggered check while its command finishes', async ({
+    page,
+    tmpPath
+  }) => {
+    // A check triggered by a command fires as soon as the command is
+    // typed, so it must keep trying while the command does its work.
+    const slow = `${tmpPath}/slow`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: slow',
+        'title: Slow',
+        'capabilities: [terminal]',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${slow}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Slow',
+        '---',
+        '',
+        '```{execute}',
+        ':id: make',
+        'sleep 3 && touch made.txt',
+        '```',
+        '',
+        '```{verify}',
+        ':id: made',
+        ':label: The file exists',
+        ':substrate: contents',
+        ':trigger: after:make',
+        'exists made.txt',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${slow}/pages/01.md`
+    );
+
+    await openWorkshop(page, slow);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const action = panel.locator('.jp-WorkshopPanel-action.jp-mod-execute');
+    const check = panel.locator('.jp-WorkshopPanel-verify');
+
+    await action.click();
+    await expect(action).toHaveClass(/jp-mod-status-ok/);
+
+    // The first attempt fails and the check keeps going rather than
+    // reporting a failure, then passes once the file appears.
+    await expect(check).toContainText('Checking');
+    await expect(check).not.toHaveClass(/jp-mod-verify-fail/);
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 15000 });
+
+    await page.contents.deleteDirectory(slow);
+  });
+
   test('walks through the start of git-basics', async ({ page, tmpPath }) => {
     const workshopPath = `${tmpPath}/${WORKSHOP}`;
 

@@ -77,6 +77,12 @@ import { VariableStore } from './variables';
 
 const STATE_KEY = '@jupyterlab-workshop/labextension:state';
 
+/**
+ * Pauses between the attempts of a verify fired by a trigger that has not
+ * passed yet, since the action that fired it may still be finishing.
+ */
+const SETTLE_DELAYS_MS: readonly number[] = [500, 1000, 2000, 4000];
+
 const MANIFEST_FILE = 'workshop.yaml';
 
 interface IStoredState {
@@ -1035,7 +1041,7 @@ export class WorkshopManager implements IWorkshopManager {
             status: 'skipped' as const,
             message: `Nothing to do on ${this._platform?.os ?? 'this platform'}`
           }
-        : await this._runGated(registry, request, trigger);
+        : await this._runSettled(registry, request, trigger);
 
     if (result.captured) {
       for (const [name, value] of Object.entries(result.captured)) {
@@ -1065,6 +1071,55 @@ export class WorkshopManager implements IWorkshopManager {
       ) {
         this.stopChain();
       }
+    }
+
+    return result;
+  }
+
+  /**
+   * Run a request, giving a verify fired by a trigger time to settle.
+   *
+   * A trigger such as `after:<action>` fires as soon as the action
+   * reports completion, which for a terminal command is when it has been
+   * typed, so a check of the command's results can run too early. A
+   * failing triggered verify is tried again over the next few seconds,
+   * staying in the running state, before the failure stands. Clicking
+   * Check runs once, as before.
+   */
+  private async _runSettled(
+    registry: IActionRegistry,
+    request: IActionRequest,
+    trigger: ActionTrigger
+  ): Promise<IActionResult> {
+    let result = await this._runGated(registry, request, trigger);
+
+    if (request.type !== 'verify' || trigger !== 'trigger') {
+      return result;
+    }
+
+    const workshop = this._workshop;
+    const page = this._currentPageId;
+
+    for (const delay of SETTLE_DELAYS_MS) {
+      if (result.status !== 'error') {
+        break;
+      }
+
+      this._running.set(request.id, {
+        status: 'running',
+        message: 'Not yet; checking again',
+        runs: this.actionStatus(request.id).runs
+      });
+      this._actionChanged.emit(request.id);
+
+      await sleep(delay);
+
+      // Leaving the page or the workshop ends the attempts.
+      if (this._workshop !== workshop || this._currentPageId !== page) {
+        break;
+      }
+
+      result = await this._runGated(registry, request, trigger);
     }
 
     return result;
