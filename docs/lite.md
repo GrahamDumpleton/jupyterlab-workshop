@@ -81,9 +81,12 @@ and works from any sub-path.
 
 ## Publishing to GitHub Pages
 
-The repository's own workflow (`.github/workflows/pages.yml`) builds a
-site with the example workshop and deploys it with `actions/deploy-pages`.
-A workshop repository can do the same:
+The repository's own workflow (`.github/workflows/pages.yml`) runs
+`just pages`, which assembles the project site: a landing page, the JSON
+schemas, and the example workshop built as a JupyterLite site under
+`demo/`. The result is deployed with `actions/deploy-pages` to
+<https://grahamdumpleton.github.io/jupyterlab-workshop/>. A workshop
+repository can do the same with just the JupyterLite build:
 
 ```yaml
 - run: pip install "jupyterlab-workshop[lite]"

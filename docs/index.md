@@ -89,3 +89,38 @@ playwright install chromium
 
 The `mcp` extra adds the MCP server for AI agents, and the `lite` extra
 the tools to build a JupyterLite site.
+
+```{toctree}
+:hidden:
+
+demo
+```
+
+```{toctree}
+:hidden:
+:caption: Writing workshops
+
+actions
+checks
+platforms
+lite
+environment
+reference/manifest
+```
+
+```{toctree}
+:hidden:
+:caption: Running workshops
+
+registry
+trust
+analytics
+```
+
+```{toctree}
+:hidden:
+:caption: Tools
+
+cli
+authoring
+```

@@ -65,19 +65,26 @@ typecheck:
     uv run jlpm typecheck
     uv run mypy
 
-# Build the documentation site into site/ (generates the manifest reference first).
+# Build the documentation with Sphinx into docs/_build/html (generates the manifest reference first).
 docs:
-    uv run python scripts/generate_manifest_reference.py
-    uv run mkdocs build --strict
+    uv run sphinx-build -W --keep-going -b html docs docs/_build/html
 
 # Serve the documentation with live reload.
 docs-serve:
-    uv run python scripts/generate_manifest_reference.py
-    uv run mkdocs serve
+    uv run sphinx-autobuild docs docs/_build/html
 
 # Clear generated documentation outputs.
 docs-clean:
-    rm -rf site docs/reference
+    rm -rf docs/_build docs/reference
+
+# Assemble the GitHub Pages site into site/: landing page, JSON schemas and the JupyterLite demo.
+pages *args:
+    rm -rf site
+    mkdir -p site/schemas/v1alpha1
+    cp github-pages/index.html site/index.html
+    touch site/.nojekyll
+    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/registry.schema.json site/schemas/v1alpha1/
+    uv run jupyter workshop lite examples/hello-jupyterlab --out site/demo "$@"
 
 # Self-test a workshop directory in a real JupyterLab (default: every example).
 selftest *args:
@@ -108,7 +115,7 @@ distclean:
     rm -rf jupyterlab_workshop/labextension jupyterlab_workshop/nodejs jupyterlab_workshop/schema
     rm -rf .eslintcache .stylelintcache packages/core/coverage
     rm -rf node_modules packages/*/node_modules tests/ui-tests/node_modules .venv
-    rm -rf site docs/reference build dist lite-site .jupyterlite.doit.db .coverage htmlcov
+    rm -rf site docs/_build docs/reference build dist lite-site .jupyterlite.doit.db .coverage htmlcov
     rm -rf tests/ui-tests/test-results tests/ui-tests/playwright-report
     rm -rf examples/*/_workshop examples/*/scratch examples/*/demo workshops
     find . -type d \( -name __pycache__ -o -name .ipynb_checkpoints -o -name '*.egg-info' -o -name .yarn -o -name .mypy_cache -o -name .ruff_cache -o -name .pytest_cache \) -prune -exec rm -rf {} +

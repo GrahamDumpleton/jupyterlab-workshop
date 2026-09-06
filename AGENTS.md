@@ -30,6 +30,11 @@ The repository is a monorepo with three main parts:
   `jupyter_server` extension (platform detection, fetching, script
   verifies, checkpoints) and the `jupyter workshop` CLI.
 
+README.md is the long description shown on PyPI, so it stays short and
+user facing and links to the documentation site; development setup and
+workflow belong in CONTRIBUTING.md, and the full documentation is under
+`docs/` and published on Read the Docs.
+
 Example workshops live in `examples/` and double as test fixtures. Tests
 live in `tests/` (Python and Galata UI tests) and alongside the source in
 `packages/core/`. See TESTING.md for where tests are, how to run them, and
@@ -104,9 +109,15 @@ underlying commands yourself; run `just --list` to see everything.
 - `just typecheck` runs tsc for the TypeScript packages and mypy for
   Python.
 
-- `just docs` builds the documentation; `just docs-clean` clears a stale
-  incremental build after structural changes such as renamed or removed
-  pages.
+- `just docs` builds the documentation with Sphinx into `docs/_build/html`
+  (the pages are MyST Markdown under `docs/`, and the manifest reference is
+  generated from the JSON schema on every build); `just docs-serve` rebuilds
+  on change; `just docs-clean` clears a stale build after structural changes
+  such as renamed or removed pages.
+
+- `just pages` assembles the GitHub Pages site into `site/`: the landing
+  page from `github-pages/`, the JSON schemas under `schemas/v1alpha1/`,
+  and the example workshop as a JupyterLite site under `demo/`.
 
 - `just clean` removes build outputs only. `just distclean` also removes
   `node_modules`, `.venv`, caches, built docs and sites, and files left

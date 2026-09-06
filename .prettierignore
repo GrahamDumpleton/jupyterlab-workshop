@@ -9,3 +9,7 @@ eslint.config.mjs
 scratch
 tests/ui-tests/test-results
 tests/ui-tests/playwright-report
+site
+lite-site
+docs/_build
+docs/reference

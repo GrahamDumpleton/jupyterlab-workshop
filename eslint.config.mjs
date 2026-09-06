@@ -16,6 +16,9 @@ export default defineConfig([
       '**/lib/**',
       '.venv',
       'scratch',
+      'site',
+      'lite-site',
+      'docs/_build',
       'tests',
       '**/__tests__/**',
       'jupyterlab_workshop'

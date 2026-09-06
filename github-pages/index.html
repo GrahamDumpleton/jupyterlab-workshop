@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jupyterlab-workshop</title>
+  <meta name="description" content="Guided interactive workshops inside JupyterLab.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1f2933;
+      --muted: #52606d;
+      --bg: #ffffff;
+      --card: #f5f7fa;
+      --accent: #f37726;
+      --link: #0b5fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #e4e7eb;
+        --muted: #9aa5b1;
+        --bg: #1b1f24;
+        --card: #262b32;
+        --link: #7ab0ff;
+      }
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.55;
+    }
+    main {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 4rem 1.5rem 3rem;
+    }
+    h1 {
+      font-size: 2.25rem;
+      margin: 0 0 0.25rem;
+    }
+    h1 span {
+      color: var(--accent);
+    }
+    .tagline {
+      font-size: 1.2rem;
+      color: var(--muted);
+      margin: 0 0 1.5rem;
+    }
+    a {
+      color: var(--link);
+    }
+    .links {
+      list-style: none;
+      padding: 0;
+      margin: 2rem 0 0;
+      display: grid;
+      gap: 0.75rem;
+    }
+    .links li {
+      background: var(--card);
+      border-radius: 0.5rem;
+      padding: 0.9rem 1.1rem;
+    }
+    .links a {
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .links a:hover {
+      text-decoration: underline;
+    }
+    .links p {
+      margin: 0.2rem 0 0;
+      color: var(--muted);
+    }
+    footer {
+      margin-top: 3rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1><span>jupyterlab</span>-workshop</h1>
+    <p class="tagline">Guided, interactive workshops inside JupyterLab.</p>
+
+    <p>
+      Workshop instructions are shown in a JupyterLab side panel and contain
+      clickable actions that drive the live session: terminals, the file
+      browser, the editor, notebooks, kernels and layout. Workshops can check
+      what the learner has done, ask questions, and hold pages until
+      requirements are met. A workshop is a directory with a
+      <code>workshop.yaml</code> manifest and Markdown pages, and it runs
+      wherever JupyterLab runs, including entirely in the browser with
+      JupyterLite.
+    </p>
+
+    <ul class="links">
+      <li>
+        <a href="https://jupyterlab-workshop.readthedocs.io/">Documentation</a>
+        <p>Installing, writing workshops, the manifest reference, the command line and more.</p>
+      </li>
+      <li>
+        <a href="demo/">Try the demo</a>
+        <p>The example workshop running in JupyterLite, with no installation.</p>
+      </li>
+      <li>
+        <a href="https://pypi.org/project/jupyterlab-workshop/">PyPI package</a>
+        <p><code>pip install jupyterlab-workshop</code></p>
+      </li>
+      <li>
+        <a href="https://github.com/GrahamDumpleton/jupyterlab-workshop">Source on GitHub</a>
+        <p>Issues, examples and contributing.</p>
+      </li>
+      <li>
+        <a href="schemas/v1alpha1/workshop.schema.json">JSON schemas</a>
+        <p>
+          <a href="schemas/v1alpha1/workshop.schema.json">workshop.schema.json</a> for
+          <code>workshop.yaml</code> and
+          <a href="schemas/v1alpha1/registry.schema.json">registry.schema.json</a> for
+          registry indexes.
+        </p>
+      </li>
+    </ul>
+
+    <footer>
+      The concept comes from the
+      <a href="https://educates.dev">Educates Training Platform</a>, re-imagined
+      so that a single workshop runs wherever JupyterLab runs, without Kubernetes
+      or containers.
+    </footer>
+  </main>
+</body>
+</html>

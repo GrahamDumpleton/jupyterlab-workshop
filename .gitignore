@@ -17,9 +17,10 @@ jupyterlab_workshop/nodejs/
 jupyterlab_workshop/schema/
 jupyterlab_workshop/_version.py
 
-# Documentation build outputs
-site/
+# Documentation build outputs and the assembled GitHub Pages site
+docs/_build/
 docs/reference/
+site/
 
 # Integration tests
 tests/ui-tests/test-results/

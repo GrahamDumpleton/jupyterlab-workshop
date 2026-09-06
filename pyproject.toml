@@ -24,7 +24,7 @@ dependencies = [
     "jupyter_server>=2.13.0,<3",
     "pyyaml>=6.0.3",
 ]
-dynamic = ["version", "description", "authors", "urls", "keywords"]
+dynamic = ["version", "description", "authors", "keywords"]
 
 [project.optional-dependencies]
 test = [
@@ -39,10 +39,22 @@ lite = [
     "jupyterlite-terminal>=1.6,<2",
 ]
 
+[project.urls]
+Homepage = "https://github.com/GrahamDumpleton/jupyterlab-workshop"
+Documentation = "https://jupyterlab-workshop.readthedocs.io/"
+Repository = "https://github.com/GrahamDumpleton/jupyterlab-workshop.git"
+Issues = "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues"
+
 [project.scripts]
 jupyter-workshop = "jupyterlab_workshop.cli:main"
 
 [dependency-groups]
+docs = [
+    "sphinx>=8",
+    "myst-parser>=4",
+    "furo>=2024.8",
+    "sphinx-autobuild>=2024.10",
+]
 dev = [
     "jupyterlab>=4.6.0,<5",
     "jupyter-builder>=1.2.0,<2",
@@ -50,8 +62,7 @@ dev = [
     "pytest>=8",
     "pytest-jupyter[server]>=0.10",
     "ruff>=0.5",
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
+    { include-group = "docs" },
     "playwright>=1.45",
     "mcp>=1.0",
     "jupyterlite-core>=0.8.3,<0.9",
@@ -63,7 +74,7 @@ dev = [
 source = "nodejs"
 
 [tool.hatch.metadata.hooks.nodejs]
-fields = ["description", "authors", "urls", "keywords"]
+fields = ["description", "authors", "keywords"]
 
 [tool.hatch.build.targets.sdist]
 artifacts = [

@@ -3,28 +3,34 @@
 Guided, interactive workshops inside JupyterLab.
 
 Workshop instructions are shown in a JupyterLab side panel and contain
-clickable actions that drive the live JupyterLab session: terminals, the
-file browser, the editor, notebooks, kernels and layout. The concept comes
-from the [Educates Training Platform](https://educates.dev), re-imagined so
-that a single workshop runs wherever JupyterLab runs, without Kubernetes or
-containers.
+clickable actions that drive the live session: terminals, the file
+browser, the editor, notebooks, kernels and layout. Workshops can check
+what the learner has done, ask questions, collect values, hold pages
+until requirements are met, and snapshot the working directory. The
+concept comes from the [Educates Training Platform](https://educates.dev),
+re-imagined so that a single workshop runs wherever JupyterLab runs,
+without Kubernetes or containers.
 
-This project is at the proof-of-concept stage. See `docs/demo.md` for how
-to try the example workshop, `docs/actions.md` for the actions a workshop
-page can use, `docs/checks.md` for verifies, quizzes, forms, gating and
-checkpoints, `docs/platforms.md` for Windows and macOS variants of
-commands, `docs/lite.md` for running and publishing workshops as a
-static JupyterLite site, `docs/environment.md` for isolated Python
-environments,
-`docs/registry.md` for the workshop browser, registries and launch links,
-`docs/trust.md` for how workshops are loaded from repositories and
-archives, what capabilities they declare, and how the trust levels change
-what actions do, `docs/analytics.md` for the progress events a workshop
-records, `docs/cli.md` for the `jupyter workshop` command line tool
-that creates, lints, renders, self-tests and publishes workshops, and
-`docs/authoring.md` for author mode in JupyterLab, session recording,
-and the MCP server and `skills/workshop-author` skill for AI agents.
-`just docs` builds these into a site.
+A workshop is a directory with a `workshop.yaml` manifest and Markdown
+pages. The format is text based and git friendly, and a workshop can
+also be published as a static JupyterLite site that runs entirely in the
+browser.
+
+> **Warning:** This project is in an early phase of development. The
+> documentation is still being improved, the experience is still being
+> polished, and the workshop format, settings and command line can change
+> between releases without a compatibility path.
+
+## Install
+
+```
+pip install jupyterlab-workshop
+```
+
+The package is a prebuilt JupyterLab 4 extension with its server
+extension; nothing else needs installing. Open the Workshop panel from
+the right sidebar, or right-click a workshop directory in the file browser
+and choose "Open as Workshop".
 
 ## Writing a workshop
 
@@ -40,17 +46,22 @@ jupyter workshop test my-workshop
 workshop in a real JupyterLab and reports each one. Inside JupyterLab,
 "Workshop: Author Mode" adds an editing toolbar to the panel, and
 `jupyter workshop mcp` (with the `mcp` extra) serves the same tools to AI
-agents.
+agents. The `lite` extra adds `jupyter workshop lite` for building a
+JupyterLite site.
 
-## Development
+## Learn more
 
-Requires [uv](https://docs.astral.sh/uv/) and [just](https://just.systems/).
+- [Documentation](https://jupyterlab-workshop.readthedocs.io/): the
+  actions a page can use, checks, forms and checkpoints, platforms,
+  JupyterLite, the manifest reference, trust, the command line and
+  authoring in JupyterLab.
 
-```
-just install
-just lab
-```
+- [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/):
+  the example workshop running in JupyterLite.
 
-Then open the Workshop panel in the right sidebar (the `panelSide`
-setting, or dragging the tab, moves it to the left). See `just --list` for the
-other development tasks.
+- [Source, issues and contributing](https://github.com/GrahamDumpleton/jupyterlab-workshop):
+  see `CONTRIBUTING.md` in the repository for the development setup.
+
+## License
+
+Apache License 2.0.
