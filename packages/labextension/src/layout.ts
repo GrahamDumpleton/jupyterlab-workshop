@@ -29,6 +29,12 @@ const SPLIT_PANEL_ID = 'jp-main-split-panel';
 /** The most of the window width the two sidebars together may take. */
 const SIDEBARS_MAX = 0.8;
 
+/** Share of the window the instructions panel gets when its sidebar had none. */
+const DEFAULT_PANEL_SHARE = 0.25;
+
+/** A sidebar share below this counts as no width at all. */
+const MIN_SHARE = 0.02;
+
 /** Services the layout manager needs. */
 export interface ILayoutContext {
   app: JupyterFrontEnd;
@@ -85,27 +91,35 @@ export class LayoutManager {
    * layout is left alone and only the instructions panel is shown.
    */
   async applyOnOpen(workshop: ILoadedWorkshop): Promise<void> {
+    // Which sidebars have no width is read now, before the command that
+    // opened the workshop reveals the panel at its minimum width.
+    const empty = this._emptySides();
     const name = workshop.manifest.layout;
 
     if (!name) {
+      this._showPanel(empty);
+
       return;
     }
 
     if (!workshop.launched && (await this._wasApplied(workshop.path))) {
-      this._context.shell.activateById(this._context.panelId);
+      this._showPanel(empty);
 
       return;
     }
 
     await this._recordApplied(workshop.path);
-    await this.apply(name);
+    await this.apply(name, empty);
   }
 
   /**
    * Apply a named layout in full: the main area regions and their sizes,
    * then the sidebars, finishing with the instructions panel shown.
    */
-  async apply(name: string): Promise<void> {
+  async apply(
+    name: string,
+    empty: ReadonlySet<'left' | 'right'> = this._emptySides()
+  ): Promise<void> {
     const spec = this.find(name);
 
     if (!spec) {
@@ -118,8 +132,73 @@ export class LayoutManager {
       this._arrangeSide(side, spec[side]);
     }
 
-    this._resizeSides(spec);
-    this._context.shell.activateById(this._context.panelId);
+    this._resizeSides([spec.left?.size, spec.right?.size]);
+    this._showPanel(empty, spec);
+  }
+
+  /**
+   * Bring the instructions panel forward. A sidebar that had no width,
+   * as after a session started in the browser with both collapsed, is
+   * given the default share so the panel does not appear at its minimum,
+   * unless the layout sized that side itself.
+   */
+  private _showPanel(
+    empty: ReadonlySet<'left' | 'right'>,
+    spec?: ILayoutSpec
+  ): void {
+    const { shell, panelId } = this._context;
+
+    shell.activateById(panelId);
+
+    const side = this._panelSide();
+
+    if (!side || !empty.has(side) || spec?.[side]?.size !== undefined) {
+      return;
+    }
+
+    this._resizeSides(
+      side === 'left'
+        ? [DEFAULT_PANEL_SHARE, undefined]
+        : [undefined, DEFAULT_PANEL_SHARE]
+    );
+  }
+
+  /**
+   * The sidebars that currently take no width, collapsed or never shown.
+   */
+  private _emptySides(): Set<'left' | 'right'> {
+    const empty = new Set<'left' | 'right'>();
+    const split = findWidget(this._context.shell, SPLIT_PANEL_ID);
+
+    if (!(split instanceof SplitPanel) || split.widgets.length !== 3) {
+      return empty;
+    }
+
+    const sizes = split.relativeSizes();
+
+    if ((sizes[0] ?? 0) < MIN_SHARE) {
+      empty.add('left');
+    }
+
+    if ((sizes[2] ?? 0) < MIN_SHARE) {
+      empty.add('right');
+    }
+
+    return empty;
+  }
+
+  private _panelSide(): 'left' | 'right' | null {
+    const { shell, panelId } = this._context;
+
+    for (const side of ['left', 'right'] as const) {
+      for (const widget of shell.widgets(side)) {
+        if (widget.id === panelId) {
+          return side;
+        }
+      }
+    }
+
+    return null;
   }
 
   private async _wasApplied(path: string): Promise<boolean> {
@@ -285,12 +364,7 @@ export class LayoutManager {
    * requested fractions are of the visible width, and a hidden area keeps
    * its old share for when it is expanded again.
    */
-  private _resizeSides(spec: ILayoutSpec): void {
-    const wanted: [number | undefined, number | undefined] = [
-      spec.left?.size,
-      spec.right?.size
-    ];
-
+  private _resizeSides(wanted: [number | undefined, number | undefined]): void {
     if (wanted.every(size => size === undefined)) {
       return;
     }

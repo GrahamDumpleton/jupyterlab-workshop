@@ -371,7 +371,10 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     this._loading = false;
-    void this._envWriter.invoke();
+
+    // The files must exist before the layout opens a terminal that
+    // sources them, so the first write is not debounced.
+    await this._writeEnvFiles();
     await this._saveStateDB();
     this._changed.emit();
   }
@@ -482,7 +485,7 @@ export class WorkshopManager implements IWorkshopManager {
       this._error = `Unable to reload workshop "${workshop.path}": ${errorMessage(error)}`;
     }
 
-    void this._envWriter.invoke();
+    await this._writeEnvFiles();
     this._changed.emit();
   }
 
@@ -1547,7 +1550,12 @@ export class WorkshopManager implements IWorkshopManager {
       );
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);
+
+      return;
     }
+
+    // Open terminals source the files again to pick up the new values.
+    this._environmentChanged.emit();
   }
 
   private async _ensurePlatform(): Promise<IPlatformInfo> {

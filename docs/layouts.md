@@ -51,7 +51,10 @@ either a word or a mapping:
 
 The instructions panel is always brought forward when a layout finishes,
 so collapsing the side it sits on has no lasting effect; collapse the
-other side instead. If both sidebars ask for a size and together they
+other side instead. When its sidebar has no width at that point, as
+after a session that started in the workshop browser with both sidebars
+collapsed, the panel takes a quarter of the window unless the layout
+gives its side a `size`. If both sidebars ask for a size and together they
 would take more than four fifths of the width, both are scaled down so the
 main area keeps some room.
 
