@@ -246,6 +246,7 @@ export class LayoutManager {
 
     if (spec.widget === 'instructions') {
       this._movePanel(side);
+      shell.activateById(this._context.panelId);
     } else if (spec.widget) {
       shell.activateById(spec.widget);
     }
@@ -255,6 +256,23 @@ export class LayoutManager {
         shell.collapseLeft();
       } else {
         shell.collapseRight();
+      }
+
+      return;
+    }
+
+    // A width only means something for a sidebar that is showing, so a
+    // collapsed one is expanded first.
+    if (spec.size !== undefined) {
+      const collapsed =
+        side === 'left' ? shell.leftCollapsed : shell.rightCollapsed;
+
+      if (collapsed) {
+        if (side === 'left') {
+          shell.expandLeft();
+        } else {
+          shell.expandRight();
+        }
       }
     }
   }

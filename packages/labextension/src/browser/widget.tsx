@@ -193,13 +193,23 @@ function BrowserContent(props: IContentProps): JSX.Element {
     [registries]
   );
   const allTags = useMemo(() => registryTags(entries), [entries]);
-  const shown = useMemo(
-    () => searchRegistry(entries, query, tags),
-    [entries, query, tags]
-  );
   const installedByName = useMemo(
     () => new Map(installed.map(item => [item.name, item])),
     [installed]
+  );
+  const entriesByName = useMemo(
+    () => new Map(entries.map(entry => [entry.name, entry])),
+    [entries]
+  );
+
+  // A workshop that is installed is listed once, under Installed, where
+  // its card offers to reinstall it from the registry.
+  const shown = useMemo(
+    () =>
+      searchRegistry(entries, query, tags).filter(
+        entry => !installedByName.has(entry.name)
+      ),
+    [entries, query, tags, installedByName]
   );
   const platform = manager.platform?.os ?? '';
 
@@ -322,6 +332,11 @@ function BrowserContent(props: IContentProps): JSX.Element {
               open={manager.workshop?.path === item.path}
               onOpen={() => open(item.path)}
               onRemove={() => void remove(item)}
+              onReinstall={
+                entriesByName.has(item.name)
+                  ? () => install(entriesByName.get(item.name)!)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -440,12 +455,16 @@ function InstalledCard({
   item,
   open,
   onOpen,
-  onRemove
+  onRemove,
+  onReinstall
 }: {
   item: IInstalledWorkshop;
   open: boolean;
   onOpen: () => void;
   onRemove: () => void;
+
+  /** Fetch the workshop again from its registry entry, when it has one. */
+  onReinstall?: () => void;
 }): JSX.Element {
   const progress =
     item.pages > 0 ? Math.round((item.done / item.pages) * 100) : 0;
@@ -491,6 +510,16 @@ function InstalledCard({
         >
           {open ? 'Open now' : item.started ? 'Resume' : 'Open'}
         </button>
+        {onReinstall ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Download the workshop from the registry again"
+            onClick={onReinstall}
+          >
+            Reinstall
+          </button>
+        ) : null}
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-warn"

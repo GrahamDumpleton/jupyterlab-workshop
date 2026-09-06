@@ -23,7 +23,9 @@ two sections:
   tags; tag buttons narrow the list further. Install downloads the
   newest version, checks its hash when the registry gives one, and opens
   it. Cards for workshops that do not list the current platform are
-  dimmed but can still be installed.
+  dimmed but can still be installed. A registry workshop that is already
+  installed appears only under Installed, where its card offers to
+  reinstall it from the registry.
 
 "Add from URL…" and "Open a directory…" run the corresponding commands,
 and "Manage registries" opens the settings editor at the workshop

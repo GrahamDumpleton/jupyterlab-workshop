@@ -193,11 +193,21 @@ test.describe('workshop browser', () => {
   test('starts in the browser from a registry launch link', async ({
     page
   }) => {
-    // The link names a registry file under the root. In a fresh workspace
-    // the browser takes the launcher's place and both sidebars collapse.
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    // The link names a registry file under the root. In a fresh workspace,
+    // as on Binder, the browser takes the launcher's place and both
+    // sidebars collapse; a new workspace name keeps the earlier tests'
+    // layout record out of the way.
     await page
       .evaluate((search: string) => {
-        window.location.assign(`${window.location.pathname}${search}`);
+        const name = `link-${Date.now().toString(36)}`;
+        const path = window.location.pathname.replace(
+          /\/lab(\/workspaces\/[^/]+)?/,
+          `/lab/workspaces/${name}`
+        );
+
+        window.location.assign(`${path}${search}`);
       }, `?registry=${REGISTRY_FILE}`)
       .catch(() => undefined);
 
@@ -207,6 +217,13 @@ test.describe('workshop browser', () => {
     await expect(
       browser.locator('.jp-WorkshopBrowser-card', {
         hasText: 'Pandas for beginners'
+      })
+    ).toHaveCount(1);
+
+    // The installed workshop is listed once, not again under Available.
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-card', {
+        hasText: 'Git from the command line'
       })
     ).toHaveCount(1);
     await expect(page.locator('#jp-main-dock-panel .jp-Launcher')).toHaveCount(
@@ -231,5 +248,25 @@ test.describe('workshop browser', () => {
     ).toHaveText('Git from the command line');
     await expect(browser).toHaveCount(0);
     expect(await page.sidebar.isOpen('right')).toBe(true);
+
+    // The layout's width applies even though the sidebar was collapsed
+    // when the workshop opened. The layout finishes after its widgets
+    // open, so the width is polled rather than read at once.
+    await expect(
+      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
+    ).toBeVisible();
+    await expect(page.locator('.jp-Terminal').first()).toBeVisible();
+
+    const rightShare = async (): Promise<number> => {
+      const right = (await page.locator('#jp-right-stack').boundingBox())
+        ?.width;
+      const split = (await page.locator('#jp-main-split-panel').boundingBox())
+        ?.width;
+
+      return (right ?? 0) / (split ?? 1);
+    };
+
+    await expect.poll(rightShare).toBeGreaterThan(0.2);
+    expect(await rightShare()).toBeLessThan(0.3);
   });
 });
