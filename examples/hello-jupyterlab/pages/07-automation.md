@@ -39,3 +39,9 @@ The cascade wrote and opened this file.
 ```
 
 Use the stop icon in the panel header to interrupt a running chain.
+The terminal has done its work for now, so the last action closes it;
+a later `execute` opens it again.
+
+```{terminal-close}
+:session: shell
+```

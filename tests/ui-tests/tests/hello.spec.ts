@@ -140,6 +140,23 @@ test.describe('hello-jupyterlab workshop', () => {
       page.locator('.jp-NotebookPanel .jp-OutputArea-output').last()
     ).toContainText('84');
 
+    // Files: writing opens the editor, and file-close takes it away again.
+    await goTo('Files and the editor');
+
+    const fileWrite = panel.locator(
+      '.jp-WorkshopPanel-action.jp-mod-file-write'
+    );
+    const fileClose = panel.locator(
+      '.jp-WorkshopPanel-action.jp-mod-file-close'
+    );
+
+    await fileWrite.click();
+    await expect(fileWrite).toHaveClass(/jp-mod-status-ok/);
+    await expect(page.locator('.jp-FileEditor')).toBeVisible();
+    await fileClose.click();
+    await expect(fileClose).toHaveClass(/jp-mod-status-ok/);
+    await expect(page.locator('.jp-FileEditor')).toHaveCount(0);
+
     // Kernels: capture output into a variable and see it in the prose.
     await goTo('Kernels');
 

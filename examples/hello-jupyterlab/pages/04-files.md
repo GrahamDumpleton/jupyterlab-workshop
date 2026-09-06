@@ -51,3 +51,10 @@ ls -la scratch
 :windows:
 Get-ChildItem scratch
 ```
+
+When a file is no longer needed on screen, an action can close its tabs,
+whether the editor, a preview or both.
+
+```{file-close}
+:path: scratch/notes.md
+```

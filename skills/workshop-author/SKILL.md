@@ -159,7 +159,7 @@ before the first marker is the default. Windows terminals are PowerShell
 | `execute`                                                          | Run a command in a terminal (`:session:`, `:cwd:`, `:wait: prompt` to wait for it to finish).         |
 | `execute-capture`                                                  | Run a command in the background and store its output in a variable (`:capture:`).                     |
 | `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`).                               |
-| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:`, `:line:`, `:match:`).                                    |
+| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:`, `:line:`, `:match:`); `file-close` closes a file's tabs. |
 | `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`. |
 | `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).         |
 | `hint`                                                             | Collapsible Markdown help.                                                                            |

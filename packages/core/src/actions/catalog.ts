@@ -120,6 +120,14 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         ['session']
       ),
       spec(
+        'terminal-close',
+        'terminal',
+        'Close a named terminal and end its session.',
+        'terminal',
+        'none',
+        ['session']
+      ),
+      spec(
         'terminal-type',
         'terminal',
         'Type text into a terminal without pressing Enter.',
@@ -160,6 +168,14 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'none',
         'none',
         ['path', 'line', 'split']
+      ),
+      spec(
+        'file-close',
+        'files',
+        'Close every editor and preview showing a file.',
+        'none',
+        'none',
+        ['path']
       ),
       spec(
         'editor-insert',

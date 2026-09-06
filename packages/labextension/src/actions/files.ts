@@ -442,6 +442,36 @@ export class UploadPromptAction implements IActionImplementation {
 }
 
 /**
+ * The `file-close` action: close every widget showing a file, whether an
+ * editor, a preview or a notebook. A file with unsaved changes asks
+ * first, as closing its tab would; a file that is not open is nothing
+ * to do.
+ */
+export class FileCloseAction implements IActionImplementation {
+  readonly type = 'file-close';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Close ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+
+    await this._context.docManager.closeFile(
+      this._context.manager.resolvePath(path)
+    );
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
  * Open a file in the text editor, placing it sensibly relative to the
  * workshop terminals, and wait until it is ready.
  *

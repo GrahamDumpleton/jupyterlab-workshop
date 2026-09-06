@@ -107,6 +107,26 @@ export class TerminalSessions {
   }
 
   /**
+   * Close the terminal for a session name and end its session. Nothing
+   * happens when no such terminal is open.
+   */
+  async close(name: string): Promise<void> {
+    const widget = this._widgets.get(name);
+
+    if (!widget || widget.isDisposed) {
+      return;
+    }
+
+    try {
+      await widget.content.session.shutdown();
+    } catch (error) {
+      console.warn(`Unable to shut down terminal "${name}"`, error);
+    }
+
+    widget.dispose();
+  }
+
+  /**
    * Return the terminal for a session name, starting it if necessary.
    */
   async get(
@@ -646,6 +666,29 @@ export class TerminalClearAction implements IActionImplementation {
 
   private _terminals: TerminalSessions;
   private _manager: IWorkshopManager;
+}
+
+/**
+ * The `terminal-close` action.
+ */
+export class TerminalCloseAction implements IActionImplementation {
+  readonly type = 'terminal-close';
+
+  constructor(terminals: TerminalSessions) {
+    this._terminals = terminals;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Close terminal "${sessionName(request)}"`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    await this._terminals.close(sessionName(request));
+
+    return { status: 'ok' };
+  }
+
+  private _terminals: TerminalSessions;
 }
 
 /**

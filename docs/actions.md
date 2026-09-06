@@ -11,6 +11,7 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 | `execute-capture` | kernel-exec | required | `capture`, `cwd`, `timeout`         | Run a command in the background and capture its output into a variable. |
 | `terminal-open`   | terminal    | none     | `session`, `cwd`, `area`            | Open or reveal a named terminal.                                        |
 | `terminal-clear`  | terminal    | none     | `session`                           | Clear a named terminal.                                                 |
+| `terminal-close`  | terminal    | none     | `session`                           | Close a named terminal and end its session.                             |
 | `terminal-type`   | terminal    | required | `session`                           | Type text into a terminal without pressing Enter.                       |
 | `send-key`        | terminal    | none     | `session`, `keys`                   | Send key strokes to a terminal.                                         |
 | `interrupt`       | terminal    | none     | `session`                           | Interrupt the command running in a terminal.                            |
@@ -21,6 +22,7 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 | --------------------- | ----------- | -------- | --------------------------------------- | --------------------------------------------------------------- |
 | `file-write`          | write-files | optional | `path`, `open`, `mode`, `from`          | Write the body, or a file shipped with the workshop, to a file. |
 | `file-open`           | none        | none     | `path`, `line`, `split`                 | Open a file in the editor, optionally at a line.                |
+| `file-close`          | none        | none     | `path`                                  | Close every editor and preview showing a file.                  |
 | `editor-insert`       | write-files | required | `path`, `line`, `save`                  | Insert the body into a file at a line, or at the end.           |
 | `editor-replace`      | write-files | optional | `path`, `match`, `regex`, `all`, `save` | Replace text matching a pattern in a file with the body.        |
 | `editor-select`       | none        | none     | `path`, `match`, `line`                 | Select text in a file.                                          |
