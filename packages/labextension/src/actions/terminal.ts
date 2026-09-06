@@ -32,6 +32,13 @@ const PROMPT_QUIET_MS = 500;
 
 const PROMPT_POLL_MS = 100;
 
+/** Shells that take Enter only as a carriage return, never as a newline. */
+const CARRIAGE_RETURN_SHELLS: ReadonlySet<string> = new Set([
+  'powershell',
+  'cmd',
+  'cockle'
+]);
+
 /** How much recent terminal output is kept for matching. */
 export const OUTPUT_WINDOW = 4096;
 
@@ -230,18 +237,20 @@ export class TerminalSessions {
   }
 
   /**
-   * Send text to a terminal connection. The JupyterLite terminal's shell
-   * takes a carriage return as Enter, as a keyboard sends, where a pty
-   * accepts a newline as well.
+   * Send text to a terminal connection. A Unix pty turns a newline into
+   * Enter, but a Windows console and the JupyterLite terminal's shell act
+   * only on a carriage return, which is what a keyboard sends, so those
+   * shells get their line endings converted.
    */
   private _write(
     session: TerminalService.ITerminalConnection,
     text: string
   ): void {
-    const content =
-      this._manager.platform?.shell === 'cockle'
-        ? text.replace(/\r?\n/g, '\r')
-        : text;
+    const content = CARRIAGE_RETURN_SHELLS.has(
+      this._manager.platform?.shell ?? ''
+    )
+      ? text.replace(/\r?\n/g, '\r')
+      : text;
 
     session.send({ type: 'stdin', content: [content] });
   }
