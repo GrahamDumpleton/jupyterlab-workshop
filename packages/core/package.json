@@ -1,6 +1,6 @@
 {
     "name": "@jupyterlab-workshop/core",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "description": "Workshop format parsing, actions vocabulary, variables and lint rules for jupyterlab-workshop.",
     "license": "Apache-2.0",
     "author": {
