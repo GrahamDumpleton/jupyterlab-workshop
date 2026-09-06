@@ -56,8 +56,9 @@ JupyterLite site.
   JupyterLite, the manifest reference, trust, the command line and
   authoring in JupyterLab.
 
-- [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/):
-  the example workshop running in JupyterLite.
+- [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force):
+  the Hello JupyterLab workshop running in JupyterLite, started afresh
+  on every visit.
 
 - [Launch on Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab):
   pick one of the example workshops in a full JupyterLab with a real

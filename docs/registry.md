@@ -281,6 +281,16 @@ https://hub.example.org/user/ada/lab?workshop=https://github.com/example-org/wor
 - `var.<name>=<value>` sets workshop variables above the manifest
   defaults but below anything the learner enters.
 
+- `restart` starts a workshop that is already present over before
+  opening it, as [Restart](#restarting-a-workshop) does: files back to
+  the first-open snapshot, progress forgotten, layout applied afresh.
+  On its own it asks first when the workshop has recorded progress, and
+  goes straight ahead when there is nothing to lose; `restart=force`
+  never asks, for a demo link that must always start clean. It applies
+  to a directory; a download replaces the files anyway. JupyterLab's own
+  `reset` parameter clears the window's tabs and panels, so a link that
+  should look untouched carries both: `lab?reset&workshop=…&restart=force`.
+
 The parameters are removed from the address bar once handled, so a
 reload does not fetch again. The trust dialog still appears unless the
 administrator's policy settles it, which is the usual arrangement for a

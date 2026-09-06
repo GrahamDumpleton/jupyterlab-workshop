@@ -195,6 +195,61 @@ test.describe('workshop browser', () => {
 
     // The parameters are gone from the address so a reload is harmless.
     expect(page.url()).not.toContain('workshop=');
+
+    // With progress recorded, a link with a bare restart asks first and
+    // carrying on keeps the page, while restart=force starts over.
+    const pageSelect = panel.locator('.jp-WorkshopPanel-pageSelect');
+    const relaunch = async (search: string): Promise<void> => {
+      await page
+        .evaluate((query: string) => {
+          window.location.assign(`${window.location.pathname}${query}`);
+        }, search)
+        .catch(() => undefined);
+    };
+
+    const title = panel.locator('.jp-WorkshopPanel-title');
+    const trust = dialog.locator('.jp-WorkshopTrust');
+    const trustIfAsked = async (): Promise<void> => {
+      await trust.or(title).first().waitFor({ timeout: 60000 });
+
+      if (await trust.isVisible()) {
+        await dialog
+          .getByRole('button', { name: 'Trust', exact: true })
+          .click();
+      }
+
+      await expect(title).toHaveText('Git from the command line');
+    };
+
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
+      .click();
+    await expect(pageSelect).toHaveValue('1');
+
+    // The state file is saved a moment after the page changes; the link
+    // must find it to know there is progress to ask about.
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(
+          `api/contents/${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/state.json?content=1`
+        );
+
+        return response.ok() ? String((await response.json()).content) : '';
+      })
+      .toContain('02-first-commit');
+
+    await relaunch(`?workshop=${WORKSHOPS_DIR}/${WORKSHOP}&restart`);
+    await expect(dialog).toContainText('Restart the workshop?', {
+      timeout: 60000
+    });
+    await dialog.getByRole('button', { name: 'Carry on' }).click();
+    await trustIfAsked();
+    await expect(pageSelect).toHaveValue('1');
+
+    await relaunch(`?workshop=${WORKSHOPS_DIR}/${WORKSHOP}&restart=force`);
+    await trustIfAsked();
+    await expect(pageSelect).toHaveValue('0');
+    expect(page.url()).not.toContain('restart');
   });
 
   test('starts in the browser from a registry launch link', async ({

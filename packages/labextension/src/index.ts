@@ -115,7 +115,7 @@ import { ISelfTestProgress, runAll } from './selftest';
 import { showFinishDialog } from './panel/finish';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
-import { WORKSHOP_STATE_DIR } from './state';
+import { STATE_FILE, WORKSHOP_STATE_DIR } from './state';
 import {
   CommandIDs,
   ConflictError,
@@ -760,6 +760,39 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       });
     }
 
+    // A `restart` on a launch link starts the workshop over before it
+    // opens: without asking when forced or when there is no progress to
+    // lose, otherwise only if the learner agrees.
+    const confirmLinkRestart = async (
+      path: string,
+      mode: 'ask' | 'force'
+    ): Promise<boolean> => {
+      if (mode === 'force') {
+        return true;
+      }
+
+      const started = await getIfExists(
+        app.serviceManager.contents,
+        PathExt.join(path, WORKSHOP_STATE_DIR, STATE_FILE),
+        false
+      );
+
+      if (!started) {
+        return true;
+      }
+
+      const result = await showDialog({
+        title: 'Restart the workshop?',
+        body: 'This link starts the workshop over. The files in the workshop directory will be put back as they were when it was first opened, anything added since will be deleted, and all progress will be forgotten. Cancel to carry on where you left off.',
+        buttons: [
+          Dialog.cancelButton({ label: 'Carry on' }),
+          Dialog.warnButton({ label: 'Restart' })
+        ]
+      });
+
+      return result.button.accept;
+    };
+
     // A launch link such as `/lab?workshop=<url>&ref=<ref>&var.x=y`
     // fetches (or opens, for a path) the workshop and applies the values;
     // `/lab?registry=<url>` opens the browser showing that registry.
@@ -813,6 +846,14 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
               );
 
               return;
+            }
+
+            if (
+              request.restart &&
+              (await confirmLinkRestart(request.path, request.restart))
+            ) {
+              await closeWorkshopWidgets(cleanup, request.path);
+              await manager.restart(request.path);
             }
 
             await manager.open(request.path, {
@@ -1220,6 +1261,14 @@ interface ILaunchRequest {
   subdir?: string;
   sha256?: string;
   variables: Record<string, string>;
+
+  /**
+   * Whether to restart a workshop that is already present before opening
+   * it: `ask` confirms first when it has recorded progress, `force` never
+   * asks. Only a directory can be restarted; a download replaces its
+   * files anyway.
+   */
+  restart?: 'ask' | 'force';
 }
 
 /** Query parameters a launch link uses. */
@@ -1228,7 +1277,8 @@ const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
   'ref',
   'subdir',
   'sha256',
-  'registry'
+  'registry',
+  'restart'
 ]);
 
 /**
@@ -1263,13 +1313,23 @@ export function parseLaunchLink(search: string): ILaunchRequest | null {
 
   const isUrl = /^https?:\/\//i.test(workshop);
 
+  // A bare `restart` asks when there is progress; `restart=force` never
+  // does. The key is looked for in the raw string, since a bare key has
+  // no value for the parser to keep.
+  const restart = /(\?|&)restart(=|&|$)/.test(search)
+    ? params.restart === 'force'
+      ? 'force'
+      : 'ask'
+    : undefined;
+
   return {
     path: isUrl ? undefined : workshop,
     url: workshop,
     ref: params.ref || undefined,
     subdir: params.subdir || undefined,
     sha256: params.sha256 || undefined,
-    variables
+    variables,
+    restart
   };
 }
 

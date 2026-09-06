@@ -1,11 +1,14 @@
-# Demo: the git-basics workshop
+# Trying the examples
 
 The quickest look is the
-[JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/),
-which runs entirely in the browser, or
+[JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force),
+which runs the Hello JupyterLab workshop entirely in the browser and
+starts it afresh on every visit (the link carries JupyterLab's `reset`
+and the extension's `restart=force`; see
+[launch links](registry.md#launch-links)), or
 [Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab),
-which starts a full JupyterLab in the workshop browser with the examples
-ready to open. Both use the released package.
+which starts a full JupyterLab in the workshop browser with all three
+examples ready to open. Both use the released package.
 
 The rest of this page walks through the proof of concept by hand from a
 checkout. It needs [uv](https://docs.astral.sh/uv/),
@@ -68,8 +71,10 @@ files, variables, tracks and automatic runs, and its files land in
 
 The workshop creates `examples/git-basics/demo`, and the extension keeps
 its progress, action log and environment files in
-`examples/git-basics/_workshop`. Both are ignored by git. Delete them to
-start again:
+`examples/git-basics/_workshop`. Both are ignored by git. The restart
+button in the panel header, or "Workshop: Restart…", puts the files back
+and forgets the progress; `just clean-examples` removes what every
+example left behind, or by hand:
 
 ```
 rm -rf examples/git-basics/demo examples/git-basics/_workshop
