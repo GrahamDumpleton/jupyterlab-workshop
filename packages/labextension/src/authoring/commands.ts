@@ -38,6 +38,7 @@ import { ReadonlyJSONObject, ReadonlyJSONValue } from '@lumino/coreutils';
 
 import { readTextFile, writeTextFile } from '../actions/contents';
 import { requestAPI } from '../request';
+import { newWorkshopIcon } from '../icons';
 import { runCurrentPage, summarize } from '../selftest';
 import { readSetting } from '../settings';
 import { WORKSHOP_STATE_DIR } from '../state';
@@ -234,6 +235,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
   commands.addCommand(CommandIDs.newWorkshop, {
     label: 'Workshop: New Workshop…',
     caption: 'Scaffold a workshop directory and open it in author mode',
+    icon: newWorkshopIcon,
     execute: async (args): Promise<void> => {
       const directory = await readSetting(
         context.settingRegistry,

@@ -1,11 +1,23 @@
 import { LabIcon } from '@jupyterlab/ui-components';
 
-const WORKSHOP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-  <path class="jp-icon3 jp-icon-selectable" fill="#616161" d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/>
-</svg>`;
+import newWorkshopSvg from '../style/icons/workshop-new.svg';
+import workshopSvg from '../style/icons/workshop.svg';
 
-/** Icon for the workshop panel tab. */
+/**
+ * Icon for the workshop panel, the workshop browser and the launcher
+ * card: a graduation cap, taken from the Educates Training Platform's
+ * logo without its surrounding heptagon.
+ */
 export const workshopIcon = new LabIcon({
-  name: 'jupyterlab-workshop:book',
-  svgstr: WORKSHOP_SVG
+  name: 'jupyterlab-workshop:cap',
+  svgstr: workshopSvg
+});
+
+/**
+ * The cap with a plus badge in its lower corner, for commands that create
+ * a new workshop.
+ */
+export const newWorkshopIcon = new LabIcon({
+  name: 'jupyterlab-workshop:cap-new',
+  svgstr: newWorkshopSvg
 });
