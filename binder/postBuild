@@ -1,0 +1,19 @@
+#!/bin/bash
+# Configure the Binder image so JupyterLab opens the example workshop on
+# start, lists the other examples in the workshop browser, and trusts
+# them without asking, since the visitor is the one who chose the link.
+set -euo pipefail
+
+settings="${NB_PYTHON_PREFIX}/share/jupyter/lab/settings"
+
+mkdir -p "$settings"
+
+cat > "$settings/overrides.json" <<'JSON'
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "defaultWorkshop": "examples/git-basics",
+    "workshopsDirectory": "examples",
+    "trustPolicy": { "forcedLevel": "trusted" }
+  }
+}
+JSON

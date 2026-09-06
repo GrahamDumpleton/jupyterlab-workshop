@@ -1,0 +1,5 @@
+# Image for mybinder.org: JupyterLab with the released extension. Nothing
+# else in the repository is installed; the example workshops are opened
+# straight from the checkout.
+jupyterlab>=4.6,<5
+jupyterlab-workshop

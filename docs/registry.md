@@ -143,7 +143,13 @@ this package can open any workshop:
 https://mybinder.org/v2/gh/example-org/launcher/main?urlpath=lab%3Fworkshop%3Dhttps%3A%2F%2Fgithub.com%2Fexample-org%2Fworkshops%26subdir%3Dgit-basics
 ```
 
-The `urlpath` is `lab?workshop=…` URL-encoded.
+The `urlpath` is `lab?workshop=…` URL-encoded. This repository's own
+`binder/` directory is an example: `requirements.txt` installs JupyterLab
+and the package, and `postBuild` writes a settings override that opens
+`examples/git-basics` on start, lists the examples in the browser and
+trusts them. A workshop repository can carry the same two files and a
+launch badge, with the `workshop` parameter naming a directory in the
+checkout rather than a URL.
 
 ## Installed workshops and the server
 
