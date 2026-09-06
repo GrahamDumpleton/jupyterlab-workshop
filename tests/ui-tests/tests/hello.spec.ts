@@ -85,6 +85,19 @@ test.describe('hello-jupyterlab workshop', () => {
       'Welcome to the workshop, Learner.'
     );
 
+    // Opening the launcher twice brings one launcher to the front rather
+    // than adding a second pane.
+    const launcherOpen = panel.locator(
+      '.jp-WorkshopPanel-action.jp-mod-launcher-open'
+    );
+    await launcherOpen.click();
+    await expect(launcherOpen).toHaveClass(/jp-mod-status-ok/);
+    await launcherOpen.click();
+    await expect(launcherOpen).toHaveClass(/jp-mod-status-ok/);
+    await expect(page.locator('#jp-main-dock-panel .jp-Launcher')).toHaveCount(
+      1
+    );
+
     // Notebooks: create, run all, insert a tagged cell and run it.
     await goTo('Notebooks');
 

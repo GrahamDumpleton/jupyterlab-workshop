@@ -371,7 +371,13 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'required',
         ['plugin', 'key']
       ),
-      spec('launcher-open', 'ui', 'Open the launcher.', 'none', 'none'),
+      spec(
+        'launcher-open',
+        'ui',
+        'Open the launcher, or show the open one.',
+        'none',
+        'none'
+      ),
 
       // Guidance.
       spec(

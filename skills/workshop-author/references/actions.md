@@ -58,7 +58,7 @@ accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, 
 | `panel-close`   | none        | none     | `id`, `side`    | Hide a JupyterLab sidebar panel.                              |
 | `focus`         | none        | none     | `id`            | Give a widget focus.                                          |
 | `settings-set`  | ui-settings | required | `plugin`, `key` | Change a JupyterLab setting, with the JSON value in the body. |
-| `launcher-open` | none        | none     | (none)          | Open the launcher.                                            |
+| `launcher-open` | none        | none     | (none)          | Open the launcher, or show the open one.                      |
 
 ## Guidance
 

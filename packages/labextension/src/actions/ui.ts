@@ -1,4 +1,6 @@
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
+import { MainAreaWidget } from '@jupyterlab/apputils';
+import { Launcher } from '@jupyterlab/launcher';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { JSONValue } from '@lumino/coreutils';
 
@@ -192,6 +194,19 @@ export class LauncherOpenAction implements IActionImplementation {
   }
 
   async run(): Promise<IActionResult> {
+    // JupyterLab's command always makes a new launcher pane, so bring an
+    // existing one to the front instead when there is one.
+    for (const widget of this._app.shell.widgets('main')) {
+      const content =
+        widget instanceof MainAreaWidget ? widget.content : widget;
+
+      if (content instanceof Launcher) {
+        this._app.shell.activateById(widget.id);
+
+        return { status: 'ok' };
+      }
+    }
+
     await this._app.commands.execute('launcher:create');
 
     return { status: 'ok' };
