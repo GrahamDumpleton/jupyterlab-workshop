@@ -211,15 +211,26 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
   // A workshop that is installed is listed once, under Installed, where
   // its card offers an update when the registry has another version.
+  const notInstalled = useMemo(
+    () => entries.filter(entry => !installedByName.has(entry.name)),
+    [entries, installedByName]
+  );
   const shown = useMemo(
-    () =>
-      searchRegistry(entries, query, tags).filter(
-        entry => !installedByName.has(entry.name)
-      ),
-    [entries, query, tags, installedByName]
+    () => searchRegistry(notInstalled, query, tags),
+    [notInstalled, query, tags]
   );
   const platform = manager.platform?.os ?? '';
-  const showAvailable = features.enabled('available');
+
+  // The Available section, with the search and tags that filter it, is
+  // only there when it has something to show or explain: an image whose
+  // registry lists exactly the workshops it ships has nothing to add.
+  const filtering = query.trim() !== '' || tags.length > 0;
+  const registryProblem = registries.some(registry => registry.error);
+  const noRegistries =
+    registries.length === 0 && !loading && features.enabled('registries');
+  const showAvailable =
+    features.enabled('available') &&
+    (notInstalled.length > 0 || filtering || registryProblem || noRegistries);
   const ways = [
     showAvailable ? 'install one below' : '',
     features.enabled('open-url') ? 'add one from a URL' : '',
@@ -392,9 +403,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
       {showAvailable ? (
         <AvailableSection
           registries={registries}
-          entries={entries}
           shown={shown}
-          loading={loading}
+          noMatch={filtering && shown.length === 0 && notInstalled.length > 0}
+          noRegistries={noRegistries}
           platform={platform}
           onInstall={install}
         />
@@ -405,16 +416,20 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
 function AvailableSection({
   registries,
-  entries,
   shown,
-  loading,
+  noMatch,
+  noRegistries,
   platform,
   onInstall
 }: {
   registries: ILoadedRegistry[];
-  entries: IRegistryEntry[];
   shown: IRegistryEntry[];
-  loading: boolean;
+
+  /** Whether the search or tags are hiding every workshop. */
+  noMatch: boolean;
+
+  /** Whether there are no registries to show and the learner can add some. */
+  noRegistries: boolean;
   platform: string;
   onInstall: (entry: IRegistryEntry) => void;
 }): JSX.Element {
@@ -428,13 +443,13 @@ function AvailableSection({
           </p>
         ) : null
       )}
-      {registries.length === 0 && !loading ? (
+      {noRegistries ? (
         <p className="jp-WorkshopBrowser-note">
           No registries are configured. Add registry URLs in the settings to
           browse workshops here.
         </p>
       ) : null}
-      {shown.length === 0 && entries.length > 0 ? (
+      {noMatch ? (
         <p className="jp-WorkshopBrowser-note">No workshops match.</p>
       ) : null}
       <div className="jp-WorkshopBrowser-cards">

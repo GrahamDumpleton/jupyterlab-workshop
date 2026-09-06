@@ -25,7 +25,10 @@ two sections:
   it. Cards for workshops that do not list the current platform are
   dimmed but can still be installed. A registry workshop that is already
   installed appears only under Installed, where its card offers an
-  Update button when the registry lists a different version.
+  Update button when the registry lists a different version. When every
+  registry workshop is installed, as in an image that ships the workshops
+  its registry lists, the Available section and its search and tags are
+  not shown at all.
 
 "Add from URL…" and "Open a directory…" run the corresponding commands,
 and "Manage registries" opens the settings editor at the workshop
