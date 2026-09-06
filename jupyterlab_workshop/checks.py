@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .fetch import FetchError, _resolve_inside
+from .fetch import FetchError, _resolve_inside, remove_tree
 
 STATE_DIR = "_workshop"
 
@@ -195,7 +195,7 @@ def restore_checkpoint(root_dir: Path, workshop_path: str, name: str) -> dict[st
                 continue
 
             if entry.is_dir() and not entry.is_symlink():
-                shutil.rmtree(entry)
+                remove_tree(entry)
             else:
                 entry.unlink()
 

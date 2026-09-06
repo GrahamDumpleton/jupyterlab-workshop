@@ -12,6 +12,7 @@ from jupyterlab_workshop.fetch import (
     archive_url,
     fetch_workshop,
     parse_source,
+    remove_tree,
     remove_workshop,
     unpack_archive,
 )
@@ -267,3 +268,17 @@ class TestRemoveWorkshop:
 
         with pytest.raises(FetchError, match="server root"):
             remove_workshop(tmp_path, "")
+
+
+def test_remove_tree_clears_read_only_files(tmp_path: Path) -> None:
+    # Git object files are read-only, which blocks deletion on Windows.
+    tree = tmp_path / "repo"
+    objects = tree / ".git" / "objects"
+    objects.mkdir(parents=True)
+    blob = objects / "abc"
+    blob.write_text("data")
+    blob.chmod(0o444)
+
+    remove_tree(tree)
+
+    assert not tree.exists()

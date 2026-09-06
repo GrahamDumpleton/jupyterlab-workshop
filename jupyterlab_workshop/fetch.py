@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tarfile
 import tempfile
 import zipfile
@@ -248,7 +249,7 @@ def fetch_workshop(
             if not overwrite:
                 raise FetchError(f"{_relative(root_dir, target)} already exists")
 
-            shutil.rmtree(target)
+            remove_tree(target)
 
         parent.mkdir(parents=True, exist_ok=True)
 
@@ -340,6 +341,40 @@ def read_manifest_name(path: Path) -> str:
     return name
 
 
+def remove_tree(path: Path) -> None:
+    """Remove a directory tree, coping with what Windows refuses.
+
+    Git marks its object files read-only, and Windows will not delete a
+    read-only file, so a failed removal clears the attribute and tries
+    again. Windows also refuses to remove a directory that is the working
+    directory of a running process, such as a terminal that has changed
+    into it; when that is the tree's own top directory it is left behind
+    empty, which a caller that refills or ignores it can live with.
+    """
+
+    def retry(
+        function: Callable[[str], Any], failing: str, error: BaseException
+    ) -> None:
+        target = Path(failing)
+
+        if isinstance(error, PermissionError) and target.exists():
+            target.chmod(stat.S_IRWXU)
+
+            try:
+                function(failing)
+
+                return
+            except PermissionError:
+                pass
+
+        if target == path and target.is_dir() and not any(target.iterdir()):
+            return
+
+        raise error
+
+    shutil.rmtree(path, onexc=retry)
+
+
 def remove_workshop(root_dir: Path, path: str) -> str:
     """Delete a workshop directory under the server root.
 
@@ -358,7 +393,7 @@ def remove_workshop(root_dir: Path, path: str) -> str:
     if not (target / MANIFEST_FILE).is_file():
         raise FetchError(f"{path} is not a workshop directory")
 
-    shutil.rmtree(target)
+    remove_tree(target)
 
     return _relative(root_dir, target)
 
