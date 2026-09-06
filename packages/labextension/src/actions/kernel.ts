@@ -18,6 +18,15 @@ export interface IKernelOutput {
   error?: string;
 }
 
+/** How long the workshop kernel may take to reply before it is given up on. */
+export const DEFAULT_EXECUTE_TIMEOUT_MS = 120000;
+
+/**
+ * Time allowed beyond a command's own limit for the kernel to start and
+ * report the outcome.
+ */
+export const REPLY_GRACE_MS = 15000;
+
 /**
  * Run code in a kernel and collect its output.
  */
@@ -135,9 +144,50 @@ export class WorkshopKernel {
   }
 
   /**
-   * Run code in the workshop kernel.
+   * Run code in the workshop kernel, starting it if needed.
+   *
+   * A reply that does not arrive within the limit, because the kernel
+   * never started or its reply was lost, becomes an error rather than a
+   * hang, and the kernel is interrupted so the next action can use it.
    */
-  async execute(code: string): Promise<IKernelOutput> {
+  async execute(
+    code: string,
+    timeoutMs: number = DEFAULT_EXECUTE_TIMEOUT_MS
+  ): Promise<IKernelOutput> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const expired = new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+
+    try {
+      const output = await Promise.race([this._run(code), expired]);
+
+      if (output) {
+        return output;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const kernel = this._session?.kernel;
+
+    if (kernel) {
+      try {
+        await kernel.interrupt();
+      } catch (error) {
+        console.warn('Unable to interrupt the workshop kernel', error);
+      }
+    }
+
+    return {
+      text: '',
+      stderr: '',
+      error: `The workshop kernel gave no reply within ${Math.round(timeoutMs / 1000)}s`
+    };
+  }
+
+  private async _run(code: string): Promise<IKernelOutput> {
     return executeInKernel(await this.kernel(), code);
   }
 

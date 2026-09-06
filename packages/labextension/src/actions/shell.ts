@@ -1,7 +1,7 @@
 import { CommandRegistry } from '@lumino/commands';
 
 import { IShellResult } from '../tokens';
-import { WorkshopKernel } from './kernel';
+import { REPLY_GRACE_MS, WorkshopKernel } from './kernel';
 
 /** The JupyterLite terminal command that runs a command headlessly. */
 export const LITE_EXECUTE_SHELL = '@jupyterlite/terminal:execute-shell';
@@ -37,7 +37,7 @@ export class KernelShell implements IShellRunner {
       `_r = subprocess.run(${JSON.stringify(command)}, shell=True, capture_output=True, text=True, cwd=${JSON.stringify(cwd)}, timeout=${timeoutMs / 1000})`,
       'print(json.dumps({"code": _r.returncode, "out": _r.stdout, "err": _r.stderr}))'
     ].join('\n');
-    const output = await this._kernel.execute(code);
+    const output = await this._kernel.execute(code, timeoutMs + REPLY_GRACE_MS);
 
     if (output.error) {
       return { code: 1, output: '', error: output.error };
