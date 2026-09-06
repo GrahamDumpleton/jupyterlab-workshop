@@ -147,12 +147,16 @@ test.describe('workshop browser', () => {
       0
     );
 
-    // Opening from the installed card shows the trust dialog and the panel.
+    // Opening from the installed card shows the trust dialog and the panel,
+    // and the card shows it is busy until then.
     await installed.getByRole('button', { name: 'Open' }).click();
 
     const dialog = page.locator('.jp-Dialog');
 
     await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+    await expect(
+      installed.getByRole('button', { name: 'Opening…' })
+    ).toBeDisabled();
     await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
     await expect(
       page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')

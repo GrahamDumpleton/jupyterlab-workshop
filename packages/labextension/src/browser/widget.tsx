@@ -248,21 +248,43 @@ function BrowserContent(props: IContentProps): JSX.Element {
         : [...current, tag]
     );
 
+  // Opening and installing take a moment (the trust dialog, a download,
+  // reading the pages), so the pressed card shows it is busy until the
+  // command finishes; the browser closes itself once a workshop opens.
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const whileBusy = async (
+    key: string,
+    work: () => Promise<unknown>
+  ): Promise<void> => {
+    setBusy(key);
+
+    try {
+      await work();
+    } finally {
+      setBusy(current => (current === key ? null : current));
+    }
+  };
+
   const install = (entry: IRegistryEntry): void => {
     const chosen = latestVersion(entry);
     const source = chosen.source;
 
-    void commands.execute(CommandIDs.openUrl, {
-      url: source.archive ?? source.git ?? '',
-      ref: source.ref,
-      subdir: source.subdir,
-      sha256: chosen.sha256,
-      archive: source.archive !== undefined
-    });
+    void whileBusy(`install:${entry.name}`, () =>
+      commands.execute(CommandIDs.openUrl, {
+        url: source.archive ?? source.git ?? '',
+        ref: source.ref,
+        subdir: source.subdir,
+        sha256: chosen.sha256,
+        archive: source.archive !== undefined
+      })
+    );
   };
 
   const open = (path: string): void => {
-    void commands.execute(CommandIDs.open, { path });
+    void whileBusy(`open:${path}`, () =>
+      commands.execute(CommandIDs.open, { path })
+    );
   };
 
   const restart = async (item: IInstalledWorkshop): Promise<void> => {
@@ -390,6 +412,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
               key={item.path}
               item={item}
               open={manager.workshop?.path === item.path}
+              busy={busy === `open:${item.path}`}
               onOpen={() => open(item.path)}
               onRestart={() => void restart(item)}
               onRemove={
@@ -407,6 +430,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           noMatch={filtering && shown.length === 0 && notInstalled.length > 0}
           noRegistries={noRegistries}
           platform={platform}
+          busy={busy}
           onInstall={install}
         />
       ) : null}
@@ -420,6 +444,7 @@ function AvailableSection({
   noMatch,
   noRegistries,
   platform,
+  busy,
   onInstall
 }: {
   registries: ILoadedRegistry[];
@@ -431,6 +456,9 @@ function AvailableSection({
   /** Whether there are no registries to show and the learner can add some. */
   noRegistries: boolean;
   platform: string;
+
+  /** The busy key of the card being installed, if any. */
+  busy: string | null;
   onInstall: (entry: IRegistryEntry) => void;
 }): JSX.Element {
   return (
@@ -458,6 +486,7 @@ function AvailableSection({
             key={`${entry.name}`}
             entry={entry}
             platform={platform}
+            busy={busy === `install:${entry.name}`}
             onInstall={() => onInstall(entry)}
           />
         ))}
@@ -469,10 +498,14 @@ function AvailableSection({
 function RegistryCard({
   entry,
   platform,
+  busy,
   onInstall
 }: {
   entry: IRegistryEntry;
   platform: string;
+
+  /** Whether this workshop is being installed right now. */
+  busy: boolean;
   onInstall: () => void;
 }): JSX.Element {
   const version = latestVersion(entry);
@@ -521,9 +554,10 @@ function RegistryCard({
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={busy}
           onClick={onInstall}
         >
-          Install
+          {busy ? 'Installing…' : 'Install'}
         </button>
       </div>
     </div>
@@ -533,6 +567,7 @@ function RegistryCard({
 function InstalledCard({
   item,
   open,
+  busy,
   onOpen,
   onRestart,
   onRemove,
@@ -540,6 +575,9 @@ function InstalledCard({
 }: {
   item: IInstalledWorkshop;
   open: boolean;
+
+  /** Whether this workshop is being opened right now. */
+  busy: boolean;
   onOpen: () => void;
 
   /** Put the files back as first opened and forget the progress. */
@@ -590,11 +628,11 @@ function InstalledCard({
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={open}
+          disabled={open || busy}
           title={open ? 'This workshop is open' : undefined}
           onClick={onOpen}
         >
-          {item.started && !open ? 'Resume' : 'Open'}
+          {busy ? 'Opening…' : item.started && !open ? 'Resume' : 'Open'}
         </button>
         {item.started ? (
           <button
