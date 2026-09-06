@@ -165,16 +165,24 @@ def stage_contents(workshops: Sequence[Path], staging: Path) -> list[str]:
     return names
 
 
-def site_config() -> dict[str, Any]:
-    """The ``jupyter-lite.json`` settings a workshop site needs."""
+def site_config(terminal: bool = True) -> dict[str, Any]:
+    """The ``jupyter-lite.json`` settings a workshop site needs.
 
-    return {
-        "jupyter-lite-schema-version": 0,
-        "jupyter-config-data": {
-            # The self-test drives the site through window.jupyterapp.
-            "exposeAppInBrowser": True,
-        },
+    With ``terminal`` the site declares that terminals are available,
+    which JupyterLab's own terminal plugin checks before offering File,
+    New, Terminal and the launcher card; without it only the workshop's
+    actions, which start sessions directly, could open one.
+    """
+
+    data: dict[str, Any] = {
+        # The self-test drives the site through window.jupyterapp.
+        "exposeAppInBrowser": True,
     }
+
+    if terminal:
+        data["terminalsAvailable"] = True
+
+    return {"jupyter-lite-schema-version": 0, "jupyter-config-data": data}
 
 
 def settings_overrides(
@@ -256,7 +264,7 @@ def build_lite_site(
     names = stage_contents(options.workshops, staging)
 
     (lite_dir / "jupyter-lite.json").write_text(
-        json.dumps(site_config(), indent=2) + "\n", encoding="utf-8"
+        json.dumps(site_config(options.terminal), indent=2) + "\n", encoding="utf-8"
     )
     overrides.write_text(
         json.dumps(settings_overrides(options, names), indent=2) + "\n",
@@ -274,7 +282,7 @@ def build_lite_site(
     if code != 0:
         raise LiteError(f"jupyter lite build failed with exit code {code}")
 
-    patch_site_config(options.output)
+    patch_site_config(options.output, terminal=options.terminal)
 
     return LiteBuildResult(
         output=options.output,
@@ -284,7 +292,7 @@ def build_lite_site(
     )
 
 
-def patch_site_config(output: Path) -> None:
+def patch_site_config(output: Path, terminal: bool = True) -> None:
     """Apply ``site_config`` to the built site's configuration files.
 
     The build merges the settings from the build directory into the site,
@@ -292,7 +300,7 @@ def patch_site_config(output: Path) -> None:
     so the settings are applied to the result as well.
     """
 
-    wanted = site_config()["jupyter-config-data"]
+    wanted = site_config(terminal)["jupyter-config-data"]
 
     for path in [output / "jupyter-lite.json", output / "lab" / "jupyter-lite.json"]:
         if not path.is_file():

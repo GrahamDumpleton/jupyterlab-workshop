@@ -70,7 +70,9 @@ local port, under a sub-path as GitHub Pages would, to try it out.
 
 The terminal needs `node`, `npm` and `micromamba` on the path when
 building, because the terminal extension fetches its WebAssembly
-commands from emscripten-forge. `--no-terminal` leaves it out.
+commands from emscripten-forge. The site declares terminals available,
+so File, New, Terminal and the launcher card work as well as the
+workshop's own actions. `--no-terminal` leaves it out.
 `--lite-dir` names the directory JupyterLite keeps its build state and
 those downloads in; the default is under the Jupyter data directory so
 that later builds are quick.

@@ -177,8 +177,21 @@ def test_patch_site_config_applies_the_settings(tmp_path: Path) -> None:
     assert root["jupyter-config-data"] == {
         "appName": "JupyterLite",
         "exposeAppInBrowser": True,
+        "terminalsAvailable": True,
     }
     assert lab["jupyter-config-data"]["exposeAppInBrowser"] is True
+
+
+def test_patch_site_config_without_terminal_leaves_terminals_off(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "jupyter-lite.json").write_text("{}")
+
+    patch_site_config(tmp_path, terminal=False)
+
+    root = json.loads((tmp_path / "jupyter-lite.json").read_text())
+
+    assert root["jupyter-config-data"] == {"exposeAppInBrowser": True}
 
 
 def test_serve_directory_serves_files(tmp_path: Path) -> None:
