@@ -135,5 +135,5 @@ lets you come back here too.
 ```
 
 ```{restore}
-:name: 02-first-commit
+:name: after-first-commit
 ```
