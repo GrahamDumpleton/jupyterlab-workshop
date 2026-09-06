@@ -197,6 +197,17 @@ underlying commands yourself; run `just --list` to see everything.
   review happens: once work is committed it can no longer be reviewed as
   the pending diff, so committing early makes review harder, not easier.
 
+- A release bumps the version in four files together, in one commit on
+  develop: the root `package.json` (the Python package reads its version
+  from it), `packages/core/package.json`,
+  `packages/labextension/package.json`, and the
+  `jupyterlab-workshop==<version>` pin in `binder/requirements.txt`. The
+  pin matters because mybinder caches the image it builds for a commit of
+  main, so an unpinned install would freeze whichever release PyPI served
+  at the first launch. Then fast-forward main, wait for CI, and push the
+  bare version tag; the release workflow refuses a tag that does not
+  match `package.json`.
+
 - When merging a feature branch back to main and pushing to the remote,
   do not treat the work as landed until the CI workflow on GitHub has run
   against the pushed merge and passed. Check the run (for example with

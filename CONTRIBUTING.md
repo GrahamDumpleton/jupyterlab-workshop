@@ -76,7 +76,10 @@ and `micromamba` on the path; pass `--no-terminal` to leave it out.
 ## Releases
 
 The version is read from the root `package.json` by the Python build, so
-bump it there and in the two workspace `package.json` files together.
+bump it there, in the two workspace `package.json` files, and in the
+`jupyterlab-workshop==<version>` pin of `binder/requirements.txt`
+together (mybinder caches the image built for a commit, so the pin keeps
+the Binder image on the matching release).
 Releases are made by pushing a tag that is the bare version string, such
 as `0.1.0`, with no `v` prefix. The release workflow refuses to build if
 the tag does not match the version in `package.json`, then builds the
