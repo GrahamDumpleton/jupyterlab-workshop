@@ -194,6 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds to allow for the whole run (default 1200)",
     )
     test.add_argument(
+        "--action-timeout",
+        type=float,
+        default=300.0,
+        help="seconds one action may take before the run stops (default 300)",
+    )
+    test.add_argument(
         "--trust",
         choices=["trusted", "restricted", "ask"],
         default="trusted",
@@ -459,6 +465,7 @@ def command_test(args: argparse.Namespace) -> int:
         in_place=args.in_place,
         headed=args.headed,
         timeout=args.timeout,
+        action_timeout=args.action_timeout,
         trust=args.trust,
         junit=args.junit,
         json_out=args.json_out,

@@ -22,7 +22,34 @@ export interface ISelfTestResult {
   status: IActionResult['status'];
   message: string;
   seconds: number;
+  /** Set when the action was still running at the per-action limit. */
+  timedOut?: boolean;
 }
+
+/** The action a self-test is currently running. */
+export interface ISelfTestCurrent {
+  page: string;
+  id: string;
+  type: string;
+  startedAt: number;
+}
+
+/** How far a self-test run has got, for a harness that polls from outside. */
+export interface ISelfTestProgress {
+  results: ISelfTestResult[];
+  current: ISelfTestCurrent | null;
+}
+
+/** Options for a self-test run. */
+export interface ISelfTestOptions {
+  /** Longest one action may take before the run stops, in milliseconds. */
+  actionTimeoutMs?: number;
+  /** Called after every action, and when an action starts. */
+  onProgress?: (progress: ISelfTestProgress) => void;
+}
+
+/** Default per-action limit: long enough for an environment to be created. */
+export const DEFAULT_ACTION_TIMEOUT_MS = 300000;
 
 /** What a self-test run produced. */
 export interface ISelfTestReport {
@@ -45,7 +72,8 @@ const CHECKS: ReadonlySet<string> = new Set(['verify', 'quiz', 'form']);
  * by `jupyter workshop test` through the `workshop:run-all` command.
  */
 export async function runAll(
-  manager: IWorkshopManager
+  manager: IWorkshopManager,
+  options: ISelfTestOptions = {}
 ): Promise<ISelfTestReport> {
   const workshop = manager.workshop;
 
@@ -65,7 +93,23 @@ export async function runAll(
       break;
     }
 
-    results.push(...(await runCurrentPage(manager, 'all')));
+    const pageResults = await runCurrentPage(manager, 'all', {
+      ...options,
+      onProgress: progress =>
+        options.onProgress?.({
+          results: [...results, ...progress.results],
+          current: progress.current
+        })
+    });
+
+    results.push(...pageResults);
+
+    // An action that never finished leaves the session in an unknown
+    // state, so the run stops there rather than reporting noise after it.
+    if (pageResults.some(item => item.timedOut)) {
+      break;
+    }
+
     manager.markDone(pageId, true);
     index += 1;
   }
@@ -79,10 +123,12 @@ export async function runAll(
  */
 export async function runCurrentPage(
   manager: IWorkshopManager,
-  filter: RunFilter
+  filter: RunFilter,
+  options: ISelfTestOptions = {}
 ): Promise<ISelfTestResult[]> {
   const pageId = manager.currentPage?.id;
   const results: ISelfTestResult[] = [];
+  const limit = options.actionTimeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS;
 
   if (!pageId) {
     return results;
@@ -133,11 +179,37 @@ export async function runCurrentPage(
     }
 
     const started = Date.now();
-    const result = await manager.runAction(
-      prepared(node),
-      'click',
-      argumentFor(node, manager)
+
+    options.onProgress?.({
+      results: [...results],
+      current: {
+        page: pageId,
+        id: node.id,
+        type: node.name,
+        startedAt: started
+      }
+    });
+
+    const result = await withLimit(
+      manager.runAction(prepared(node), 'click', argumentFor(node, manager)),
+      limit
     );
+
+    if (result === null) {
+      results.push({
+        page: pageId,
+        id: node.id,
+        type: node.name,
+        status: 'error',
+        message: `Still running after ${Math.round(limit / 1000)}s; the self-test stopped here`,
+        seconds: (Date.now() - started) / 1000,
+        timedOut: true
+      });
+
+      options.onProgress?.({ results: [...results], current: null });
+
+      break;
+    }
 
     results.push({
       page: pageId,
@@ -147,9 +219,32 @@ export async function runCurrentPage(
       message: result.message ?? '',
       seconds: (Date.now() - started) / 1000
     });
+
+    options.onProgress?.({ results: [...results], current: null });
   }
 
   return results;
+}
+
+/**
+ * Resolve with the action's result, or with null once the limit passes
+ * first. The action itself keeps running; the caller decides what to do.
+ */
+async function withLimit(
+  action: Promise<IActionResult>,
+  limitMs: number
+): Promise<IActionResult | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const expired = new Promise<null>(resolve => {
+    timer = setTimeout(() => resolve(null), limitMs);
+  });
+
+  try {
+    return await Promise.race([action, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

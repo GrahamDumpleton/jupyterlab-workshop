@@ -37,6 +37,12 @@ LITE_PREFIX = "lite"
 
 RUN_ALL_COMMAND = "workshop:run-all"
 
+PROGRESS_COMMAND = "workshop:self-test-progress"
+
+#: Where the page keeps the outcome of the run-all command while the
+#: harness polls for it.
+RESULT_SLOT = "__jupyterlabWorkshopSelfTest"
+
 
 @dataclass(frozen=True)
 class SelfTestOptions:
@@ -45,7 +51,12 @@ class SelfTestOptions:
     directory: Path
     in_place: bool = False
     headed: bool = False
+
+    #: Seconds to allow for the whole run before it is abandoned.
     timeout: float = 1200.0
+
+    #: Seconds one action may take before the run stops at it.
+    action_timeout: float = 300.0
     trust: str = "trusted"
     junit: Path | None = None
     json_out: Path | None = None
@@ -121,7 +132,7 @@ def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> o
             sync_playwright,
             f"http://127.0.0.1:{port}/lab?token={token}",
             name,
-            options.headed,
+            options,
             ready_timeout=120000,
         )
     finally:
@@ -156,7 +167,7 @@ def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> obj
             sync_playwright,
             f"http://127.0.0.1:{port}/{LITE_PREFIX}/lab/index.html",
             name,
-            options.headed,
+            options,
             ready_timeout=300000,
         )
     finally:
@@ -167,11 +178,13 @@ def _drive(
     sync_playwright: Any,
     url: str,
     name: str,
-    headed: bool,
+    options: SelfTestOptions,
     ready_timeout: int,
 ) -> object:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=not headed)
+        browser = playwright.chromium.launch(headless=not options.headed)
         page = browser.new_page()
 
         page.goto(url)
@@ -180,14 +193,110 @@ def _drive(
         )
         page.evaluate("() => window.jupyterapp.restored")
 
-        raw = page.evaluate(
-            "([command, path]) => "
-            "window.jupyterapp.commands.execute(command, { path })",
-            [RUN_ALL_COMMAND, name],
+        # Start the run and park its outcome on the window rather than
+        # awaiting the promise, so the wait below can carry a deadline.
+        page.evaluate(
+            "([command, path, actionTimeout, slot]) => {"
+            "  window[slot] = { done: false };"
+            "  window.jupyterapp.commands"
+            "    .execute(command, { path, actionTimeout })"
+            "    .then("
+            "      result => { window[slot] = { done: true, result }; },"
+            "      error => {"
+            "        window[slot] = { done: true, error: String(error) };"
+            "      }"
+            "    );"
+            "}",
+            [RUN_ALL_COMMAND, name, options.action_timeout, RESULT_SLOT],
         )
+
+        try:
+            page.wait_for_function(
+                f"() => window.{RESULT_SLOT} && window.{RESULT_SLOT}.done",
+                timeout=options.timeout * 1000,
+            )
+        except PlaywrightTimeoutError:
+            progress = page.evaluate(
+                "command => window.jupyterapp.commands.execute(command)",
+                PROGRESS_COMMAND,
+            )
+            browser.close()
+
+            return timed_out_report(name, progress, options.timeout)
+
+        outcome = page.evaluate(f"() => window.{RESULT_SLOT}")
         browser.close()
 
-    return raw
+    if not isinstance(outcome, dict) or "result" not in outcome:
+        error = outcome.get("error") if isinstance(outcome, dict) else outcome
+
+        raise SystemExit(f"{RUN_ALL_COMMAND} failed: {error}")
+
+    return outcome["result"]
+
+
+def timed_out_report(name: str, progress: object, timeout: float) -> dict[str, Any]:
+    """Build a report for a run abandoned at the overall time limit.
+
+    The results gathered so far are kept, and the action that was running
+    when time ran out is recorded as a failure so the report says where
+    the run stuck.
+    """
+
+    results: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    if isinstance(progress, dict):
+        raw_results = progress.get("results")
+        raw_current = progress.get("current")
+
+        if isinstance(raw_results, list):
+            results = [dict(item) for item in raw_results if isinstance(item, dict)]
+
+        if isinstance(raw_current, dict):
+            current = raw_current
+
+    if current is not None:
+        started = float(current.get("startedAt", 0)) / 1000
+        elapsed = max(0.0, time.time() - started) if started else timeout
+
+        results.append(
+            {
+                "page": current.get("page", ""),
+                "id": current.get("id", ""),
+                "type": current.get("type", ""),
+                "status": "error",
+                "message": (
+                    f"Still running when the self-test hit its {timeout:.0f}s limit"
+                ),
+                "seconds": elapsed,
+                "timedOut": True,
+            }
+        )
+    else:
+        results.append(
+            {
+                "page": "",
+                "id": "self-test",
+                "type": "run",
+                "status": "error",
+                "message": (
+                    f"No action was reported as running when the self-test hit "
+                    f"its {timeout:.0f}s limit"
+                ),
+                "seconds": timeout,
+                "timedOut": True,
+            }
+        )
+
+    return {
+        "workshop": name,
+        "results": results,
+        "passed": sum(1 for item in results if item.get("status") == "ok"),
+        "failed": sum(1 for item in results if item.get("status") == "error"),
+        "skipped": sum(1 for item in results if item.get("status") == "skipped"),
+        "timedOut": True,
+    }
 
 
 def _prepare_root(options: SelfTestOptions, work: Path) -> tuple[Path, str]:

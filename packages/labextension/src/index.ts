@@ -111,7 +111,7 @@ import { LiteBackend } from './lite/backend';
 import { isJupyterLite } from './lite/detect';
 import { WorkshopManager } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
-import { runAll } from './selftest';
+import { ISelfTestProgress, runAll } from './selftest';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { WORKSHOP_STATE_DIR } from './state';
@@ -835,6 +835,10 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     });
 
     // The self-test harness opens a workshop and runs everything in it.
+    // It polls the progress command while the run is going so that a
+    // run it has to abandon still reports what happened up to then.
+    let selfTestProgress: ISelfTestProgress = { results: [], current: null };
+
     app.commands.addCommand(CommandIDs.runAll, {
       label: 'Workshop: Run Every Action (self-test)',
       caption:
@@ -842,15 +846,33 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => manager.workshop !== null,
       execute: async (args): Promise<unknown> => {
         const path = typeof args.path === 'string' ? args.path : '';
+        const actionTimeoutMs =
+          typeof args.actionTimeout === 'number' && args.actionTimeout > 0
+            ? args.actionTimeout * 1000
+            : undefined;
 
         if (path && manager.workshop?.path !== path) {
           await manager.open(path);
         }
 
-        const report = await runAll(manager);
+        selfTestProgress = { results: [], current: null };
+
+        const report = await runAll(manager, {
+          actionTimeoutMs,
+          onProgress: progress => {
+            selfTestProgress = progress;
+          }
+        });
 
         return report as unknown as ReadonlyJSONValue;
       }
+    });
+
+    app.commands.addCommand(CommandIDs.selfTestProgress, {
+      label: 'Workshop: Self-test Progress',
+      caption: 'Report how far the running self-test has got',
+      execute: (): ReadonlyJSONValue =>
+        selfTestProgress as unknown as ReadonlyJSONValue
     });
 
     if (palette) {
@@ -860,6 +882,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         if (
           command !== CommandIDs.openSelected &&
           command !== CommandIDs.runAll &&
+          command !== CommandIDs.selfTestProgress &&
           command !== CommandIDs.launch
         ) {
           palette.addItem({ command, category: PALETTE_CATEGORY });

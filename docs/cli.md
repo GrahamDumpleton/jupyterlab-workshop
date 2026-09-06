@@ -141,6 +141,7 @@ the result locally to try it out.
 ```
 jupyter workshop test my-workshop [--junit FILE] [--json FILE] [--in-place]
                                   [--headed] [--timeout SECONDS]
+                                  [--action-timeout SECONDS]
                                   [--trust trusted|restricted|ask]
                                   [--lite] [--lite-dir DIR]
 ```
@@ -154,6 +155,13 @@ each terminal command to finish, answers quizzes correctly, submits forms
 with their defaults, and runs every check. Each action is reported as
 pass, fail or skip, and the exit code is 1 when anything failed. `--junit`
 writes a JUnit XML report for CI, `--json` the full results.
+
+An action that is still running after `--action-timeout` seconds (default 300) is reported as failed and the run stops there, since later actions
+would build on an unknown state. `--timeout` (default 1200) bounds the
+whole run: when it passes, the harness collects the results gathered so
+far, records the action in flight as failed, and exits with code 1. Both
+limits exist so that a stuck action in CI produces a report naming it
+rather than a job that never ends.
 
 Requirements: the `test` extra (`pip install
 "jupyterlab-workshop[test]"`) and a browser (`playwright install

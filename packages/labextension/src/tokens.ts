@@ -770,6 +770,7 @@ export namespace CommandIDs {
   export const uninstall = 'workshop:uninstall';
   export const reset = 'workshop:reset';
   export const runAll = 'workshop:run-all';
+  export const selfTestProgress = 'workshop:self-test-progress';
   export const browse = 'workshop:browse';
   export const launch = 'workshop:launch';
   export const exportEvents = 'workshop:export-events';
