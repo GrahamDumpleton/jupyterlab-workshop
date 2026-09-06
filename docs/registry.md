@@ -144,10 +144,10 @@ https://mybinder.org/v2/gh/example-org/launcher/main?urlpath=lab%3Fworkshop%3Dht
 ```
 
 The `urlpath` is `lab?workshop=…` URL-encoded. This repository's own
-`binder/` directory is an example: `requirements.txt` installs JupyterLab
-and the package, and `postBuild` writes a settings override that opens
-`examples/git-basics` on start, lists the examples in the browser and
-trusts them. A workshop repository can carry the same two files and a
+`binder/` directory is an example: `runtime.txt` selects a Python the
+package supports, `requirements.txt` installs JupyterLab and the package,
+and `postBuild` writes a settings override that opens `examples/git-basics`
+on start, lists the examples in the browser and trusts them. A workshop repository can carry the same two files and a
 launch badge, with the `workshop` parameter naming a directory in the
 checkout rather than a URL.
 

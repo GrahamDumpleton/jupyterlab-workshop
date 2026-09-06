@@ -1,4 +1,5 @@
-# Image for mybinder.org: JupyterLab with the released extension. Nothing
+# Image for mybinder.org: JupyterLab with the released extension on the
+# Python named in runtime.txt (the package needs 3.12 or later). Nothing
 # else in the repository is installed; the example workshops are opened
 # straight from the checkout.
 jupyterlab>=4.6,<5
