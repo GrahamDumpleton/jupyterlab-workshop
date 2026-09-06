@@ -153,7 +153,11 @@ def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> o
 
         raise
     else:
-        if isinstance(raw, dict) and raw.get("timedOut"):
+        # A failure with no more than the browser's word for it is hard to
+        # explain later, so the server side of the story is kept too.
+        if isinstance(raw, dict) and (
+            raw.get("timedOut") or _to_report(raw).failed > 0
+        ):
             _dump_server_log(log)
 
         return raw
