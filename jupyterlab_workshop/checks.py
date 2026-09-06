@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,17 +124,24 @@ def create_checkpoint(
 
     directory.mkdir(parents=True, exist_ok=True)
 
+    # The archive is built under a name of its own and renamed into place,
+    # so a reader never sees a half-written file, and two writers at once
+    # (a check's cascade and a click on the same block) each finish their
+    # own file rather than tripping over a shared one.
     archive = directory / f"{checkpoint_name}.tar"
-    partial = directory / f"{checkpoint_name}.tar.partial"
+    partial = directory / f"{checkpoint_name}.{uuid.uuid4().hex}.partial"
 
-    with tarfile.open(partial, "w") as tar:
-        for entry in sorted(workshop.iterdir()):
-            if entry.name == STATE_DIR:
-                continue
+    try:
+        with tarfile.open(partial, "w") as tar:
+            for entry in sorted(workshop.iterdir()):
+                if entry.name == STATE_DIR:
+                    continue
 
-            tar.add(entry, arcname=entry.name)
+                tar.add(entry, arcname=entry.name)
 
-    partial.replace(archive)
+        partial.replace(archive)
+    finally:
+        partial.unlink(missing_ok=True)
 
     record = {
         "name": checkpoint_name,

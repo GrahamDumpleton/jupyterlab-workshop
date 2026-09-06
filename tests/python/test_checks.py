@@ -156,3 +156,21 @@ class TestPreflight:
         assert _satisfies("3.12.0", "==3.12") is True
         assert _satisfies("", ">=1") is False
         assert _satisfies("1.0", "weird") is True
+
+
+def test_create_checkpoint_leaves_no_partial_file(tmp_path: Path) -> None:
+    workshop = tmp_path / "ws"
+
+    workshop.mkdir()
+    (workshop / "workshop.yaml").write_text("name: ws\n")
+    (workshop / "data.txt").write_text("one\n")
+
+    create_checkpoint(tmp_path, "ws", "start")
+    create_checkpoint(tmp_path, "ws", "start")
+
+    snapshots = workshop / "_workshop" / "snapshots"
+
+    assert sorted(path.name for path in snapshots.iterdir()) == [
+        "start.json",
+        "start.tar",
+    ]
