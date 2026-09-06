@@ -15,6 +15,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { workshopIcon } from '../icons';
 import {
   CommandIDs,
+  IFeaturePolicy,
   IInstalledWorkshop,
   IWorkshopManager,
   errorMessage
@@ -59,6 +60,7 @@ export class WorkshopBrowser extends ReactWidget {
     // while a workshop that was already open is browsed alongside.
     this._openPath = options.manager.workshop?.path ?? null;
     options.manager.changed.connect(this._onWorkshopChanged, this);
+    options.features.changed.connect(this.update, this);
   }
 
   dispose(): void {
@@ -67,6 +69,7 @@ export class WorkshopBrowser extends ReactWidget {
     }
 
     this._options.manager.changed.disconnect(this._onWorkshopChanged, this);
+    this._options.features.changed.disconnect(this.update, this);
     super.dispose();
   }
 
@@ -83,7 +86,7 @@ export class WorkshopBrowser extends ReactWidget {
   }
 
   protected render(): JSX.Element {
-    const { manager, commands, readSettings } = this._options;
+    const { manager, commands, features, readSettings } = this._options;
 
     return (
       <UseSignal signal={this._refreshRequested}>
@@ -91,6 +94,7 @@ export class WorkshopBrowser extends ReactWidget {
           <BrowserContent
             manager={manager}
             commands={commands}
+            features={features}
             readSettings={readSettings}
             refreshSignal={this._refreshRequested}
           />
@@ -123,6 +127,9 @@ export namespace WorkshopBrowser {
     manager: IWorkshopManager;
     commands: CommandRegistry;
 
+    /** Which buttons and sections the settings leave enabled. */
+    features: IFeaturePolicy;
+
     /** Current values of the settings the browser depends on. */
     readSettings: () => Promise<IBrowserSettings>;
   }
@@ -133,7 +140,7 @@ interface IContentProps extends WorkshopBrowser.IOptions {
 }
 
 function BrowserContent(props: IContentProps): JSX.Element {
-  const { manager, commands, readSettings, refreshSignal } = props;
+  const { manager, commands, features, readSettings, refreshSignal } = props;
   const [registries, setRegistries] = useState<ILoadedRegistry[]>([]);
   const [installed, setInstalled] = useState<IInstalledWorkshop[]>([]);
   const [directory, setDirectory] = useState('workshops');
@@ -203,7 +210,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
   );
 
   // A workshop that is installed is listed once, under Installed, where
-  // its card offers to reinstall it from the registry.
+  // its card offers an update when the registry has another version.
   const shown = useMemo(
     () =>
       searchRegistry(entries, query, tags).filter(
@@ -212,6 +219,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
     [entries, query, tags, installedByName]
   );
   const platform = manager.platform?.os ?? '';
+  const showAvailable = features.enabled('available');
+  const ways = [
+    showAvailable ? 'install one below' : '',
+    features.enabled('open-url') ? 'add one from a URL' : '',
+    features.enabled('open-directory') ? 'open a directory' : ''
+  ].filter(Boolean);
+  const installHints =
+    ways.length === 0
+      ? ''
+      : ` You can ${ways.join(', ').replace(/, ([^,]*)$/, ' or $1')}.`;
 
   const toggleTag = (tag: string): void =>
     setTags(current =>
@@ -235,6 +252,28 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
   const open = (path: string): void => {
     void commands.execute(CommandIDs.open, { path });
+  };
+
+  const restart = async (item: IInstalledWorkshop): Promise<void> => {
+    await commands.execute(CommandIDs.restart, {
+      path: item.path,
+      title: item.title
+    });
+    setVersion(value => value + 1);
+  };
+
+  // The registry version an installed workshop could move to, if any.
+  const updateFor = (
+    item: IInstalledWorkshop
+  ): { version: string; run: () => void } | undefined => {
+    const entry = entriesByName.get(item.name);
+    const version = entry ? latestVersion(entry).version : '';
+
+    if (!entry || !version || version === item.version) {
+      return undefined;
+    }
+
+    return { version, run: () => install(entry) };
   };
 
   const remove = async (item: IInstalledWorkshop): Promise<void> => {
@@ -262,37 +301,47 @@ function BrowserContent(props: IContentProps): JSX.Element {
   return (
     <div className="jp-WorkshopBrowser-content">
       <div className="jp-WorkshopBrowser-toolbar">
-        <input
-          type="search"
-          className="jp-WorkshopBrowser-search"
-          placeholder="Search workshops"
-          value={query}
-          onChange={event => setQuery(event.target.value)}
-        />
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled"
-          onClick={() => void commands.execute(CommandIDs.openUrl)}
-        >
-          Add from URL…
-        </button>
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled"
-          onClick={() => void commands.execute(CommandIDs.open)}
-        >
-          Open a directory…
-        </button>
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled"
-          title="Change the registries in the settings"
-          onClick={() =>
-            void commands.execute('settingeditor:open', { query: 'Workshop' })
-          }
-        >
-          Manage registries
-        </button>
+        {showAvailable ? (
+          <input
+            type="search"
+            className="jp-WorkshopBrowser-search"
+            placeholder="Search workshops"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+          />
+        ) : null}
+        {features.enabled('open-url') ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            onClick={() => void commands.execute(CommandIDs.openUrl)}
+          >
+            Add from URL…
+          </button>
+        ) : null}
+        {features.enabled('open-directory') ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            onClick={() => void commands.execute(CommandIDs.open)}
+          >
+            Open a directory…
+          </button>
+        ) : null}
+        {features.enabled('registries') ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Change the registries in the settings"
+            onClick={() =>
+              void commands.execute('settingeditor:open', {
+                query: 'Workshop'
+              })
+            }
+          >
+            Manage registries
+          </button>
+        ) : null}
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-minimal jp-WorkshopBrowser-refresh"
@@ -302,7 +351,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           <refreshIcon.react tag="span" width="16px" height="16px" />
         </button>
       </div>
-      {allTags.length > 0 ? (
+      {showAvailable && allTags.length > 0 ? (
         <div className="jp-WorkshopBrowser-tags">
           {allTags.map(tag => (
             <button
@@ -321,7 +370,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
         <p className="jp-WorkshopBrowser-note">
           {loading
             ? 'Looking for installed workshops…'
-            : `No workshops are installed under ${directory || 'the JupyterLab root'} yet. Install one below, add one from a URL, or open a directory.`}
+            : `No workshops are installed under ${directory || 'the JupyterLab root'} yet.${installHints}`}
         </p>
       ) : (
         <div className="jp-WorkshopBrowser-cards">
@@ -331,16 +380,46 @@ function BrowserContent(props: IContentProps): JSX.Element {
               item={item}
               open={manager.workshop?.path === item.path}
               onOpen={() => open(item.path)}
-              onRemove={() => void remove(item)}
-              onReinstall={
-                entriesByName.has(item.name)
-                  ? () => install(entriesByName.get(item.name)!)
-                  : undefined
+              onRestart={() => void restart(item)}
+              onRemove={
+                features.enabled('remove') ? () => void remove(item) : undefined
               }
+              update={updateFor(item)}
             />
           ))}
         </div>
       )}
+      {showAvailable ? (
+        <AvailableSection
+          registries={registries}
+          entries={entries}
+          shown={shown}
+          loading={loading}
+          platform={platform}
+          onInstall={install}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AvailableSection({
+  registries,
+  entries,
+  shown,
+  loading,
+  platform,
+  onInstall
+}: {
+  registries: ILoadedRegistry[];
+  entries: IRegistryEntry[];
+  shown: IRegistryEntry[];
+  loading: boolean;
+  platform: string;
+  onInstall: (entry: IRegistryEntry) => void;
+}): JSX.Element {
+  return (
+    <>
       <h2 className="jp-WorkshopBrowser-heading">Available</h2>
       {registries.map(registry =>
         registry.error ? (
@@ -364,28 +443,22 @@ function BrowserContent(props: IContentProps): JSX.Element {
             key={`${entry.name}`}
             entry={entry}
             platform={platform}
-            installed={installedByName.get(entry.name)}
-            onInstall={() => install(entry)}
-            onOpen={path => open(path)}
+            onInstall={() => onInstall(entry)}
           />
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
 function RegistryCard({
   entry,
   platform,
-  installed,
-  onInstall,
-  onOpen
+  onInstall
 }: {
   entry: IRegistryEntry;
   platform: string;
-  installed?: IInstalledWorkshop;
   onInstall: () => void;
-  onOpen: (path: string) => void;
 }): JSX.Element {
   const version = latestVersion(entry);
   const supported = platform === '' || supportsPlatform(entry, platform);
@@ -430,21 +503,12 @@ function RegistryCard({
             Not written for {platform}
           </span>
         ) : null}
-        {installed ? (
-          <button
-            type="button"
-            className="jp-Button jp-mod-styled jp-mod-accept"
-            onClick={() => onOpen(installed.path)}
-          >
-            {installed.started ? 'Resume' : 'Open'}
-          </button>
-        ) : null}
         <button
           type="button"
-          className={`jp-Button jp-mod-styled${installed ? '' : ' jp-mod-accept'}`}
+          className="jp-Button jp-mod-styled jp-mod-accept"
           onClick={onInstall}
         >
-          {installed ? 'Reinstall' : 'Install'}
+          Install
         </button>
       </div>
     </div>
@@ -455,16 +519,22 @@ function InstalledCard({
   item,
   open,
   onOpen,
+  onRestart,
   onRemove,
-  onReinstall
+  update
 }: {
   item: IInstalledWorkshop;
   open: boolean;
   onOpen: () => void;
-  onRemove: () => void;
 
-  /** Fetch the workshop again from its registry entry, when it has one. */
-  onReinstall?: () => void;
+  /** Put the files back as first opened and forget the progress. */
+  onRestart: () => void;
+
+  /** Delete the workshop, when the settings allow removing. */
+  onRemove?: () => void;
+
+  /** The registry version to move to, when it differs from the installed one. */
+  update?: { version: string; run: () => void };
 }): JSX.Element {
   const progress =
     item.pages > 0 ? Math.round((item.done / item.pages) * 100) : 0;
@@ -506,27 +576,40 @@ function InstalledCard({
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
           disabled={open}
+          title={open ? 'This workshop is open' : undefined}
           onClick={onOpen}
         >
-          {open ? 'Open now' : item.started ? 'Resume' : 'Open'}
+          {item.started && !open ? 'Resume' : 'Open'}
         </button>
-        {onReinstall ? (
+        {item.started ? (
           <button
             type="button"
             className="jp-Button jp-mod-styled"
-            title="Download the workshop from the registry again"
-            onClick={onReinstall}
+            title="Put the files back as they were when first opened and forget the progress"
+            onClick={onRestart}
           >
-            Reinstall
+            Restart
           </button>
         ) : null}
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled jp-mod-warn"
-          onClick={onRemove}
-        >
-          Remove
-        </button>
+        {update ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Download this version from the registry, replacing the files"
+            onClick={update.run}
+          >
+            Update to {update.version}
+          </button>
+        ) : null}
+        {onRemove ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-warn"
+            onClick={onRemove}
+          >
+            Remove
+          </button>
+        ) : null}
       </div>
     </div>
   );

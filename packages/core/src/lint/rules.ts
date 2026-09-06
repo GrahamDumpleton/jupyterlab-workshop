@@ -25,6 +25,7 @@ import {
   LAYOUT_WIDGET_PATH_KINDS,
   parseLayoutWidget
 } from '../format/layouts';
+import { PRISTINE_CHECKPOINT } from '../format/checkpoints';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import { liteShellProblems, usesSubprocess } from '../lite';
@@ -304,6 +305,7 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
 
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
+      lintCheckpointName(node, where, messages);
       lintPaths(node, workspaceOnly, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
       lintVariants(node, input.manifest.platforms, where, messages);
@@ -323,6 +325,30 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
         'The manifest declares an environment with requirements but not the "install-packages" capability it needs',
       path: input.manifestPath ?? 'workshop.yaml',
       fix: { kind: 'add-capability', capability: 'install-packages' }
+    });
+  }
+}
+
+/**
+ * The checkpoint the extension takes on first open is reserved: a
+ * workshop that named its own checkpoint the same way would overwrite
+ * the files "Restart" puts back.
+ */
+function lintCheckpointName(
+  node: IDirectiveNode,
+  where: { path: string; line?: number },
+  messages: ILintMessage[]
+): void {
+  if (node.name !== 'checkpoint' && node.name !== 'restore') {
+    return;
+  }
+
+  if (node.options.name === PRISTINE_CHECKPOINT) {
+    messages.push({
+      level: 'error',
+      rule: 'reserved-checkpoint-name',
+      message: `The checkpoint name "${PRISTINE_CHECKPOINT}" is reserved for the snapshot taken when a workshop is first opened`,
+      ...where
     });
   }
 }

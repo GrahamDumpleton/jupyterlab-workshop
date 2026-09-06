@@ -6,6 +6,7 @@ import {
   IPage,
   IRegistryIndex,
   IWorkshopManifest,
+  PRISTINE_CHECKPOINT,
   TrustLevel,
   Variables,
   parseRegistryIndex,
@@ -37,7 +38,7 @@ import {
   readTextFile,
   writeTextFile
 } from './actions/contents';
-import { StateStore, WORKSHOP_STATE_DIR } from './state';
+import { STATE_FILE, StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
   IActionLogEntry,
@@ -47,6 +48,7 @@ import {
   IActionStatus,
   IEnvironmentStatus,
   IFetchRequest,
+  IFeaturePolicy,
   IFetchResult,
   IGateStatus,
   IInstalledWorkshop,
@@ -54,6 +56,7 @@ import {
   IOpenOptions,
   IPreflightResult,
   IPageProgress,
+  IRestartResult,
   IPlatformInfo,
   ITrustDecision,
   ITrustPrompts,
@@ -107,6 +110,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._trustStore = options.trustStore;
     this._prompts = options.prompts;
     this._settings = options.settings ?? null;
+    this._features = options.features ?? null;
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
     this._reloader = new Debouncer(() => this.reload(), 300);
@@ -186,7 +190,7 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   get authoring(): boolean {
-    return this._authoring;
+    return this._authoring && this._features?.enabled('author') !== false;
   }
 
   get lint(): ILintMessage[] {
@@ -310,6 +314,18 @@ export class WorkshopManager implements IWorkshopManager {
       // A workshop marked as the learner's own reopens in author mode.
       this._authoring = await this._trustStore.isAuthored(trust.sourceKey);
 
+      // The first time a workshop opens, before any action can touch its
+      // files, they are snapshotted so that "Restart" can put them back.
+      const fresh =
+        (await readIfExists(
+          this._contents,
+          PathExt.join(workshopPath, WORKSHOP_STATE_DIR, STATE_FILE)
+        )) === null;
+
+      if (fresh) {
+        await this._snapshotPristine(workshopPath);
+      }
+
       const state = await this._state.load(
         workshopPath,
         manifest.name,
@@ -389,6 +405,10 @@ export class WorkshopManager implements IWorkshopManager {
     const workshop = this._workshop;
 
     if (!workshop || this._authoring === on) {
+      return;
+    }
+
+    if (on && this._features?.enabled('author') === false) {
       return;
     }
 
@@ -788,6 +808,51 @@ export class WorkshopManager implements IWorkshopManager {
     this._store.load({}, []);
 
     await this.open(path);
+  }
+
+  async restart(path?: string): Promise<IRestartResult> {
+    const workshop = this._workshop;
+    const target =
+      path === undefined ? workshop?.path : normalizeWorkshopPath(path);
+
+    if (target === undefined) {
+      throw new Error('No workshop is open');
+    }
+
+    const open = workshop !== null && workshop.path === target;
+
+    // Leave the open workshop first so nothing writes state back while
+    // the files change underneath it.
+    if (open) {
+      const settings = this._state.state?.installed.settings ?? [];
+
+      this.stopChain();
+      await this._restoreSettings(settings);
+      await this._state.unload();
+
+      this._workshop = null;
+      this._currentPageId = '';
+      this._store.load({}, []);
+    }
+
+    // Put the files back, then drop the state directory, snapshot
+    // included: reopening takes a fresh one of the restored files.
+    let files = true;
+
+    try {
+      await this._backend.restoreCheckpoint(target, PRISTINE_CHECKPOINT);
+    } catch (error) {
+      console.warn('No pristine snapshot to restore', error);
+      files = false;
+    }
+
+    await deleteTree(this._contents, PathExt.join(target, WORKSHOP_STATE_DIR));
+
+    if (open) {
+      await this.open(target);
+    }
+
+    return { files };
   }
 
   /**
@@ -1806,6 +1871,19 @@ export class WorkshopManager implements IWorkshopManager {
     return chosen;
   }
 
+  /**
+   * Archive the workshop's files as the reserved pristine checkpoint. A
+   * failure is logged rather than raised: the workshop still opens, and
+   * a restart then keeps the files.
+   */
+  private async _snapshotPristine(path: string): Promise<void> {
+    try {
+      await this._backend.checkpoint(path, PRISTINE_CHECKPOINT, {});
+    } catch (error) {
+      console.warn('Unable to snapshot the workshop files', error);
+    }
+  }
+
   private async _restoreSettings(
     changes: { plugin: string; key: string; previous?: unknown }[]
   ): Promise<void> {
@@ -1868,6 +1946,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _envWriter: Debouncer;
   private _reloader: Debouncer;
   private _authoring = false;
+  private _features: IFeaturePolicy | null;
   private _workshop: ILoadedWorkshop | null = null;
   private _currentPageId = '';
   private _platform: IPlatformInfo | null = null;
@@ -1896,10 +1975,14 @@ export namespace WorkshopManager {
 
     /** Setting registry, used to restore settings on uninstall. */
     settings?: ISettingRegistry | null;
+
+    /** Which features the settings disable; author mode may be one. */
+    features?: IFeaturePolicy | null;
   }
 }
 
-function normalizeWorkshopPath(path: string): string {
+/** Trim a workshop path and strip its surrounding slashes. */
+export function normalizeWorkshopPath(path: string): string {
   return PathExt.normalize(path.trim()).replace(/^\/+|\/+$/g, '');
 }
 

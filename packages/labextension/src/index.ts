@@ -1,3 +1,4 @@
+import { IRegistryIndex } from '@jupyterlab-workshop/core';
 import {
   ILabShell,
   ILayoutRestorer,
@@ -101,6 +102,7 @@ import {
 import { AnalyticsRecorder } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
+import { featuresPlugin } from './features';
 import {
   BROWSER_ID,
   IBrowserSettings,
@@ -109,7 +111,7 @@ import {
 import { closePlaceholders, isPlaceholderMain, LayoutManager } from './layout';
 import { LiteBackend } from './lite/backend';
 import { isJupyterLite } from './lite/detect';
-import { WorkshopManager } from './manager';
+import { WorkshopManager, normalizeWorkshopPath } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { ISelfTestProgress, runAll } from './selftest';
 import { showVariablesDialog } from './panel/variables';
@@ -119,6 +121,7 @@ import {
   CommandIDs,
   ConflictError,
   IActionRegistry,
+  IFeaturePolicy,
   IFetchRequest,
   IWorkshopManager,
   errorMessage
@@ -128,7 +131,7 @@ import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
 import { TriggerBus } from './verify/triggers';
 
-export { IActionRegistry, IWorkshopManager } from './tokens';
+export { IActionRegistry, IFeaturePolicy, IWorkshopManager } from './tokens';
 
 const PLUGIN_PREFIX = '@jupyterlab-workshop/labextension';
 
@@ -142,9 +145,11 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
   description: 'Loads workshops and tracks the current page.',
   autoStart: true,
   provides: IWorkshopManager,
+  requires: [IFeaturePolicy],
   optional: [IStateDB, ISettingRegistry],
   activate: (
     app: JupyterFrontEnd,
+    features: IFeaturePolicy,
     stateDB: IStateDB | null,
     settingRegistry: ISettingRegistry | null
   ): IWorkshopManager => {
@@ -182,7 +187,8 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       stateDB,
       trustStore,
       prompts: trustPrompts,
-      settings: settingRegistry
+      settings: settingRegistry,
+      features
     });
 
     // Progress events go to the workshop's events file and any sink.
@@ -385,7 +391,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
   id: `${PLUGIN_PREFIX}:panel`,
   description: 'Shows workshop instructions in the left sidebar.',
   autoStart: true,
-  requires: [IWorkshopManager, IActionRegistry, ILabShell, IDocumentManager],
+  requires: [
+    IWorkshopManager,
+    IActionRegistry,
+    ILabShell,
+    IDocumentManager,
+    IFeaturePolicy
+  ],
   optional: [
     ISettingRegistry,
     ICommandPalette,
@@ -400,6 +412,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     registry: IActionRegistry,
     shell: ILabShell,
     docManager: IDocumentManager,
+    features: IFeaturePolicy,
     settingRegistry: ISettingRegistry | null,
     palette: ICommandPalette | null,
     restorer: ILayoutRestorer | null,
@@ -407,7 +420,14 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     launcher: ILauncher | null,
     router: IRouter | null
   ): void => {
-    const panel = new WorkshopPanel({ manager, commands: app.commands });
+    const panel = new WorkshopPanel({
+      manager,
+      commands: app.commands,
+      features
+    });
+
+    // Disabling a feature greys out its commands everywhere at once.
+    features.changed.connect(() => app.commands.notifyCommandChanged());
 
     // Start on the right; a saved layout or the setting may move it.
     shell.add(panel, 'right', { rank: 600 });
@@ -423,7 +443,33 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     });
 
     // Commands.
+    const workshopsDirectory = (): Promise<string> =>
+      readSetting(settingRegistry, 'workshopsDirectory', 'workshops');
+
+    // With opening directories disabled, the installed workshops (those
+    // under the workshops directory) stay openable, from the browser or
+    // a launch link, and anything else is refused.
+    const mayOpenDirectory = async (path: string): Promise<boolean> => {
+      if (features.enabled('open-directory')) {
+        return true;
+      }
+
+      const target = normalizeWorkshopPath(path);
+      const installed = await manager.installed(await workshopsDirectory());
+
+      return installed.some(item => item.path === target);
+    };
+
     const openWorkshopAt = async (path: string): Promise<void> => {
+      if (!(await mayOpenDirectory(path))) {
+        await showErrorMessage(
+          'Not available',
+          'Opening other workshop directories is disabled here.'
+        );
+
+        return;
+      }
+
       // Refuse early with a clear message rather than a parse error.
       const manifest = await getIfExists(
         app.serviceManager.contents,
@@ -447,8 +493,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.open, {
       label: 'Open Workshop…',
       caption: 'Choose a workshop directory to open',
+      isEnabled: () => features.enabled('open-directory'),
       execute: async (args): Promise<void> => {
         let path = typeof args.path === 'string' ? args.path : '';
+
+        if (!path && !features.enabled('open-directory')) {
+          return;
+        }
 
         if (!path) {
           const result = await FileDialog.getExistingDirectory({
@@ -473,7 +524,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.openPath, {
       label: 'Open Workshop Path…',
       caption: 'Open a workshop directory by typing its path',
+      isEnabled: () => features.enabled('open-directory'),
       execute: async (): Promise<void> => {
+        if (!features.enabled('open-directory')) {
+          return;
+        }
+
         const result = await InputDialog.getText({
           title: 'Open Workshop',
           label: 'Workshop directory (relative to the JupyterLab root)',
@@ -504,7 +560,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.openSelected, {
       label: 'Open as Workshop',
       caption: 'Open the selected directory as a workshop',
-      isVisible: () => selectedDirectory() !== null,
+      isVisible: () =>
+        features.enabled('open-directory') && selectedDirectory() !== null,
       execute: async (): Promise<void> => {
         const item = selectedDirectory();
 
@@ -524,6 +581,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       label: 'Open Workshop from URL…',
       caption:
         'Download a workshop from a git repository or archive URL and open it',
+      isEnabled: () => features.enabled('open-url'),
       execute: async (args): Promise<void> => {
         let url = typeof args.url === 'string' ? args.url : '';
         const ref = typeof args.ref === 'string' ? args.ref : undefined;
@@ -536,6 +594,21 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           ? args.variables
           : undefined;
         const launch = args.launch === true;
+
+        // With URLs disabled, only the sources the registries list may
+        // be fetched: the browser's Install and Update still work.
+        if (!features.enabled('open-url')) {
+          if (!url || !(await sourceListed(url, ref, subdir))) {
+            if (url) {
+              await showErrorMessage(
+                'Not available',
+                'Opening workshops from other URLs is disabled here.'
+              );
+            }
+
+            return;
+          }
+        }
 
         if (!url) {
           const result = await InputDialog.getText({
@@ -552,11 +625,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           url = result.value.trim();
         }
 
-        const directory = await readSetting(
-          settingRegistry,
-          'workshopsDirectory',
-          'workshops'
-        );
+        const directory = await workshopsDirectory();
         const path = await fetchWorkshop(manager, {
           url,
           ref,
@@ -582,13 +651,47 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         ...configured,
         ...sessionRegistries.filter(url => !configured.includes(url))
       ];
-      const workshopsDirectory = await readSetting(
-        settingRegistry,
-        'workshopsDirectory',
-        'workshops'
-      );
 
-      return { registries, workshopsDirectory };
+      return { registries, workshopsDirectory: await workshopsDirectory() };
+    };
+
+    // Whether a source is one a configured registry lists.
+    const sourceListed = async (
+      url: string,
+      ref: string | undefined,
+      subdir: string | undefined
+    ): Promise<boolean> => {
+      const { registries } = await readBrowserSettings();
+
+      for (const registry of registries) {
+        let index: IRegistryIndex;
+
+        try {
+          index = await manager.fetchRegistry(registry);
+        } catch (error) {
+          console.warn(`Unable to read the registry ${registry}`, error);
+
+          continue;
+        }
+
+        for (const entry of index.workshops) {
+          for (const version of entry.versions) {
+            const source = version.source;
+            const listed =
+              source.archive !== undefined
+                ? source.archive === url
+                : source.git === url &&
+                  (source.subdir ?? '') === (subdir ?? '') &&
+                  (ref === undefined || (source.ref ?? '') === ref);
+
+            if (listed) {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
     };
     let browser: WorkshopBrowser | null = null;
 
@@ -610,11 +713,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       label: 'Browse Workshops',
       caption: 'Find, install, resume and remove workshops',
       icon: args => (args.isLauncher ? panel.title.icon : undefined),
+      isEnabled: () => features.enabled('browse'),
       execute: (): void => {
         if (!browser || browser.isDisposed) {
           browser = new WorkshopBrowser({
             manager,
             commands: app.commands,
+            features,
             readSettings: readBrowserSettings
           });
         }
@@ -629,7 +734,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
-    if (launcher) {
+    if (launcher && features.enabled('browse')) {
       launcher.add({
         command: CommandIDs.browse,
         category: 'Workshops',
@@ -651,7 +756,11 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         const request = parseLaunchLink(search);
         const registry = parseRegistryLink(search);
 
-        if (registry && !sessionRegistries.includes(registry)) {
+        if (
+          registry &&
+          features.enabled('registries') &&
+          !sessionRegistries.includes(registry)
+        ) {
           sessionRegistries.push(registry);
         }
 
@@ -681,6 +790,14 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           }
 
           if (request.path !== undefined) {
+            if (!(await mayOpenDirectory(request.path))) {
+              Notification.error(
+                'Opening other workshop directories is disabled here.'
+              );
+
+              return;
+            }
+
             await manager.open(request.path, {
               variables: request.variables,
               launch: true
@@ -776,7 +893,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(CommandIDs.close, {
       label: 'Close Workshop',
-      isEnabled: () => manager.workshop !== null,
+      isEnabled: () => manager.workshop !== null && features.enabled('close'),
       execute: () => manager.close()
     });
 
@@ -807,12 +924,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(CommandIDs.uninstall, {
       label: 'Workshop: Remove…',
-      isEnabled: () => manager.workshop !== null,
+      isEnabled: () => manager.workshop !== null && features.enabled('remove'),
       execute: async (): Promise<void> => {
         const plan = manager.uninstallPlan();
         const title = manager.workshop?.manifest.title ?? '';
 
-        if (!plan) {
+        if (!plan || !features.enabled('remove')) {
           return;
         }
 
@@ -837,6 +954,57 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         } catch (error) {
           await showErrorMessage(
             'Unable to remove the workshop',
+            errorMessage(error)
+          );
+        }
+      }
+    });
+
+    // Restart puts the files back from the snapshot taken when the
+    // workshop was first opened. A path restarts an installed workshop
+    // that is not open, as the browser's Restart button asks.
+    app.commands.addCommand(CommandIDs.restart, {
+      label: 'Workshop: Restart…',
+      caption:
+        'Put the files back as they were when the workshop was first opened and forget all progress',
+      isEnabled: () => manager.workshop !== null,
+      execute: async (args): Promise<void> => {
+        const path = typeof args.path === 'string' ? args.path : undefined;
+        const title =
+          typeof args.title === 'string'
+            ? args.title
+            : (manager.workshop?.manifest.title ?? '');
+
+        if (path === undefined && !manager.workshop) {
+          return;
+        }
+
+        const result = await showDialog({
+          title: `Restart workshop "${title}"?`,
+          body: 'The files in the workshop directory will be put back as they were when the workshop was first opened, anything added since will be deleted, and all progress will be forgotten.',
+          buttons: [
+            Dialog.cancelButton(),
+            Dialog.warnButton({ label: 'Restart' })
+          ]
+        });
+
+        if (!result.button.accept) {
+          return;
+        }
+
+        try {
+          const outcome = await manager.restart(path);
+
+          if (!outcome.files) {
+            Notification.warning(
+              'Progress was forgotten but the files were kept: the workshop was first opened before a snapshot of them was taken.',
+              { autoClose: 8000 }
+            );
+          }
+        } catch (error) {
+          console.error('Unable to restart the workshop', error);
+          await showErrorMessage(
+            'Unable to restart the workshop',
             errorMessage(error)
           );
         }
@@ -1198,6 +1366,7 @@ class UninstallBody extends Widget {
 }
 
 export default [
+  featuresPlugin,
   managerPlugin,
   terminalsPlugin,
   actionsPlugin,

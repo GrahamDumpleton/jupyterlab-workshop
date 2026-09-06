@@ -259,6 +259,11 @@ pass, `soft` only shows what is missing.
 - Ids referred to elsewhere (`requires`, `after:`, `cascade`) must exist;
   lint reports `unknown-requirement` and `unknown-action-id`.
 
+- Never name a checkpoint `pristine`: the extension takes a checkpoint
+  under that name when a workshop is first opened and "Restart" restores
+  it (`reserved-checkpoint-name`). Restart only puts back files inside
+  the workshop directory, so keep what a workshop creates inside it.
+
 - Keep `write-files` paths inside the workshop directory unless the
   scope is wider; lint warns on `..`, `~` and absolute paths.
 
@@ -319,8 +324,13 @@ To make the repository launch on Binder, add `binder/requirements.txt`
 `$NB_PYTHON_PREFIX/share/jupyter/lab/settings/overrides.json` with
 `"@jupyterlab-workshop/labextension:panel": {"defaultWorkshop": "",
 "browseOnStart": true, "workshopsDirectory": "workshops",
-"trustPolicy": {"forcedLevel": "trusted"}}`. The session then starts in
-the workshop browser with the checkout's workshops listed as installed.
+"trustPolicy": {"forcedLevel": "trusted"}, "disabledFeatures":
+["open-directory", "open-url", "registries", "remove", "author"]}`. The
+session then starts in the workshop browser with the checkout's
+workshops listed as installed, and the disabled features keep learners
+to them: no other directories or URLs, no editing, no removing, with
+Restart to put a workshop back as it started. Other keys are
+`available`, `close` and `browse` (for an image running one workshop).
 The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;
 add `%3Fworkshop%3Dworkshops%2F<name>` to open one workshop directly.
 

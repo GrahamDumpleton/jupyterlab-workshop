@@ -77,6 +77,25 @@
       },
       "default": {}
     },
+    "disabledFeatures": {
+      "type": "array",
+      "title": "Disabled features",
+      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the configured registries and the installed ones openable.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "open-directory",
+          "open-url",
+          "registries",
+          "available",
+          "remove",
+          "close",
+          "browse",
+          "author"
+        ]
+      },
+      "default": []
+    },
     "registries": {
       "type": "array",
       "title": "Workshop registries",

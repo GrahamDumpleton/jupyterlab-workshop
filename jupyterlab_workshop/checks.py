@@ -24,7 +24,9 @@ from .fetch import FetchError, _resolve_inside, remove_tree
 
 STATE_DIR = "_workshop"
 
-CHECKPOINTS_DIR = "checkpoints"
+# Not "checkpoints": that name at the end of a contents API path is the
+# server's own checkpoints route, which would hide the directory.
+CHECKPOINTS_DIR = "snapshots"
 
 MANIFEST_FILE = "workshop.yaml"
 
@@ -108,7 +110,7 @@ def create_checkpoint(
     name: str,
     variables: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Archive the workshop directory under ``_workshop/checkpoints/<name>``.
+    """Archive the workshop directory under ``_workshop/snapshots/<name>``.
 
     The state directory is left out so restoring never clobbers progress.
     Variables passed in are stored next to the archive for the frontend to

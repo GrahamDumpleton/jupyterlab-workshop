@@ -156,7 +156,12 @@ workshops that are not open.
 
 "Workshop: Reset Progress…" forgets page progress, action results,
 captured variables and the log, restores changed settings, and reopens
-the workshop at its first page.
+the workshop at its first page. "Workshop: Restart…" does the same and
+also puts the files back as they were when the workshop was first
+opened; see [restarting a workshop](registry.md#restarting-a-workshop).
+An administrator can remove these and other buttons with the
+`disabledFeatures` setting described under
+[locking down a deployment](registry.md#locking-down-a-deployment).
 
 ## Action log
 

@@ -11,14 +11,18 @@ import {
 import { WORKSHOP_STATE_DIR } from '../state';
 import { ICheckpointRecord } from '../tokens';
 
-/** Directory under the state directory holding the checkpoints. */
-const CHECKPOINTS_DIR = 'checkpoints';
+/**
+ * Directory under the state directory holding the checkpoints. Not
+ * "checkpoints": that name at the end of a contents API path is the
+ * server's own checkpoints route, which would hide the directory.
+ */
+const CHECKPOINTS_DIR = 'snapshots';
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * Snapshot a workshop by copying its files, except the state directory,
- * to `_workshop/checkpoints/<name>/` through the contents API, with a
+ * to `_workshop/snapshots/<name>/` through the contents API, with a
  * record of the variables beside it. This is how JupyterLite checkpoints
  * without a server to make an archive.
  */

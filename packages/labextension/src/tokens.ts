@@ -407,6 +407,52 @@ export interface IInstalledWorkshop {
   started: boolean;
 }
 
+/** What a restart managed to do. */
+export interface IRestartResult {
+  /**
+   * Whether the files were put back. False when the workshop was first
+   * opened before the snapshot existed, in which case only progress was
+   * forgotten and the files stay as they are.
+   */
+  files: boolean;
+}
+
+/** Features an administrator can remove for a locked-down deployment. */
+export const FEATURES = [
+  'open-directory',
+  'open-url',
+  'registries',
+  'available',
+  'remove',
+  'close',
+  'browse',
+  'author'
+] as const;
+
+/** One of the removable features. */
+export type Feature = (typeof FEATURES)[number];
+
+/**
+ * Which features the settings leave enabled. Loaded before the plugins
+ * that depend on it activate, so the answers are available synchronously.
+ */
+export interface IFeaturePolicy {
+  /** Emitted when the settings change which features are disabled. */
+  readonly changed: ISignal<IFeaturePolicy, void>;
+
+  /** The features currently disabled. */
+  readonly disabled: readonly Feature[];
+
+  /** Whether a feature is enabled. */
+  enabled(feature: Feature): boolean;
+}
+
+/** Token for the feature policy. */
+export const IFeaturePolicy = new Token<IFeaturePolicy>(
+  '@jupyterlab-workshop/labextension:IFeaturePolicy',
+  'Which parts of the workshop extension the settings disable.'
+);
+
 /** Options for opening a workshop. */
 export interface IOpenOptions {
   /** Values applied over the manifest defaults, as a launch link provides. */
@@ -544,6 +590,13 @@ export interface IWorkshopManager {
 
   /** Forget progress and reopen the workshop from its first page. */
   reset(): Promise<void>;
+
+  /**
+   * Put the workshop's files back as they were when it was first opened,
+   * forget its progress and, when it is the open workshop, reopen it from
+   * the first page. Without a path the open workshop restarts.
+   */
+  restart(path?: string): Promise<IRestartResult>;
 
   /** Whether the current page's requirements allow moving on. */
   gate(pageId?: string): IGateStatus;
@@ -784,6 +837,7 @@ export namespace CommandIDs {
   export const trust = 'workshop:trust';
   export const uninstall = 'workshop:uninstall';
   export const reset = 'workshop:reset';
+  export const restart = 'workshop:restart';
   export const runAll = 'workshop:run-all';
   export const selfTestProgress = 'workshop:self-test-progress';
   export const browse = 'workshop:browse';

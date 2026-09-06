@@ -67,7 +67,8 @@ assert out.strip(), "No commits yet: run git commit"
 - [Manifest reference](reference/manifest.md) documents `workshop.yaml`.
 
 - [Finding and installing workshops](registry.md) covers the workshop
-  browser, registries and launch links.
+  browser, registries, launch links, locking down a deployment to the
+  workshops it supplies, and restarting a workshop.
 
 - [Loading and trust](trust.md) explains where workshops come from and
   what the trust levels allow.

@@ -19,7 +19,7 @@ would do, it does in the browser instead:
 | `execute-capture`, `verify` with `shell`     | The terminal extension's headless shell.                                                       |
 | `verify` with `kernel`, `kernel-execute`     | The Pyodide kernel: Python without `subprocess`.                                               |
 | `verify` with `script`, `environment-create` | Not available; the actions report why.                                                         |
-| Checkpoints                                  | Copies of the files under `_workshop/checkpoints/`.                                            |
+| Checkpoints                                  | Copies of the files under `_workshop/snapshots/`.                                              |
 | Preflight                                    | Python is always found; other tools must be commands of the shell. Versions are not checked.   |
 | Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to from the browser and needs CORS.     |
 

@@ -178,9 +178,12 @@ gated the same way as Next.
 
 A checkpoint archives everything in the workshop directory except its
 `_workshop` state directory, together with the learner's variables, into
-`_workshop/checkpoints/<name>.tar` and `<name>.json` through the server.
+`_workshop/snapshots/<name>.tar` and `<name>.json` through the server.
 Without `:name:` the current page id is used. A page with `checkpoint:
-true` in its front matter is checkpointed when it is marked done.
+true` in its front matter is checkpointed when it is marked done. The
+name `pristine` is reserved: the extension takes a checkpoint under it
+when a workshop is first opened, and "Restart" restores it, so lint
+reports a workshop that uses it (`reserved-checkpoint-name`).
 
 Restoring deletes the current files (again leaving `_workshop` alone),
 extracts the archive and puts the variables back. Files open in editors

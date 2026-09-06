@@ -418,6 +418,18 @@ describe('layout rules', () => {
     ).toEqual([]);
   });
 
+  it('reports the reserved checkpoint name', () => {
+    const reserved = (page: string): string[] =>
+      rules(page).filter(rule => rule === 'reserved-checkpoint-name');
+
+    expect(
+      reserved(
+        '```{checkpoint}\n:name: pristine\n```\n```{restore}\n:name: pristine\n```\n'
+      )
+    ).toHaveLength(2);
+    expect(reserved('```{checkpoint}\n:name: start\n```\n')).toEqual([]);
+  });
+
   it('reports layouts that are neither declared nor built in', () => {
     const findings = lint(
       '```{layout}\n:name: missing\n```\n',

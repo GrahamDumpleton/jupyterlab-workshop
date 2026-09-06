@@ -374,7 +374,7 @@ test.describe('workshop panel', () => {
       .poll(
         () =>
           page.contents.fileExists(
-            `${workshopPath}/_workshop/checkpoints/02-first-commit.tar`
+            `${workshopPath}/_workshop/snapshots/02-first-commit.tar`
           ),
         { timeout: 20000 }
       )

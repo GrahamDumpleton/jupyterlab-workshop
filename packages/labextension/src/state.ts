@@ -21,7 +21,8 @@ import {
  */
 export const WORKSHOP_STATE_DIR = '_workshop';
 
-const STATE_FILE = 'state.json';
+/** Name of the state file inside the state directory. */
+export const STATE_FILE = 'state.json';
 
 const LOG_LIMIT = 200;
 

@@ -25,7 +25,7 @@ const REGISTRY = {
       capabilities: ['terminal', 'write-files:workspace'],
       versions: [
         {
-          version: '0.1.0',
+          version: '0.2.0',
           source: { git: 'https://github.com/example/workshops', subdir: 'git' }
         }
       ]
@@ -118,14 +118,17 @@ test.describe('workshop browser', () => {
         .locator('.jp-WorkshopBrowser-chip')
     ).toContainText(['linux', 'kernel-exec']);
 
-    // The uploaded workshop appears under Installed and the registry card
-    // for the same name offers to open rather than install.
+    // The uploaded workshop appears once, under Installed, and since the
+    // registry lists a newer version its card offers the update.
     const installed = cards.filter({ hasText: WORKSHOPS_DIR });
 
     await expect(installed).toHaveCount(1);
     await expect(installed).toContainText('not started');
     await expect(
-      cards.filter({ has: page.getByRole('button', { name: 'Reinstall' }) })
+      installed.getByRole('button', { name: 'Update to 0.2.0' })
+    ).toHaveCount(1);
+    await expect(
+      cards.filter({ hasText: 'Git from the command line' })
     ).toHaveCount(1);
 
     // Search and tags narrow the registry list.
@@ -268,5 +271,148 @@ test.describe('workshop browser', () => {
 
     await expect.poll(rightShare).toBeGreaterThan(0.2);
     expect(await rightShare()).toBeLessThan(0.3);
+  });
+});
+
+test.describe('locked-down browser', () => {
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        registries: [REGISTRY_FILE],
+        workshopsDirectory: WORKSHOPS_DIR,
+        disabledFeatures: [
+          'open-directory',
+          'open-url',
+          'registries',
+          'remove',
+          'author'
+        ]
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.contents.uploadContent(
+      JSON.stringify(REGISTRY),
+      'text',
+      REGISTRY_FILE
+    );
+    await page.contents.uploadDirectory(
+      EXAMPLE_DIR,
+      `${WORKSHOPS_DIR}/${WORKSHOP}`
+    );
+
+    for (const name of ['_workshop', 'scratch', 'demo']) {
+      const directory = `${WORKSHOPS_DIR}/${WORKSHOP}/${name}`;
+
+      if (await page.contents.directoryExists(directory)) {
+        await page.contents.deleteDirectory(directory);
+      }
+    }
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.contents.deleteFile(REGISTRY_FILE);
+
+    if (await page.contents.directoryExists(WORKSHOPS_DIR)) {
+      await page.contents.deleteDirectory(WORKSHOPS_DIR);
+    }
+  });
+
+  test('hides the disabled features and restarts a workshop', async ({
+    page
+  }) => {
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:browse', {});
+    });
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    await expect(browser).toBeVisible();
+
+    // The ways of bringing in other workshops are gone, but the registry
+    // is still listed and the installed workshop still opens.
+    const cards = browser.locator('.jp-WorkshopBrowser-card');
+
+    await expect(cards.filter({ hasText: 'Pandas for beginners' })).toHaveCount(
+      1
+    );
+    for (const name of [
+      'Add from URL…',
+      'Open a directory…',
+      'Manage registries',
+      'Remove'
+    ]) {
+      await expect(browser.getByRole('button', { name })).toHaveCount(0);
+    }
+
+    const installed = cards.filter({ hasText: WORKSHOPS_DIR });
+
+    await expect(installed).toHaveCount(1);
+    await installed.getByRole('button', { name: 'Open' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
+      'Git from the command line'
+    );
+
+    // The header keeps only the buttons the settings allow.
+    for (const title of [
+      'Edit this workshop',
+      'Open another workshop',
+      'Open a workshop from a URL'
+    ]) {
+      await expect(panel.locator(`button[title="${title}"]`)).toHaveCount(0);
+    }
+    await expect(panel.locator('button[title="Browse workshops"]')).toHaveCount(
+      1
+    );
+    await expect(
+      panel.locator('button[title="Close this workshop"]')
+    ).toHaveCount(1);
+
+    // Make progress and add a file, then restart: the file goes, the
+    // progress is forgotten and the workshop reopens at page one.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:mark-done', {});
+    });
+    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
+      'title',
+      /^1 of/
+    );
+
+    const added = `${WORKSHOPS_DIR}/${WORKSHOP}/added.txt`;
+
+    await page.contents.uploadContent('added later', 'text', added);
+    expect(await page.contents.fileExists(added)).toBe(true);
+
+    await panel.locator('button[title="Restart this workshop"]').click();
+    await expect(dialog).toContainText('Restart workshop');
+    await dialog.getByRole('button', { name: 'Restart' }).click();
+
+    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
+      'title',
+      /^0 of/
+    );
+    await expect
+      .poll(() => page.contents.fileExists(added), { timeout: 15000 })
+      .toBe(false);
+    expect(
+      await page.contents.fileExists(
+        `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/snapshots/pristine.tar`
+      )
+    ).toBe(true);
   });
 });

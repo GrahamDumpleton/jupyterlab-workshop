@@ -3,7 +3,7 @@ import { CommandRegistry } from '@lumino/commands';
 import React from 'react';
 
 import { workshopIcon } from '../icons';
-import { IWorkshopManager } from '../tokens';
+import { IFeaturePolicy, IWorkshopManager } from '../tokens';
 import { WorkshopPanelComponent } from './components';
 
 /** Id of the panel widget, also used for layout restoration. */
@@ -18,6 +18,8 @@ export class WorkshopPanel extends ReactWidget {
 
     this._manager = options.manager;
     this._commands = options.commands;
+    this._features = options.features;
+    this._features.changed.connect(this.update, this);
 
     this.id = PANEL_ID;
     this.title.icon = workshopIcon;
@@ -25,22 +27,36 @@ export class WorkshopPanel extends ReactWidget {
     this.addClass('jp-WorkshopPanel');
   }
 
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
+    }
+
+    this._features.changed.disconnect(this.update, this);
+    super.dispose();
+  }
+
   protected render(): JSX.Element {
     return (
       <WorkshopPanelComponent
         manager={this._manager}
         commands={this._commands}
+        features={this._features}
       />
     );
   }
 
   private _manager: IWorkshopManager;
   private _commands: CommandRegistry;
+  private _features: IFeaturePolicy;
 }
 
 export namespace WorkshopPanel {
   export interface IOptions {
     manager: IWorkshopManager;
     commands: CommandRegistry;
+
+    /** Which buttons and commands the settings leave enabled. */
+    features: IFeaturePolicy;
   }
 }

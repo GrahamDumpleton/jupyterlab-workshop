@@ -45,6 +45,7 @@ import { WORKSHOP_STATE_DIR } from '../state';
 import {
   CommandIDs,
   IActionResult,
+  IFeaturePolicy,
   IWorkshopManager,
   errorMessage
 } from '../tokens';
@@ -78,6 +79,9 @@ export interface IAuthoringContext {
   settingRegistry: ISettingRegistry | null;
   recorder: Recorder;
 
+  /** Whether the settings leave author mode enabled at all. */
+  features: IFeaturePolicy;
+
   /** Id of the instructions panel, activated after opening a workshop. */
   panelId: string;
 }
@@ -86,11 +90,15 @@ export interface IAuthoringContext {
  * Register the author mode commands.
  */
 export function addAuthoringCommands(context: IAuthoringContext): void {
-  const { app, manager, shell, recorder } = context;
+  const { app, manager, shell, recorder, features } = context;
   const commands = app.commands;
   const contents = app.serviceManager.contents;
   const serverSettings = app.serviceManager.serverSettings;
-  const isOpen = (): boolean => manager.workshop !== null;
+
+  // Every authoring command is off when the settings disable authoring.
+  const allowed = (): boolean => features.enabled('author');
+  const isOpen = (): boolean => allowed() && manager.workshop !== null;
+  const hasPage = (): boolean => allowed() && manager.currentPage !== null;
   const isAuthoring = (): boolean => manager.authoring;
 
   // Files are written through an open editor when there is one, so the
@@ -236,7 +244,12 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
     label: 'Workshop: New Workshop…',
     caption: 'Scaffold a workshop directory and open it in author mode',
     icon: newWorkshopIcon,
+    isEnabled: allowed,
     execute: async (args): Promise<void> => {
+      if (!allowed()) {
+        return;
+      }
+
       const directory = await readSetting(
         context.settingRegistry,
         'workshopsDirectory',
@@ -281,7 +294,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
 
   commands.addCommand(CommandIDs.editPage, {
     label: 'Workshop: Edit Page Source',
-    isEnabled: () => manager.currentPage !== null,
+    isEnabled: hasPage,
     execute: async (): Promise<void> => {
       const page = manager.currentPage;
 
@@ -626,7 +639,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
   commands.addCommand(CommandIDs.runPageActions, {
     label: 'Workshop: Run Page Actions',
     caption: 'Run every action of the current page in order, skipping checks',
-    isEnabled: () => manager.currentPage !== null,
+    isEnabled: hasPage,
     execute: async (): Promise<void> => {
       reportRun(await runCurrentPage(manager, 'actions'), 'Page actions');
     }
@@ -635,7 +648,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
   commands.addCommand(CommandIDs.runPageChecks, {
     label: 'Workshop: Run Page Checks',
     caption: 'Run every check, quiz and form of the current page',
-    isEnabled: () => manager.currentPage !== null,
+    isEnabled: hasPage,
     execute: async (): Promise<void> => {
       reportRun(await runCurrentPage(manager, 'checks'), 'Page checks');
     }

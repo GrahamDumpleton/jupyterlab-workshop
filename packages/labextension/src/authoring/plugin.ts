@@ -12,7 +12,7 @@ import { ITerminalTracker } from '@jupyterlab/terminal';
 
 import { ITerminalSessions, TerminalSessions } from '../actions/terminal';
 import { PANEL_ID } from '../panel/widget';
-import { CommandIDs, IWorkshopManager } from '../tokens';
+import { CommandIDs, IFeaturePolicy, IWorkshopManager } from '../tokens';
 import { BridgeListener } from './bridge';
 import { addAuthoringCommands } from './commands';
 import { Recorder } from './recorder';
@@ -40,7 +40,13 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab-workshop/labextension:authoring',
   description: 'Edit, record and lint workshops from JupyterLab.',
   autoStart: true,
-  requires: [IWorkshopManager, ILabShell, IDocumentManager, ITerminalSessions],
+  requires: [
+    IWorkshopManager,
+    ILabShell,
+    IDocumentManager,
+    ITerminalSessions,
+    IFeaturePolicy
+  ],
   optional: [
     IEditorTracker,
     ITerminalTracker,
@@ -54,6 +60,7 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
     shell: ILabShell,
     docManager: IDocumentManager,
     terminals: TerminalSessions,
+    features: IFeaturePolicy,
     editorTracker: IEditorTracker | null,
     terminalTracker: ITerminalTracker | null,
     settingRegistry: ISettingRegistry | null,
@@ -76,6 +83,7 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
       editorTracker,
       settingRegistry,
       recorder,
+      features,
       panelId: PANEL_ID
     });
 
@@ -109,7 +117,7 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
       }
     }
 
-    if (launcher) {
+    if (launcher && features.enabled('author')) {
       launcher.add({
         command: CommandIDs.newWorkshop,
         category: 'Workshops',

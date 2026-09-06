@@ -26,6 +26,7 @@ import {
   folderIcon,
   launcherIcon,
   listIcon,
+  refreshIcon,
   runIcon,
   settingsIcon,
   stopIcon
@@ -39,12 +40,20 @@ import React, {
   useState
 } from 'react';
 
-import { CommandIDs, IActionRequest, IWorkshopManager } from '../tokens';
+import {
+  CommandIDs,
+  IActionRequest,
+  IFeaturePolicy,
+  IWorkshopManager
+} from '../tokens';
 
 /** Props shared by the panel components. */
 export interface IPanelProps {
   manager: IWorkshopManager;
   commands: CommandRegistry;
+
+  /** Which buttons the settings leave enabled. */
+  features: IFeaturePolicy;
 }
 
 const PULSE_CLASS = 'jp-mod-pulse';
@@ -85,7 +94,11 @@ function IconButton({
   );
 }
 
-function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
+function PanelContent({
+  manager,
+  commands,
+  features
+}: IPanelProps): JSX.Element {
   const workshop = manager.workshop;
   const page = manager.currentPage;
 
@@ -93,9 +106,21 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
     return (
       <EmptyState
         error={manager.error}
-        onOpen={() => void commands.execute(CommandIDs.open)}
-        onOpenUrl={() => void commands.execute(CommandIDs.openUrl)}
-        onBrowse={() => void commands.execute(CommandIDs.browse)}
+        onOpen={
+          features.enabled('open-directory')
+            ? () => void commands.execute(CommandIDs.open)
+            : undefined
+        }
+        onOpenUrl={
+          features.enabled('open-url')
+            ? () => void commands.execute(CommandIDs.openUrl)
+            : undefined
+        }
+        onBrowse={
+          features.enabled('browse')
+            ? () => void commands.execute(CommandIDs.browse)
+            : undefined
+        }
       />
     );
   }
@@ -140,32 +165,47 @@ function PanelContent({ manager, commands }: IPanelProps): JSX.Element {
             onClick={() => run(CommandIDs.showLog)}
           />
           <IconButton
-            icon={editIcon}
-            title={
-              manager.authoring ? 'Leave author mode' : 'Edit this workshop'
-            }
-            onClick={() => run(CommandIDs.authorMode)}
+            icon={refreshIcon}
+            title="Restart this workshop"
+            onClick={() => run(CommandIDs.restart)}
           />
-          <IconButton
-            icon={launcherIcon}
-            title="Browse workshops"
-            onClick={() => run(CommandIDs.browse)}
-          />
-          <IconButton
-            icon={folderIcon}
-            title="Open another workshop"
-            onClick={() => run(CommandIDs.open)}
-          />
-          <IconButton
-            icon={downloadIcon}
-            title="Open a workshop from a URL"
-            onClick={() => run(CommandIDs.openUrl)}
-          />
-          <IconButton
-            icon={closeIcon}
-            title="Close this workshop"
-            onClick={() => run(CommandIDs.close)}
-          />
+          {features.enabled('author') ? (
+            <IconButton
+              icon={editIcon}
+              title={
+                manager.authoring ? 'Leave author mode' : 'Edit this workshop'
+              }
+              onClick={() => run(CommandIDs.authorMode)}
+            />
+          ) : null}
+          {features.enabled('browse') ? (
+            <IconButton
+              icon={launcherIcon}
+              title="Browse workshops"
+              onClick={() => run(CommandIDs.browse)}
+            />
+          ) : null}
+          {features.enabled('open-directory') ? (
+            <IconButton
+              icon={folderIcon}
+              title="Open another workshop"
+              onClick={() => run(CommandIDs.open)}
+            />
+          ) : null}
+          {features.enabled('open-url') ? (
+            <IconButton
+              icon={downloadIcon}
+              title="Open a workshop from a URL"
+              onClick={() => run(CommandIDs.openUrl)}
+            />
+          ) : null}
+          {features.enabled('close') ? (
+            <IconButton
+              icon={closeIcon}
+              title="Close this workshop"
+              onClick={() => run(CommandIDs.close)}
+            />
+          ) : null}
         </div>
         <div
           className="jp-WorkshopPanel-progress"
@@ -273,36 +313,44 @@ function EmptyState({
   onBrowse
 }: {
   error: string | null;
-  onOpen: () => void;
-  onOpenUrl: () => void;
-  onBrowse: () => void;
+
+  /** Handlers for the ways of opening a workshop the settings allow. */
+  onOpen?: () => void;
+  onOpenUrl?: () => void;
+  onBrowse?: () => void;
 }): JSX.Element {
   return (
     <div className="jp-WorkshopPanel-empty">
       <p>No workshop is open.</p>
       {error ? <p className="jp-WorkshopPanel-error">{error}</p> : null}
       <div className="jp-WorkshopPanel-emptyActions">
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled jp-mod-accept"
-          onClick={onBrowse}
-        >
-          Browse workshops
-        </button>
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled"
-          onClick={onOpen}
-        >
-          Open a directory
-        </button>
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled"
-          onClick={onOpenUrl}
-        >
-          Open from URL
-        </button>
+        {onBrowse ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-accept"
+            onClick={onBrowse}
+          >
+            Browse workshops
+          </button>
+        ) : null}
+        {onOpen ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            onClick={onOpen}
+          >
+            Open a directory
+          </button>
+        ) : null}
+        {onOpenUrl ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            onClick={onOpenUrl}
+          >
+            Open from URL
+          </button>
+        ) : null}
       </div>
     </div>
   );
