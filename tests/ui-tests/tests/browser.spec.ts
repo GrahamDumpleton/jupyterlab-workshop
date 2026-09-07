@@ -410,6 +410,15 @@ test.describe('workshop browser', () => {
     expect(record.ok()).toBe(true);
     expect(String((await record.json()).content)).toContain(COLLECTION_FILE);
 
+    // The uploaded git-basics recorded no collection, but only this
+    // collection lists its name, so Installed follows the collection's
+    // order, git-basics before pandas-intro, rather than the titles.
+    await expect(
+      cards
+        .filter({ hasText: WORKSHOPS_DIR })
+        .locator('.jp-WorkshopBrowser-cardTitle')
+    ).toHaveText([/Git from the command line/, /Pandas for beginners/]);
+
     // Replace the uploaded git-basics, which no collection is recorded
     // for, with the first collection's own, so the second collection's
     // git-basics is a real clash: it stays listed, and installing it
@@ -515,6 +524,62 @@ test.describe('workshop browser', () => {
       .getByRole('button', { name: 'Open' })
       .click();
     await trustWorkshop(page, 'Git, the other way');
+  });
+
+  test('leaves a name two collections offer unmatched', async ({ page }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const uploaded = browser
+      .locator('.jp-WorkshopBrowser-card')
+      .filter({ hasText: WORKSHOPS_DIR });
+
+    // With one collection listing the name, the uploaded git-basics is
+    // taken to be that collection's and offered its newer version.
+    await expect(uploaded).toHaveCount(1);
+    await expect(
+      uploaded.locator('.jp-WorkshopBrowser-chip.jp-mod-source')
+    ).toHaveText('Test collection');
+    await expect(
+      uploaded.getByRole('button', { name: 'Update to 0.2.0' })
+    ).toHaveCount(1);
+
+    // Subscribing to a second collection that also offers a git-basics
+    // makes the name ambiguous: the browser stops guessing, so the card
+    // names no collection and offers no update.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:collections', {});
+    });
+
+    const dialog = page.locator('.jp-Dialog');
+    const sources = dialog.locator('.jp-WorkshopSources');
+
+    await expect(sources).toBeVisible();
+    await sources.locator('.jp-WorkshopSources-input').fill(SECOND_FILE);
+    await sources
+      .getByRole('button', { name: 'Subscribe', exact: true })
+      .click();
+    await expect(
+      sources.locator('.jp-WorkshopSources-row', {
+        hasText: 'Second collection'
+      })
+    ).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Second collection'
+      })
+    ).toHaveCount(1);
+    await expect(uploaded).toHaveCount(1);
+    await expect(
+      uploaded.locator('.jp-WorkshopBrowser-chip.jp-mod-source')
+    ).toHaveCount(0);
+    await expect(uploaded.getByRole('button', { name: /^Update/ })).toHaveCount(
+      0
+    );
   });
 
   test('opens a workshop from a launch link with variables', async ({

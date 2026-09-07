@@ -343,32 +343,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
     setVersion(value => value + 1);
   };
 
-  // The collection an installed workshop came from, and the entry that
-  // lists it: by the recorded collection when there is one, else the
-  // first subscribed collection offering the name.
   const collectionFor = (
     item: IInstalledWorkshop
-  ):
-    { collection: ILoadedCollection; entry?: ICollectionEntry } | undefined => {
-    for (const collection of collections) {
-      if (
-        item.collection !== null &&
-        !sameLocation(item.collection, collection.url)
-      ) {
-        continue;
-      }
-
-      const entry = collection.index?.workshops.find(
-        candidate => candidate.name === item.name
-      );
-
-      if (entry || item.collection !== null) {
-        return { collection, entry };
-      }
-    }
-
-    return undefined;
-  };
+  ): IMatchedCollection | undefined => collectionOf(item, collections);
 
   const updateFor = (
     item: IInstalledWorkshop
@@ -1054,32 +1031,73 @@ async function loadCatalog(
   }
 }
 
+/** A subscribed collection an installed workshop belongs to, and its entry. */
+interface IMatchedCollection {
+  collection: ILoadedCollection;
+  entry?: ICollectionEntry;
+}
+
 /**
- * Installed workshops in collection order: those from a subscribed
- * collection by the collection's position and then their position in
- * its index, then the rest by title.
+ * The subscribed collection an installed workshop belongs to, and the
+ * entry listing it. An install that recorded its collection belongs to
+ * that one, whether or not its index still lists the name. A workshop
+ * with no record, a local directory or an older install, belongs to the
+ * one subscribed collection that lists its name; a name that two
+ * collections offer is ambiguous and matches neither, so the browser
+ * never guesses which one a directory came from.
+ */
+function collectionOf(
+  item: IInstalledWorkshop,
+  collections: ILoadedCollection[]
+): IMatchedCollection | undefined {
+  const entryIn = (
+    collection: ILoadedCollection
+  ): ICollectionEntry | undefined =>
+    collection.index?.workshops.find(candidate => candidate.name === item.name);
+
+  if (item.collection !== null) {
+    const recorded = item.collection;
+    const collection = collections.find(candidate =>
+      sameLocation(candidate.url, recorded)
+    );
+
+    return collection ? { collection, entry: entryIn(collection) } : undefined;
+  }
+
+  const matches: IMatchedCollection[] = [];
+
+  for (const collection of collections) {
+    const entry = entryIn(collection);
+
+    if (entry) {
+      matches.push({ collection, entry });
+    }
+  }
+
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+/**
+ * Installed workshops in collection order: those belonging to a
+ * subscribed collection, by record or by a unique name match, by the
+ * collection's position and then their position in its index, then the
+ * rest by title.
  */
 function orderInstalled(
   installed: IInstalledWorkshop[],
   collections: ILoadedCollection[]
 ): IInstalledWorkshop[] {
   const rank = (item: IInstalledWorkshop): [number, number] => {
-    if (item.collection === null) {
+    const found = collectionOf(item, collections);
+
+    if (!found) {
       return [collections.length, 0];
     }
 
-    const position = collections.findIndex(collection =>
-      sameLocation(collection.url, item.collection ?? '')
-    );
+    const entries = found.collection.index?.workshops ?? [];
+    const index = found.entry ? entries.indexOf(found.entry) : entries.length;
 
-    if (position < 0) {
-      return [collections.length, 0];
-    }
-
-    const entries = collections[position].index?.workshops ?? [];
-    const index = entries.findIndex(entry => entry.name === item.name);
-
-    return [position, index < 0 ? entries.length : index];
+    return [collections.indexOf(found.collection), index];
   };
 
   return [...installed]

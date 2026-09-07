@@ -29,8 +29,10 @@ with two sections:
   the collection it came from, how many pages are done, and buttons to
   Open or Resume it, Restart it once started, Update it when its
   collection lists another version, and Remove it. The workshop that is
-  open is marked. Workshops installed from a collection are listed in
-  the collection's own order, so a course reads top to bottom.
+  open is marked. Workshops are listed in their collection's own order,
+  so a course reads top to bottom: the collection recorded when a
+  workshop was installed or, for a directory with no record, the one
+  subscribed collection that lists its name. The rest follow by title.
 
 - **Available** lists the workshops of every subscribed collection, one
   group per collection. A group is headed by the collection's icon,
@@ -109,7 +111,10 @@ Two collections may each offer a workshop named `git-basics`. They are
 kept apart: the browser matches an installed workshop to the collection
 it was installed from, so each is offered, installed and updated on its
 own. (A workshop with no collection recorded, a local directory or one
-added from a URL, is matched by name alone.) The first lands in
+added from a URL, is matched by name alone: it takes the order and the
+Update button of the one subscribed collection that lists its name, and
+a name two collections offer is left without either rather than
+guessed.) The first lands in
 `workshops/git-basics`; a second of the same name from another
 collection lands in `workshops/git-basics-<hash>`,
 where the hash is the first seven characters of the SHA-256 of the

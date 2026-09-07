@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -105,6 +106,33 @@ def run_script(
     )
 
 
+#: How often, and how long apart, a refused rename is tried again.
+REPLACE_ATTEMPTS = 10
+REPLACE_DELAY = 0.05
+
+
+def _replace_with_retries(source: Path, target: Path) -> None:
+    """Rename ``source`` over ``target``, trying again when refused.
+
+    On Windows a rename over a file that another writer is replacing at
+    the same moment, or that a virus scanner has just opened, fails with
+    a permission error that clears within milliseconds, where other
+    platforms take the last rename. Two writers of one checkpoint, a
+    check's cascade and the click on the same block, are that case, so
+    the rename is tried again a few times before the error stands.
+    """
+
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            source.replace(target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+
+            time.sleep(REPLACE_DELAY * (attempt + 1))
+
+
 def create_checkpoint(
     root_dir: Path,
     workshop_path: str,
@@ -139,7 +167,7 @@ def create_checkpoint(
 
                 tar.add(entry, arcname=entry.name)
 
-        partial.replace(archive)
+        _replace_with_retries(partial, archive)
     finally:
         partial.unlink(missing_ok=True)
 

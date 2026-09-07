@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from jupyterlab_workshop import checks as checks_module
 from jupyterlab_workshop.checks import (
     CheckError,
     create_checkpoint,
@@ -174,3 +175,61 @@ def test_create_checkpoint_leaves_no_partial_file(tmp_path: Path) -> None:
         "start.json",
         "start.tar",
     ]
+
+
+def test_create_checkpoint_retries_a_refused_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rename refused with a permission error, as Windows does while
+    another writer replaces the same file, is tried again."""
+
+    workshop = tmp_path / "ws"
+
+    workshop.mkdir()
+    (workshop / "workshop.yaml").write_text("name: ws\n")
+
+    original = Path.replace
+    refusals = {"left": 2}
+
+    def replace(self: Path, target: Path) -> Path:
+        if refusals["left"] > 0:
+            refusals["left"] -= 1
+            raise PermissionError(13, "The process cannot access the file")
+
+        return original(self, target)
+
+    monkeypatch.setattr(Path, "replace", replace)
+    monkeypatch.setattr(checks_module, "REPLACE_DELAY", 0)
+
+    create_checkpoint(tmp_path, "ws", "start")
+
+    snapshots = workshop / "_workshop" / "snapshots"
+
+    assert refusals["left"] == 0
+    assert sorted(path.name for path in snapshots.iterdir()) == [
+        "start.json",
+        "start.tar",
+    ]
+
+
+def test_create_checkpoint_gives_up_on_a_persistent_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workshop = tmp_path / "ws"
+
+    workshop.mkdir()
+    (workshop / "workshop.yaml").write_text("name: ws\n")
+
+    def replace(self: Path, target: Path) -> Path:
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(Path, "replace", replace)
+    monkeypatch.setattr(checks_module, "REPLACE_DELAY", 0)
+
+    with pytest.raises(PermissionError):
+        create_checkpoint(tmp_path, "ws", "start")
+
+    # The half-written file is cleaned up even so.
+    snapshots = workshop / "_workshop" / "snapshots"
+
+    assert [path.name for path in snapshots.iterdir()] == []
