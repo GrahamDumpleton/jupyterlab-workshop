@@ -5,6 +5,18 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { DocumentRegistry, IDocumentWidget } from '@jupyterlab/docregistry';
 import { FileEditor, IEditorTracker } from '@jupyterlab/fileeditor';
+import {
+  EditorTarget,
+  IOffsetSpan,
+  expandReplacement,
+  findEditorMatches,
+  lineAt,
+  lineCount,
+  lineSpan,
+  lineTextSpan,
+  parseEditorTarget,
+  substitute
+} from '@jupyterlab-workshop/core';
 
 import {
   IActionImplementation,
@@ -27,12 +39,6 @@ export interface IFileActionContext {
   editorTracker: IEditorTracker | null;
   manager: IWorkshopManager;
   terminals: TerminalSessions;
-}
-
-/** A located piece of text in a document. */
-interface ITextSpan {
-  start: number;
-  end: number;
 }
 
 /**
@@ -67,6 +73,14 @@ export class FileWriteAction implements IActionImplementation {
         contents,
         this._context.manager.resolvePath(request.options.from)
       );
+
+      // A shipped file is copied as it is, since it may legitimately
+      // contain braces, unless the directive asks for substitution.
+      if (request.options.substitute === 'true') {
+        content = substitute(content, this._context.manager.variables.values, {
+          pathSep: this._context.manager.platform?.path_sep
+        }).text;
+      }
     } else {
       content = withTrailingNewline(request.body);
     }
@@ -156,8 +170,8 @@ export class FileOpenAction implements IActionImplementation {
 }
 
 /**
- * The `editor-insert` action: insert the body into a file at a line, or at
- * the end, through the editor, and save.
+ * The `editor-insert` action: insert the body into a file before a line
+ * or a match (or after it), or at the end, through the editor, and save.
  */
 export class EditorInsertAction implements IActionImplementation {
   readonly type = 'editor-insert';
@@ -167,16 +181,22 @@ export class EditorInsertAction implements IActionImplementation {
   }
 
   describe(request: IActionRequest): string {
-    const where =
-      request.options.line && request.options.line !== 'end'
-        ? `at line ${request.options.line}`
-        : 'at the end';
+    const { line, match, position } = request.options;
+    const relation = position === 'after' ? 'after' : 'at';
+    let where = 'at the end';
+
+    if (match !== undefined) {
+      where = `${position === 'after' ? 'after' : 'before'} "${match}"`;
+    } else if (line !== undefined && line !== 'end') {
+      where = `${relation} line ${line}`;
+    }
 
     return `Insert into ${request.options.path ?? '(no path)'} ${where}`;
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
     const path = requireOption(request, 'path');
+    const target = targetFor(request);
     const widget = await openEditor(
       this._context,
       this._context.manager.resolvePath(path)
@@ -185,36 +205,41 @@ export class EditorInsertAction implements IActionImplementation {
     const sharedModel = widget.content.model.sharedModel;
     const source = sharedModel.getSource();
     const text = withTrailingNewline(request.body.replace(/\r\n/g, '\n'));
-    const lineOption = request.options.line ?? 'end';
 
-    // Work out the zero-based line the text is inserted before.
-    let lineIndex: number;
+    // Work out the zero-based lines the text is inserted before, last
+    // first so earlier lines keep their numbers while inserting.
+    const lineIndexes = insertionLines(source, target, editor.lineCount);
 
-    if (lineOption === 'end') {
-      lineIndex = editor.lineCount;
-    } else {
-      const line = parseLine(lineOption);
-
-      if (line === undefined) {
-        return { status: 'error', message: `Invalid line "${lineOption}"` };
-      }
-
-      lineIndex = Math.min(line - 1, editor.lineCount);
+    if (lineIndexes.length === 0) {
+      return {
+        status: 'error',
+        message: `"${request.options.match}" was not found in ${path}`
+      };
     }
 
-    if (lineIndex >= editor.lineCount) {
-      const separator = source.length > 0 && !source.endsWith('\n') ? '\n' : '';
+    let firstLine = lineIndexes[0];
 
-      sharedModel.updateSource(source.length, source.length, separator + text);
-      lineIndex = editor.lineCount - countLines(text);
-    } else {
-      const offset = editor.getOffsetAt({ line: lineIndex, column: 0 });
+    for (const lineIndex of [...lineIndexes].reverse()) {
+      if (lineIndex >= editor.lineCount) {
+        const current = sharedModel.getSource();
+        const separator =
+          current.length > 0 && !current.endsWith('\n') ? '\n' : '';
 
-      sharedModel.updateSource(offset, offset, text);
+        sharedModel.updateSource(
+          current.length,
+          current.length,
+          separator + text
+        );
+        firstLine = editor.lineCount - countLines(text);
+      } else {
+        const offset = editor.getOffsetAt({ line: lineIndex, column: 0 });
+
+        sharedModel.updateSource(offset, offset, text);
+      }
     }
 
     await saveIfWanted(widget, request);
-    revealLine(widget, Math.max(0, lineIndex));
+    revealLine(widget, Math.max(0, firstLine));
 
     return { status: 'ok' };
   }
@@ -223,8 +248,9 @@ export class EditorInsertAction implements IActionImplementation {
 }
 
 /**
- * The `editor-replace` action: replace text matching a pattern with the
- * body, through the editor, and save.
+ * The `editor-replace` action: replace the matches of a pattern, or a
+ * range of lines, with the body, through the editor, and save. The new
+ * text is left selected so the learner sees what changed.
  */
 export class EditorReplaceAction implements IActionImplementation {
   readonly type = 'editor-replace';
@@ -234,36 +260,49 @@ export class EditorReplaceAction implements IActionImplementation {
   }
 
   describe(request: IActionRequest): string {
-    return `Replace "${request.options.match ?? ''}" in ${request.options.path ?? '(no path)'}`;
+    const { line, match } = request.options;
+    const what =
+      match !== undefined
+        ? `"${match}"`
+        : line !== undefined
+          ? `line${line.includes('-') ? 's' : ''} ${line}`
+          : '(nothing)';
+
+    return `Replace ${what} in ${request.options.path ?? '(no path)'}`;
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
     const path = requireOption(request, 'path');
-    const match = requireOption(request, 'match');
+    const target = targetFor(request);
     const widget = await openEditor(
       this._context,
       this._context.manager.resolvePath(path)
     );
     const sharedModel = widget.content.model.sharedModel;
-    const spans = findSpans(sharedModel.getSource(), match, request.options);
+    const source = sharedModel.getSource();
+    const body = request.body.replace(/\r\n/g, '\n');
+    const edits = replacementEdits(source, target, body);
 
-    if (spans.length === 0) {
+    if (edits.length === 0) {
       return {
         status: 'error',
-        message: `"${match}" was not found in ${path}`
+        message:
+          target.kind === 'line'
+            ? `Line ${target.start} is past the end of ${path}`
+            : `"${request.options.match}" was not found in ${path}`
       };
     }
 
-    // Replace from the end so earlier offsets stay valid.
-    const replacement = request.body.replace(/\r\n/g, '\n').replace(/\n$/, '');
-    const targets = request.options.all === 'true' ? spans : spans.slice(0, 1);
-
-    for (const span of [...targets].reverse()) {
-      sharedModel.updateSource(span.start, span.end, replacement);
+    // Apply from the end so earlier offsets stay valid.
+    for (const edit of [...edits].reverse()) {
+      sharedModel.updateSource(edit.start, edit.end, edit.text);
     }
 
     await saveIfWanted(widget, request);
-    revealOffset(widget, targets[0].start);
+    showSpan(widget, {
+      start: edits[0].start,
+      end: edits[0].start + edits[0].text.length
+    });
 
     return { status: 'ok' };
   }
@@ -272,7 +311,7 @@ export class EditorReplaceAction implements IActionImplementation {
 }
 
 /**
- * The `editor-select` action: select matching text or a line.
+ * The `editor-select` action: select matching text or a range of lines.
  */
 export class EditorSelectAction implements IActionImplementation {
   readonly type = 'editor-select';
@@ -286,18 +325,21 @@ export class EditorSelectAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
+    const target = targetFor(request);
     const widget = await openEditor(
       this._context,
       this._context.manager.resolvePath(requireOption(request, 'path'))
     );
-    const range = findRange(widget, request);
+    const span = selectionSpan(
+      widget.content.model.sharedModel.getSource(),
+      target
+    );
 
-    if (!range) {
+    if (!span) {
       return { status: 'error', message: 'Nothing to select was found' };
     }
 
-    widget.content.editor.setSelection(range);
-    widget.content.editor.revealPosition(range.start);
+    showSpan(widget, span);
     widget.content.editor.focus();
 
     return { status: 'ok' };
@@ -307,7 +349,8 @@ export class EditorSelectAction implements IActionImplementation {
 }
 
 /**
- * The `editor-highlight` action: select matching text briefly.
+ * The `editor-highlight` action: select matching text or a range of
+ * lines briefly.
  */
 export class EditorHighlightAction implements IActionImplementation {
   readonly type = 'editor-highlight';
@@ -321,25 +364,26 @@ export class EditorHighlightAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
+    const target = targetFor(request);
     const widget = await openEditor(
       this._context,
       this._context.manager.resolvePath(requireOption(request, 'path'))
     );
-    const range = findRange(widget, request);
+    const span = selectionSpan(
+      widget.content.model.sharedModel.getSource(),
+      target
+    );
 
-    if (!range) {
+    if (!span) {
       return { status: 'error', message: 'Nothing to highlight was found' };
     }
 
-    const editor = widget.content.editor;
-
-    editor.setSelection(range);
-    editor.revealPosition(range.start);
+    const range = showSpan(widget, span);
 
     window.setTimeout(
       () => {
-        if (!widget.isDisposed) {
-          editor.setCursorPosition(range.start);
+        if (!widget.isDisposed && range) {
+          widget.content.editor.setCursorPosition(range.start);
         }
       },
       parseDuration(request.options.duration, 3000)
@@ -583,19 +627,6 @@ function revealLine(
   editor.revealPosition({ line, column: 0 });
 }
 
-function revealOffset(
-  widget: IDocumentWidget<FileEditor>,
-  offset: number
-): void {
-  const editor = widget.content.editor;
-  const position = editor.getPositionAt(offset);
-
-  if (position) {
-    editor.setCursorPosition(position);
-    editor.revealPosition(position);
-  }
-}
-
 async function saveIfWanted(
   widget: IDocumentWidget<FileEditor>,
   request: IActionRequest
@@ -605,70 +636,145 @@ async function saveIfWanted(
   }
 }
 
-function findSpans(
-  source: string,
-  match: string,
-  options: Record<string, string>
-): ITextSpan[] {
-  const spans: ITextSpan[] = [];
-
-  if (options.regex === 'true') {
-    const pattern = new RegExp(match, 'g');
-    let found: RegExpExecArray | null;
-
-    while ((found = pattern.exec(source)) !== null) {
-      spans.push({ start: found.index, end: found.index + found[0].length });
-
-      if (found[0].length === 0) {
-        pattern.lastIndex += 1;
-      }
-    }
-
-    return spans;
-  }
-
-  let index = source.indexOf(match);
-
-  while (index >= 0) {
-    spans.push({ start: index, end: index + match.length });
-    index = source.indexOf(match, index + Math.max(match.length, 1));
-  }
-
-  return spans;
+/** One replacement to make in a file. */
+interface ITextEdit extends IOffsetSpan {
+  text: string;
 }
 
-function findRange(
-  widget: IDocumentWidget<FileEditor>,
-  request: IActionRequest
-): CodeEditor.IRange | undefined {
-  const editor = widget.content.editor;
+/**
+ * Read the targeting options of an editor action, or throw the problems
+ * the linter would have reported.
+ */
+function targetFor(request: IActionRequest): EditorTarget {
+  const { target, errors } = parseEditorTarget(request.type, request.options);
 
-  if (request.options.match) {
-    const source = widget.content.model.sharedModel.getSource();
-    const [span] = findSpans(source, request.options.match, request.options);
+  if (!target) {
+    throw new Error(errors.join('; '));
+  }
 
-    if (!span) {
+  return target;
+}
+
+/**
+ * The span a select or highlight covers: the chosen matches from the
+ * first to the last, or the text of the named lines.
+ */
+function selectionSpan(
+  source: string,
+  target: EditorTarget
+): IOffsetSpan | undefined {
+  if (target.kind === 'match') {
+    const matches = findEditorMatches(source, target);
+
+    if (matches.length === 0) {
       return undefined;
     }
 
-    const start = editor.getPositionAt(span.start);
-    const end = editor.getPositionAt(span.end);
-
-    return start && end ? { start, end } : undefined;
+    return {
+      start: matches[0].spanStart,
+      end: matches[matches.length - 1].spanEnd
+    };
   }
 
-  const line = parseLine(request.options.line ?? '');
+  if (target.kind === 'line' && target.start <= lineCount(source)) {
+    return lineTextSpan(source, target.start, target.end);
+  }
 
-  if (line === undefined || line > editor.lineCount) {
+  return undefined;
+}
+
+/**
+ * The edits a replace makes: each chosen match becomes the body, with
+ * group references expanded when asked, or the named lines become the
+ * body's lines, and no lines at all when the body is empty.
+ */
+function replacementEdits(
+  source: string,
+  target: EditorTarget,
+  body: string
+): ITextEdit[] {
+  if (target.kind === 'match') {
+    const replacement = body.replace(/\n$/, '');
+
+    return findEditorMatches(source, target).map(match => ({
+      start: match.start,
+      end: match.end,
+      text: target.expand ? expandReplacement(replacement, match) : replacement
+    }));
+  }
+
+  if (target.kind === 'line' && target.start <= lineCount(source)) {
+    const span = lineSpan(source, target.start, target.end);
+
+    return [
+      {
+        ...span,
+        text: body.trim() === '' ? '' : withTrailingNewline(body)
+      }
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * The zero-based lines an insert goes before, in file order: the end of
+ * the file, the named line, or the line of each chosen match, the one
+ * after it with `position: after`.
+ */
+function insertionLines(
+  source: string,
+  target: EditorTarget,
+  editorLines: number
+): number[] {
+  if (target.kind === 'end') {
+    return [editorLines];
+  }
+
+  if (target.kind === 'line') {
+    const index = target.position === 'after' ? target.start : target.start - 1;
+
+    return [Math.min(index, editorLines)];
+  }
+
+  const lines = new Set<number>();
+
+  for (const match of findEditorMatches(source, target)) {
+    if (target.position === 'after') {
+      lines.add(lineAt(source, Math.max(match.start, match.end - 1)));
+    } else {
+      lines.add(lineAt(source, match.start) - 1);
+    }
+  }
+
+  return [...lines].sort((a, b) => a - b);
+}
+
+/**
+ * Select a span of the file and scroll to its start, returning the range
+ * selected. An empty span just places the cursor.
+ */
+function showSpan(
+  widget: IDocumentWidget<FileEditor>,
+  span: IOffsetSpan
+): CodeEditor.IRange | undefined {
+  const editor = widget.content.editor;
+  const start = editor.getPositionAt(span.start);
+  const end = editor.getPositionAt(span.end);
+
+  if (!start || !end) {
     return undefined;
   }
 
-  const text = editor.getLine(line - 1) ?? '';
+  if (span.end > span.start) {
+    editor.setSelection({ start, end });
+  } else {
+    editor.setCursorPosition(start);
+  }
 
-  return {
-    start: { line: line - 1, column: 0 },
-    end: { line: line - 1, column: text.length }
-  };
+  editor.revealPosition(start);
+
+  return { start, end };
 }
 
 function parseLine(value: string): number | undefined {

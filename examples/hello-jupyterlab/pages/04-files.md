@@ -10,25 +10,53 @@ template: the greeting uses your name.
 ```{file-write}
 :path: scratch/notes.md
 :from: files/notes.md
+:substitute: true
 :open: true
 ```
 
-Text in an open file can be replaced, selected and highlighted.
+Text in an open file can be replaced, inserted, selected and highlighted.
+An action points at text with literal `match` text, a regular expression,
+or line numbers.
 
 ```{editor-replace}
+:id: replace-literal
 :path: scratch/notes.md
 :match: shipped with the workshop
-was shipped with this workshop
+shipped with this workshop
+```
+
+```{editor-insert}
+:id: insert-after-title
+:path: scratch/notes.md
+:regex: true
+:match: ^# Notes
+:position: after
+Revised by an editor-insert action.
+```
+
+A regular expression can capture part of what it matches and reuse it in
+the replacement.
+
+```{editor-replace}
+:id: replace-expand
+:path: scratch/notes.md
+:regex: true
+:expand: true
+:match: ^# Notes for (.*)$
+# Revised notes for $1
 ```
 
 ```{editor-select}
+:id: select-second
 :path: scratch/notes.md
-:match: file-write
+:match: action
+:occurrence: 2
 ```
 
 ```{editor-highlight}
+:id: highlight-lines
 :path: scratch/notes.md
-:line: 1
+:line: 1-2
 :duration: 3s
 ```
 

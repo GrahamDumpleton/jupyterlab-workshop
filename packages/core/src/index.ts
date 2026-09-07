@@ -1,4 +1,5 @@
 export * from './actions/catalog';
+export * from './actions/editor';
 export * from './authoring';
 export * from './checks';
 export * from './diff';

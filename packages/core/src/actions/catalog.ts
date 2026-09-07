@@ -180,31 +180,34 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       spec(
         'editor-insert',
         'files',
-        'Insert the body into a file at a line, or at the end.',
+        'Insert the body into a file before a line or a match, or at the end.',
         'write-files',
         'required',
-        ['path', 'line', 'save']
+        ['path', 'line', 'match', 'regex', 'occurrence', 'position', 'save']
       ),
       spec(
         'editor-replace',
         'files',
-        'Replace text matching a pattern in a file with the body.',
+        'Replace the first match of a pattern, chosen matches, or a range of lines with the body.',
         'write-files',
         'optional',
-        ['path', 'match', 'regex', 'all', 'save']
+        ['path', 'line', 'match', 'regex', 'occurrence', 'expand', 'save']
       ),
-      spec('editor-select', 'files', 'Select text in a file.', 'none', 'none', [
-        'path',
-        'match',
-        'line'
-      ]),
+      spec(
+        'editor-select',
+        'files',
+        'Select matching text or a range of lines in a file.',
+        'none',
+        'none',
+        ['path', 'line', 'match', 'regex', 'occurrence', 'group']
+      ),
       spec(
         'editor-highlight',
         'files',
-        'Briefly highlight text in a file.',
+        'Briefly highlight matching text or a range of lines in a file.',
         'none',
         'none',
-        ['path', 'match', 'line', 'duration']
+        ['path', 'line', 'match', 'regex', 'occurrence', 'group', 'duration']
       ),
       spec(
         'file-browser-reveal',

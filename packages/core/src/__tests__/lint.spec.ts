@@ -456,3 +456,83 @@ describe('layout rules', () => {
     ).toHaveLength(2);
   });
 });
+
+describe('editor action options', () => {
+  it('reports targeting problems as invalid-<directive>', () => {
+    const found = rules(`
+\`\`\`{editor-select}
+:path: a.py
+\`\`\`
+
+\`\`\`{editor-highlight}
+:path: a.py
+:match: (def
+:regex: true
+\`\`\`
+
+\`\`\`{editor-replace}
+:path: a.py
+:match: x
+:expand: true
+new
+\`\`\`
+
+\`\`\`{editor-insert}
+:path: a.py
+:line: 2-3
+new
+\`\`\`
+
+\`\`\`{editor-replace}
+:path: a.py
+:line: 2-3
+:expand: true
+\`\`\`
+`);
+
+    expect(found).toEqual([
+      'invalid-editor-select',
+      'invalid-editor-highlight',
+      'invalid-editor-replace',
+      'invalid-editor-insert',
+      'invalid-editor-replace',
+      'unused-capability'
+    ]);
+  });
+
+  it('accepts the targeting options when they agree', () => {
+    const found = rules(`
+\`\`\`{editor-select}
+:path: a.py
+:match: def (\\w+)
+:regex: true
+:occurrence: 2-3
+:group: 1
+\`\`\`
+
+\`\`\`{editor-replace}
+:path: a.py
+:match: ^def (\\w+)
+:regex: true
+:occurrence: all
+:expand: true
+def renamed_$1
+\`\`\`
+
+\`\`\`{editor-replace}
+:path: a.py
+:line: 10-15
+\`\`\`
+
+\`\`\`{editor-insert}
+:path: a.py
+:match: ^import
+:regex: true
+:position: after
+import sys
+\`\`\`
+`);
+
+    expect(found.filter(rule => rule.startsWith('invalid-'))).toEqual([]);
+  });
+});

@@ -9,6 +9,7 @@ import {
   allowedOptions,
   isActionType
 } from '../actions/catalog';
+import { EDITOR_ACTIONS, editorTargetProblems } from '../actions/editor';
 import { parseForm } from '../checks/form';
 import { parseRequirement } from '../checks/gating';
 import { parseQuiz } from '../checks/quiz';
@@ -114,7 +115,12 @@ function lintChecks(input: ILintInput, messages: ILintMessage[]): void {
           break;
 
         default:
-          continue;
+          if (!EDITOR_ACTIONS.includes(node.name)) {
+            continue;
+          }
+
+          problems.push(...editorTargetProblems(node.name, node.options));
+          break;
       }
 
       for (const problem of problems) {

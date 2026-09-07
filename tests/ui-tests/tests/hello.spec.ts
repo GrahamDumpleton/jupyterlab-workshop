@@ -140,7 +140,8 @@ test.describe('hello-jupyterlab workshop', () => {
       page.locator('.jp-NotebookPanel .jp-OutputArea-output').last()
     ).toContainText('84');
 
-    // Files: writing opens the editor, and file-close takes it away again.
+    // Files: writing opens the editor, the editor actions change what it
+    // shows, and file-close takes it away again.
     await goTo('Files and the editor');
 
     const fileWrite = panel.locator(
@@ -149,10 +150,40 @@ test.describe('hello-jupyterlab workshop', () => {
     const fileClose = panel.locator(
       '.jp-WorkshopPanel-action.jp-mod-file-close'
     );
+    const editorContent = page.locator('.jp-FileEditor .cm-content');
+    const runEditorAction = async (id: string): Promise<void> => {
+      const action = panel.locator(`[data-action-id="${id}"]`);
+
+      await action.click();
+      await expect(action).toHaveClass(/jp-mod-status-ok/);
+    };
 
     await fileWrite.click();
     await expect(fileWrite).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
+
+    await runEditorAction('replace-literal');
+    await expect(editorContent).toContainText('shipped with this workshop');
+    await runEditorAction('insert-after-title');
+    await expect(editorContent.locator('.cm-line').nth(1)).toHaveText(
+      'Revised by an editor-insert action.'
+    );
+    await runEditorAction('replace-expand');
+    await expect(editorContent.locator('.cm-line').first()).toHaveText(
+      '# Revised notes for Learner'
+    );
+
+    // The second occurrence is the one in the last line, and selecting
+    // it focuses the editor so the browser selection shows it.
+    await runEditorAction('select-second');
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toBe('action');
+    await runEditorAction('highlight-lines');
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toContain('Revised by an editor-insert action.');
+
     await fileClose.click();
     await expect(fileClose).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-FileEditor')).toHaveCount(0);
