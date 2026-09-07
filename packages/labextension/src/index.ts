@@ -1190,18 +1190,32 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         selfTestProgress as unknown as ReadonlyJSONValue
     });
 
+    // Only the commands this plugin registers go in the palette; the
+    // authoring plugin adds its own. The context menu command only makes
+    // sense with a selection, the self-test is for the harness and the
+    // launch command for URLs, so those stay out.
     if (palette) {
-      for (const command of Object.values(CommandIDs)) {
-        // The context menu command only makes sense with a selection, the
-        // self-test is for the harness and the launch command for URLs.
-        if (
-          command !== CommandIDs.openSelected &&
-          command !== CommandIDs.runAll &&
-          command !== CommandIDs.selfTestProgress &&
-          command !== CommandIDs.launch
-        ) {
-          palette.addItem({ command, category: PALETTE_CATEGORY });
-        }
+      for (const command of [
+        CommandIDs.open,
+        CommandIDs.openPath,
+        CommandIDs.openUrl,
+        CommandIDs.browse,
+        CommandIDs.close,
+        CommandIDs.nextPage,
+        CommandIDs.previousPage,
+        CommandIDs.finish,
+        CommandIDs.variables,
+        CommandIDs.showLog,
+        CommandIDs.stopChain,
+        CommandIDs.trust,
+        CommandIDs.reset,
+        CommandIDs.restart,
+        CommandIDs.uninstall,
+        CommandIDs.applyLayout,
+        CommandIDs.exportEvents,
+        CommandIDs.createEnvironment
+      ]) {
+        palette.addItem({ command, category: PALETTE_CATEGORY });
       }
     }
 

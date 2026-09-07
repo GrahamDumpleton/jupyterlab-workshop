@@ -287,9 +287,10 @@ the capability back.
 
 Right click the `git-tutorial` directory in the file browser and choose
 "Open as Workshop", trust it, and work through the pages. If a page
-does not read well, turn on "Workshop: Author Mode" from the command
-palette: its Edit page button opens the source beside the panel and
-saving re-renders it. The trust dialog does not come back for a
+does not read well, turn on author mode with the pencil button in the
+panel header, or "Workshop: Author Mode" from the command palette
+(Ctrl+Shift+C, or Cmd+Shift+C on a Mac): its Edit page button opens the
+source beside the panel and saving re-renders it. The trust dialog does not come back for a
 workshop you have edited in author mode.
 
 ## Self-test

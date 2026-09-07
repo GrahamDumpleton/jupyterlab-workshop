@@ -18,6 +18,12 @@ learner can equally type it, or something else, themselves.
 A workshop can say how the window should look when it opens, for example
 a rendered README above a terminal, through a [layout](layouts.md).
 
+The panel's header holds the buttons for the things a learner does most:
+open, browse, restart, variables, trust. Every command the extension
+adds is also in JupyterLab's command palette, the searchable list opened
+with Ctrl+Shift+C (Cmd+Shift+C on a Mac) or View, Activate Command
+Palette, under the prefix "Workshop:", which is how the docs name them.
+
 ## A workshop is a directory
 
 A workshop is a directory holding two kinds of file:

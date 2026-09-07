@@ -106,10 +106,14 @@ click the `my-workshop` directory in the file browser and choose "Open
 as Workshop", or use the panel's Open a directory button. A local
 directory brings up the same trust dialog; Trust it, it is yours.
 
-Turn on author mode with "Workshop: Author Mode" from the command
-palette, or the pencil button in the panel header. It marks the workshop
-as your own, so editing it never brings the trust dialog back, and adds
-a toolbar to the panel. Edit page opens the page source beside the
+Turn on author mode with the pencil button in the panel header, or
+with "Workshop: Author Mode" from the command palette. The command
+palette is JupyterLab's searchable list of every command: press
+Ctrl+Shift+C (Cmd+Shift+C on a Mac), or choose View, Activate Command
+Palette, then type "author" and press Enter. Everything the extension
+adds is listed there with the prefix "Workshop:". Author mode marks the
+workshop as your own, so editing it never brings the trust dialog back,
+and adds a toolbar to the panel. Edit page opens the page source beside the
 panel, and saving re-renders it, so you can change a sentence or an
 action and see the result at once. [Writing workshops in
 JupyterLab](authoring.md) describes the rest of the toolbar.

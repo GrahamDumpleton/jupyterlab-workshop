@@ -1,5 +1,7 @@
 {
   "jupyter.lab.shortcuts": [],
+  "jupyter.lab.setting-icon": "jupyterlab-workshop:cap",
+  "jupyter.lab.setting-icon-label": "Workshop",
   "title": "Workshop",
   "description": "Settings for the guided workshop panel.",
   "type": "object",
