@@ -87,10 +87,13 @@
     <p class="tagline">Guided, interactive workshops inside JupyterLab.</p>
 
     <p>
-      Workshop instructions are shown in a JupyterLab side panel and contain
-      clickable actions that drive the live session: terminals, the file
-      browser, the editor, notebooks, kernels and layout. Workshops can check
-      what the learner has done, ask questions, and hold pages until
+      Teaching in JupyterLab usually means a notebook with explanation
+      between the code cells, which learners read down pressing Run. This
+      extension separates the instructions from the work: they live in a
+      side panel, one page at a time, and each step is a clickable action
+      that does something real in the session beside it, in a terminal, the
+      editor, a notebook, a kernel or the interface itself. Workshops can
+      check what the learner has done, ask questions, and hold pages until
       requirements are met. A workshop is a directory with a
       <code>workshop.yaml</code> manifest and Markdown pages, and it runs
       wherever JupyterLab runs, including entirely in the browser with
@@ -130,10 +133,8 @@
     </ul>
 
     <footer>
-      The concept comes from the
-      <a href="https://educates.dev">Educates Training Platform</a>, re-imagined
-      so that a single workshop runs wherever JupyterLab runs, without Kubernetes
-      or containers.
+      Inspired by the
+      <a href="https://educates.dev">Educates Training Platform</a>.
     </footer>
   </main>
 </body>

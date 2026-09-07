@@ -38,7 +38,9 @@ checkout.
 ## Reset
 
 The workshops keep their progress in a `_workshop` directory and write
-their files beside it. The Restart button in the panel header, or
-"Workshop: Restart…", puts the files back as they were when the
-workshop was first opened and forgets the progress. In JupyterLite the
-demo link above does that on every visit.
+their files beside it. The Restart button in the panel header puts the
+files back as they were when the workshop was first opened and forgets
+the progress; so does "Workshop: Restart…" in JupyterLab's command
+palette, the searchable list of commands opened with Ctrl+Shift+C
+(Cmd+Shift+C on a Mac) or View, Activate Command Palette. In JupyterLite
+the demo link above does that on every visit.

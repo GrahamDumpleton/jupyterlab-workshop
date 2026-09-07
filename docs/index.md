@@ -2,21 +2,42 @@
 
 Guided, interactive workshops inside JupyterLab.
 
-Workshop instructions are shown in a JupyterLab side panel and contain
-clickable actions that drive the live session: terminals, the file
-browser, the editor, notebooks, kernels and layout. Workshops can check
-what the learner has done, ask questions, collect values, hold pages
-until requirements are met, and snapshot the working directory. The
-concept comes from the [Educates Training Platform](https://educates.dev),
-re-imagined so that a single workshop runs wherever JupyterLab runs,
-without Kubernetes or containers.
-
 ```{warning}
-This project is in an early phase of development. The documentation is
-still being improved, the experience is still being polished, and the
-workshop format, settings and command line can change between releases
-without a compatibility path.
+Early in development: the documentation and the experience are still
+being polished, and the workshop format, settings and command line can
+change between releases without a compatibility path.
 ```
+
+## Why
+
+JupyterLab is a natural place to teach, and the usual way to do it is a
+notebook: paragraphs of explanation with code cells between them, handed
+to the learner to run. It works up to a point, and then it does not.
+The learner reads down the page pressing Shift+Enter, or Run All, and
+finishes having done nothing. Everything has to be a cell in the
+notebook's one language, so a lesson cannot ask for a shell command, a
+file edited by hand, a second notebook, or anything JupyterLab itself
+does. The instructions and the work are the same document, so the
+notebook the learner ends up with is neither a clean set of notes nor a
+clean piece of work, and there is no way to tell, from either side,
+whether a step was done, done right, or skipped.
+
+This extension separates the two. The instructions live in a side
+panel, one page at a time, and the rest of the window is the ordinary
+JupyterLab session the learner works in. Each step in the instructions
+is a clickable action that does something real in that session: run a
+command in a terminal, write or edit a file, create a notebook and run
+its cells, execute code in a kernel, open a panel or arrange the
+window. The learner can click it, or type it themselves; the workshop
+checks the result either way. A page can hold checks that verify what
+was done, quizzes, and forms that collect values, and can wait for them
+before moving on. A workshop can snapshot the files for a later reset,
+adapt to the platform and to choices the learner makes, and be shipped
+to a class through a registry, a Binder link, or as a static site that
+runs entirely in the browser.
+
+The subject can be anything JupyterLab can host: a language, a library,
+a command line tool such as git, a data workflow, or JupyterLab itself.
 
 ## Three ways in
 

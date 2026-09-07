@@ -5,6 +5,11 @@ opened, what the trust dialog asks, how to move through the pages and
 what the checks want, and how to start over or clear up afterwards.
 Authors and operators need it too, since it is what their learners see.
 
+Commands named "Workshop: …" below are in JupyterLab's command palette,
+the searchable list of every command, opened with Ctrl+Shift+C
+(Cmd+Shift+C on a Mac) or View, Activate Command Palette. Most also have
+a button in the panel header.
+
 ## Opening a workshop
 
 The Workshop panel is the graduation cap tab in the sidebar. With no
