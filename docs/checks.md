@@ -179,7 +179,7 @@ done, records the `workshop-finish` event and opens a dialog saying the
 workshop is complete, with what to do next: browse other workshops,
 close this one, or on Binder shut the session down. Which of those
 appear depends on the host and the
-[disabled features](registry.md#locking-down-a-deployment); "Keep
+[disabled features](deploying.md#locking-down-a-deployment); "Keep
 reading" is always there. The footer then shows "Finished" with a "What
 next?" link that brings the dialog back. A `finish` field in the
 manifest holds Markdown shown in the dialog, for example where to go

@@ -43,18 +43,8 @@ alongside.
 ### Starting in the browser
 
 An image that offers a choice of workshops can start JupyterLab in the
-browser rather than at the launcher. With the `browseOnStart` setting
-true, a session that has no workshop to restore, no `defaultWorkshop` and
-no launch link opens the browser in place of the launcher and collapses
-both sidebars, so the learner sees only the catalogue until they pick a
-workshop; the instructions panel then appears on the right. Pointing
-`workshopsDirectory` at a directory of workshops shipped in the image
-lists them as installed and ready to open without a download.
-
-A launch link can do the same for one session with a `registry`
-parameter naming an index by URL or by a path relative to the JupyterLab
-root: `/lab?registry=https://example.org/workshops/index.json`. The
-registry is shown alongside the configured ones for that session only.
+browser instead of at the launcher, with the `browseOnStart` setting or
+a `registry` launch link; see [Deploying workshops](deploying.md#starting-in-the-browser).
 
 ## Registries
 
@@ -136,98 +126,16 @@ its own directory, with a `registry.json` at the root that
 [Publishing workshops](publishing.md#several-workshops-in-one-repository).
 Anyone can add the raw URL of that index to their `registries` setting,
 or start a session in it with a `registry` launch link, and Install
-fetches each workshop from the forge.
-
-The same checkout serves as a [Binder](https://mybinder.org) image. Add
-`binder/requirements.txt` installing `jupyterlab` and
-`jupyterlab-workshop`, and a `binder/postBuild` that writes an
-`overrides.json` such as this into `$NB_PYTHON_PREFIX/share/jupyter/lab/settings/`:
-
-```json
-{
-  "@jupyterlab-workshop/labextension:panel": {
-    "defaultWorkshop": "",
-    "browseOnStart": true,
-    "workshopsDirectory": "workshops",
-    "trustPolicy": { "forcedLevel": "trusted" },
-    "disabledFeatures": [
-      "open-directory",
-      "open-url",
-      "registries",
-      "remove",
-      "author"
-    ]
-  }
-}
-```
-
-The session then starts in the browser with every workshop in the
-checkout listed as installed and ready to open, with no download and no
-trust dialog, since the visitor chose the repository. The
-`disabledFeatures` list, described [below](#locking-down-a-deployment),
-keeps the learner to those workshops. A launch link of
-`urlpath=lab%3Fregistry%3Dregistry.json` gives the same start without
-the override, apart from the trust dialog, and
-`urlpath=lab%3Fworkshop%3Dworkshops%2Fgit-basics` opens one workshop
-directly. This repository's own `examples/` directory, `registry/` index
-and `binder/` files follow this pattern.
+fetches each workshop from the forge. The same checkout can serve as a
+Binder image; see [Deploying workshops](deploying.md#a-binder-repository).
 
 ## Locking down a deployment
 
-An image built for a course usually wants learners to run the workshops
-it supplies and nothing else: no opening other directories or URLs, no
-editing, and no removing a workshop they may need again. The
-`disabledFeatures` setting, set through `overrides.json` like the trust
-policy, lists parts of the extension to remove. Each key removes every
-entry point for the feature at once: the buttons in the panel header
-and the browser, the launcher card, the command in the palette and the
-matching launch link parameter.
-
-| Key              | Removes                                                                                                                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `open-directory` | The folder button, "Open a directory" in the browser, "Open Workshop…" and "Open Workshop Path…", the file browser context menu item, and `workshop=<path>` launch links naming a directory outside the workshops directory. |
-| `open-url`       | The download button, "Add from URL…", "Open Workshop from URL…", and `workshop=<url>` launch links for sources no configured registry lists.                                                                                 |
-| `registries`     | "Manage registries" and the `registry` launch link parameter, so only the `registries` setting counts.                                                                                                                       |
-| `available`      | The Available section of the browser and its search and tag filters, leaving only the installed workshops.                                                                                                                   |
-| `remove`         | The Remove buttons and "Workshop: Remove…".                                                                                                                                                                                  |
-| `close`          | The close button and "Close Workshop".                                                                                                                                                                                       |
-| `browse`         | The browse button, the launcher card and "Browse Workshops", for an image that runs a single workshop.                                                                                                                       |
-| `author`         | The edit button, author mode and its commands, and the "New Workshop" launcher card. A workshop marked as the learner's own opens as a learner would see it.                                                                 |
-
-The workshops under `workshopsDirectory` stay openable with
-`open-directory` disabled, from the browser or a `workshop=<path>` launch
-link, and the browser's Install and Update buttons keep working with
-`open-url` disabled, because those sources come from the registries.
-The Binder recipe above disables everything except browsing, the
-Available section and closing, so learners can move between the
-supplied workshops but not bring in others or change them.
-
-These settings shape the interface rather than secure it: a learner
-with a terminal or the browser console can still reach the files and
-commands. Use the [trust policy](trust.md#administrator-policy) to
-limit what workshops may do.
-
-### Restarting a workshop
-
-The first time a workshop is opened, before any action runs, its files
-are archived as the reserved `pristine` checkpoint under `_workshop`.
-"Workshop: Restart…", the restart button in the panel header and the
-Restart button on an installed workshop's card put those files back,
-deleting anything added to the directory since, forget all progress,
-close the documents and terminals the workshop had open, and reopen the
-workshop at its first page with its layout applied afresh. This works offline, for
-workshops shipped in an image or opened from a local directory, and in
-JupyterLite; it is the way to start over in a locked-down deployment
-where Remove is unavailable. Update, shown on an installed workshop's
-card when the registry lists a different version, fetches that version
-from the registry and replaces the files, and remains available.
-
-Two limits apply. Restart only covers files inside the workshop
-directory, so a workshop that writes elsewhere, for example into the
-home directory, is not undone. And a workshop first opened by a version
-of the extension before the snapshot existed has none to restore; a
-restart then forgets the progress, keeps the files and says so, and the
-reopen takes a snapshot of the files as they are.
+The `disabledFeatures` setting removes the buttons, commands and launch
+link parameters that let a learner open other directories or URLs, edit
+or remove workshops; see [Deploying workshops](deploying.md#locking-down-a-deployment).
+Restart, which puts a workshop back as it was first opened, stays
+available; see [Using workshops](using.md#starting-over-and-clearing-up).
 
 ## Launch links
 
@@ -249,7 +157,7 @@ https://hub.example.org/user/ada/lab?workshop=https://github.com/example-org/wor
   defaults but below anything the learner enters.
 
 - `restart` starts a workshop that is already present over before
-  opening it, as [Restart](#restarting-a-workshop) does: files back to
+  opening it, as [Restart](using.md#starting-over-and-clearing-up) does: files back to
   the first-open snapshot, progress forgotten, layout applied afresh.
   On its own it asks first when the workshop has recorded progress, and
   goes straight ahead when there is nothing to lose; `restart=force`

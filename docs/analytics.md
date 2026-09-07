@@ -53,29 +53,14 @@ progress to workshops.example.org". Nothing is sent unless it is ticked;
 the choice is stored with the trust decision and can be changed from
 "Workshop: Change Trust Level…".
 
-An administrator can report every workshop's events without asking, for
-example under JupyterHub, through the `analytics` setting in
-`overrides.json`:
-
-```json
-{
-  "@jupyterlab-workshop/labextension:panel": {
-    "analytics": {
-      "sink": "https://workshops.example.org/events",
-      "identity": "hub"
-    }
-  }
-}
-```
-
-`identity` is `none` (the default) or `hub`, which adds the
-`JUPYTERHUB_USER` name to every event as `user`.
-
-Batches are posted by the server, not the browser, as
-`application/x-ndjson` bodies to the sink URL, so the sink needs no CORS
-headers. In [JupyterLite](lite.md) there is no server: the browser posts
-the same bodies itself, so a sink used from there must allow cross-origin
-requests from the site. A sink is any endpoint that accepts a POST; a few lines of any
-web framework that appends the body to a file is enough. Delivery is
-best effort: a sink that is down loses the batch, and the local file
-remains the record.
+An administrator can report every workshop's events without asking,
+for example under JupyterHub, through the `analytics` setting; see
+[reporting progress](deploying.md#reporting-progress). Batches are
+posted by the server, not the browser, as `application/x-ndjson` bodies
+to the sink URL, so the sink needs no CORS headers. In
+[JupyterLite](lite.md) there is no server: the browser posts the same
+bodies itself, so a sink used from there must allow cross-origin
+requests from the site. A sink is any endpoint that accepts a POST; a
+few lines of any web framework that appends the body to a file is
+enough. Delivery is best effort: a sink that is down loses the batch,
+and the local file remains the record.

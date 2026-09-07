@@ -115,64 +115,14 @@ diff against the file's current content.
 
 ## Administrator policy
 
-The `trustPolicy` setting, normally set through `overrides.json`, adjusts
-the behaviour for every learner:
+The `trustPolicy` setting, normally set through `overrides.json`, can
+force a level for every workshop, trust sources by prefix, and disable
+capabilities outright; see [settling trust](deploying.md#settling-trust)
+and the [settings reference](settings.md).
 
-```json
-{
-  "@jupyterlab-workshop/labextension:panel": {
-    "defaultTrustLevel": "restricted",
-    "trustPolicy": {
-      "forcedLevel": null,
-      "trustedSources": [
-        "git:https://github.com/GrahamDumpleton/",
-        "local:examples/"
-      ],
-      "disabledCapabilities": ["ui-settings"]
-    }
-  }
-}
-```
+## Removing, resetting and the log
 
-- `defaultTrustLevel` is the button selected by default in the dialog.
-
-- `forcedLevel` applies one level to every workshop and skips the dialog.
-
-- `trustedSources` lists source key prefixes that open as trusted without
-  asking. Source keys look like `local:<directory>`,
-  `git:<url>@<ref>/<subdir>` and `archive:<url>`.
-
-- `disabledCapabilities` never run, whatever the learner chose; the
-  affected actions are skipped with a message.
-
-## Removing and resetting
-
-Closing a workshop, from the header button or the Finish dialog, also
-closes the documents it put on screen (every open file under its
-directory, such as the README preview and editors a layout or an action
-opened) and shuts down its terminals, so the next workshop or the
-browser starts in a clear window. A file with unsaved changes asks
-first. Restart and Remove do the same before touching the files.
-
-"Workshop: Remove…" lists what it will do before doing it: delete the
-workshop directory for downloaded workshops (for local directories only
-the `_workshop` state directory is removed), restore any JupyterLab
-settings the workshop changed with `settings-set`, unregister the kernel
-of an [isolated environment](environment.md) it created, and forget the
-trust decision. The workshop browser's Remove button does the same for
-workshops that are not open.
-
-"Workshop: Reset Progress…" forgets page progress, action results,
-captured variables and the log, restores changed settings, and reopens
-the workshop at its first page. "Workshop: Restart…" does the same and
-also puts the files back as they were when the workshop was first
-opened; see [restarting a workshop](registry.md#restarting-a-workshop).
-An administrator can remove these and other buttons with the
-`disabledFeatures` setting described under
-[locking down a deployment](registry.md#locking-down-a-deployment).
-
-## Action log
-
-Every action that ran, was downgraded, confirmed or skipped is recorded
-with its time, page, type, description, trigger and result in
-`_workshop/state.json` and shown by "Workshop: Show Action Log".
+Restart, Reset Progress and Remove, what closing a workshop cleans up,
+and the action log are described for learners under
+[Using workshops](using.md#starting-over-and-clearing-up). The log is
+kept in `_workshop/state.json` and shown by "Workshop: Show Action Log".

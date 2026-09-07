@@ -24,9 +24,10 @@ without a compatibility path.
   browser with nothing to install, or on Binder with a real terminal.
 
 - **Run workshops.** [Getting started](getting-started.md) installs the
-  extension on your machine and walks through an example, and
-  [Finding and installing workshops](registry.md) covers handing
-  workshops to learners through the browser, registries and launch links.
+  extension on your machine and walks through an example,
+  [Using workshops](using.md) is the learner's guide, and
+  [Deploying workshops](deploying.md) covers Binder, JupyterHub and
+  locked-down images.
 
 - **Write workshops.** [How workshops work](concepts.md) explains the
   pieces, the [tutorial](tutorial.md) builds a small workshop from
@@ -137,7 +138,9 @@ publishing
 :hidden:
 :caption: Running workshops
 
+using
 registry
+deploying
 trust
 analytics
 ```
@@ -147,5 +150,6 @@ analytics
 :caption: Reference
 
 reference/manifest
+settings
 cli
 ```
