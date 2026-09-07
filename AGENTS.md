@@ -197,6 +197,10 @@ underlying commands yourself; run `just --list` to see everything.
   review happens: once work is committed it can no longer be reviewed as
   the pending diff, so committing early makes review harder, not easier.
 
+- `develop` is the default and working branch; `main` holds released
+  code and is what GitHub Pages and the Binder link build from. Never tag
+  from develop.
+
 - A release bumps the version in four files together, in one commit on
   develop: the root `package.json` (the Python package reads its version
   from it), `packages/core/package.json`,
@@ -206,7 +210,73 @@ underlying commands yourself; run `just --list` to see everything.
   main, so an unpinned install would freeze whichever release PyPI served
   at the first launch. Then fast-forward main, wait for CI, and push the
   bare version tag; the release workflow refuses a tag that does not
-  match `package.json`.
+  match `package.json`. Version numbers cannot be reused on PyPI, so a
+  failed publish means moving on to the next patch number.
+
+- The release steps in full, for a release of `X.Y.Z`. Each step waits
+  for the previous one to finish; never chain the tag push behind a CI
+  check in one command, read the CI result first and then tag.
+
+  1. On develop with a clean tree, set `"version": "X.Y.Z"` in the three
+     `package.json` files and `jupyterlab-workshop==X.Y.Z` in
+     `binder/requirements.txt`, then commit them together:
+
+     ```
+     git commit -am "Bump version to X.Y.Z"
+     ```
+
+  2. Push develop and wait for its CI run to pass. A push starts the
+     `ci` workflow only:
+
+     ```
+     git push origin develop
+     gh run list --branch develop --workflow ci --limit 1
+     gh run watch <run-id> --exit-status
+     ```
+
+  3. Fast-forward main to develop and push it. A push to main starts two
+     workflows, `ci` and `pages`, so select each run by workflow name
+     rather than taking the first id listed, and wait for both:
+
+     ```
+     git checkout main
+     git merge --ff-only develop
+     git push origin main
+     gh run list --branch main --workflow ci --limit 1
+     gh run list --branch main --workflow pages --limit 1
+     gh run watch <run-id> --exit-status
+     ```
+
+  4. Only once both are green, push the bare version tag (no `v`
+     prefix) from main. This starts the `release` workflow: build, PyPI
+     publish and GitHub release:
+
+     ```
+     git tag X.Y.Z
+     git push origin X.Y.Z
+     gh run list --workflow release --limit 1
+     gh run watch <run-id> --exit-status
+     ```
+
+  5. Confirm the release landed, then go back to develop:
+
+     ```
+     gh release view X.Y.Z
+     git checkout develop
+     ```
+
+     PyPI's JSON API lags a fresh upload; check the simple index at
+     `https://pypi.org/simple/jupyterlab-workshop/` instead. Locally,
+     `uv sync --reinstall-package jupyterlab-workshop` is needed before
+     the Python side reports the new version.
+
+  Two self-test flakes are known in CI and are not regressions: the
+  browser job's hello-jupyterlab hidden-kernel execute-capture step, and
+  the lite job's terminal `execute` with `wait: prompt` timing out at
+  120s on a trivial command. Rerun the failed jobs with
+  `gh run rerun <run-id> --failed` and wait for the rerun to pass before
+  going on; a rerun that fails again is a real problem, so stop and
+  report it.
 
 - When merging a feature branch back to main and pushing to the remote,
   do not treat the work as landed until the CI workflow on GitHub has run
