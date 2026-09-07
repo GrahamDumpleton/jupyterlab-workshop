@@ -182,9 +182,11 @@ far, records the action in flight as failed, and exits with code 1. Both
 limits exist so that a stuck action in CI produces a report naming it
 rather than a job that never ends.
 
-Requirements: the `test` extra (`pip install
-"jupyterlab-workshop[test]"`) and a browser (`playwright install
-chromium`). Terminals started by the test use a non-interactive pager so
+Requirements: the `test` extra, which installs Playwright, a library
+that drives a browser from Python (`uv add "jupyterlab-workshop[test]"`
+or `pip install "jupyterlab-workshop[test]"`), and a browser for it,
+which `playwright install chromium` downloads into Playwright's own
+cache. Terminals started by the test use a non-interactive pager so
 commands such as `git diff` do not wait for a key press.
 
 Commands in the tested workshop should not need input. A check that

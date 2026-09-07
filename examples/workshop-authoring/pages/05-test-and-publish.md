@@ -12,8 +12,9 @@ prints PASS or FAIL for each. It is what a workshop's CI runs.
 
 ```{hint}
 :title: Running the self-test
-The self-test needs a browser: `pip install
-"jupyterlab-workshop[test]"` and `playwright install chromium`.
+The self-test needs the `test` extra, which installs Playwright, and a
+browser for it: `uv add "jupyterlab-workshop[test]"` (or `pip install`
+the same) and then `playwright install chromium`.
 Then run `jupyter workshop test {{ workshop_dir }}`. It starts a second
 JupyterLab, so it is not run from inside this one.
 ```

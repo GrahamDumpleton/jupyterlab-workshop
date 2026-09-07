@@ -53,54 +53,10 @@ hides an action.
 
 ## Building a site
 
-```
-pip install "jupyterlab-workshop[lite]"
-jupyter workshop lite my-workshop [other-workshop ...] [--out lite-site]
-                                  [--default NAME] [--trust LEVEL]
-                                  [--registry URL] [--no-terminal]
-                                  [--lite-dir DIR] [--serve] [--port PORT]
-```
-
-The command copies the workshops into the site's contents (leaving
-`_workshop/` progress behind), writes the extension settings that open a
-workshop on start (`--default`, or the only workshop given) and, with
-`--trust`, apply a trust level without asking, then runs `jupyter lite
-build`. The site includes whatever JupyterLab extensions are installed in
-the environment, this one among them. `--serve` serves the result on a
-local port, under a sub-path as GitHub Pages would, to try it out.
-
-The terminal needs `node`, `npm` and `micromamba` on the path when
-building, because the terminal extension fetches its WebAssembly
-commands from emscripten-forge. The site declares terminals available,
-so File, New, Terminal and the launcher card work as well as the
-workshop's own actions. `--no-terminal` leaves it out.
-`--lite-dir` names the directory JupyterLite keeps its build state and
-those downloads in; the default is under the Jupyter data directory so
-that later builds are quick.
-
-Pyodide itself is loaded from a CDN when the site opens, so learners
-need network access on first use. The built site is relative-path only
-and works from any sub-path.
-
-## Publishing to GitHub Pages
-
-The repository's own workflow (`.github/workflows/pages.yml`) runs
-`just pages`, which assembles the project site: a landing page, the JSON
-schemas, and the example workshop built as a JupyterLite site under
-`demo/`. The result is deployed with `actions/deploy-pages` to
-<https://grahamdumpleton.github.io/jupyterlab-workshop/>. A workshop
-repository can do the same with just the JupyterLite build:
-
-```yaml
-- run: pip install "jupyterlab-workshop[lite]"
-- run: |
-    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
-      | tar -xj -C /usr/local bin/micromamba
-- run: jupyter workshop lite . --out site
-- uses: actions/upload-pages-artifact@v3
-  with:
-    path: site
-```
+`jupyter workshop lite` builds a static site carrying one or more
+workshops, with the extension, the Pyodide kernel and the terminal, that
+any web host can serve; [Publishing workshops](publishing.md#a-jupyterlite-site)
+covers the command, what the build needs, and deploying to GitHub Pages.
 
 ## Testing
 

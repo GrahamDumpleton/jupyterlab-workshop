@@ -13,9 +13,10 @@ current platform, the panel shows a banner when a workshop is opened on
 a platform it does not list, and the linter uses it to check that every
 command has a version for each listed platform.
 
-## Variables
+## Built-in variables
 
-The built-in variables `platform` (`linux`, `macos`, `windows` or
+[Variables](variables.md) describes the syntax, where values come from
+and how they reach terminals. The built-in variables `platform` (`linux`, `macos`, `windows` or
 `lite`), `shell` (`bash`, `zsh`, `sh`, `fish`, `powershell`, `cmd` or
 `cockle` in JupyterLite), `path_sep`, `home` and `user` describe the
 machine, `workshop_dir` is the workshop directory relative to the

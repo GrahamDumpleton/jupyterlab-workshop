@@ -8,12 +8,43 @@ fifteen minutes. To see a workshop without installing anything, use the
 ## Install
 
 The package is a prebuilt JupyterLab 4 extension with its server
-extension, so one install is all it needs:
+extension. It goes into a Python virtual environment together with
+JupyterLab, since a system Python is usually not yours to install into
+and often has no `pip` command at all. Make a directory to work in,
+create the environment there and start JupyterLab from it: the
+directory JupyterLab starts in becomes its root, workshops you install
+land under it, and one you scaffold has to be inside it to open. A home
+directory is a poor choice, since everything in it shows in the file
+browser.
+
+With [uv](https://docs.astral.sh/uv/), which is the shortest route:
 
 ```
-pip install jupyterlab-workshop
+uv init --bare workshops-playground
+cd workshops-playground
+uv add jupyterlab jupyterlab-workshop
+uv run jupyter lab
+```
+
+`uv init --bare` writes a `pyproject.toml` recording what the project
+needs, `uv add` creates a `.venv` there and installs into it, and
+`uv run` runs a command with that environment active. The extension
+does not pull in JupyterLab itself, which is why both are named.
+
+With Python's own tools instead:
+
+```
+mkdir workshops-playground
+cd workshops-playground
+python3 -m venv .venv
+source .venv/bin/activate
+pip install jupyterlab jupyterlab-workshop
 jupyter lab
 ```
+
+On Windows the activation line is `.venv\Scripts\activate`. The rest of
+this page assumes the environment is active; with uv, put `uv run` in
+front of any command typed outside JupyterLab.
 
 The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers
@@ -58,8 +89,11 @@ installed workshop.
 
 ## Scaffold your own
 
-The `jupyter workshop` command comes with the package. From the
-directory JupyterLab was started in:
+The `jupyter workshop` command comes with the package. Run it in a
+terminal opened inside JupyterLab (File, New, Terminal), which starts
+in the right directory with the environment on its path, or in any
+other terminal in `workshops-playground` with the environment active,
+or `uv run` in front:
 
 ```
 jupyter workshop init my-workshop --title "My first workshop"
@@ -88,13 +122,22 @@ jupyter workshop lint my-workshop
 ```
 
 The self-test runs every action in a real JupyterLab and reports each
-one. It needs the `test` extra and a browser:
+one. It starts a JupyterLab of its own on a free port, so it is safe to
+run from a terminal inside the one you are using. It needs two more
+things. The package's `test` extra installs Playwright, a library that
+drives a browser from Python, and Playwright then needs a browser of its
+own: `playwright install chromium` downloads a copy of Chromium into
+Playwright's cache, a one-time download of a few hundred megabytes that
+is separate from any browser on the machine.
 
 ```
-pip install "jupyterlab-workshop[test]"
-playwright install chromium
-jupyter workshop test my-workshop
+uv add "jupyterlab-workshop[test]"
+uv run playwright install chromium
+uv run jupyter workshop test my-workshop
 ```
+
+With pip, `pip install "jupyterlab-workshop[test]"` and then the same
+two commands without `uv run`.
 
 A green self-test is what a workshop's continuous integration runs;
 `init --ci` writes a GitHub Actions workflow for it.

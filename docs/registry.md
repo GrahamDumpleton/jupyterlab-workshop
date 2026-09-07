@@ -123,54 +123,20 @@ schema.
 
 ### Building an index
 
-`jupyter workshop publish` writes an archive, its hash and a
-`<name>-<version>.registry.json` entry for a workshop. `jupyter workshop
-registry` merges such entries into an index, adding versions to entries
-that exist already:
-
-```
-jupyter workshop publish git-basics --url https://example.org/w/git-basics-1.2.0.tar.gz
-jupyter workshop registry index.json dist/git-basics-1.2.0.registry.json --title "Our workshops"
-```
-
-Host `index.json` and the archives anywhere that serves files over
-HTTPS, such as GitHub Pages or an object store, and list the index URL
-in the `registries` setting.
+`jupyter workshop publish` writes an archive, its hash and a registry
+entry for a workshop, `jupyter workshop registry` merges such entries
+into an index, and `jupyter workshop index` lists every workshop in a
+repository without archives; see [Publishing workshops](publishing.md).
 
 ## Several workshops in one repository
 
 A repository can hold a set of related workshops side by side, each in
-its own directory, with one index at the root that lists them all:
-
-```
-workshops-repo/
-  registry.json
-  binder/
-    requirements.txt
-    postBuild
-  workshops/
-    git-basics/
-      workshop.yaml
-      pages/
-    pandas-intro/
-      workshop.yaml
-      pages/
-```
-
-`jupyter workshop index` writes and updates `registry.json` from the
-manifests, giving each entry a git source pointing at its directory in
-the repository, so no archives are built or published:
-
-```
-jupyter workshop index workshops --repo https://github.com/example-org/workshops --ref main
-```
-
-Run from the checkout, the repository URL and branch are read from git
-and can be left out, and the paths in the index are relative to the
-checkout root; give `--ref` a tag when a course is pinned to a release. Commit the index with the workshops. Anyone can then add the
-raw URL of `registry.json` to their `registries` setting, or start a
-session in it with a `registry` launch link, and Install fetches each
-workshop from the forge.
+its own directory, with a `registry.json` at the root that
+`jupyter workshop index` builds from their manifests; see
+[Publishing workshops](publishing.md#several-workshops-in-one-repository).
+Anyone can add the raw URL of that index to their `registries` setting,
+or start a session in it with a `registry` launch link, and Install
+fetches each workshop from the forge.
 
 The same checkout serves as a [Binder](https://mybinder.org) image. Add
 `binder/requirements.txt` installing `jupyterlab` and

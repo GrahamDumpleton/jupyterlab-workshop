@@ -147,10 +147,11 @@ def test_session_requests_report_server_errors() -> None:
         session.request("bridge", {"command": "workshop:x"}, timeout=1)
 
 
-def test_skill_action_reference_matches_the_docs() -> None:
+@pytest.mark.parametrize("name", ["actions.md", "pages.md"])
+def test_skill_reference_matches_the_docs(name: str) -> None:
     root = Path(__file__).resolve().parents[2]
-    docs = root / "docs" / "actions.md"
-    reference = root / "skills" / "workshop-author" / "references" / "actions.md"
+    docs = root / "docs" / name
+    reference = root / "skills" / "workshop-author" / "references" / name
 
     if not docs.is_file():
         pytest.skip("needs the documentation in a checkout")

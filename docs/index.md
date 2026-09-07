@@ -28,9 +28,10 @@ without a compatibility path.
   [Finding and installing workshops](registry.md) covers handing
   workshops to learners through the browser, registries and launch links.
 
-- **Write workshops.** Getting started ends by scaffolding one of your
-  own; [How workshops work](concepts.md) explains the pieces, and the
-  writing section below has the reference for each.
+- **Write workshops.** [How workshops work](concepts.md) explains the
+  pieces, the [tutorial](tutorial.md) builds a small workshop from
+  nothing and publishes it, and the writing section of the navigation
+  has the reference for each part.
 
 ## What a workshop looks like
 
@@ -88,21 +89,23 @@ front matter asks for it to pass before the learner moves on.
 
 ## Install
 
-```
-pip install jupyterlab-workshop
-```
-
 The package is a prebuilt JupyterLab 4 extension with its server
-extension; nothing else needs installing. Add the `test` extra and a
-browser to self-test workshops:
+extension. Install it into a virtual environment alongside JupyterLab,
+with uv or with pip:
 
 ```
-pip install "jupyterlab-workshop[test]"
-playwright install chromium
+uv add jupyterlab jupyterlab-workshop
 ```
 
-The `mcp` extra adds the MCP server for AI agents, and the `lite` extra
-the tools to build a JupyterLite site.
+```
+pip install jupyterlab jupyterlab-workshop
+```
+
+The `test` extra adds the self-test, which also needs a browser
+(`playwright install chromium`); the `mcp` extra adds the MCP server
+for AI agents; and the `lite` extra adds the tools to build a
+JupyterLite site. [Getting started](getting-started.md) walks through
+the setup step by step.
 
 ```{toctree}
 :hidden:
@@ -117,6 +120,9 @@ demo
 :hidden:
 :caption: Writing workshops
 
+tutorial
+pages
+variables
 actions
 checks
 layouts
@@ -124,6 +130,7 @@ platforms
 lite
 environment
 authoring
+publishing
 ```
 
 ```{toctree}

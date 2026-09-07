@@ -169,7 +169,9 @@ before the first marker is the default. Windows terminals are PowerShell
 | `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                 |
 | `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                      |
 
-The full table with every option is in `references/actions.md`.
+The full table with every option is in `references/actions.md`, and
+`references/pages.md` covers the page syntax, the common options and how
+the editor actions point at text.
 
 ## Checks
 

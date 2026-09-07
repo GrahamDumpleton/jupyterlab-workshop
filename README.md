@@ -23,31 +23,33 @@ browser.
 
 ## Install
 
+The package is a prebuilt JupyterLab 4 extension with its server
+extension. Install it into a virtual environment alongside JupyterLab:
+
 ```
-pip install jupyterlab-workshop
+uv add jupyterlab jupyterlab-workshop
 ```
 
-The package is a prebuilt JupyterLab 4 extension with its server
-extension; nothing else needs installing. Open the Workshop panel from
-the right sidebar, or right-click a workshop directory in the file browser
+or `pip install jupyterlab jupyterlab-workshop`. Start JupyterLab from a
+working directory of your own and open the Workshop panel from the
+right sidebar, or right-click a workshop directory in the file browser
 and choose "Open as Workshop".
 
 ## Writing a workshop
 
 ```
-pip install "jupyterlab-workshop[test]"
-playwright install chromium
 jupyter workshop init my-workshop
 jupyter workshop lint my-workshop
 jupyter workshop test my-workshop
 ```
 
-`lint` needs Node.js on the path; `test` runs every action of the
-workshop in a real JupyterLab and reports each one. Inside JupyterLab,
-"Workshop: Author Mode" adds an editing toolbar to the panel, and
-`jupyter workshop mcp` (with the `mcp` extra) serves the same tools to AI
-agents. The `lite` extra adds `jupyter workshop lite` for building a
-JupyterLite site.
+`lint` needs Node.js on the path. `test` runs every action of the
+workshop in a real JupyterLab and reports each one; it needs the `test`
+extra, which installs Playwright, and a browser for it, downloaded with
+`playwright install chromium`. Inside JupyterLab, "Workshop: Author
+Mode" adds an editing toolbar to the panel, and `jupyter workshop mcp`
+(with the `mcp` extra) serves the same tools to AI agents. The `lite`
+extra adds `jupyter workshop lite` for building a JupyterLite site.
 
 ## Learn more
 
