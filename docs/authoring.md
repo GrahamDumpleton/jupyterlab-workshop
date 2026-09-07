@@ -92,7 +92,7 @@ A Claude Code configuration, for example, is:
 ```
 
 Tools that work on files: `lint`, `render`, `pages`, `test`, `init`,
-`publish`, `draft`, `get_schema` and `list_registry`. Tools that act on
+`publish`, `index`, `draft`, `get_schema` and `list_registry`. Tools that act on
 a running JupyterLab: `open_workshop`, `session_status`, `run_action`,
 `run_page` and `run_workshop`. Resources: the manifest and registry
 schemas, and the authoring skill.

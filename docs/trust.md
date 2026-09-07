@@ -16,8 +16,9 @@ A workshop is opened from one of these sources:
   is used in place, which suits authoring.
 
 - A git repository on a forge that serves archives, through the
-  "Open Workshop from URL…" command. GitHub, GitLab, Codeberg and Gitea
-  are recognised. A tree URL such as
+  "Open Workshop from URL…" command. GitHub and GitLab are recognised
+  by host, and any other host is assumed to serve archives the way
+  Gitea, Codeberg and Forgejo do. A tree URL such as
   `https://github.com/owner/repo/tree/v1.2.0/workshops/git-basics` names
   the ref and the directory inside the repository. No `git` binary is
   needed: the server downloads the archive, checks its SHA-256, unpacks it

@@ -14,8 +14,9 @@ two sections:
 
 - **Installed** lists every workshop directory under the
   `workshopsDirectory` setting (default `workshops`), with its source,
-  how many pages are done, and Resume or Open and Remove buttons. The
-  workshop that is open is marked.
+  how many pages are done, and buttons to Open or Resume it, Restart it
+  once started, Update it when the registry lists another version, and
+  Remove it. The workshop that is open is marked.
 
 - **Available** lists the workshops of every configured registry as
   cards showing the title, version, description, platforms, capabilities

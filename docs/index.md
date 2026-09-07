@@ -18,6 +18,22 @@ workshop format, settings and command line can change between releases
 without a compatibility path.
 ```
 
+## Three ways in
+
+- **Try it.** The [hosted demos](demo.md) run an example workshop in the
+  browser with nothing to install, or on Binder with a real terminal.
+
+- **Run workshops.** [Getting started](getting-started.md) installs the
+  extension on your machine and walks through an example, and
+  [Finding and installing workshops](registry.md) covers handing
+  workshops to learners through the browser, registries and launch links.
+
+- **Write workshops.** Getting started ends by scaffolding one of your
+  own; [How workshops work](concepts.md) explains the pieces, and the
+  writing section below has the reference for each.
+
+## What a workshop looks like
+
 A workshop is a directory with a `workshop.yaml` manifest and Markdown
 pages. The format is text based and git friendly:
 
@@ -43,46 +59,32 @@ assert out.strip(), "No commits yet: run git commit"
 ```
 ````
 
-## Where to start
+The `execute` block runs the command in a workshop terminal when
+clicked. The `verify` block checks the result in a hidden kernel, runs
+on its own when the terminal shows the commit message, and the page's
+front matter asks for it to pass before the learner moves on.
 
-- [Try the demo](demo.md) to see the example workshops running.
+## What it can do
 
-- [Actions](actions.md) lists every directive a page can use.
+- **Drive the session.** Actions run commands, open and edit files,
+  create and run notebooks, execute code in kernels, arrange the window
+  and point at parts of the interface.
 
-- [Checks, forms and checkpoints](checks.md) covers verifying progress,
-  quizzes, forms, gating, how progress and finishing work, and
-  checkpoints.
+- **Check progress.** Verifies run code or inspect files and the
+  interface, quizzes ask questions, forms collect values, and pages can
+  be gated on them. Checkpoints snapshot the files for a later restore.
 
-- [Layouts](layouts.md) covers arranging the JupyterLab window when a
-  workshop opens: sidebars, their widths, and what the main area holds.
+- **Adapt.** Variables, platform variants and conditions let one
+  workshop serve Linux, macOS, Windows and JupyterLite, and follow
+  tracks the learner chooses.
 
-- [Platforms](platforms.md) covers command variants for Linux, macOS,
-  Windows and JupyterLite, paths and terminal shells.
+- **Stay safe.** Every action needs a declared capability, the trust
+  dialog says what a workshop asks for, and a restricted level turns
+  commands into text to be typed rather than run.
 
-- [JupyterLite](lite.md) covers running and publishing workshops as a
-  static site with no server.
-
-- [Isolated environments](environment.md) describes giving a workshop
-  its own Python environment and kernel.
-
-- [Manifest reference](reference/manifest.md) documents `workshop.yaml`.
-
-- [Finding and installing workshops](registry.md) covers the workshop
-  browser, registries, launch links, locking down a deployment to the
-  workshops it supplies, and restarting a workshop.
-
-- [Loading and trust](trust.md) explains where workshops come from and
-  what the trust levels allow.
-
-- [Progress events](analytics.md) describes what is recorded, the export,
-  and reporting to a sink.
-
-- [Command line](cli.md) covers `jupyter workshop` for creating,
-  checking, self-testing and publishing workshops.
-
-- [Writing workshops in JupyterLab](authoring.md) covers author mode,
-  recording a session into pages, and the MCP server and skill for AI
-  agents.
+- **Ship anywhere.** Publish to a registry, ship in a Binder or
+  JupyterHub image, or build a JupyterLite site that runs entirely in
+  the browser.
 
 ## Install
 
@@ -104,7 +106,10 @@ the tools to build a JupyterLite site.
 
 ```{toctree}
 :hidden:
+:caption: Start here
 
+getting-started
+concepts
 demo
 ```
 
@@ -118,7 +123,7 @@ layouts
 platforms
 lite
 environment
-reference/manifest
+authoring
 ```
 
 ```{toctree}
@@ -132,8 +137,8 @@ analytics
 
 ```{toctree}
 :hidden:
-:caption: Tools
+:caption: Reference
 
+reference/manifest
 cli
-authoring
 ```

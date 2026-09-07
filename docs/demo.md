@@ -1,81 +1,44 @@
 # Trying the examples
 
-The quickest look is the
-[JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force),
-which runs the Hello JupyterLab workshop entirely in the browser and
-starts it afresh on every visit (the link carries JupyterLab's `reset`
-and the extension's `restart=force`; see
-[launch links](registry.md#launch-links)), or
-[Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab),
-which starts a full JupyterLab in the workshop browser with all three
-examples ready to open. Both use the released package.
+Two hosted demos show the example workshops without installing
+anything. Both use the released package.
 
-The rest of this page walks through the proof of concept by hand from a
-checkout. It needs [uv](https://docs.astral.sh/uv/),
-[just](https://just.systems/), Node.js and git.
+- The [JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force)
+  runs the Hello JupyterLab workshop entirely in the browser, with a
+  Python kernel compiled to WebAssembly and a small shell. The link
+  carries JupyterLab's `reset` and the extension's `restart=force`, so
+  every visit starts afresh; see [launch links](registry.md#launch-links).
 
-## Set up
+- [Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab)
+  starts a full JupyterLab with a real terminal, opening in the workshop
+  browser with all three examples listed and ready to open: Git from the
+  command line, Hello JupyterLab, and Writing your first workshop. A
+  Binder session is temporary and takes a minute or two to start.
 
-From the repository root:
+The examples are:
 
-```
-just install
-just lab
-```
+- **Git from the command line** creates a repository in a terminal and
+  walks through add, commit, diff, branch, merge and a conflict, with
+  checks after each step. It needs `git`, which Binder has and
+  JupyterLite does not.
 
-`just install` creates the Python environment, installs the JavaScript
-workspace, builds the extension and links it into JupyterLab in development
-mode. `just lab` starts JupyterLab with the repository root as its root
-directory, which is where the example workshop lives.
+- **Hello JupyterLab** is a tour of what actions can do: notebooks,
+  kernels, files and the editor, the interface, variables and tracks,
+  automatic runs, and finishing.
 
-To rebuild while editing the TypeScript, run `just watch` in a second
-terminal and refresh the browser after each rebuild.
+- **Writing your first workshop** is a workshop about writing workshops
+  with the `jupyter workshop` command and author mode, and was itself
+  written that way.
 
-## Walk through
-
-1. In JupyterLab, click the book icon in the right sidebar to show the
-   Workshop panel (the `panelSide` setting moves it to the left, and
-   JupyterLab remembers a tab you drag to the other side). The `examples/git-basics` workshop loads automatically
-   (the path is the `defaultWorkshop` setting of the extension; change it
-   under Settings, use the folder icon in the panel header to pick a
-   different workshop directory, or right-click a directory in the file
-   browser and choose "Open as Workshop").
-
-2. On page one, click each command block in turn. The first click starts a
-   terminal named `git` in a split beneath the main area and runs the
-   command there. Every block shows exactly the text that is sent to the
-   terminal.
-
-3. On page two, the first action writes `README.md` into the `demo`
-   directory and opens it in the editor above the terminal. The final
-   action highlights the terminal with a short callout.
-
-4. Page three appends a line to the open file through the editor and saves
-   it, then opens a second terminal named `log` beside the first.
-
-5. Pages four and five branch, merge, create a conflict, open the file at
-   the conflict marker and resolve it by rewriting the file. The last action
-   shows a success notification.
-
-6. Use the arrows or the page dropdown to move between pages. Reload the
-   browser tab: the panel reopens on the same page.
-
-## The hello-jupyterlab workshop
-
-Use the folder icon in the panel header and enter `examples/hello-jupyterlab`
-to open the second example. It exercises notebooks, kernels, the interface,
-files, variables, tracks and automatic runs, and its files land in
-`examples/hello-jupyterlab/scratch`, which git ignores.
+To run the examples on your own machine, [Getting started](getting-started.md)
+installs the extension and opens one from the workshop browser, or
+CONTRIBUTING.md in the repository describes running them from a
+checkout.
 
 ## Reset
 
-The workshop creates `examples/git-basics/demo`, and the extension keeps
-its progress, action log and environment files in
-`examples/git-basics/_workshop`. Both are ignored by git. The restart
-button in the panel header, or "Workshop: Restart…", puts the files back
-and forgets the progress; `just clean-examples` removes what every
-example left behind, or by hand:
-
-```
-rm -rf examples/git-basics/demo examples/git-basics/_workshop
-```
+The workshops keep their progress in a `_workshop` directory and write
+their files beside it. The Restart button in the panel header, or
+"Workshop: Restart…", puts the files back as they were when the
+workshop was first opened and forgets the progress. In JupyterLite the
+demo link above does that on every visit.

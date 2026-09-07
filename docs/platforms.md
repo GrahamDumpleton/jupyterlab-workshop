@@ -18,7 +18,8 @@ command has a version for each listed platform.
 The built-in variables `platform` (`linux`, `macos`, `windows` or
 `lite`), `shell` (`bash`, `zsh`, `sh`, `fish`, `powershell`, `cmd` or
 `cockle` in JupyterLite), `path_sep`, `home` and `user` describe the
-machine, and `when` conditions can test them:
+machine, `workshop_dir` is the workshop directory relative to the
+JupyterLab root, and `when` conditions can test them:
 
 ````markdown
 ```{when} platform == "windows"

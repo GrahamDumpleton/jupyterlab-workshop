@@ -51,10 +51,13 @@ JupyterLite site.
 
 ## Learn more
 
-- [Documentation](https://jupyterlab-workshop.readthedocs.io/): the
-  actions a page can use, checks, forms and checkpoints, platforms,
-  JupyterLite, the manifest reference, trust, the command line and
-  authoring in JupyterLab.
+- [Getting started](https://jupyterlab-workshop.readthedocs.io/en/latest/getting-started.html):
+  install the extension, run an example workshop and scaffold your own.
+
+- [Documentation](https://jupyterlab-workshop.readthedocs.io/): how
+  workshops work, the actions a page can use, checks, forms and
+  checkpoints, platforms, JupyterLite, the manifest reference, trust,
+  the command line and authoring in JupyterLab.
 
 - [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force):
   the Hello JupyterLab workshop running in JupyterLite, started afresh
