@@ -196,6 +196,73 @@ test.describe('workshop panel', () => {
     await page.contents.deleteDirectory(slow);
   });
 
+  test('substitutes a changed variable into a timed check', async ({
+    page,
+    tmpPath
+  }) => {
+    // A form on the page changes a variable the check names, so the
+    // timer must check the new file, not the one it started with.
+    const timed = `${tmpPath}/timed`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: timed',
+        'title: Timed',
+        'variables:',
+        '  - { name: note, type: text, default: first }',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${timed}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Timed',
+        '---',
+        '',
+        '```{form}',
+        ':id: which',
+        '- { name: note, type: text, label: Note, required: true }',
+        '```',
+        '',
+        '```{verify}',
+        ':id: present',
+        ':label: The note {{ note }}.txt exists',
+        ':substrate: contents',
+        ':trigger: interval 1s',
+        'exists {{ note }}.txt',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${timed}/pages/01.md`
+    );
+    await page.contents.uploadContent('second', 'text', `${timed}/second.txt`);
+
+    await openWorkshop(page, timed);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const form = panel.locator('.jp-WorkshopPanel-form');
+    const check = panel.locator('.jp-WorkshopPanel-verify');
+
+    // The timer checks for first.txt, which is not there.
+    await expect(check).toContainText('first.txt');
+    await expect(check).toHaveClass(/jp-mod-verify-fail/, { timeout: 15000 });
+
+    // Renaming the note through the form points the timer at second.txt.
+    await form.getByLabel('Note').fill('second');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(form).toHaveClass(/jp-mod-status-ok/);
+    await expect(check).toContainText('second.txt');
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 15000 });
+
+    await page.contents.deleteDirectory(timed);
+  });
+
   test('walks through the start of git-basics', async ({ page, tmpPath }) => {
     const workshopPath = `${tmpPath}/${WORKSHOP}`;
 

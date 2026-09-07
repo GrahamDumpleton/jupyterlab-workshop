@@ -58,7 +58,10 @@ export class TriggerBus {
     }
 
     // A new page: drop the old timers, then fire page-enter and start the
-    // intervals of the verifies on it.
+    // intervals of the verifies on it. A timer remembers only the id of
+    // its verify and looks the directive up again each time it fires, so
+    // a variable changed since, by a form on the page, is substituted
+    // into the check afresh rather than the timer running a stale copy.
     this._pageKey = key;
     this._clearTimers();
 
@@ -71,8 +74,10 @@ export class TriggerBus {
         if (trigger.kind === 'page-enter') {
           this._run(node);
         } else if (trigger.kind === 'interval') {
+          const id = node.id;
+
           this._timers.push(
-            window.setInterval(() => this._run(node), trigger.ms)
+            window.setInterval(() => this._runCurrent(id), trigger.ms)
           );
         }
       }
@@ -201,6 +206,14 @@ export class TriggerBus {
         node,
         triggers: parseTriggers(node.options.trigger).triggers
       }));
+  }
+
+  private _runCurrent(id: string): void {
+    const current = this._verifies().find(({ node }) => node.id === id);
+
+    if (current) {
+      this._run(current.node);
+    }
   }
 
   private _run(node: IDirectiveNode): void {
