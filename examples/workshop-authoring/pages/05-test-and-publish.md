@@ -20,7 +20,7 @@ JupyterLab, so it is not run from inside this one.
 ```
 
 Publishing builds an archive of the workshop, records its SHA-256 and
-writes a registry entry that a workshop browser can list.
+writes a collection entry that a workshop browser can list.
 
 ```{execute}
 :id: publish
@@ -34,7 +34,7 @@ jupyter workshop publish {{ workshop_dir }} --out {{ workshop_dir }}/dist
 :substrate: contents
 :trigger: after:publish
 exists {{ workshop_dir }}/dist/my-workshop-0.1.0.tar.gz
-exists {{ workshop_dir }}/dist/my-workshop-0.1.0.registry.json
+exists {{ workshop_dir }}/dist/my-workshop-0.1.0.collection.json
 ```
 
 ## Editing inside JupyterLab
