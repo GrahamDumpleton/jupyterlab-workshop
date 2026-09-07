@@ -270,13 +270,19 @@ underlying commands yourself; run `just --list` to see everything.
      `uv sync --reinstall-package jupyterlab-workshop` is needed before
      the Python side reports the new version.
 
-  Two self-test flakes are known in CI and are not regressions: the
-  browser job's hello-jupyterlab hidden-kernel execute-capture step, and
+  Three self-test flakes are known in CI and are not regressions: the
+  browser job's hello-jupyterlab hidden-kernel execute-capture step;
   the lite job's terminal `execute` with `wait: prompt` timing out at
-  120s on a trivial command. Rerun the failed jobs with
-  `gh run rerun <run-id> --failed` and wait for the rerun to pass before
-  going on; a rerun that fails again is a real problem, so stop and
-  report it.
+  120s on a trivial command; and the windows job failing only in
+  temporary directory cleanup, with `PermissionError: [WinError 32]`
+  on the `workshop-test-*` root because the server still holds it,
+  after the self-test itself has reported its passes. Rerun the failed
+  jobs with `gh run rerun <run-id> --failed` and wait for the rerun to
+  pass before going on; a rerun that fails again is a real problem, so
+  stop and report it. Read the result with
+  `gh run view <run-id> --json conclusion,jobs` rather than trusting
+  the exit status of `gh run watch`, which has reported success for a
+  failed run.
 
 - When merging a feature branch back to main and pushing to the remote,
   do not treat the work as landed until the CI workflow on GitHub has run
