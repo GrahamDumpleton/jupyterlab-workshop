@@ -28,9 +28,9 @@ A workshop is opened from one of these sources:
 
 - A direct `.zip` or `.tar.gz` URL, handled the same way.
 
-- A registry entry chosen in the workshop browser, or a launch link in
+- A collection entry chosen in the workshop browser, or a launch link in
   the JupyterLab URL, both of which resolve to one of the above; see
-  [Finding and installing workshops](registry.md).
+  [Finding and installing workshops](collections.md).
 
 Downloaded workshops carry a `_workshop/source.json` record with the
 source, the archive URL and its hash, so reopening the directory later
@@ -78,7 +78,7 @@ warns about declared capabilities that no page uses.
 Opening a workshop shows a dialog with the source, the content hash (the
 archive's SHA-256 for downloads, a hash of the manifest and pages for local
 directories and for downloads made by [JupyterLite](lite.md), which
-fetches files one by one and so cannot check a registry's archive hash),
+fetches files one by one and so cannot check a collection's archive hash),
 the capabilities it declares and how many actions use each,
 the number of automatic actions, and any lint findings, including the
 danger heuristics: piping downloads into a shell, `sudo`, recursive

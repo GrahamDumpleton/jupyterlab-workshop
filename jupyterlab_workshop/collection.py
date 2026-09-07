@@ -1,11 +1,15 @@
-"""Registry indexes and the list of installed workshops.
+"""Collection indexes and the list of installed workshops.
 
-A registry index is a JSON file listing workshops and where each version
-can be fetched from. The frontend reads indexes through the server so that
-they can live on any host without CORS headers, and so that an index can
-also be a file under the server root for local or classroom use. The
-``jupyter workshop registry`` command builds indexes from the entry files
-that ``jupyter workshop publish`` writes.
+A collection is a published list of workshops. Its index is a JSON file,
+``collection.json`` by convention, listing the workshops in the order they
+are shown and where each version can be fetched from, with a title,
+description, publisher and icon for the collection itself. The frontend
+reads indexes through the server so that they can live on any host
+without CORS headers, and so that an index can also be a file under the
+server root for local or classroom use. The ``jupyter workshop
+collection`` command builds indexes from the entry files that ``jupyter
+workshop publish`` writes, and ``jupyter workshop index`` from the
+workshops in a repository.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import json
 import re
 import subprocess
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -23,7 +28,13 @@ import yaml
 from .fetch import Downloader, FetchError, _relative, _resolve_inside, download
 from .publish import PublishError, flatten_capabilities, read_manifest
 
-REGISTRY_VERSION = 1
+COLLECTION_VERSION = 1
+
+#: The file name a collection index is published under by convention.
+COLLECTION_FILE = "collection.json"
+
+#: Descriptive fields of a collection, in the order they are written.
+METADATA_KEYS = ("title", "description", "publisher", "homepage", "icon", "tags")
 
 MANIFEST_FILE = "workshop.yaml"
 
@@ -38,14 +49,60 @@ INDEX_EXCLUDES = {"node_modules", STATE_DIR, "site", "dist", "build"}
 SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^:/]+):(.+)$")
 
 
-class RegistryError(Exception):
-    """A registry index could not be read or built."""
+class CollectionError(Exception):
+    """A collection index could not be read or built."""
 
 
-def load_registry(
+@dataclass(frozen=True)
+class CollectionMetadata:
+    """The descriptive fields of a collection an author can set.
+
+    An empty value leaves what the existing index says; ``tags`` replaces
+    the list when given.
+    """
+
+    title: str = ""
+    description: str = ""
+    publisher: str = ""
+    publisher_url: str = ""
+    homepage: str = ""
+    icon: str = ""
+    tags: tuple[str, ...] | None = None
+
+    def apply(self, index: dict[str, Any], existing: dict[str, Any] | None) -> None:
+        """Write the metadata into ``index``, keeping ``existing`` values."""
+
+        previous = existing or {}
+
+        for key in ("title", "description", "homepage", "icon"):
+            value = getattr(self, key) or previous.get(key)
+
+            if value:
+                index[key] = value
+
+        publisher: Any = previous.get("publisher")
+
+        if self.publisher:
+            publisher = {"name": self.publisher}
+
+            if self.publisher_url:
+                publisher["url"] = self.publisher_url
+        elif self.publisher_url and isinstance(publisher, dict):
+            publisher = {**publisher, "url": self.publisher_url}
+
+        if publisher:
+            index["publisher"] = publisher
+
+        tags = list(self.tags) if self.tags is not None else previous.get("tags")
+
+        if tags:
+            index["tags"] = tags
+
+
+def load_collection(
     location: str, root_dir: Path, downloader: Downloader | None = None
 ) -> dict[str, Any]:
-    """Read a registry index from a URL or a path under the server root.
+    """Read a collection index from a URL or a path under the server root.
 
     The result is checked just enough to be an index of the supported
     version; the frontend validates the entries in full.
@@ -57,43 +114,45 @@ def load_registry(
         try:
             data = (downloader or download)(location)
         except FetchError as error:
-            raise RegistryError(str(error)) from error
+            raise CollectionError(str(error)) from error
 
         if len(data) > MAX_INDEX_BYTES:
-            raise RegistryError(f"The registry at {location} is larger than the limit")
+            raise CollectionError(
+                f"The collection at {location} is larger than the limit"
+            )
 
         text = data.decode("utf-8", errors="replace")
     elif scheme:
-        raise RegistryError(f"Unsupported registry location {location}")
+        raise CollectionError(f"Unsupported collection location {location}")
     else:
         try:
             path = _resolve_inside(root_dir, location)
         except FetchError as error:
-            raise RegistryError(str(error)) from error
+            raise CollectionError(str(error)) from error
 
         if not path.is_file():
-            raise RegistryError(f"There is no registry file at {location}")
+            raise CollectionError(f"There is no collection file at {location}")
 
         text = path.read_text(encoding="utf-8")
 
-    return parse_registry(text, location)
+    return parse_collection(text, location)
 
 
-def parse_registry(text: str, location: str = "registry") -> dict[str, Any]:
+def parse_collection(text: str, location: str = "collection") -> dict[str, Any]:
     """Parse the JSON text of an index and check its version and shape."""
 
     try:
         data = json.loads(text)
     except ValueError as error:
-        raise RegistryError(f"{location} is not valid JSON: {error}") from error
+        raise CollectionError(f"{location} is not valid JSON: {error}") from error
 
     if not isinstance(data, dict):
-        raise RegistryError(f"{location} must contain a JSON object")
+        raise CollectionError(f"{location} must contain a JSON object")
 
-    if data.get("version") != REGISTRY_VERSION:
-        raise RegistryError(
-            f"{location} has registry version {data.get('version')!r}; "
-            f"expected {REGISTRY_VERSION}"
+    if data.get("version") != COLLECTION_VERSION:
+        raise CollectionError(
+            f"{location} has collection version {data.get('version')!r}; "
+            f"expected {COLLECTION_VERSION}"
         )
 
     workshops = data.get("workshops")
@@ -101,53 +160,65 @@ def parse_registry(text: str, location: str = "registry") -> dict[str, Any]:
     if not isinstance(workshops, list) or not all(
         isinstance(item, dict) for item in workshops
     ):
-        raise RegistryError(f"{location} needs a list of workshops")
+        raise CollectionError(f"{location} needs a list of workshops")
 
     return data
 
 
-def build_registry(
+def collection_metadata(index: dict[str, Any]) -> dict[str, Any]:
+    """The descriptive fields of an index, as a catalog restates them."""
+
+    return {key: index[key] for key in METADATA_KEYS if index.get(key)}
+
+
+def build_collection(
     existing: dict[str, Any] | None,
     entries: Iterable[dict[str, Any]],
-    title: str | None = None,
+    metadata: CollectionMetadata | None = None,
 ) -> dict[str, Any]:
     """Merge entry records into an index, replacing entries by name.
 
-    Versions of an existing entry are kept and combined with the new ones,
-    newest first, so publishing a new version adds to the list rather
-    than replacing it.
+    The order of the index is kept: an entry already listed is updated in
+    place and a new one is appended, so an author can order the file once
+    and the tools respect it. Versions of an existing entry are kept and
+    combined with the new ones, newest first, so publishing a new version
+    adds to the list rather than replacing it.
     """
 
-    workshops: dict[str, dict[str, Any]] = {}
-
-    for item in (existing or {}).get("workshops", []):
-        if isinstance(item, dict) and isinstance(item.get("name"), str):
-            workshops[item["name"]] = item
+    workshops: list[dict[str, Any]] = [
+        item
+        for item in (existing or {}).get("workshops", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    positions = {item["name"]: index for index, item in enumerate(workshops)}
 
     for entry in entries:
         name = entry.get("name")
 
         if not isinstance(name, str) or not name:
-            raise RegistryError("Each registry entry needs a name")
+            raise CollectionError("Each collection entry needs a name")
 
         if not isinstance(entry.get("versions"), list) or not entry["versions"]:
-            raise RegistryError(f"Registry entry {name} needs at least one version")
+            raise CollectionError(f"Collection entry {name} needs at least one version")
 
-        previous = workshops.get(name, {})
+        position = positions.get(name)
+        previous = workshops[position] if position is not None else {}
         merged = {**previous, **entry}
 
         merged["versions"] = _merge_versions(
             entry["versions"], previous.get("versions", [])
         )
-        workshops[name] = merged
 
-    index: dict[str, Any] = {"version": REGISTRY_VERSION}
-    chosen_title = title or (existing or {}).get("title")
+        if position is None:
+            positions[name] = len(workshops)
+            workshops.append(merged)
+        else:
+            workshops[position] = merged
 
-    if chosen_title:
-        index["title"] = chosen_title
+    index: dict[str, Any] = {"version": COLLECTION_VERSION}
 
-    index["workshops"] = [workshops[name] for name in sorted(workshops)]
+    (metadata or CollectionMetadata()).apply(index, existing)
+    index["workshops"] = workshops
 
     return index
 
@@ -181,7 +252,7 @@ def find_workshops(root: Path) -> list[Path]:
 
 
 def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, Any]:
-    """Build the registry entry for a workshop fetched from a repository.
+    """Build the collection entry for a workshop fetched from a repository.
 
     The metadata comes from the manifest and the single version points at
     ``subdir`` of ``repo`` at ``ref``.
@@ -190,12 +261,12 @@ def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, 
     try:
         manifest = read_manifest(directory)
     except PublishError as error:
-        raise RegistryError(str(error)) from error
+        raise CollectionError(str(error)) from error
 
     name = str(manifest.get("name") or "")
 
     if not name:
-        raise RegistryError(f"The manifest in {directory} has no name")
+        raise CollectionError(f"The manifest in {directory} has no name")
 
     source: dict[str, str] = {"git": repo, "ref": ref}
 
@@ -223,14 +294,15 @@ def index_repository(
     repo: str,
     ref: str,
     existing: dict[str, Any] | None = None,
-    title: str | None = None,
+    metadata: CollectionMetadata | None = None,
 ) -> dict[str, Any]:
     """Build or update an index of the workshops under ``directories``.
 
     ``root`` is the repository checkout; each workshop becomes an entry
     whose source is its directory relative to the root, so learners fetch
     it straight from the forge. Entries for names already in ``existing``
-    are replaced and their other versions kept.
+    are updated in place, keeping their position and other versions, and
+    new ones are appended in the order found.
     """
 
     root = root.resolve()
@@ -240,22 +312,22 @@ def index_repository(
         resolved = directory.resolve()
 
         if not resolved.is_dir():
-            raise RegistryError(f"{directory} is not a directory")
+            raise CollectionError(f"{directory} is not a directory")
 
         if not resolved.is_relative_to(root):
-            raise RegistryError(f"{directory} is outside the repository root {root}")
+            raise CollectionError(f"{directory} is outside the repository root {root}")
 
         found.extend(find_workshops(resolved))
 
     if not found:
-        raise RegistryError("No workshop.yaml found in the directories given")
+        raise CollectionError("No workshop.yaml found in the directories given")
 
     entries = [
         index_entry(directory, directory.relative_to(root).as_posix(), repo, ref)
         for directory in found
     ]
 
-    return build_registry(existing, entries, title=title)
+    return build_collection(existing, entries, metadata)
 
 
 def checkout_root(path: Path) -> Path | None:
@@ -316,14 +388,16 @@ def https_remote(remote: str) -> str:
 def list_installed(root_dir: Path, directory: str) -> list[dict[str, Any]]:
     """Describe every workshop directory directly under ``directory``.
 
-    Each record carries the manifest summary, the download source when the
-    workshop was fetched, and the learner's progress from the state file.
+    Each record carries the manifest summary, the download source and the
+    collection it was installed from when the workshop was fetched, and
+    the learner's progress from the state file. Records are in title
+    order; the frontend orders them by collection.
     """
 
     try:
         parent = _resolve_inside(root_dir, directory)
     except FetchError as error:
-        raise RegistryError(str(error)) from error
+        raise CollectionError(str(error)) from error
 
     if not parent.is_dir():
         return []
@@ -397,6 +471,7 @@ def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:
         if isinstance(source.get("source"), dict)
         else None,
         "sha256": str(source.get("sha256") or ""),
+        "collection": str(source.get("collection") or "") or None,
         "pages": page_count,
         "done": done,
         "currentPage": str(state.get("currentPage") or ""),

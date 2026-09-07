@@ -21,22 +21,32 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from .catalog import (
+    CatalogError,
+    CatalogMetadata,
+    build_catalog,
+    load_catalog,
+    parse_catalog,
+    refresh_entries,
+)
 from .cli import (
+    CATALOG_SCHEMA_FILE,
+    COLLECTION_SCHEMA_FILE,
     NODE_BUNDLE,
-    REGISTRY_SCHEMA_FILE,
     SCHEMA_FILE,
     CliError,
     run_node,
 )
-from .publish import PublishError, publish_workshop
-from .registry import (
-    RegistryError,
+from .collection import (
+    CollectionError,
+    CollectionMetadata,
     checkout_root,
     guess_repository,
     index_repository,
-    load_registry,
-    parse_registry,
+    load_collection,
+    parse_collection,
 )
+from .publish import PublishError, publish_workshop
 from .scaffold import slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -238,9 +248,15 @@ def create_server(
 
     @server.tool()
     def get_schema(kind: str = "workshop") -> Any:
-        """The JSON schema of workshop.yaml, or of a registry index."""
+        """The JSON schema of workshop.yaml, a collection index or a catalog.
 
-        path = REGISTRY_SCHEMA_FILE if kind == "registry" else SCHEMA_FILE
+        The kind is workshop, collection or catalog.
+        """
+
+        path = {
+            "collection": COLLECTION_SCHEMA_FILE,
+            "catalog": CATALOG_SCHEMA_FILE,
+        }.get(kind, SCHEMA_FILE)
 
         if not path.is_file():
             return {"error": f"{path.name} is not part of this installation"}
@@ -248,12 +264,21 @@ def create_server(
         return json.loads(path.read_text(encoding="utf-8"))
 
     @server.tool()
-    def list_registry(location: str) -> Any:
-        """Read a registry index from a URL or a local file."""
+    def list_collection(location: str) -> Any:
+        """Read a collection index from a URL or a local file."""
 
         try:
-            return load_registry(location, Path.cwd())
-        except RegistryError as error:
+            return load_collection(location, Path.cwd())
+        except CollectionError as error:
+            return {"error": str(error)}
+
+    @server.tool()
+    def list_catalog(location: str) -> Any:
+        """Read a catalog from a URL or a local file, with its locations resolved."""
+
+        try:
+            return load_catalog(location, Path.cwd())
+        except CatalogError as error:
             return {"error": str(error)}
 
     @server.tool()
@@ -295,7 +320,7 @@ def create_server(
 
     @server.tool()
     def publish(directory: str, out: str = "dist", url: str = "") -> Any:
-        """Build the archive, its sha256 and a registry entry for a workshop."""
+        """Build the archive, its sha256 and a collection entry for a workshop."""
 
         try:
             result = publish_workshop(Path(directory), Path(out), url)
@@ -312,15 +337,24 @@ def create_server(
         repo: str = "",
         ref: str = "",
         title: str = "",
+        description: str = "",
+        publisher: str = "",
+        publisher_url: str = "",
+        homepage: str = "",
+        icon: str = "",
+        tags: list[str] | None = None,
     ) -> Any:
-        """Build or update a registry index of the workshops in a repository.
+        """Build or update a collection index of the workshops in a repository.
 
         Every workshop found under the directories (the current directory
         by default) becomes an entry fetched from its path within the
         checkout at the repository URL and ref, which default to the git
         origin and branch of the checkout holding the first directory. The
-        index is written to registry.json under the checkout unless out
-        names another file.
+        index is written to collection.json under the checkout unless out
+        names another file; entries already listed keep their position.
+        The title, description, publisher, homepage, icon and tags describe
+        the collection itself and are kept from an existing index when
+        not given.
         """
 
         searched = [Path(item) for item in directories or ["."]]
@@ -334,24 +368,28 @@ def create_server(
         if not chosen_repo:
             return {"error": f"{root} has no git origin; give repo"}
 
-        index_path = Path(out) if out else root_path / "registry.json"
+        index_path = Path(out) if out else root_path / "collection.json"
         existing = None
+        metadata = CollectionMetadata(
+            title=title,
+            description=description,
+            publisher=publisher,
+            publisher_url=publisher_url,
+            homepage=homepage,
+            icon=icon,
+            tags=tuple(tags) if tags else None,
+        )
 
         try:
             if index_path.is_file():
-                existing = parse_registry(
+                existing = parse_collection(
                     index_path.read_text(encoding="utf-8"), str(index_path)
                 )
 
             data = index_repository(
-                root_path,
-                searched,
-                chosen_repo,
-                chosen_ref,
-                existing,
-                title=title or None,
+                root_path, searched, chosen_repo, chosen_ref, existing, metadata
             )
-        except RegistryError as error:
+        except CollectionError as error:
             return {"error": str(error)}
 
         index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -363,6 +401,57 @@ def create_server(
             "ref": chosen_ref,
             "index": data,
         }
+
+    @server.tool()
+    def catalog(
+        path: str,
+        collections: list[str] | None = None,
+        relative: bool = False,
+        title: str = "",
+        description: str = "",
+        publisher: str = "",
+        publisher_url: str = "",
+        homepage: str = "",
+        icon: str = "",
+    ) -> Any:
+        """Build or refresh a catalog.json from collection indexes.
+
+        Each collection, given by URL or file path, is read and its entry
+        written or refreshed from the index's own title, description,
+        publisher, icon and tags, keeping an existing entry's position.
+        With relative set, a file path is recorded relative to the catalog
+        file, for a repository holding a catalog and its collections. The
+        title and the other fields describe the catalog itself.
+        """
+
+        catalog_path = Path(path)
+        existing = None
+        metadata = CatalogMetadata(
+            title=title,
+            description=description,
+            publisher=publisher,
+            publisher_url=publisher_url,
+            homepage=homepage,
+            icon=icon,
+        )
+
+        try:
+            if catalog_path.is_file():
+                existing = parse_catalog(
+                    catalog_path.read_text(encoding="utf-8"), str(catalog_path)
+                )
+
+            entries = refresh_entries(
+                catalog_path, collections or [], relative=relative
+            )
+            data = build_catalog(existing, entries, metadata)
+        except CatalogError as error:
+            return {"error": str(error)}
+
+        catalog_path.parent.mkdir(parents=True, exist_ok=True)
+        catalog_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+        return {"path": str(catalog_path), "catalog": data}
 
     @server.tool()
     def draft(recording: str, directory: str, name: str = "", title: str = "") -> Any:
@@ -478,14 +567,26 @@ def register_resources(server: MCPServer) -> None:
         )
 
     @server.resource(
-        "workshop://schema/registry",
-        name="Registry index schema",
+        "workshop://schema/collection",
+        name="Collection index schema",
         mime_type="application/json",
     )
-    def registry_schema() -> str:
+    def collection_schema() -> str:
         return (
-            REGISTRY_SCHEMA_FILE.read_text(encoding="utf-8")
-            if REGISTRY_SCHEMA_FILE.is_file()
+            COLLECTION_SCHEMA_FILE.read_text(encoding="utf-8")
+            if COLLECTION_SCHEMA_FILE.is_file()
+            else "{}"
+        )
+
+    @server.resource(
+        "workshop://schema/catalog",
+        name="Catalog schema",
+        mime_type="application/json",
+    )
+    def catalog_schema() -> str:
+        return (
+            CATALOG_SCHEMA_FILE.read_text(encoding="utf-8")
+            if CATALOG_SCHEMA_FILE.is_file()
             else "{}"
         )
 

@@ -10,18 +10,18 @@ link.
 The extension runs in JupyterLite as it is. What the server extension
 would do, it does in the browser instead:
 
-| On a server                                  | In JupyterLite                                                                                 |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Platform detection                           | Fixed: `platform` is `lite`, `shell` is `cockle`, files live under `/drive`.                   |
-| Download from a repository (archive)         | File by file from the raw files of the repository, through jsDelivr for GitHub.                |
-| Download from an archive URL                 | Not available; use a repository URL.                                                           |
-| Registry index                               | Fetched by the browser, so the host must send CORS headers, or ship the index inside the site. |
-| `execute-capture`, `verify` with `shell`     | The terminal extension's headless shell.                                                       |
-| `verify` with `kernel`, `kernel-execute`     | The Pyodide kernel: Python without `subprocess`.                                               |
-| `verify` with `script`, `environment-create` | Not available; the actions report why.                                                         |
-| Checkpoints                                  | Copies of the files under `_workshop/snapshots/`.                                              |
-| Preflight                                    | Python is always found; other tools must be commands of the shell. Versions are not checked.   |
-| Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to from the browser and needs CORS.     |
+| On a server                                  | In JupyterLite                                                                                |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Platform detection                           | Fixed: `platform` is `lite`, `shell` is `cockle`, files live under `/drive`.                  |
+| Download from a repository (archive)         | File by file from the raw files of the repository, through jsDelivr for GitHub.               |
+| Download from an archive URL                 | Not available; use a repository URL.                                                          |
+| Collection index, catalog                    | Fetched by the browser, so the host must send CORS headers, or ship the file inside the site. |
+| `execute-capture`, `verify` with `shell`     | The terminal extension's headless shell.                                                      |
+| `verify` with `kernel`, `kernel-execute`     | The Pyodide kernel: Python without `subprocess`.                                              |
+| `verify` with `script`, `environment-create` | Not available; the actions report why.                                                        |
+| Checkpoints                                  | Copies of the files under `_workshop/snapshots/`.                                             |
+| Preflight                                    | Python is always found; other tools must be commands of the shell. Versions are not checked.  |
+| Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to from the browser and needs CORS.    |
 
 Files written by actions, notebooks and progress live in the browser's
 storage for the site, so they survive a reload but stay on that machine.

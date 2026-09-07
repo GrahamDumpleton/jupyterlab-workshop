@@ -1,4 +1,4 @@
-import { IRegistryIndex } from '@jupyterlab-workshop/core';
+import { ICollectionIndex } from '@jupyterlab-workshop/core';
 import {
   ILabShell,
   ILayoutRestorer,
@@ -101,6 +101,9 @@ import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
 import { closeWorkshopWidgets } from './cleanup';
 import { featuresPlugin } from './features';
+import { showCollectionsDialog } from './browser/dialog';
+import { installEntry } from './browser/install';
+import { SourceStore } from './browser/sources';
 import {
   BROWSER_ID,
   IBrowserSettings,
@@ -125,7 +128,7 @@ import {
   IWorkshopManager,
   errorMessage
 } from './tokens';
-import { readFlag, readSetting, readSettingList } from './settings';
+import { readFlag, readSetting } from './settings';
 import { trustPrompts } from './trust/dialogs';
 import { TrustStore, policyFromSettings } from './trust/store';
 import { TriggerBus } from './verify/triggers';
@@ -607,13 +610,20 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         const sha256 =
           typeof args.sha256 === 'string' ? args.sha256 : undefined;
         const archive = args.archive === true;
+        const name = typeof args.name === 'string' ? args.name : undefined;
+        const collection =
+          typeof args.collection === 'string' ? args.collection : undefined;
         const variables = isStringRecord(args.variables)
           ? args.variables
           : undefined;
         const launch = args.launch === true;
 
-        // With URLs disabled, only the sources the registries list may
-        // be fetched: the browser's Install and Update still work.
+        // The browser installs without opening: the workshop is listed
+        // under Installed, where Open starts it.
+        const open = args.open !== false;
+
+        // With URLs disabled, only the sources the subscribed collections
+        // list may be fetched: the browser's Install and Update still work.
         if (!features.enabled('open-url')) {
           if (!url || !(await sourceListed(url, ref, subdir))) {
             if (url) {
@@ -649,44 +659,42 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           subdir,
           sha256,
           archive,
-          directory
+          directory,
+          name,
+          collection
         });
 
-        if (path) {
+        if (path && open) {
           await manager.open(path, { variables, launch });
           shell.activateById(panel.id);
         }
       }
     });
 
-    // The browser lists registries and installed workshops in the main
-    // area. A launch link can add a registry for the session.
-    const sessionRegistries: string[] = [];
-    const readBrowserSettings = async (): Promise<IBrowserSettings> => {
-      const configured = await readSettingList(settingRegistry, 'registries');
-      const registries = [
-        ...configured,
-        ...sessionRegistries.filter(url => !configured.includes(url))
-      ];
+    // The browser lists the subscribed collections and the installed
+    // workshops in the main area. A launch link can add a collection or
+    // a catalog for the session.
+    const store = new SourceStore({ settingRegistry, features });
+    const readBrowserSettings = async (): Promise<IBrowserSettings> => ({
+      workshopsDirectory: await workshopsDirectory()
+    });
 
-      return { registries, workshopsDirectory: await workshopsDirectory() };
-    };
-
-    // Whether a source is one a configured registry lists.
+    // Whether a source is one a subscribed collection lists.
     const sourceListed = async (
       url: string,
       ref: string | undefined,
       subdir: string | undefined
     ): Promise<boolean> => {
-      const { registries } = await readBrowserSettings();
-
-      for (const registry of registries) {
-        let index: IRegistryIndex;
+      for (const subscribed of await store.list('collection')) {
+        let index: ICollectionIndex;
 
         try {
-          index = await manager.fetchRegistry(registry);
+          index = await manager.fetchCollection(subscribed.url);
         } catch (error) {
-          console.warn(`Unable to read the registry ${registry}`, error);
+          console.warn(
+            `Unable to read the collection ${subscribed.url}`,
+            error
+          );
 
           continue;
         }
@@ -737,6 +745,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             manager,
             commands: app.commands,
             features,
+            store,
             readSettings: readBrowserSettings
           });
         }
@@ -759,6 +768,22 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         args: { isLauncher: true }
       });
     }
+
+    app.commands.addCommand(CommandIDs.collections, {
+      label: 'Workshop: Collections…',
+      caption:
+        'See, subscribe to and unsubscribe from workshop collections and catalogs',
+      isEnabled: () =>
+        store.canChange('collection') || store.canChange('catalog'),
+      execute: async (args): Promise<void> => {
+        await showCollectionsDialog({
+          manager,
+          store,
+          tab: args.tab === 'catalog' ? 'catalog' : 'collection'
+        });
+        browser?.refresh();
+      }
+    });
 
     // A `restart` on a launch link starts the workshop over before it
     // opens: without asking when forced or when there is no progress to
@@ -795,7 +820,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     // A launch link such as `/lab?workshop=<url>&ref=<ref>&var.x=y`
     // fetches (or opens, for a path) the workshop and applies the values;
-    // `/lab?registry=<url>` opens the browser showing that registry.
+    // `/lab?collection=<url>` or `/lab?catalog=<url>` adds it for the
+    // session and opens the browser; `/lab?collection=<url>&workshop=<name>`
+    // installs that workshop of the collection and opens it.
     app.commands.addCommand(CommandIDs.launch, {
       label: 'Open Workshop from Launch Link',
       execute: (args): void => {
@@ -804,17 +831,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             ? args.search
             : window.location.search;
         const request = parseLaunchLink(search);
-        const registry = parseRegistryLink(search);
+        const sources = parseSourceLink(search);
 
-        if (
-          registry &&
-          features.enabled('registries') &&
-          !sessionRegistries.includes(registry)
-        ) {
-          sessionRegistries.push(registry);
-        }
-
-        if (!request && !registry) {
+        if (!request && !sources.collection && !sources.catalog) {
           return;
         }
 
@@ -833,8 +852,48 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             });
           }
 
+          if (sources.collection) {
+            await store.addForSession('collection', sources.collection);
+          }
+
+          if (sources.catalog) {
+            await store.addForSession('catalog', sources.catalog);
+          }
+
           if (!request) {
             await startBrowsing();
+
+            return;
+          }
+
+          // A bare name with a collection is looked up in that collection
+          // and installed from it, so the install records where it came
+          // from as the browser's Install button would.
+          if (request.collection !== undefined) {
+            const index = await manager.fetchCollection(request.collection);
+            const entry = index.workshops.find(
+              item => item.name === request.url
+            );
+
+            if (!entry) {
+              Notification.error(
+                `The collection ${request.collection} has no workshop named ${request.url}.`
+              );
+
+              return;
+            }
+
+            const installed = await manager.installed(
+              await workshopsDirectory()
+            );
+
+            await installEntry(
+              app.commands,
+              request.collection,
+              entry,
+              installed,
+              { variables: request.variables, launch: true }
+            );
 
             return;
           }
@@ -887,7 +946,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     if (router) {
       router.register({
         command: CommandIDs.launch,
-        pattern: /(\?|&)(workshop|registry)=/,
+        pattern: /(\?|&)(workshop|collection|catalog)=/,
         rank: 20
       });
     }
@@ -1200,6 +1259,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         CommandIDs.openPath,
         CommandIDs.openUrl,
         CommandIDs.browse,
+        CommandIDs.collections,
         CommandIDs.close,
         CommandIDs.nextPage,
         CommandIDs.previousPage,
@@ -1226,7 +1286,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     void app.restored.then(async () => {
       const search = window.location.search;
 
-      if (parseLaunchLink(search) || parseRegistryLink(search)) {
+      const sources = parseSourceLink(search);
+
+      if (parseLaunchLink(search) || sources.collection || sources.catalog) {
         return;
       }
 
@@ -1270,6 +1332,13 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 interface ILaunchRequest {
   /** A local directory to open, when the workshop parameter is not a URL. */
   path?: string;
+
+  /**
+   * The collection to install from, when the workshop parameter is a
+   * bare name and the link also names a collection; `url` then holds
+   * the name.
+   */
+  collection?: string;
   url: string;
   ref?: string;
   subdir?: string;
@@ -1291,24 +1360,36 @@ const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
   'ref',
   'subdir',
   'sha256',
-  'registry',
+  'collection',
+  'catalog',
   'restart'
 ]);
+
+/** The sources a launch link adds for the session. */
+export interface ISourceLink {
+  collection?: string;
+  catalog?: string;
+}
+
+/**
+ * The collection and catalog a launch link names, from its `collection`
+ * and `catalog` query parameters.
+ */
+export function parseSourceLink(search: string): ISourceLink {
+  const params = URLExt.queryStringToObject(search);
+  const collection = params.collection?.trim() ?? '';
+  const catalog = params.catalog?.trim() ?? '';
+
+  return {
+    collection: collection === '' ? undefined : collection,
+    catalog: catalog === '' ? undefined : catalog
+  };
+}
 
 /**
  * Parse the query string of a launch link, or return null when it has no
  * `workshop` parameter.
  */
-/**
- * The registry a launch link asks the browser to show, from a `registry`
- * query parameter, or null.
- */
-export function parseRegistryLink(search: string): string | null {
-  const registry = URLExt.queryStringToObject(search).registry?.trim() ?? '';
-
-  return registry === '' ? null : registry;
-}
-
 export function parseLaunchLink(search: string): ILaunchRequest | null {
   const params = URLExt.queryStringToObject(search);
   const workshop = params.workshop?.trim() ?? '';
@@ -1326,6 +1407,12 @@ export function parseLaunchLink(search: string): ILaunchRequest | null {
   }
 
   const isUrl = /^https?:\/\//i.test(workshop);
+  const collection = params.collection?.trim() ?? '';
+
+  // A bare name alongside a collection is one of its workshops rather
+  // than a directory.
+  const fromCollection =
+    !isUrl && collection !== '' && /^[a-z0-9][a-z0-9-]*$/.test(workshop);
 
   // A bare `restart` asks when there is progress; `restart=force` never
   // does. The key is looked for in the raw string, since a bare key has
@@ -1337,7 +1424,8 @@ export function parseLaunchLink(search: string): ILaunchRequest | null {
     : undefined;
 
   return {
-    path: isUrl ? undefined : workshop,
+    path: isUrl || fromCollection ? undefined : workshop,
+    collection: fromCollection ? collection : undefined,
     url: workshop,
     ref: params.ref || undefined,
     subdir: params.subdir || undefined,

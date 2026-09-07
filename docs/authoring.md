@@ -24,7 +24,7 @@ to the panel:
 | Run actions, Run checks | Run the current page's steps or its checks in order, as the self-test would.                                                                                              |
 | Lint                    | Opens the lint panel: every finding with its file and line, and a Fix button for the mechanical ones (declare or remove a capability, drop an unknown option).            |
 | Trust                   | Shows the dialog learners will see for this manifest.                                                                                                                     |
-| Publish                 | Builds the archive, its SHA-256 and a registry entry under `dist/` in the workshop.                                                                                       |
+| Publish                 | Builds the archive, its SHA-256 and a collection entry under `dist/` in the workshop.                                                                                     |
 | Record                  | Records the session into draft pages; see below.                                                                                                                          |
 
 ```{figure} _static/author-mode.png
@@ -101,10 +101,11 @@ A Claude Code configuration, for example, is:
 ```
 
 Tools that work on files: `lint`, `render`, `pages`, `test`, `init`,
-`publish`, `index`, `draft`, `get_schema` and `list_registry`. Tools that act on
-a running JupyterLab: `open_workshop`, `session_status`, `run_action`,
-`run_page` and `run_workshop`. Resources: the manifest and registry
-schemas, and the authoring skill.
+`publish`, `index`, `catalog`, `draft`, `get_schema`, `list_collection`
+and `list_catalog`. Tools that act on a running JupyterLab:
+`open_workshop`, `session_status`, `run_action`, `run_page` and
+`run_workshop`. Resources: the manifest, collection and catalog schemas,
+and the authoring skill.
 
 The live tools reach JupyterLab through the server extension: a request
 becomes a Jupyter Server event, the extension runs the command in the

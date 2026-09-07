@@ -4,8 +4,8 @@
 # them without asking, since the visitor is the one who chose the link.
 # A launch link naming a workshop still opens that workshop directly.
 # The disabled features keep visitors to the supplied workshops: no
-# other directories or URLs, no editing and no removing; Restart puts a
-# workshop back as it started.
+# other directories or URLs, no subscribing to collections or catalogs, no
+# editing and no removing; Restart puts a workshop back as it started.
 set -euo pipefail
 
 settings="${NB_PYTHON_PREFIX}/share/jupyter/lab/settings"
@@ -22,7 +22,8 @@ cat > "$settings/overrides.json" <<'JSON'
     "disabledFeatures": [
       "open-directory",
       "open-url",
-      "registries",
+      "collections",
+      "catalogs",
       "remove",
       "author"
     ]

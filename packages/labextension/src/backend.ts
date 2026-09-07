@@ -43,6 +43,8 @@ export class ServerBackend implements IWorkshopBackend {
             sha256: request.sha256 ?? ''
           },
       directory: request.directory,
+      name: request.name ?? '',
+      collection: request.collection ?? '',
       overwrite: request.overwrite ?? false
     };
 
@@ -52,13 +54,22 @@ export class ServerBackend implements IWorkshopBackend {
     });
   }
 
-  async fetchRegistry(url: string): Promise<unknown> {
+  async fetchCollection(url: string): Promise<unknown> {
     const response = await requestAPI<{ url: string; index: unknown }>(
-      `registry?url=${encodeURIComponent(url)}`,
+      `collection?url=${encodeURIComponent(url)}`,
       this._settings
     );
 
     return response.index;
+  }
+
+  async fetchCatalog(url: string): Promise<unknown> {
+    const response = await requestAPI<{ url: string; catalog: unknown }>(
+      `catalog?url=${encodeURIComponent(url)}`,
+      this._settings
+    );
+
+    return response.catalog;
   }
 
   async installed(directory: string): Promise<IInstalledWorkshop[]> {

@@ -1,10 +1,11 @@
 """Take the screenshots used in the documentation.
 
 A throwaway JupyterLab is started from a temporary root holding the
-Hello JupyterLab example as an installed workshop and the project's
-registry index as a local registry, and Playwright drives it through
-the states the pages show: the trust dialog, the panel with a workshop
-open, author mode, the Finish dialog and the workshop browser. The
+Hello JupyterLab example as an installed workshop, two fixture
+collections and a fixture catalog, and Playwright drives it through the
+states the pages show: the trust dialog, the panel with a workshop
+open, author mode, the Finish dialog, the workshop browser with its
+collection groups, and the Collections dialog. The
 images are written under ``docs/_static`` and are meant to be committed,
 so the docs build needs neither a browser nor a server; run this again
 after an interface change.
@@ -33,6 +34,131 @@ OUTPUT = ROOT / "docs" / "_static"
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 WORKSHOP = "workshops/hello-jupyterlab"
 VIEWPORT = {"width": 1440, "height": 900}
+
+#: Collections that stand in for published ones in the pictures.
+FIXTURE_COLLECTIONS: dict[str, dict[str, Any]] = {
+    "python-basics": {
+        "version": 1,
+        "title": "Python basics",
+        "description": (
+            "The language from the first print to a small program: values, "
+            "control flow, functions and modules."
+        ),
+        "publisher": {"name": "Example Academy", "url": "https://example.org"},
+        "icon": "icon.svg",
+        "tags": ["python", "beginner"],
+        "workshops": [
+            {
+                "name": "python-first-steps",
+                "title": "First steps in Python",
+                "description": "Values, names and the notebook.",
+                "tags": ["python", "beginner"],
+                "platforms": ["linux", "macos", "windows", "lite"],
+                "capabilities": ["kernel-exec"],
+                "duration": "45m",
+                "versions": [
+                    {
+                        "version": "1.0.0",
+                        "source": {
+                            "git": "https://github.com/example-org/python-basics",
+                            "ref": "main",
+                            "subdir": "first-steps",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "python-control-flow",
+                "title": "Loops and conditions",
+                "description": "Making decisions and repeating work.",
+                "tags": ["python", "beginner"],
+                "platforms": ["linux", "macos", "windows", "lite"],
+                "capabilities": ["kernel-exec"],
+                "duration": "40m",
+                "versions": [
+                    {
+                        "version": "1.0.0",
+                        "source": {
+                            "git": "https://github.com/example-org/python-basics",
+                            "ref": "main",
+                            "subdir": "control-flow",
+                        },
+                    }
+                ],
+            },
+        ],
+    },
+    "kubernetes-intro": {
+        "version": 1,
+        "title": "Kubernetes from the command line",
+        "description": (
+            "Pods, deployments and services with kubectl against a local cluster."
+        ),
+        "publisher": {"name": "Example Academy", "url": "https://example.org"},
+        "icon": "icon.svg",
+        "tags": ["kubernetes", "cli"],
+        "workshops": [
+            {
+                "name": "kubernetes-pods",
+                "title": "Running your first pod",
+                "description": "Create, inspect and delete a pod.",
+                "tags": ["kubernetes"],
+                "platforms": ["linux", "macos"],
+                "capabilities": ["terminal"],
+                "duration": "30m",
+                "versions": [
+                    {
+                        "version": "0.3.0",
+                        "source": {
+                            "git": "https://github.com/example-org/kubernetes-intro",
+                            "ref": "main",
+                            "subdir": "pods",
+                        },
+                    }
+                ],
+            }
+        ],
+    },
+}
+
+#: A catalog offering the fixture collections, one of them not subscribed to.
+FIXTURE_CATALOG: dict[str, Any] = {
+    "version": 1,
+    "title": "Example Academy",
+    "description": "Courses from Example Academy.",
+    "publisher": {"name": "Example Academy", "url": "https://example.org"},
+    "collections": [
+        {
+            "url": "python-basics/collection.json",
+            "title": "Python basics",
+            "description": FIXTURE_COLLECTIONS["python-basics"]["description"],
+            "publisher": {"name": "Example Academy"},
+            "icon": "python-basics/icon.svg",
+            "tags": ["python", "beginner"],
+        },
+        {
+            "url": "kubernetes-intro/collection.json",
+            "title": "Kubernetes from the command line",
+            "description": FIXTURE_COLLECTIONS["kubernetes-intro"]["description"],
+            "publisher": {"name": "Example Academy"},
+            "icon": "kubernetes-intro/icon.svg",
+            "tags": ["kubernetes", "cli"],
+        },
+    ],
+}
+
+
+def fixture_icon(title: str) -> str:
+    """A simple square SVG mark with the title's initial."""
+
+    hue = sum(ord(char) for char in title) % 360
+
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+        f'<rect width="64" height="64" rx="12" fill="hsl({hue} 55% 42%)"/>'
+        '<text x="32" y="42" text-anchor="middle" font-family="sans-serif" '
+        f'font-size="34" font-weight="700" fill="#fff">{title[0]}</text></svg>'
+    )
 
 
 def main() -> int:
@@ -67,7 +193,8 @@ def main() -> int:
 
 
 def prepare_root(work: Path) -> Path:
-    """Lay out the JupyterLab root: one installed workshop and a registry."""
+    """Lay out the JupyterLab root: one installed workshop, two collections
+    and a catalog offering a third."""
 
     root = work / "root"
     installed = root / WORKSHOP
@@ -77,13 +204,25 @@ def prepare_root(work: Path) -> Path:
         installed,
         ignore=shutil.ignore_patterns("_workshop", "scratch", "demo"),
     )
-    shutil.copy(ROOT / "registry" / "index.json", root / "registry.json")
+
+    # The examples collection as shipped, plus fixture collections with
+    # plausible titles so the grouped browser has something to show.
+    shutil.copytree(ROOT / "collections" / "examples", root / "examples-collection")
+
+    for name, collection in FIXTURE_COLLECTIONS.items():
+        target = root / name
+
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "collection.json").write_text(json.dumps(collection, indent=2))
+        (target / "icon.svg").write_text(fixture_icon(collection["title"]))
+
+    (root / "catalog.json").write_text(json.dumps(FIXTURE_CATALOG, indent=2))
 
     return root
 
 
 def write_overrides(work: Path) -> Path:
-    """Settings for a clean session: no default workshop, a local registry."""
+    """Settings for a clean session: no default workshop, local collections."""
 
     settings = work / "settings"
 
@@ -92,7 +231,11 @@ def write_overrides(work: Path) -> Path:
     overrides = {
         PANEL_PLUGIN: {
             "defaultWorkshop": "",
-            "registries": ["registry.json"],
+            "collections": [
+                "examples-collection/collection.json",
+                "python-basics/collection.json",
+            ],
+            "catalogs": ["catalog.json"],
             "workshopsDirectory": "workshops",
         },
         "@jupyterlab/apputils-extension:notification": {
@@ -128,6 +271,10 @@ def start_server(
         "--ServerApp.open_browser=False",
         "--LabApp.expose_app_in_browser=True",
         f"--LabApp.app_settings_dir={settings}",
+        # The developer's own user settings and workspaces would override
+        # the fixtures, so the session gets empty ones of its own.
+        f"--LabApp.user_settings_dir={settings.parent / 'user-settings'}",
+        f"--LabApp.workspaces_dir={settings.parent / 'workspaces'}",
     ]
 
     with log.open("wb") as handle:
@@ -205,15 +352,29 @@ def take_screenshots(page: Any, url: str) -> None:
     dialog.get_by_role("button", name="Keep reading", exact=True).click()
     time.sleep(1)
 
-    # The workshop browser, with one workshop installed and two available.
+    # The workshop browser, with one workshop installed and the subscribed
+    # collections' workshops grouped by collection.
     page.evaluate("window.jupyterapp.commands.execute('workshop:browse')")
 
     browser = page.locator(".jp-WorkshopBrowser")
 
     browser.wait_for(timeout=30000)
-    browser.locator(".jp-WorkshopBrowser-card").first.wait_for(timeout=60000)
+    browser.locator(".jp-WorkshopBrowser-group").nth(1).wait_for(timeout=60000)
     time.sleep(2)
     save(browser, "browser.png")
+
+    # The Collections dialog, listing what is subscribed to and what the
+    # catalog offers.
+    page.evaluate(
+        "() => { void window.jupyterapp.commands.execute('workshop:collections'); }"
+    )
+    dialog.locator(".jp-WorkshopSources").wait_for(timeout=30000)
+    offered = dialog.locator(".jp-WorkshopSources-catalogs .jp-WorkshopSources-row")
+
+    offered.first.wait_for(timeout=60000)
+    time.sleep(1)
+    save(dialog.locator(".jp-Dialog-content"), "collections-dialog.png")
+    dialog.get_by_role("button", name="Close", exact=True).click()
 
 
 def save(target: Any, name: str) -> None:

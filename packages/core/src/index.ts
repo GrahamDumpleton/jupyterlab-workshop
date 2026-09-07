@@ -1,7 +1,9 @@
 export * from './actions/catalog';
 export * from './actions/editor';
 export * from './authoring';
+export * from './catalog';
 export * from './checks';
+export * from './collection';
 export * from './diff';
 export * from './errors';
 export * from './format/checkpoints';
@@ -15,7 +17,6 @@ export * from './hash';
 export * from './lint';
 export * from './lite';
 export * from './markdown/parser';
-export * from './registry';
 export * from './schema';
 export * from './trust';
 export * from './variables/expressions';

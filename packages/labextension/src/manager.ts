@@ -4,12 +4,15 @@ import {
   IDirectiveNode,
   ILintMessage,
   IPage,
-  IRegistryIndex,
+  ICatalog,
+  ICollectionIndex,
   IWorkshopManifest,
   PRISTINE_CHECKPOINT,
   TrustLevel,
   Variables,
-  parseRegistryIndex,
+  parseCatalog,
+  parseCollectionIndex,
+  resolveCatalog,
   parseRequirement,
   actionCapability,
   decideAction,
@@ -617,8 +620,15 @@ export class WorkshopManager implements IWorkshopManager {
     await this._backend.removeInstalled(target);
   }
 
-  async fetchRegistry(url: string): Promise<IRegistryIndex> {
-    return parseRegistryIndex(await this._backend.fetchRegistry(url));
+  async fetchCollection(url: string): Promise<ICollectionIndex> {
+    return parseCollectionIndex(await this._backend.fetchCollection(url));
+  }
+
+  async fetchCatalog(url: string): Promise<ICatalog> {
+    return resolveCatalog(
+      parseCatalog(await this._backend.fetchCatalog(url)),
+      url
+    );
   }
 
   async close(): Promise<void> {

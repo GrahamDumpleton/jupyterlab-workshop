@@ -14,11 +14,11 @@ extension and JupyterLab.
 
 - `tests/python/` holds the pytest suite for the Python package: the
   server extension handlers, platform detection, fetching, checks,
-  registries, events, environments, the bridge, the MCP server (through
+  collections, catalogs, events, environments, the bridge, the MCP server (through
   an in-memory client) and the CLI. It uses `pytest-jupyter`
   to start a real Jupyter Server in a temporary directory and talks to
   the handlers over HTTP with the `jp_fetch` fixture. Anything that
-  needs a remote (archives, registries, event sinks) is served by a
+  needs a remote (archives, collections, event sinks) is served by a
   local `ThreadingHTTPServer` started inside the test.
 
 - `tests/ui-tests/` holds Galata (Playwright) tests that start a real
@@ -77,7 +77,8 @@ extension and JupyterLab.
 
 - Settings for a browser test go through Galata's `mockSettings` (see
   `browser.spec.ts`), and files it needs at a fixed path under the test
-  server's root, such as a registry index, are uploaded in `beforeEach`
+  server's root, such as a collection index, a catalog or a workshop
+  archive the server fetches from its own `files/`, are uploaded in `beforeEach`
   and removed in `afterEach` so runs do not interfere.
 
 - Opening a workshop shows the trust dialog, so a browser test must not

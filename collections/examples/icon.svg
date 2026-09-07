@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Example workshops">
+  <rect width="64" height="64" rx="12" fill="#f37726"/>
+  <path d="M32 16 8 27l24 11 24-11z" fill="#fff"/>
+  <path d="M16 31v10c0 4 7 8 16 8s16-4 16-8V31l-16 7z" fill="#fff" opacity="0.85"/>
+  <path d="M52 27v14" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+</svg>

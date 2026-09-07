@@ -92,7 +92,7 @@ it.
 
 The layout named by the `layout` field is applied the first time a
 workshop is opened in a JupyterLab workspace, and every time it is opened
-from a [launch link](registry.md), including from Binder or the
+from a [launch link](collections.md), including from Binder or the
 `jupyter workshop test` command. After that, JupyterLab restores whatever
 arrangement the learner left, so reloading the page or reopening the
 workshop from the browser keeps their sidebars and panes as they were and

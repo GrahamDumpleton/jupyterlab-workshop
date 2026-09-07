@@ -68,7 +68,7 @@ def read_manifest(directory: Path) -> dict[str, object]:
 
 
 def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult:
-    """Archive a workshop into ``out`` with its hash and a registry entry."""
+    """Archive a workshop into ``out`` with its hash and a collection entry."""
 
     manifest = read_manifest(directory)
     name = str(manifest.get("name") or "")
@@ -92,7 +92,7 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
 
     (out / f"{archive.name}.sha256").write_text(f"{digest}  {archive.name}\n")
 
-    registry_entry: dict[str, Any] = {
+    collection_entry: dict[str, Any] = {
         "name": name,
         "title": manifest.get("title", name),
         "description": manifest.get("description", ""),
@@ -109,12 +109,15 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
             }
         ],
     }
-    entry_path = out / f"{name}-{version}.registry.json"
+    entry_path = out / f"{name}-{version}.collection.json"
 
-    entry_path.write_text(json.dumps(registry_entry, indent=2) + "\n")
+    entry_path.write_text(json.dumps(collection_entry, indent=2) + "\n")
 
     return PublishResult(
-        archive=archive, sha256=digest, entry_path=entry_path, entry=registry_entry
+        archive=archive,
+        sha256=digest,
+        entry_path=entry_path,
+        entry=collection_entry,
     )
 
 
@@ -122,7 +125,7 @@ def flatten_capabilities(value: object) -> list[str]:
     """Flatten manifest capabilities to ``name`` and ``name:scope`` strings."""
 
     # The manifest writes scoped capabilities as single-key mappings; the
-    # registry lists them as name:scope strings.
+    # collection lists them as name:scope strings.
     names: list[str] = []
 
     if not isinstance(value, list):

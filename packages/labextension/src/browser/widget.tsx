@@ -1,13 +1,22 @@
 import {
-  IRegistryEntry,
-  IRegistryIndex,
+  ICatalog,
+  ICollectionEntry,
+  ICollectionIndex,
+  collectionTags,
   latestVersion,
-  registryTags,
-  searchRegistry,
+  normalizeLocation,
+  resolveLocation,
+  searchCollection,
   supportsPlatform
 } from '@jupyterlab-workshop/core';
 import { Dialog, showDialog, showErrorMessage } from '@jupyterlab/apputils';
-import { ReactWidget, UseSignal, refreshIcon } from '@jupyterlab/ui-components';
+import {
+  ReactWidget,
+  UseSignal,
+  caretDownIcon,
+  caretRightIcon,
+  refreshIcon
+} from '@jupyterlab/ui-components';
 import { CommandRegistry } from '@lumino/commands';
 import { ISignal, Signal } from '@lumino/signaling';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -21,28 +30,47 @@ import {
   errorMessage
 } from '../tokens';
 import { describeSource } from '../trust/summary';
+import { showCollectionsDialog } from './dialog';
+import { SourceIcon } from './icon';
+import { installEntry, isInstalledFrom } from './install';
+import {
+  ISubscribedSource,
+  SourceKind,
+  SourceStore,
+  sameLocation
+} from './sources';
 
 /** Id of the browser widget. */
 export const BROWSER_ID = 'jupyterlab-workshop-browser';
 
 /** Settings the browser reads each time it refreshes. */
 export interface IBrowserSettings {
-  registries: string[];
   workshopsDirectory: string;
 }
 
-/** A registry that has been loaded, or failed to. */
-interface ILoadedRegistry {
-  url: string;
+/** A subscribed collection that has been read, or failed to be. */
+interface ILoadedCollection extends ISubscribedSource {
   title: string;
-  entries: IRegistryEntry[];
+  index?: ICollectionIndex;
   error?: string;
 }
 
+/** A subscribed catalog that has been read, or failed to be. */
+interface ILoadedCatalog extends ISubscribedSource {
+  catalog?: ICatalog;
+  error?: string;
+}
+
+/** Size of the icon beside a collection heading. */
+const GROUP_ICON_SIZE = 48;
+
+/** Prefix of the localStorage keys remembering collapsed groups. */
+const COLLAPSED_KEY = 'jupyterlab-workshop:collapsed:';
+
 /**
- * Main-area widget listing the workshops of the configured registries
- * and those already installed, with search, tag filters and install,
- * resume and remove buttons.
+ * Main-area widget listing the workshops of the subscribed collections,
+ * grouped by collection, and those already installed, with search, tag
+ * filters and install, resume and remove buttons.
  */
 export class WorkshopBrowser extends ReactWidget {
   constructor(options: WorkshopBrowser.IOptions) {
@@ -73,29 +101,24 @@ export class WorkshopBrowser extends ReactWidget {
     super.dispose();
   }
 
-  /** Emitted to ask the component to reload registries and installs. */
+  /** Emitted to ask the component to reload the sources and installs. */
   get refreshRequested(): ISignal<this, void> {
     return this._refreshRequested;
   }
 
   /**
-   * Reload the registries and the installed list.
+   * Reload the collections, catalogs and the installed list.
    */
   refresh(): void {
     this._refreshRequested.emit();
   }
 
   protected render(): JSX.Element {
-    const { manager, commands, features, readSettings } = this._options;
-
     return (
       <UseSignal signal={this._refreshRequested}>
         {() => (
           <BrowserContent
-            manager={manager}
-            commands={commands}
-            features={features}
-            readSettings={readSettings}
+            {...this._options}
             refreshSignal={this._refreshRequested}
           />
         )}
@@ -130,6 +153,9 @@ export namespace WorkshopBrowser {
     /** Which buttons and sections the settings leave enabled. */
     features: IFeaturePolicy;
 
+    /** The subscribed collections and catalogs. */
+    store: SourceStore;
+
     /** Current values of the settings the browser depends on. */
     readSettings: () => Promise<IBrowserSettings>;
   }
@@ -140,8 +166,10 @@ interface IContentProps extends WorkshopBrowser.IOptions {
 }
 
 function BrowserContent(props: IContentProps): JSX.Element {
-  const { manager, commands, features, readSettings, refreshSignal } = props;
-  const [registries, setRegistries] = useState<ILoadedRegistry[]>([]);
+  const { manager, commands, features, store, readSettings, refreshSignal } =
+    props;
+  const [collections, setCollections] = useState<ILoadedCollection[]>([]);
+  const [catalogs, setCatalogs] = useState<ILoadedCatalog[]>([]);
   const [installed, setInstalled] = useState<IInstalledWorkshop[]>([]);
   const [directory, setDirectory] = useState('workshops');
   const [loading, setLoading] = useState(true);
@@ -149,18 +177,21 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [tags, setTags] = useState<string[]>([]);
   const [version, setVersion] = useState(0);
 
-  // Reload when asked, when a workshop is opened or closed, or at first.
+  // Reload when asked, when a workshop is opened or closed, when the
+  // subscribed sources change, or at first.
   useEffect(() => {
     const bump = (): void => setVersion(value => value + 1);
 
     refreshSignal.connect(bump);
     manager.changed.connect(bump);
+    store.changed.connect(bump);
 
     return () => {
       refreshSignal.disconnect(bump);
       manager.changed.disconnect(bump);
+      store.changed.disconnect(bump);
     };
-  }, [manager, refreshSignal]);
+  }, [manager, refreshSignal, store]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,9 +200,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
       setLoading(true);
 
       const settings = await readSettings();
-      const loaded = await Promise.all(
-        settings.registries.map(url => loadRegistry(manager, url))
-      );
+      const [subscribedCollections, subscribedCatalogs] = await Promise.all([
+        store.list('collection'),
+        store.list('catalog')
+      ]);
+      const [loadedCollections, loadedCatalogs] = await Promise.all([
+        Promise.all(
+          subscribedCollections.map(item => loadCollection(manager, item))
+        ),
+        Promise.all(subscribedCatalogs.map(item => loadCatalog(manager, item)))
+      ]);
       let list: IInstalledWorkshop[] = [];
 
       try {
@@ -181,8 +219,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
       }
 
       if (!cancelled) {
-        setRegistries(loaded);
-        setInstalled(list);
+        setCollections(loadedCollections);
+        setCatalogs(loadedCatalogs);
+        setInstalled(orderInstalled(list, loadedCollections));
         setDirectory(settings.workshopsDirectory);
         setLoading(false);
       }
@@ -193,44 +232,58 @@ function BrowserContent(props: IContentProps): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [manager, readSettings, version]);
+  }, [manager, readSettings, store, version]);
 
-  const entries = useMemo(
-    () => registries.flatMap(registry => registry.entries),
-    [registries]
-  );
-  const allTags = useMemo(() => registryTags(entries), [entries]);
-  const installedByName = useMemo(
-    () => new Map(installed.map(item => [item.name, item])),
-    [installed]
-  );
-  const entriesByName = useMemo(
-    () => new Map(entries.map(entry => [entry.name, entry])),
-    [entries]
-  );
+  // Each collection's entries that are not installed yet, after the
+  // search and tag filters; an installed workshop is listed once, under
+  // Installed, where its card offers an update.
+  const groups = useMemo(
+    () =>
+      collections.map(collection => {
+        const entries = collection.index?.workshops ?? [];
+        const notInstalled = entries.filter(
+          entry =>
+            !installed.some(item =>
+              isInstalledFrom(item, collection.url, entry.name)
+            )
+        );
 
-  // A workshop that is installed is listed once, under Installed, where
-  // its card offers an update when the registry has another version.
-  const notInstalled = useMemo(
-    () => entries.filter(entry => !installedByName.has(entry.name)),
-    [entries, installedByName]
+        return {
+          collection,
+          notInstalled,
+          shown: searchCollection(notInstalled, query, tags)
+        };
+      }),
+    [collections, installed, query, tags]
   );
-  const shown = useMemo(
-    () => searchRegistry(notInstalled, query, tags),
-    [notInstalled, query, tags]
+  const allTags = useMemo(
+    () => collectionTags(groups.flatMap(group => group.notInstalled)),
+    [groups]
   );
   const platform = manager.platform?.os ?? '';
+  const filtering = query.trim() !== '' || tags.length > 0;
+  const anyNotInstalled = groups.some(group => group.notInstalled.length > 0);
+  const anyProblem =
+    collections.some(item => item.error) || catalogs.some(item => item.error);
+  const canSubscribe =
+    store.canChange('collection') || store.canChange('catalog');
+  const nothingSubscribed =
+    collections.length === 0 && catalogs.length === 0 && !loading;
+  const suggestions = useMemo(
+    () => suggestedCollections(catalogs, collections),
+    [catalogs, collections]
+  );
 
   // The Available section, with the search and tags that filter it, is
   // only there when it has something to show or explain: an image whose
-  // registry lists exactly the workshops it ships has nothing to add.
-  const filtering = query.trim() !== '' || tags.length > 0;
-  const registryProblem = registries.some(registry => registry.error);
-  const noRegistries =
-    registries.length === 0 && !loading && features.enabled('registries');
+  // collection lists exactly the workshops it ships has nothing to add.
   const showAvailable =
     features.enabled('available') &&
-    (notInstalled.length > 0 || filtering || registryProblem || noRegistries);
+    (anyNotInstalled ||
+      filtering ||
+      anyProblem ||
+      suggestions.length > 0 ||
+      (nothingSubscribed && canSubscribe));
   const ways = [
     showAvailable ? 'install one below' : '',
     features.enabled('open-url') ? 'add one from a URL' : '',
@@ -266,19 +319,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
   };
 
-  const install = (entry: IRegistryEntry): void => {
-    const chosen = latestVersion(entry);
-    const source = chosen.source;
-
-    void whileBusy(`install:${entry.name}`, () =>
-      commands.execute(CommandIDs.openUrl, {
-        url: source.archive ?? source.git ?? '',
-        ref: source.ref,
-        subdir: source.subdir,
-        sha256: chosen.sha256,
-        archive: source.archive !== undefined
-      })
-    );
+  // Installing downloads the workshop and lists it under Installed,
+  // where Open starts it; the list is reloaded once the download ends.
+  const install = (collection: string, entry: ICollectionEntry): void => {
+    void whileBusy(
+      `install:${normalizeLocation(collection)}:${entry.name}`,
+      () =>
+        installEntry(commands, collection, entry, installed, { open: false })
+    ).then(() => setVersion(value => value + 1));
   };
 
   const open = (path: string): void => {
@@ -295,18 +343,45 @@ function BrowserContent(props: IContentProps): JSX.Element {
     setVersion(value => value + 1);
   };
 
-  // The registry version an installed workshop could move to, if any.
+  // The collection an installed workshop came from, and the entry that
+  // lists it: by the recorded collection when there is one, else the
+  // first subscribed collection offering the name.
+  const collectionFor = (
+    item: IInstalledWorkshop
+  ):
+    { collection: ILoadedCollection; entry?: ICollectionEntry } | undefined => {
+    for (const collection of collections) {
+      if (
+        item.collection !== null &&
+        !sameLocation(item.collection, collection.url)
+      ) {
+        continue;
+      }
+
+      const entry = collection.index?.workshops.find(
+        candidate => candidate.name === item.name
+      );
+
+      if (entry || item.collection !== null) {
+        return { collection, entry };
+      }
+    }
+
+    return undefined;
+  };
+
   const updateFor = (
     item: IInstalledWorkshop
   ): { version: string; run: () => void } | undefined => {
-    const entry = entriesByName.get(item.name);
+    const found = collectionFor(item);
+    const entry = found?.entry;
     const version = entry ? latestVersion(entry).version : '';
 
-    if (!entry || !version || version === item.version) {
+    if (!found || !entry || !version || version === item.version) {
       return undefined;
     }
 
-    return { version, run: () => install(entry) };
+    return { version, run: () => install(found.collection.url, entry) };
   };
 
   const remove = async (item: IInstalledWorkshop): Promise<void> => {
@@ -326,6 +401,23 @@ function BrowserContent(props: IContentProps): JSX.Element {
     } catch (error) {
       await showErrorMessage(
         'Unable to remove the workshop',
+        errorMessage(error)
+      );
+    }
+  };
+
+  const manage = (tab: SourceKind): void => {
+    void showCollectionsDialog({ manager, store, tab }).then(() =>
+      setVersion(value => value + 1)
+    );
+  };
+
+  const subscribeSuggested = async (url: string): Promise<void> => {
+    try {
+      await store.subscribe('collection', url);
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to subscribe to the collection',
         errorMessage(error)
       );
     }
@@ -361,18 +453,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
             Open a directory…
           </button>
         ) : null}
-        {features.enabled('registries') ? (
+        {canSubscribe ? (
           <button
             type="button"
             className="jp-Button jp-mod-styled"
-            title="Change the registries in the settings"
-            onClick={() =>
-              void commands.execute('settingeditor:open', {
-                query: 'Workshop'
-              })
-            }
+            title="See, subscribe to and unsubscribe from collections and catalogs"
+            onClick={() => manage('collection')}
           >
-            Manage registries
+            Collections…
           </button>
         ) : null}
         <button
@@ -411,6 +499,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
             <InstalledCard
               key={item.path}
               item={item}
+              collection={collectionFor(item)?.collection}
               open={manager.workshop?.path === item.path}
               busy={busy === `open:${item.path}`}
               onOpen={() => open(item.path)}
@@ -425,83 +514,330 @@ function BrowserContent(props: IContentProps): JSX.Element {
       )}
       {showAvailable ? (
         <AvailableSection
-          registries={registries}
-          shown={shown}
-          noMatch={filtering && shown.length === 0 && notInstalled.length > 0}
-          noRegistries={noRegistries}
+          groups={groups}
+          catalogs={catalogs}
+          suggestions={suggestions}
+          filtering={filtering}
+          nothingSubscribed={nothingSubscribed}
+          canSubscribeCollections={store.canChange('collection')}
+          canSubscribeCatalogs={store.canChange('catalog')}
           platform={platform}
           busy={busy}
           onInstall={install}
+          onManage={manage}
+          onSubscribe={url => void subscribeSuggested(url)}
         />
       ) : null}
     </div>
   );
 }
 
+/** A collection's entries after installs and filters are accounted for. */
+interface IGroup {
+  collection: ILoadedCollection;
+  notInstalled: ICollectionEntry[];
+  shown: ICollectionEntry[];
+}
+
+/** A collection a catalog offers that is not subscribed to yet. */
+interface ISuggestion {
+  url: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  publisher?: string;
+  catalog: string;
+}
+
 function AvailableSection({
-  registries,
-  shown,
-  noMatch,
-  noRegistries,
+  groups,
+  catalogs,
+  suggestions,
+  filtering,
+  nothingSubscribed,
+  canSubscribeCollections,
+  canSubscribeCatalogs,
   platform,
   busy,
-  onInstall
+  onInstall,
+  onManage,
+  onSubscribe
 }: {
-  registries: ILoadedRegistry[];
-  shown: IRegistryEntry[];
+  groups: IGroup[];
+  catalogs: ILoadedCatalog[];
+  suggestions: ISuggestion[];
 
-  /** Whether the search or tags are hiding every workshop. */
-  noMatch: boolean;
+  /** Whether the search or tags are in force. */
+  filtering: boolean;
 
-  /** Whether there are no registries to show and the learner can add some. */
-  noRegistries: boolean;
+  /** Whether there is no collection or catalog subscription. */
+  nothingSubscribed: boolean;
+  canSubscribeCollections: boolean;
+  canSubscribeCatalogs: boolean;
   platform: string;
 
   /** The busy key of the card being installed, if any. */
   busy: string | null;
-  onInstall: (entry: IRegistryEntry) => void;
+  onInstall: (collection: string, entry: ICollectionEntry) => void;
+  onManage: (tab: SourceKind) => void;
+  onSubscribe: (url: string) => void;
 }): JSX.Element {
+  const anyShown = groups.some(group => group.shown.length > 0);
+  const anyNotInstalled = groups.some(group => group.notInstalled.length > 0);
+
   return (
     <>
       <h2 className="jp-WorkshopBrowser-heading">Available</h2>
-      {registries.map(registry =>
-        registry.error ? (
-          <p key={registry.url} className="jp-WorkshopBrowser-error">
-            Unable to read the registry {registry.url}: {registry.error}
+      {nothingSubscribed ? (
+        <div className="jp-WorkshopBrowser-empty">
+          <p className="jp-WorkshopBrowser-note">
+            You are not subscribed to any collections or catalogs. A collection
+            is a published list of workshops; a catalog lists collections.
+            Subscribe to one by its URL to see what it offers.
+          </p>
+          <div className="jp-WorkshopBrowser-emptyActions">
+            {canSubscribeCollections ? (
+              <button
+                type="button"
+                className="jp-Button jp-mod-styled jp-mod-accept"
+                onClick={() => onManage('collection')}
+              >
+                Subscribe to a collection…
+              </button>
+            ) : null}
+            {canSubscribeCatalogs ? (
+              <button
+                type="button"
+                className="jp-Button jp-mod-styled"
+                onClick={() => onManage('catalog')}
+              >
+                Subscribe to a catalog…
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {catalogs.map(item =>
+        item.error ? (
+          <p key={item.url} className="jp-WorkshopBrowser-error">
+            Unable to read the catalog {item.url}: {item.error}
           </p>
         ) : null
       )}
-      {noRegistries ? (
-        <p className="jp-WorkshopBrowser-note">
-          No registries are configured. Add registry URLs in the settings to
-          browse workshops here.
-        </p>
-      ) : null}
-      {noMatch ? (
+      {filtering && anyNotInstalled && !anyShown ? (
         <p className="jp-WorkshopBrowser-note">No workshops match.</p>
       ) : null}
-      <div className="jp-WorkshopBrowser-cards">
-        {shown.map(entry => (
-          <RegistryCard
-            key={`${entry.name}`}
-            entry={entry}
+      {groups.map(group =>
+        !filtering || group.shown.length > 0 ? (
+          <CollectionGroup
+            key={group.collection.url}
+            group={group}
             platform={platform}
-            busy={busy === `install:${entry.name}`}
-            onInstall={() => onInstall(entry)}
+            busy={busy}
+            onInstall={entry => onInstall(group.collection.url, entry)}
           />
-        ))}
-      </div>
+        ) : null
+      )}
+      {suggestions.length > 0 && !filtering ? (
+        <div className="jp-WorkshopBrowser-suggestions">
+          <h3 className="jp-WorkshopBrowser-subheading">
+            Collections you can subscribe to
+          </h3>
+          <p className="jp-WorkshopBrowser-note">
+            The subscribed catalogs offer these collections. Subscribing to one
+            lists its workshops here.
+          </p>
+          <div className="jp-WorkshopBrowser-cards">
+            {suggestions.map(item => (
+              <div
+                key={item.url}
+                className="jp-WorkshopBrowser-card jp-WorkshopBrowser-suggestion"
+                data-collection={item.url}
+              >
+                <div className="jp-WorkshopBrowser-suggestionHead">
+                  <SourceIcon
+                    icon={item.icon}
+                    title={item.title}
+                    size={GROUP_ICON_SIZE}
+                  />
+                  <div>
+                    <div className="jp-WorkshopBrowser-cardTitle">
+                      {item.title}
+                    </div>
+                    {item.publisher ? (
+                      <div className="jp-WorkshopBrowser-cardText">
+                        by {item.publisher}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                {item.description ? (
+                  <p className="jp-WorkshopBrowser-cardText">
+                    {item.description}
+                  </p>
+                ) : null}
+                <div className="jp-WorkshopBrowser-cardMeta">
+                  <span className="jp-WorkshopBrowser-chip" title={item.url}>
+                    from {item.catalog}
+                  </span>
+                </div>
+                <div className="jp-WorkshopBrowser-cardActions">
+                  {canSubscribeCollections ? (
+                    <button
+                      type="button"
+                      className="jp-Button jp-mod-styled jp-mod-accept"
+                      onClick={() => onSubscribe(item.url)}
+                    >
+                      Subscribe
+                    </button>
+                  ) : (
+                    <span className="jp-WorkshopBrowser-note">
+                      Subscribing to collections is disabled here
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
 
-function RegistryCard({
-  entry,
+function CollectionGroup({
+  group,
   platform,
   busy,
   onInstall
 }: {
-  entry: IRegistryEntry;
+  group: IGroup;
+  platform: string;
+  busy: string | null;
+  onInstall: (entry: ICollectionEntry) => void;
+}): JSX.Element {
+  const { collection } = group;
+  const [collapsed, setCollapsed] = useState(() =>
+    readCollapsed(collection.url)
+  );
+  const toggle = (): void => {
+    setCollapsed(current => {
+      writeCollapsed(collection.url, !current);
+
+      return !current;
+    });
+  };
+  const index = collection.index;
+  const icon = index?.icon
+    ? resolveLocation(collection.url, index.icon)
+    : undefined;
+  const Caret = collapsed ? caretRightIcon : caretDownIcon;
+  const count = group.notInstalled.length;
+
+  return (
+    <section
+      className={`jp-WorkshopBrowser-group${collapsed ? ' jp-mod-collapsed' : ''}`}
+      data-collection={collection.url}
+    >
+      <div className="jp-WorkshopBrowser-groupHeader">
+        <button
+          type="button"
+          className="jp-WorkshopBrowser-groupToggle"
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Show the workshops' : 'Hide the workshops'}
+          onClick={toggle}
+        >
+          <Caret.react tag="span" width="16px" height="16px" />
+        </button>
+        <SourceIcon
+          icon={icon}
+          title={collection.title}
+          size={GROUP_ICON_SIZE}
+        />
+        <div className="jp-WorkshopBrowser-groupText">
+          <h3 className="jp-WorkshopBrowser-groupTitle">
+            {index?.homepage ? (
+              <a href={index.homepage} target="_blank" rel="noreferrer">
+                {collection.title}
+              </a>
+            ) : (
+              collection.title
+            )}
+            <span className="jp-WorkshopBrowser-groupCount">
+              {count === 1 ? '1 workshop' : `${count} workshops`}
+            </span>
+          </h3>
+          {index?.description ? (
+            <p className="jp-WorkshopBrowser-groupDescription">
+              {index.description}
+            </p>
+          ) : null}
+          <div className="jp-WorkshopBrowser-groupMeta">
+            {index?.publisher ? (
+              <span className="jp-WorkshopBrowser-groupPublisher">
+                by{' '}
+                {index.publisher.url ? (
+                  <a
+                    href={index.publisher.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {index.publisher.name}
+                  </a>
+                ) : (
+                  index.publisher.name
+                )}
+              </span>
+            ) : null}
+            <span
+              className="jp-WorkshopBrowser-groupUrl"
+              title={collection.url}
+            >
+              {collection.url}
+            </span>
+          </div>
+          {collection.error ? (
+            <p className="jp-WorkshopBrowser-error">
+              Unable to read this collection: {collection.error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {!collapsed && !collection.error && group.notInstalled.length === 0 ? (
+        <p className="jp-WorkshopBrowser-note">
+          Every workshop of this collection is installed.
+        </p>
+      ) : null}
+      {!collapsed ? (
+        <div className="jp-WorkshopBrowser-cards">
+          {group.shown.map(entry => (
+            <CollectionCard
+              key={entry.name}
+              entry={entry}
+              collection={collection}
+              platform={platform}
+              busy={
+                busy ===
+                `install:${normalizeLocation(collection.url)}:${entry.name}`
+              }
+              onInstall={() => onInstall(entry)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CollectionCard({
+  entry,
+  collection,
+  platform,
+  busy,
+  onInstall
+}: {
+  entry: ICollectionEntry;
+  collection: ILoadedCollection;
   platform: string;
 
   /** Whether this workshop is being installed right now. */
@@ -515,6 +851,7 @@ function RegistryCard({
     <div
       className={`jp-WorkshopBrowser-card${supported ? '' : ' jp-mod-unsupported'}`}
       data-workshop={entry.name}
+      data-collection={collection.url}
     >
       <div className="jp-WorkshopBrowser-cardTitle">
         {entry.title}
@@ -526,6 +863,12 @@ function RegistryCard({
         <p className="jp-WorkshopBrowser-cardText">{entry.description}</p>
       ) : null}
       <div className="jp-WorkshopBrowser-cardMeta">
+        <span
+          className="jp-WorkshopBrowser-chip jp-mod-source"
+          title={collection.url}
+        >
+          {collection.title}
+        </span>
         {entry.platforms.map(name => (
           <span
             key={name}
@@ -566,6 +909,7 @@ function RegistryCard({
 
 function InstalledCard({
   item,
+  collection,
   open,
   busy,
   onOpen,
@@ -574,6 +918,9 @@ function InstalledCard({
   update
 }: {
   item: IInstalledWorkshop;
+
+  /** The subscribed collection it came from, when known. */
+  collection?: ILoadedCollection;
   open: boolean;
 
   /** Whether this workshop is being opened right now. */
@@ -586,7 +933,7 @@ function InstalledCard({
   /** Delete the workshop, when the settings allow removing. */
   onRemove?: () => void;
 
-  /** The registry version to move to, when it differs from the installed one. */
+  /** The collection version to move to, when it differs from the installed one. */
   update?: { version: string; run: () => void };
 }): JSX.Element {
   const progress =
@@ -614,6 +961,21 @@ function InstalledCard({
             title={describeSource(item.source)}
           >
             {item.source.kind}
+          </span>
+        ) : null}
+        {collection ? (
+          <span
+            className="jp-WorkshopBrowser-chip jp-mod-source"
+            title={collection.url}
+          >
+            {collection.title}
+          </span>
+        ) : item.collection ? (
+          <span
+            className="jp-WorkshopBrowser-chip jp-mod-source"
+            title={item.collection}
+          >
+            collection not subscribed
           </span>
         ) : null}
         {item.started ? (
@@ -648,7 +1010,7 @@ function InstalledCard({
           <button
             type="button"
             className="jp-Button jp-mod-styled"
-            title="Download this version from the registry, replacing the files"
+            title="Download this version from the collection, replacing the files"
             onClick={update.run}
           >
             Update to {update.version}
@@ -668,15 +1030,128 @@ function InstalledCard({
   );
 }
 
-async function loadRegistry(
+async function loadCollection(
   manager: IWorkshopManager,
-  url: string
-): Promise<ILoadedRegistry> {
+  item: ISubscribedSource
+): Promise<ILoadedCollection> {
   try {
-    const index: IRegistryIndex = await manager.fetchRegistry(url);
+    const index = await manager.fetchCollection(item.url);
 
-    return { url, title: index.title ?? url, entries: index.workshops };
+    return { ...item, title: index.title ?? item.url, index };
   } catch (error) {
-    return { url, title: url, entries: [], error: errorMessage(error) };
+    return { ...item, title: item.url, error: errorMessage(error) };
+  }
+}
+
+async function loadCatalog(
+  manager: IWorkshopManager,
+  item: ISubscribedSource
+): Promise<ILoadedCatalog> {
+  try {
+    return { ...item, catalog: await manager.fetchCatalog(item.url) };
+  } catch (error) {
+    return { ...item, error: errorMessage(error) };
+  }
+}
+
+/**
+ * Installed workshops in collection order: those from a subscribed
+ * collection by the collection's position and then their position in
+ * its index, then the rest by title.
+ */
+function orderInstalled(
+  installed: IInstalledWorkshop[],
+  collections: ILoadedCollection[]
+): IInstalledWorkshop[] {
+  const rank = (item: IInstalledWorkshop): [number, number] => {
+    if (item.collection === null) {
+      return [collections.length, 0];
+    }
+
+    const position = collections.findIndex(collection =>
+      sameLocation(collection.url, item.collection ?? '')
+    );
+
+    if (position < 0) {
+      return [collections.length, 0];
+    }
+
+    const entries = collections[position].index?.workshops ?? [];
+    const index = entries.findIndex(entry => entry.name === item.name);
+
+    return [position, index < 0 ? entries.length : index];
+  };
+
+  return [...installed]
+    .map((item, order) => ({ item, order, rank: rank(item) }))
+    .sort(
+      (a, b) =>
+        a.rank[0] - b.rank[0] ||
+        a.rank[1] - b.rank[1] ||
+        a.item.title.toLowerCase().localeCompare(b.item.title.toLowerCase()) ||
+        a.order - b.order
+    )
+    .map(({ item }) => item);
+}
+
+/**
+ * The collections the subscribed catalogs offer that are not subscribed to,
+ * each listed once, with the catalog's word on it.
+ */
+function suggestedCollections(
+  catalogs: ILoadedCatalog[],
+  collections: ILoadedCollection[]
+): ISuggestion[] {
+  const seen = new Set<string>();
+  const suggestions: ISuggestion[] = [];
+
+  for (const item of catalogs) {
+    for (const entry of item.catalog?.collections ?? []) {
+      const key = normalizeLocation(entry.url);
+
+      if (
+        seen.has(key) ||
+        collections.some(collection => sameLocation(collection.url, entry.url))
+      ) {
+        continue;
+      }
+
+      seen.add(key);
+      suggestions.push({
+        url: entry.url,
+        title: entry.title ?? entry.url,
+        description: entry.description,
+        icon: entry.icon,
+        publisher: entry.publisher?.name,
+        catalog: item.catalog?.title ?? item.url
+      });
+    }
+  }
+
+  return suggestions;
+}
+
+function readCollapsed(url: string): boolean {
+  try {
+    return (
+      window.localStorage.getItem(COLLAPSED_KEY + normalizeLocation(url)) ===
+      '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(url: string, collapsed: boolean): void {
+  try {
+    const key = COLLAPSED_KEY + normalizeLocation(url);
+
+    if (collapsed) {
+      window.localStorage.setItem(key, '1');
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage may be unavailable; the state then lasts the session.
   }
 }

@@ -214,6 +214,27 @@ class TestFetchWorkshop:
             "sha256": result.sha256,
         }
         assert record["sha256"] == result.sha256
+        assert "collection" not in record
+
+    def test_records_the_collection_and_the_given_name(self, tmp_path: Path) -> None:
+        data = make_tar({"workshop.yaml": MANIFEST})
+        source = Source("archive", "https://x/ws.tar.gz")
+        result = fetch_workshop(
+            source,
+            tmp_path,
+            "workshops",
+            name="demo-1a2b3c4",
+            downloader=lambda _: data,
+            collection="https://x/collection.json",
+        )
+
+        assert result.path == "workshops/demo-1a2b3c4"
+
+        record = json.loads(
+            (tmp_path / result.path / "_workshop" / "source.json").read_text()
+        )
+
+        assert record["collection"] == "https://x/collection.json"
 
     def test_refuses_existing_unless_overwrite(self, tmp_path: Path) -> None:
         data = make_tar({"workshop.yaml": MANIFEST})

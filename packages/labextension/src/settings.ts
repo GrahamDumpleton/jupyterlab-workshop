@@ -75,3 +75,48 @@ export async function readSettingList(
     return [];
   }
 }
+
+/**
+ * Write a list-of-strings setting of the panel plugin into the user's
+ * settings, replacing the whole list. The composite value read back
+ * afterwards is this list, whatever the defaults or overrides held.
+ */
+export async function writeSettingList(
+  settingRegistry: ISettingRegistry | null,
+  key: string,
+  value: readonly string[]
+): Promise<void> {
+  if (!settingRegistry) {
+    throw new Error('Settings are not available');
+  }
+
+  const settings = await settingRegistry.load(PANEL_PLUGIN_ID);
+
+  await settings.set(key, [...value]);
+}
+
+/**
+ * The value of a list setting the user set themselves, or null when the
+ * list comes from the defaults or an administrator's overrides.
+ */
+export async function readUserSettingList(
+  settingRegistry: ISettingRegistry | null,
+  key: string
+): Promise<string[] | null> {
+  if (!settingRegistry) {
+    return null;
+  }
+
+  try {
+    const settings = await settingRegistry.load(PANEL_PLUGIN_ID);
+    const value = settings.get(key).user;
+
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : null;
+  } catch (error) {
+    console.error('Failed to load workshop settings', error);
+
+    return null;
+  }
+}

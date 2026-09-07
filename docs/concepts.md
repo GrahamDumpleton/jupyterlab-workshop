@@ -98,14 +98,17 @@ reference](actions.md) the ways of setting and showing them.
 ## Where workshops come from
 
 A workshop is opened from a local directory, which is how authors work;
-from the workshop browser, which lists registries of published
-workshops and installs one under the `workshops` directory; from a
+from the workshop browser, which lists the workshops of the subscribed
+collections and installs one under the `workshops` directory; from a
 repository or archive URL; or from a launch link, a JupyterLab URL with
 a `workshop` parameter that fetches and opens it as JupyterLab starts.
-A registry is a JSON index that the `jupyter workshop publish`,
-`registry` and `index` commands build. [Finding and installing
-workshops](registry.md) covers the browser, registries, launch links
-and deployments such as Binder.
+A collection is a published list of workshops, a JSON index that the
+`jupyter workshop publish`, `collection` and `index` commands build; a
+catalog is a published list of collections, so one URL can point at
+everything an organisation offers. There are no subscriptions out of
+the box.
+[Finding and installing workshops](collections.md) covers the browser,
+collections, catalogs, launch links and deployments such as Binder.
 
 ## State on disk
 

@@ -6,9 +6,11 @@
 
 import * as fs from 'fs';
 
+import { parseCatalog } from '../catalog';
+import { parseCollectionIndex } from '../collection';
 import { lintWorkshop } from '../lint/rules';
 import { ILintMessage, formatLintMessage } from '../lint/types';
-import { REGISTRY_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
+import { CATALOG_SCHEMA, COLLECTION_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
 import { draftToDirectory } from './draft';
 import { renderWorkshopHtml } from './render';
 import { ILoadOptions, loadWorkshopFiles } from './workshop';
@@ -44,6 +46,54 @@ export function lintDirectory(
   };
 }
 
+/** What `check` reports about a collection or catalog file. */
+export interface ICheckReport {
+  file: string;
+  kind: 'collection' | 'catalog';
+  title: string;
+
+  /** Workshops of a collection, or collections of a catalog. */
+  entries: number;
+
+  /** The locations a catalog names, as written, for the caller to resolve. */
+  locations: string[];
+}
+
+/**
+ * Parse a collection or catalog file, telling the two apart by their
+ * lists, and report what it holds. A malformed file throws with the
+ * parser's message.
+ */
+export function checkIndexFile(file: string): ICheckReport {
+  const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const record =
+    typeof data === 'object' && data !== null && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+
+  if (Array.isArray(record.collections)) {
+    const catalog = parseCatalog(data);
+
+    return {
+      file,
+      kind: 'catalog',
+      title: catalog.title ?? '',
+      entries: catalog.collections.length,
+      locations: catalog.collections.map(entry => entry.url)
+    };
+  }
+
+  const collection = parseCollectionIndex(data);
+
+  return {
+    file,
+    kind: 'collection',
+    title: collection.title ?? '',
+    entries: collection.workshops.length,
+    locations: []
+  };
+}
+
 function usage(): string {
   return [
     'Usage: workshop-cli <command> [arguments]',
@@ -52,7 +102,9 @@ function usage(): string {
     '                             Report problems in a workshop',
     '  render <dir> [page] [--out <file>] [--platform <name>]',
     '                             Render pages to standalone HTML',
-    '  schema [--registry]        Print the manifest (or registry) JSON schema',
+    '  schema [--collection|--catalog]',
+    '                             Print the manifest, collection or catalog JSON schema',
+    '  check <file.json>          Validate a collection or catalog file, as JSON',
     '  pages <dir>                List page ids and titles as JSON',
     '  draft <recording> <dir> [--name <name>] [--title <title>] [--json]',
     '                             Write draft pages from a recorded session'
@@ -117,11 +169,25 @@ export function main(argv: string[]): number {
       }
 
       case 'schema': {
-        const schema = flags.has('--registry')
-          ? REGISTRY_SCHEMA
-          : WORKSHOP_SCHEMA;
+        const schema = flags.has('--collection')
+          ? COLLECTION_SCHEMA
+          : flags.has('--catalog')
+            ? CATALOG_SCHEMA
+            : WORKSHOP_SCHEMA;
 
         process.stdout.write(`${JSON.stringify(schema, null, 2)}\n`);
+
+        return 0;
+      }
+
+      case 'check': {
+        if (!positional[0]) {
+          throw new Error('check needs a collection or catalog file');
+        }
+
+        const report = checkIndexFile(positional[0]);
+
+        process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 
         return 0;
       }

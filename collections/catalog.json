@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "title": "jupyterlab-workshop checkout",
+  "description": "The collections in this repository, for development and the tests.",
+  "publisher": {
+    "name": "jupyterlab-workshop",
+    "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop"
+  },
+  "collections": [
+    {
+      "url": "examples/collection.json",
+      "title": "Example workshops",
+      "description": "The example workshops from the jupyterlab-workshop repository: a tour of what actions can do, git from the command line, and writing a workshop of your own.",
+      "publisher": {
+        "name": "jupyterlab-workshop",
+        "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop"
+      },
+      "homepage": "https://jupyterlab-workshop.readthedocs.io/",
+      "icon": "examples/icon.svg",
+      "tags": ["examples"]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "defaultWorkshop": "",
+    "browseOnStart": true,
+    "workshopsDirectory": "examples",
+    "collections": ["collections/examples/collection.json"],
+    "catalogs": ["collections/catalog.json"]
+  }
+}

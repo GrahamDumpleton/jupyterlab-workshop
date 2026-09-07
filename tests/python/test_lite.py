@@ -76,13 +76,15 @@ def test_settings_overrides_open_the_only_workshop_by_default(tmp_path: Path) ->
         output=tmp_path / "out",
         default_workshop="b",
         trust="trusted",
-        registries=("https://example.org/index.json",),
+        collections=("https://example.org/collection.json",),
+        catalogs=("https://example.org/catalog.json",),
     )
     settings = settings_overrides(chosen, ["a", "b"])[PANEL_PLUGIN]
 
     assert settings["defaultWorkshop"] == "b"
     assert settings["trustPolicy"] == {"forcedLevel": "trusted"}
-    assert settings["registries"] == ["https://example.org/index.json"]
+    assert settings["collections"] == ["https://example.org/collection.json"]
+    assert settings["catalogs"] == ["https://example.org/catalog.json"]
 
     with pytest.raises(LiteError, match="no workshop named missing"):
         settings_overrides(
@@ -210,13 +212,25 @@ def test_serve_directory_serves_files(tmp_path: Path) -> None:
 def test_cli_parses_lite_options(tmp_path: Path) -> None:
     parser = cli.build_parser()
     args = parser.parse_args(
-        ["lite", "a", "b", "--out", "site", "--no-terminal", "--registry", "u"]
+        [
+            "lite",
+            "a",
+            "b",
+            "--out",
+            "site",
+            "--no-terminal",
+            "--collection",
+            "u",
+            "--catalog",
+            "c",
+        ]
     )
 
     assert args.func is cli.command_lite
     assert args.workshops == [Path("a"), Path("b")]
     assert args.terminal is False
-    assert args.registry == ["u"]
+    assert args.collection == ["u"]
+    assert args.catalog == ["c"]
 
     test = parser.parse_args(["test", "a", "--lite", "--lite-dir", "cache"])
 

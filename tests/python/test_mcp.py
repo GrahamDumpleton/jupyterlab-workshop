@@ -80,7 +80,7 @@ def test_init_tool_writes_a_workshop_and_live_tools_need_a_session(
     assert "No running JupyterLab" in status
 
 
-def test_index_tool_writes_a_registry(tmp_path: Path) -> None:
+def test_index_tool_writes_a_collection(tmp_path: Path) -> None:
     server = create_server(lambda: None)
 
     cli.main(["init", str(tmp_path / "workshops" / "one"), "--title", "One"])
@@ -108,10 +108,56 @@ def test_index_tool_writes_a_registry(tmp_path: Path) -> None:
     assert "no git origin" in missing
     assert "workshops/one" in written
 
-    index = json.loads((tmp_path / "registry.json").read_text())
+    index = json.loads((tmp_path / "collection.json").read_text())
 
     assert index["title"] == "Mine"
     assert index["workshops"][0]["versions"][0]["source"]["subdir"] == "workshops/one"
+
+
+def test_catalog_tool_writes_and_refreshes_a_catalog(tmp_path: Path) -> None:
+    server = create_server(lambda: None)
+    collection = tmp_path / "python" / "collection.json"
+
+    collection.parent.mkdir()
+    collection.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "title": "Python",
+                "description": "The language.",
+                "icon": "icon.svg",
+                "workshops": [],
+            }
+        )
+    )
+
+    async def scenario() -> str:
+        async with Client(server) as client:
+            written = await client.call_tool(
+                "catalog",
+                {
+                    "path": str(tmp_path / "catalog.json"),
+                    "collections": [str(collection)],
+                    "relative": True,
+                    "title": "Mine",
+                },
+            )
+
+            return _text(written)
+
+    assert "python/collection.json" in _run(scenario())
+
+    catalog = json.loads((tmp_path / "catalog.json").read_text())
+
+    assert catalog["title"] == "Mine"
+    assert catalog["collections"] == [
+        {
+            "url": "python/collection.json",
+            "title": "Python",
+            "description": "The language.",
+            "icon": "icon.svg",
+        }
+    ]
 
 
 @needs_node

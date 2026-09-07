@@ -25,7 +25,7 @@ import { fetchJson, fetchWorkshopFiles } from './fetch';
 import { listInstalled, removeInstalled } from './installed';
 import { litePreflight } from './preflight';
 
-/** Largest registry index the browser will read. */
+/** Largest collection index or catalog the browser will read. */
 const MAX_INDEX_BYTES = 5 * 1024 * 1024;
 
 /**
@@ -49,13 +49,21 @@ export class LiteBackend implements IWorkshopBackend {
     return fetchWorkshopFiles(this._contents, request);
   }
 
-  async fetchRegistry(url: string): Promise<unknown> {
+  fetchCollection(url: string): Promise<unknown> {
+    return this._fetchIndex(url, 'collection');
+  }
+
+  fetchCatalog(url: string): Promise<unknown> {
+    return this._fetchIndex(url, 'catalog');
+  }
+
+  private async _fetchIndex(url: string, what: string): Promise<unknown> {
     // A path rather than a URL is a file in the site's contents.
     if (!/^https?:\/\//i.test(url)) {
       const text = await readIfExists(this._contents, PathExt.normalize(url));
 
       if (text === null) {
-        throw new Error(`There is no registry file at ${url}`);
+        throw new Error(`There is no ${what} file at ${url}`);
       }
 
       return JSON.parse(text) as unknown;
@@ -64,7 +72,7 @@ export class LiteBackend implements IWorkshopBackend {
     const index = await fetchJson(url);
 
     if (JSON.stringify(index).length > MAX_INDEX_BYTES) {
-      throw new Error(`The registry at ${url} is larger than the limit`);
+      throw new Error(`The ${what} at ${url} is larger than the limit`);
     }
 
     return index;

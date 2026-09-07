@@ -1,5 +1,7 @@
 import { expect, galata, test } from '@jupyterlab/galata';
+import type { Page } from '@playwright/test';
 import * as path from 'path';
+import * as zlib from 'zlib';
 
 const WORKSHOP = 'git-basics';
 
@@ -8,13 +10,31 @@ const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 const PLUGIN = '@jupyterlab-workshop/labextension:panel';
 
 /** Fixed paths under the test server root, removed after each test. */
-const REGISTRY_FILE = 'test-registry.json';
+const COLLECTION_FILE = 'test-collection.json';
+
+const SECOND_FILE = 'second/collection.json';
+
+const CATALOG_FILE = 'test-catalog.json';
+
+const ARCHIVE_FILE = 'pandas-intro-2.0.0.tar.gz';
+
+const GIT_ARCHIVE_FILE = 'git-basics-0.2.0.tar.gz';
+
+const CLASH_ARCHIVE_FILE = 'git-basics-9.0.0.tar.gz';
 
 const WORKSHOPS_DIR = 'test-workshops';
 
-const REGISTRY = {
+/** The archive URL the server fetches a test workshop from: its own files. */
+function filesUrl(page: Page, name: string): string {
+  return `${new URL(page.url()).origin}/files/${name}`;
+}
+
+const COLLECTION = {
   version: 1,
-  title: 'Test registry',
+  title: 'Test collection',
+  description: 'Two workshops for the tests.',
+  publisher: { name: 'Test Publisher', url: 'https://example.org' },
+  tags: ['test'],
   workshops: [
     {
       name: 'git-basics',
@@ -26,7 +46,7 @@ const REGISTRY = {
       versions: [
         {
           version: '0.2.0',
-          source: { git: 'https://github.com/example/workshops', subdir: 'git' }
+          source: { archive: `<archive:${GIT_ARCHIVE_FILE}>` }
         }
       ]
     },
@@ -40,12 +60,64 @@ const REGISTRY = {
       versions: [
         {
           version: '2.0.0',
-          source: { archive: 'https://example.org/pandas-intro-2.0.0.tar.gz' }
+          source: { archive: `<archive:${ARCHIVE_FILE}>` }
         }
       ]
     }
   ]
 };
+
+/** A second collection that also offers a `git-basics`. */
+const SECOND = {
+  version: 1,
+  title: 'Second collection',
+  description: 'Another course with its own git workshop.',
+  icon: 'icon.svg',
+  workshops: [
+    {
+      name: 'git-basics',
+      title: 'Git, the other way',
+      description: 'A different workshop with the same name.',
+      tags: ['git'],
+      platforms: ['linux', 'macos'],
+      capabilities: ['terminal'],
+      versions: [
+        {
+          version: '9.0.0',
+          source: { archive: `<archive:${CLASH_ARCHIVE_FILE}>` }
+        }
+      ]
+    }
+  ]
+};
+
+const CATALOG = {
+  version: 1,
+  title: 'Test catalog',
+  description: 'Collections for the tests.',
+  collections: [
+    {
+      url: SECOND_FILE,
+      title: 'Second collection',
+      description: 'Another course with its own git workshop.',
+      icon: 'second/icon.svg'
+    }
+  ]
+};
+
+const ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#36c"/></svg>';
+
+const MANIFEST = (name: string, title: string, version: string): string =>
+  [
+    'apiVersion: jupyterlab-workshop/v1alpha1',
+    `name: ${name}`,
+    `title: ${title}`,
+    `version: ${version}`,
+    'pages:',
+    '  - pages/01.md',
+    ''
+  ].join('\n');
 
 interface IExposedApp {
   jupyterapp: {
@@ -53,12 +125,162 @@ interface IExposedApp {
   };
 }
 
+/**
+ * A gzipped tar holding a workshop, built by hand since the tests have
+ * no tar library: one ustar header per file, then the padded content.
+ */
+function workshopArchive(name: string, title: string, version: string): Buffer {
+  const files: Record<string, string> = {
+    [`${name}/workshop.yaml`]: MANIFEST(name, title, version),
+    [`${name}/pages/01.md`]: `---\ntitle: Start\n---\n\n# ${title}\n`
+  };
+  const blocks: Buffer[] = [];
+
+  for (const [file, text] of Object.entries(files)) {
+    const content = Buffer.from(text, 'utf8');
+    const header = Buffer.alloc(512, 0);
+
+    header.write(file, 0, 100, 'utf8');
+    header.write('0000644\0', 100, 8, 'utf8');
+    header.write('0000000\0', 108, 8, 'utf8');
+    header.write('0000000\0', 116, 8, 'utf8');
+    header.write(`${content.length.toString(8).padStart(11, '0')}\0`, 124, 12);
+    header.write('00000000000\0', 136, 12, 'utf8');
+    header.write('        ', 148, 8, 'utf8');
+    header.write('0', 156, 1, 'utf8');
+    header.write('ustar\0', 257, 6, 'utf8');
+    header.write('00', 263, 2, 'utf8');
+
+    let sum = 0;
+
+    for (const byte of header) {
+      sum += byte;
+    }
+
+    header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'utf8');
+    blocks.push(header, content);
+
+    const padding = (512 - (content.length % 512)) % 512;
+
+    if (padding > 0) {
+      blocks.push(Buffer.alloc(padding, 0));
+    }
+  }
+
+  blocks.push(Buffer.alloc(1024, 0));
+
+  return zlib.gzipSync(Buffer.concat(blocks));
+}
+
+/** The collection JSON with archive placeholders pointed at the server. */
+function withArchives(page: Page, collection: object): string {
+  return JSON.stringify(collection).replace(
+    /<archive:([^>]+)>/g,
+    (_match, name: string) => filesUrl(page, name)
+  );
+}
+
+async function uploadFixtures(page: Page): Promise<void> {
+  await page.contents.uploadContent(
+    withArchives(page, COLLECTION),
+    'text',
+    COLLECTION_FILE
+  );
+  await page.contents.uploadContent(
+    withArchives(page, SECOND),
+    'text',
+    SECOND_FILE
+  );
+  await page.contents.uploadContent(ICON, 'text', 'second/icon.svg');
+  await page.contents.uploadContent(
+    JSON.stringify(CATALOG),
+    'text',
+    CATALOG_FILE
+  );
+  await page.contents.uploadContent(
+    workshopArchive('pandas-intro', 'Pandas for beginners', '2.0.0').toString(
+      'base64'
+    ),
+    'base64',
+    ARCHIVE_FILE
+  );
+  await page.contents.uploadContent(
+    workshopArchive('git-basics', 'Git, the other way', '9.0.0').toString(
+      'base64'
+    ),
+    'base64',
+    CLASH_ARCHIVE_FILE
+  );
+  await page.contents.uploadContent(
+    workshopArchive(
+      'git-basics',
+      'Git from the command line',
+      '0.2.0'
+    ).toString('base64'),
+    'base64',
+    GIT_ARCHIVE_FILE
+  );
+  await page.contents.uploadDirectory(
+    EXAMPLE_DIR,
+    `${WORKSHOPS_DIR}/${WORKSHOP}`
+  );
+
+  for (const name of ['_workshop', 'scratch', 'demo']) {
+    const directory = `${WORKSHOPS_DIR}/${WORKSHOP}/${name}`;
+
+    if (await page.contents.directoryExists(directory)) {
+      await page.contents.deleteDirectory(directory);
+    }
+  }
+}
+
+async function removeFixtures(page: Page): Promise<void> {
+  for (const file of [
+    COLLECTION_FILE,
+    CATALOG_FILE,
+    ARCHIVE_FILE,
+    CLASH_ARCHIVE_FILE,
+    GIT_ARCHIVE_FILE
+  ]) {
+    if (await page.contents.fileExists(file)) {
+      await page.contents.deleteFile(file);
+    }
+  }
+
+  for (const directory of ['second', WORKSHOPS_DIR]) {
+    if (await page.contents.directoryExists(directory)) {
+      await page.contents.deleteDirectory(directory);
+    }
+  }
+}
+
+async function openBrowser(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const exposed = window as unknown as IExposedApp;
+
+    void exposed.jupyterapp.commands.execute('workshop:browse', {});
+  });
+  await expect(page.locator('#jupyterlab-workshop-browser')).toBeVisible();
+}
+
+async function trustWorkshop(page: Page, title: string): Promise<void> {
+  const dialog = page.locator('.jp-Dialog');
+
+  await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible({
+    timeout: 60000
+  });
+  await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+  await expect(
+    page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+  ).toHaveText(title);
+}
+
 test.use({
   mockSettings: {
     ...galata.DEFAULT_SETTINGS,
     [PLUGIN]: {
       defaultWorkshop: '',
-      registries: [REGISTRY_FILE],
+      collections: [COLLECTION_FILE],
       workshopsDirectory: WORKSHOPS_DIR
     }
   }
@@ -66,60 +288,47 @@ test.use({
 
 test.describe('workshop browser', () => {
   test.beforeEach(async ({ page }) => {
-    await page.contents.uploadContent(
-      JSON.stringify(REGISTRY),
-      'text',
-      REGISTRY_FILE
-    );
-    await page.contents.uploadDirectory(
-      EXAMPLE_DIR,
-      `${WORKSHOPS_DIR}/${WORKSHOP}`
-    );
-
-    for (const name of ['_workshop', 'scratch', 'demo']) {
-      const directory = `${WORKSHOPS_DIR}/${WORKSHOP}/${name}`;
-
-      if (await page.contents.directoryExists(directory)) {
-        await page.contents.deleteDirectory(directory);
-      }
-    }
+    await uploadFixtures(page);
   });
 
   test.afterEach(async ({ page }) => {
-    await page.contents.deleteFile(REGISTRY_FILE);
-
-    if (await page.contents.directoryExists(WORKSHOPS_DIR)) {
-      await page.contents.deleteDirectory(WORKSHOPS_DIR);
-    }
+    await removeFixtures(page);
   });
 
-  test('lists registry and installed workshops and opens one', async ({
+  test('lists collection and installed workshops and opens one', async ({
     page
   }) => {
-    await page.evaluate(() => {
-      const exposed = window as unknown as IExposedApp;
-
-      void exposed.jupyterapp.commands.execute('workshop:browse', {});
-    });
+    await openBrowser(page);
 
     const browser = page.locator('#jupyterlab-workshop-browser');
 
-    await expect(browser).toBeVisible();
+    // The collection is a group headed by its title and description, and
+    // its entries show as cards with their metadata and a source label.
+    const group = browser.locator('.jp-WorkshopBrowser-group');
 
-    // Both registry entries show as cards with their metadata.
-    const cards = browser.locator('.jp-WorkshopBrowser-card');
-
-    await expect(cards.filter({ hasText: 'Pandas for beginners' })).toHaveCount(
-      1
+    await expect(group).toHaveCount(1);
+    await expect(group.locator('.jp-WorkshopBrowser-groupTitle')).toContainText(
+      'Test collection'
     );
     await expect(
-      cards
-        .filter({ hasText: 'Pandas for beginners' })
-        .locator('.jp-WorkshopBrowser-chip')
-    ).toContainText(['linux', 'kernel-exec']);
+      group.locator('.jp-WorkshopBrowser-groupDescription')
+    ).toHaveText('Two workshops for the tests.');
+    await expect(
+      group.locator('.jp-WorkshopSourceIcon.jp-mod-tile')
+    ).toHaveText('T');
+
+    const cards = browser.locator('.jp-WorkshopBrowser-card');
+    const pandas = cards.filter({ hasText: 'Pandas for beginners' });
+
+    await expect(pandas).toHaveCount(1);
+    await expect(pandas.locator('.jp-WorkshopBrowser-chip')).toContainText([
+      'Test collection',
+      'linux',
+      'kernel-exec'
+    ]);
 
     // The uploaded workshop appears once, under Installed, and since the
-    // registry lists a newer version its card offers the update.
+    // collection lists a newer version its card offers the update.
     const installed = cards.filter({ hasText: WORKSHOPS_DIR });
 
     await expect(installed).toHaveCount(1);
@@ -131,21 +340,26 @@ test.describe('workshop browser', () => {
       cards.filter({ hasText: 'Git from the command line' })
     ).toHaveCount(1);
 
-    // Search and tags narrow the registry list.
+    // Search and tags narrow the collection list.
     await browser.locator('.jp-WorkshopBrowser-search').fill('pandas');
     await expect(
       cards.filter({ hasText: 'Git from the command line' })
     ).toHaveCount(1);
-    await expect(cards.filter({ hasText: 'Pandas for beginners' })).toHaveCount(
-      1
-    );
+    await expect(pandas).toHaveCount(1);
     await browser.locator('.jp-WorkshopBrowser-search').fill('');
     await browser
-      .locator('.jp-WorkshopBrowser-tag', { hasText: 'cli' })
+      .locator('.jp-WorkshopBrowser-tag', { hasText: 'data' })
       .click();
-    await expect(cards.filter({ hasText: 'Pandas for beginners' })).toHaveCount(
-      0
-    );
+    await expect(pandas).toHaveCount(1);
+    await browser
+      .locator('.jp-WorkshopBrowser-tag', { hasText: 'data' })
+      .click();
+
+    // Collapsing a group hides its cards and is remembered.
+    await group.locator('.jp-WorkshopBrowser-groupToggle').click();
+    await expect(pandas).toHaveCount(0);
+    await group.locator('.jp-WorkshopBrowser-groupToggle').click();
+    await expect(pandas).toHaveCount(1);
 
     // Opening from the installed card shows the trust dialog and the panel,
     // and the card shows it is busy until then.
@@ -161,6 +375,146 @@ test.describe('workshop browser', () => {
     await expect(
       page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
     ).toHaveText('Git from the command line');
+  });
+
+  test('installs from a collection, recording it, and suffixes a clash', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const cards = browser.locator('.jp-WorkshopBrowser-card');
+
+    // Installing downloads the archive from the server's own files and
+    // lists the workshop under Installed without opening it.
+    await cards
+      .filter({ hasText: 'Pandas for beginners' })
+      .getByRole('button', { name: 'Install' })
+      .click();
+    await expect(
+      cards
+        .filter({ hasText: WORKSHOPS_DIR })
+        .filter({ hasText: 'Pandas for beginners' })
+    ).toHaveCount(1);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group .jp-WorkshopBrowser-card', {
+        hasText: 'Pandas for beginners'
+      })
+    ).toHaveCount(0);
+    await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
+
+    const record = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/pandas-intro/_workshop/source.json?content=1`
+    );
+
+    expect(record.ok()).toBe(true);
+    expect(String((await record.json()).content)).toContain(COLLECTION_FILE);
+
+    // Replace the uploaded git-basics, which no collection is recorded
+    // for, with the first collection's own, so the second collection's
+    // git-basics is a real clash: it stays listed, and installing it
+    // lands in a directory with the collection's hash appended.
+    await cards
+      .filter({ hasText: WORKSHOPS_DIR })
+      .filter({ hasText: 'Git from the command line' })
+      .getByRole('button', { name: 'Remove' })
+      .click();
+    await page
+      .locator('.jp-Dialog')
+      .getByRole('button', { name: 'Remove' })
+      .click();
+    await expect(
+      cards.filter({ hasText: 'Git from the command line' })
+    ).toHaveCount(1);
+    await cards
+      .filter({ hasText: 'Git from the command line' })
+      .getByRole('button', { name: 'Install' })
+      .click();
+    await expect(
+      cards
+        .filter({ hasText: WORKSHOPS_DIR })
+        .filter({ hasText: 'Git from the command line' })
+    ).toHaveCount(1);
+
+    await page.evaluate((file: string) => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:collections', {});
+
+      return file;
+    }, SECOND_FILE);
+
+    const dialog = page.locator('.jp-Dialog');
+    const sources = dialog.locator('.jp-WorkshopSources');
+
+    await expect(sources).toBeVisible();
+    await sources.locator('.jp-WorkshopSources-input').fill(SECOND_FILE);
+    await sources
+      .getByRole('button', { name: 'Subscribe', exact: true })
+      .click();
+    await expect(
+      sources.locator('.jp-WorkshopSources-row', {
+        hasText: 'Second collection'
+      })
+    ).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+
+    const second = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'Second collection'
+    });
+
+    await expect(second).toHaveCount(1);
+    await expect(second.locator('.jp-WorkshopSourceIcon img')).toHaveCount(1);
+
+    const other = second.locator('.jp-WorkshopBrowser-card', {
+      hasText: 'Git, the other way'
+    });
+
+    await expect(other).toHaveCount(1);
+    await other.getByRole('button', { name: 'Install' }).click();
+    await expect(
+      cards
+        .filter({ hasText: WORKSHOPS_DIR })
+        .filter({ hasText: 'Git, the other way' })
+    ).toHaveCount(1);
+
+    const listing = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}?content=1`
+    );
+    const names = ((await listing.json()).content as { name: string }[])
+      .map(item => item.name)
+      .sort();
+
+    expect(names).toContain('git-basics');
+    expect(names).toContain('pandas-intro');
+    expect(names.some(name => /^git-basics-[0-9a-f]{7}$/.test(name))).toBe(
+      true
+    );
+
+    // Both git workshops are now installed, each matched to its own
+    // collection, so nothing is left to offer and the Available section
+    // is not shown at all.
+    const installed = browser.locator('.jp-WorkshopBrowser-card', {
+      hasText: WORKSHOPS_DIR
+    });
+
+    await expect(installed).toHaveCount(3);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-heading', { hasText: 'Available' })
+    ).toHaveCount(0);
+    await expect(browser.locator('.jp-WorkshopBrowser-group')).toHaveCount(0);
+    await expect(
+      installed
+        .filter({ hasText: 'Git, the other way' })
+        .locator('.jp-WorkshopBrowser-chip.jp-mod-source')
+    ).toHaveText('Second collection');
+
+    // Open starts the installed workshop from its card.
+    await installed
+      .filter({ hasText: 'Git, the other way' })
+      .getByRole('button', { name: 'Open' })
+      .click();
+    await trustWorkshop(page, 'Git, the other way');
   });
 
   test('opens a workshop from a launch link with variables', async ({
@@ -252,15 +606,35 @@ test.describe('workshop browser', () => {
     expect(page.url()).not.toContain('restart');
   });
 
-  test('starts in the browser from a registry launch link', async ({
+  test('installs a named workshop of a collection from a launch link', async ({
+    page
+  }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?collection=${COLLECTION_FILE}&workshop=pandas-intro`)
+      .catch(() => undefined);
+
+    await trustWorkshop(page, 'Pandas for beginners');
+    expect(page.url()).not.toContain('collection=');
+
+    const record = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/pandas-intro/_workshop/source.json?content=1`
+    );
+
+    expect(record.ok()).toBe(true);
+    expect(String((await record.json()).content)).toContain(COLLECTION_FILE);
+  });
+
+  test('starts in the browser from a collection launch link and keeps it', async ({
     page
   }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
 
-    // The link names a registry file under the root. In a fresh workspace,
-    // as on Binder, the browser takes the launcher's place and both
-    // sidebars collapse; a new workspace name keeps the earlier tests'
-    // layout record out of the way.
+    // The link names a collection file under the root. In a fresh
+    // workspace, as on Binder, the browser takes the launcher's place and
+    // both sidebars collapse; a new workspace name keeps the earlier
+    // tests' layout record out of the way.
     await page
       .evaluate((search: string) => {
         const name = `link-${Date.now().toString(36)}`;
@@ -270,22 +644,22 @@ test.describe('workshop browser', () => {
         );
 
         window.location.assign(`${path}${search}`);
-      }, `?registry=${REGISTRY_FILE}`)
+      }, `?collection=${SECOND_FILE}`)
       .catch(() => undefined);
 
     const browser = page.locator('#jupyterlab-workshop-browser');
 
     await expect(browser).toBeVisible({ timeout: 60000 });
+
+    // Both the configured collection and the link's are grouped.
     await expect(
-      browser.locator('.jp-WorkshopBrowser-card', {
-        hasText: 'Pandas for beginners'
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Test collection'
       })
     ).toHaveCount(1);
-
-    // The installed workshop is listed once, not again under Available.
     await expect(
-      browser.locator('.jp-WorkshopBrowser-card', {
-        hasText: 'Git from the command line'
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Second collection'
       })
     ).toHaveCount(1);
     await expect(page.locator('#jp-main-dock-panel .jp-Launcher')).toHaveCount(
@@ -293,7 +667,33 @@ test.describe('workshop browser', () => {
     );
     expect(await page.sidebar.isOpen('left')).toBe(false);
     expect(await page.sidebar.isOpen('right')).toBe(false);
-    expect(page.url()).not.toContain('registry=');
+    expect(page.url()).not.toContain('collection=');
+
+    // The dialog shows where each came from, and Subscribe moves the
+    // link's collection into the settings.
+    await browser.getByRole('button', { name: 'Collections…' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+    const row = dialog.locator('.jp-WorkshopSources-row', {
+      hasText: 'Second collection'
+    });
+
+    await expect(row).toContainText('from this session');
+    await row.getByRole('button', { name: 'Subscribe', exact: true }).click();
+    await expect(row).toContainText('from your settings');
+    await expect(
+      row.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(0);
+
+    // Unsubscribing takes the group away again.
+    await row.getByRole('button', { name: 'Unsubscribe' }).click();
+    await expect(row).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Second collection'
+      })
+    ).toHaveCount(0);
 
     // Opening a workshop closes the browser and reveals the instructions.
     await browser
@@ -301,13 +701,7 @@ test.describe('workshop browser', () => {
       .getByRole('button', { name: 'Open' })
       .click();
 
-    const dialog = page.locator('.jp-Dialog');
-
-    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
-    await expect(
-      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
-    ).toHaveText('Git from the command line');
+    await trustWorkshop(page, 'Git from the command line');
     await expect(browser).toHaveCount(0);
     expect(await page.sidebar.isOpen('right')).toBe(true);
 
@@ -331,6 +725,55 @@ test.describe('workshop browser', () => {
     await expect.poll(rightShare).toBeGreaterThan(0.2);
     expect(await rightShare()).toBeLessThan(0.3);
   });
+
+  test('offers the collections of a catalog from a launch link', async ({
+    page
+  }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?catalog=${CATALOG_FILE}`)
+      .catch(() => undefined);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    await expect(browser).toBeVisible({ timeout: 60000 });
+
+    // The catalog's collection that is not subscribed to is offered, with
+    // the catalog's word on it and its icon; subscribing lists its workshops.
+    const offered = browser.locator('.jp-WorkshopBrowser-suggestion');
+
+    await expect(offered).toHaveCount(1);
+    await expect(offered).toContainText('Second collection');
+    await expect(offered).toContainText('from Test catalog');
+    await expect(offered.locator('.jp-WorkshopSourceIcon img')).toHaveCount(1);
+    await offered
+      .getByRole('button', { name: 'Subscribe', exact: true })
+      .click();
+
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Second collection'
+      })
+    ).toHaveCount(1);
+    await expect(offered).toHaveCount(0);
+
+    // The dialog's Catalogs tab lists the catalog, and the collections
+    // tab marks the new collection as subscribed.
+    await browser.getByRole('button', { name: 'Collections…' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+    const catalogRow = dialog.locator(
+      '.jp-WorkshopSources-catalogs .jp-WorkshopSources-row'
+    );
+
+    await expect(catalogRow).toContainText('subscribed');
+    await dialog.getByRole('tab', { name: 'Catalogs' }).click();
+    await expect(
+      dialog.locator('.jp-WorkshopSources-row', { hasText: 'Test catalog' })
+    ).toContainText('from this session');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+  });
 });
 
 test.describe('locked-down browser', () => {
@@ -339,12 +782,13 @@ test.describe('locked-down browser', () => {
       ...galata.DEFAULT_SETTINGS,
       [PLUGIN]: {
         defaultWorkshop: '',
-        registries: [REGISTRY_FILE],
+        collections: [COLLECTION_FILE],
         workshopsDirectory: WORKSHOPS_DIR,
         disabledFeatures: [
           'open-directory',
           'open-url',
-          'registries',
+          'collections',
+          'catalogs',
           'remove',
           'author'
         ]
@@ -353,47 +797,21 @@ test.describe('locked-down browser', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await page.contents.uploadContent(
-      JSON.stringify(REGISTRY),
-      'text',
-      REGISTRY_FILE
-    );
-    await page.contents.uploadDirectory(
-      EXAMPLE_DIR,
-      `${WORKSHOPS_DIR}/${WORKSHOP}`
-    );
-
-    for (const name of ['_workshop', 'scratch', 'demo']) {
-      const directory = `${WORKSHOPS_DIR}/${WORKSHOP}/${name}`;
-
-      if (await page.contents.directoryExists(directory)) {
-        await page.contents.deleteDirectory(directory);
-      }
-    }
+    await uploadFixtures(page);
   });
 
   test.afterEach(async ({ page }) => {
-    await page.contents.deleteFile(REGISTRY_FILE);
-
-    if (await page.contents.directoryExists(WORKSHOPS_DIR)) {
-      await page.contents.deleteDirectory(WORKSHOPS_DIR);
-    }
+    await removeFixtures(page);
   });
 
   test('hides the disabled features and restarts a workshop', async ({
     page
   }) => {
-    await page.evaluate(() => {
-      const exposed = window as unknown as IExposedApp;
-
-      void exposed.jupyterapp.commands.execute('workshop:browse', {});
-    });
+    await openBrowser(page);
 
     const browser = page.locator('#jupyterlab-workshop-browser');
 
-    await expect(browser).toBeVisible();
-
-    // The ways of bringing in other workshops are gone, but the registry
+    // The ways of bringing in other workshops are gone, but the collection
     // is still listed and the installed workshop still opens.
     const cards = browser.locator('.jp-WorkshopBrowser-card');
 
@@ -403,7 +821,7 @@ test.describe('locked-down browser', () => {
     for (const name of [
       'Add from URL…',
       'Open a directory…',
-      'Manage registries',
+      'Collections…',
       'Remove'
     ]) {
       await expect(browser.getByRole('button', { name })).toHaveCount(0);
@@ -467,48 +885,5 @@ test.describe('locked-down browser', () => {
         `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/snapshots/pristine.tar`
       )
     ).toBe(true);
-
-    // The last page offers Finish in place of Next. Finishing shows the
-    // dialog, and browsing from it closes the workshop for the browser.
-    const options = await pageSelect.locator('option').count();
-
-    await pageSelect.selectOption(String(options - 1));
-    await expect(
-      panel.locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
-    ).toHaveCount(0);
-    await panel
-      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Finish' })
-      .click();
-    await expect(dialog).toContainText('Finished: Git from the command line');
-    await expect(dialog).toContainText('everyday git commands');
-    await expect(dialog.getByRole('button', { name: 'Shut down' })).toHaveCount(
-      0
-    );
-    await dialog.getByRole('button', { name: 'Keep reading' }).click();
-    await expect(panel.locator('.jp-WorkshopPanel-finished')).toContainText(
-      'Finished'
-    );
-    // Only the finished page counts: page one was left with its
-    // requirements unmet and the pages in between were never visited.
-    await expect(panel.locator('.jp-WorkshopPanel-progress')).toHaveAttribute(
-      'title',
-      new RegExp(`^1 of ${options}`)
-    );
-
-    // Browsing from the dialog closes the workshop's preview and terminal
-    // with it, so the browser fills a fresh window with both sidebars
-    // collapsed.
-    await expect(
-      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
-    ).toHaveCount(1);
-    await panel.locator('.jp-WorkshopPanel-finished a').click();
-    await dialog.getByRole('button', { name: 'Browse workshops' }).click();
-    await expect(browser).toBeVisible();
-    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveCount(0);
-    await expect(
-      page.locator('#jp-main-dock-panel .jp-MarkdownViewer')
-    ).toHaveCount(0);
-    await expect(page.locator('.jp-Terminal')).toHaveCount(0);
-    expect(await page.sidebar.isOpen('right')).toBe(false);
   });
 });

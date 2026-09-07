@@ -130,7 +130,7 @@ def test_publish_builds_a_stable_archive(
     assert not any("_workshop" in name for name in names)
 
     digest = (out / "pub-0.1.0.tar.gz.sha256").read_text().split()[0]
-    entry = json.loads((out / "pub-0.1.0.registry.json").read_text())
+    entry = json.loads((out / "pub-0.1.0.collection.json").read_text())
 
     assert entry["name"] == "pub"
     assert entry["versions"][0]["sha256"] == digest
@@ -174,11 +174,11 @@ def test_junit_report_marks_failures_and_skips() -> None:
     assert '<skipped message=""/>' in xml
 
 
-def test_registry_command_builds_an_index_from_entries(
+def test_collection_command_builds_an_index_from_entries(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    entry = tmp_path / "demo-1.0.registry.json"
-    index = tmp_path / "registry" / "index.json"
+    entry = tmp_path / "demo-1.0.collection.json"
+    index = tmp_path / "collections" / "collection.json"
 
     entry.write_text(
         json.dumps(
@@ -192,12 +192,35 @@ def test_registry_command_builds_an_index_from_entries(
         )
     )
 
-    assert cli.main(["registry", str(index), str(entry), "--title", "Mine"]) == 0
+    assert (
+        cli.main(
+            [
+                "collection",
+                str(index),
+                str(entry),
+                "--title",
+                "Mine",
+                "--description",
+                "About mine.",
+                "--publisher",
+                "Me",
+                "--icon",
+                "icon.svg",
+                "--tag",
+                "a",
+            ]
+        )
+        == 0
+    )
     assert "1 workshop(s)" in capsys.readouterr().out
 
     data = json.loads(index.read_text())
 
     assert data["title"] == "Mine"
+    assert data["description"] == "About mine."
+    assert data["publisher"] == {"name": "Me"}
+    assert data["icon"] == "icon.svg"
+    assert data["tags"] == ["a"]
     assert data["workshops"][0]["name"] == "demo"
 
     # Publishing again adds a version rather than replacing the entry.
@@ -213,15 +236,16 @@ def test_registry_command_builds_an_index_from_entries(
         )
     )
 
-    assert cli.main(["registry", str(index), str(entry)]) == 0
+    assert cli.main(["collection", str(index), str(entry)]) == 0
 
     data = json.loads(index.read_text())
 
+    assert data["title"] == "Mine"
     assert [v["version"] for v in data["workshops"][0]["versions"]] == ["1.1", "1.0"]
 
     entry.write_text("[]")
 
-    assert cli.main(["registry", str(index), str(entry)]) == 2
+    assert cli.main(["collection", str(index), str(entry)]) == 2
 
 
 def test_index_command_indexes_a_repository(
@@ -253,7 +277,7 @@ def test_index_command_indexes_a_repository(
     )
     assert "2 workshop(s)" in capsys.readouterr().out
 
-    data = json.loads((tmp_path / "registry.json").read_text())
+    data = json.loads((tmp_path / "collection.json").read_text())
 
     assert data["title"] == "Class"
     assert [entry["name"] for entry in data["workshops"]] == ["one", "two"]

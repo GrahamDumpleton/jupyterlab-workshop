@@ -50,20 +50,21 @@ The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers
 three buttons: Browse workshops, Open a directory and Open from URL.
 
-```{note}
-The panel may also show a message that it could not open
-`examples/git-basics`. That is the `defaultWorkshop` setting, which
-points at the example in the project's own checkout; it does nothing
-harmful. Clear it under Settings, Workshop, to make the message go away.
-```
-
 ## Run an example
 
-Click Browse workshops. The browser lists the workshops of the
-project's registry under Available: Git from the command line, Hello
-JupyterLab, and Writing your first workshop. Install Hello JupyterLab.
+Click Open from URL and paste the address of the Hello JupyterLab
+example in the project's repository:
+
+```
+https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/hello-jupyterlab
+```
+
 The extension downloads it into `workshops/hello-jupyterlab` under the
-directory JupyterLab was started in, then opens it.
+directory JupyterLab was started in, then opens it. Browse workshops
+would show it as installed from now on; the browser is also where
+published collections of workshops are subscribed to and installed
+from, which [Finding and installing workshops](collections.md) covers,
+and a fresh install subscribes to none.
 
 ```{figure} _static/trust-dialog.png
 :alt: The trust dialog for the Hello JupyterLab workshop
@@ -171,5 +172,6 @@ A green self-test is what a workshop's continuous integration runs;
   [Checks, forms, gating and checkpoints](checks.md) covers verifying
   what the learner has done.
 
-- [Finding and installing workshops](registry.md) covers the browser,
-  registries and launch links for handing a workshop to learners.
+- [Finding and installing workshops](collections.md) covers the browser,
+  collections, catalogs and launch links for handing a workshop to
+  learners.

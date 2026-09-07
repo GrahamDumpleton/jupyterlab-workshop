@@ -332,8 +332,8 @@ jupyter workshop publish git-tutorial --out git-tutorial/dist
 ```
 
 This writes `git-tutorial/dist/git-tutorial-0.1.0.tar.gz`, its SHA-256
-beside it, and `git-tutorial-0.1.0.registry.json`, an entry for a
-registry index. Without `--out` the files go to `dist/` in the current
+beside it, and `git-tutorial-0.1.0.collection.json`, an entry for a
+collection index. Without `--out` the files go to `dist/` in the current
 directory. [Publishing workshops](publishing.md) covers building an
 index from such entries, listing a repository of workshops without
 archives at all, and hosting either where learners' JupyterLab can

@@ -21,6 +21,7 @@ from .analytics import (
 )
 from .bridge import SETTINGS_KEY as BRIDGE_KEY
 from .bridge import Bridge, BridgeError
+from .catalog import CatalogError, load_catalog
 from .checks import (
     CheckError,
     create_checkpoint,
@@ -29,6 +30,7 @@ from .checks import (
     restore_checkpoint,
     run_script,
 )
+from .collection import CollectionError, list_installed, load_collection
 from .environment import (
     EnvironmentSetupError,
     create_environment,
@@ -38,7 +40,6 @@ from .environment import (
 from .fetch import FetchError, fetch_workshop, parse_source, remove_workshop
 from .platform import current_platform
 from .publish import PublishError, publish_workshop
-from .registry import RegistryError, list_installed, load_registry
 from .scaffold import TEMPLATES, slug, write_scaffold
 
 API_NAMESPACE = "jupyterlab-workshop"
@@ -106,6 +107,7 @@ class FetchHandler(WorkshopHandler):
         body = self.body_json()
         directory = str(body.get("directory") or DEFAULT_WORKSHOPS_DIRECTORY)
         name = str(body.get("name") or "")
+        collection = str(body.get("collection") or "")
         overwrite = bool(body.get("overwrite", False))
 
         try:
@@ -118,7 +120,12 @@ class FetchHandler(WorkshopHandler):
             result = await IOLoop.current().run_in_executor(
                 None,
                 lambda: fetch_workshop(
-                    source, self.root_dir, directory, name=name, overwrite=overwrite
+                    source,
+                    self.root_dir,
+                    directory,
+                    name=name,
+                    overwrite=overwrite,
+                    collection=collection,
                 ),
             )
         except FetchError as error:
@@ -138,7 +145,7 @@ class WorkshopsHandler(WorkshopHandler):
 
         try:
             records = list_installed(self.root_dir, directory)
-        except RegistryError as error:
+        except CollectionError as error:
             raise tornado.web.HTTPError(400, str(error)) from error
 
         self.finish(json.dumps({"workshops": records}))
@@ -259,8 +266,8 @@ class PreflightHandler(WorkshopHandler):
         self.finish(json.dumps({"tools": [result.to_dict() for result in results]}))
 
 
-class RegistryHandler(WorkshopHandler):
-    """Read a registry index from a URL or a file under the root."""
+class CollectionHandler(WorkshopHandler):
+    """Read a collection index from a URL or a file under the root."""
 
     @tornado.web.authenticated
     async def get(self) -> None:
@@ -271,12 +278,32 @@ class RegistryHandler(WorkshopHandler):
 
         try:
             index = await IOLoop.current().run_in_executor(
-                None, lambda: load_registry(location, self.root_dir)
+                None, lambda: load_collection(location, self.root_dir)
             )
-        except RegistryError as error:
+        except CollectionError as error:
             raise tornado.web.HTTPError(400, str(error)) from error
 
         self.finish(json.dumps({"url": location, "index": index}))
+
+
+class CatalogHandler(WorkshopHandler):
+    """Read a catalog from a URL or a file under the root."""
+
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        location = self.get_argument("url", "")
+
+        if not location:
+            raise tornado.web.HTTPError(400, "A url query argument is required")
+
+        try:
+            catalog = await IOLoop.current().run_in_executor(
+                None, lambda: load_catalog(location, self.root_dir)
+            )
+        except CatalogError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"url": location, "catalog": catalog}))
 
 
 class EventsHandler(WorkshopHandler):
@@ -418,7 +445,7 @@ class InitHandler(WorkshopHandler):
 
 
 class PublishHandler(WorkshopHandler):
-    """Build the archive, hash and registry entry of a workshop."""
+    """Build the archive, hash and collection entry of a workshop."""
 
     @tornado.web.authenticated
     async def post(self) -> None:
@@ -528,7 +555,8 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
         (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
         (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),
-        (url_path_join(base_url, API_NAMESPACE, "registry"), RegistryHandler),
+        (url_path_join(base_url, API_NAMESPACE, "collection"), CollectionHandler),
+        (url_path_join(base_url, API_NAMESPACE, "catalog"), CatalogHandler),
         (url_path_join(base_url, API_NAMESPACE, "events"), EventsHandler),
         (url_path_join(base_url, API_NAMESPACE, "environment"), EnvironmentHandler),
         (url_path_join(base_url, API_NAMESPACE, "init"), InitHandler),

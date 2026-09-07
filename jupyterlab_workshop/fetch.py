@@ -213,13 +213,16 @@ def fetch_workshop(
     name: str = "",
     overwrite: bool = False,
     downloader: Downloader | None = None,
+    collection: str = "",
 ) -> FetchResult:
     """Download and unpack a workshop under ``root_dir/directory``.
 
     The workshop lands in a directory named after the manifest's ``name``
     (or ``name`` when given). An existing directory is refused unless
-    ``overwrite`` is set. The returned path is relative to ``root_dir`` with
-    forward slashes, as the contents API expects.
+    ``overwrite`` is set. The ``collection`` the workshop was chosen from,
+    when given, is recorded with the source so the browser can match the
+    install to its entry later. The returned path is relative to
+    ``root_dir`` with forward slashes, as the contents API expects.
     """
 
     parent = _resolve_inside(root_dir, directory)
@@ -261,7 +264,7 @@ def fetch_workshop(
             sha256=digest,
         )
 
-        _write_source_file(staging, fetched, url)
+        _write_source_file(staging, fetched, url, collection)
         shutil.move(str(staging), str(target))
 
     return FetchResult(
@@ -558,18 +561,23 @@ def _temp_parent(parent: Path) -> str | None:
     return str(parent) if parent.is_dir() else None
 
 
-def _write_source_file(staging: Path, source: Source, url: str) -> None:
+def _write_source_file(
+    staging: Path, source: Source, url: str, collection: str = ""
+) -> None:
     state_dir = staging / STATE_DIR
 
     state_dir.mkdir(parents=True, exist_ok=True)
 
-    record = {
+    record: dict[str, Any] = {
         "version": 1,
         "source": source.to_dict(),
         "archive": url,
         "sha256": source.sha256,
         "fetchedAt": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+
+    if collection:
+        record["collection"] = collection
 
     (state_dir / SOURCE_FILE).write_text(
         json.dumps(record, indent=2) + os.linesep, encoding="utf-8"

@@ -5,11 +5,12 @@ page that explains the behaviour in full.
 
 ## Installing and starting
 
-**"Unable to open workshop examples/git-basics" in the panel on a fresh
-install.** The `defaultWorkshop` setting ships pointing at an example
-that only exists in the project's own checkout. Nothing is wrong; clear
-the setting under Settings, Workshop, or ignore the message. See the
-[settings reference](settings.md).
+**The workshop browser's Available section is empty, or says you are
+not subscribed to anything.** A fresh install subscribes to nothing.
+Subscribe to a collection or a catalog by its URL from the
+"Collections…" dialog, open
+a workshop from a URL, or open a directory. See [Finding and installing
+workshops](collections.md).
 
 **`pip: command not found`, or `pip install` says the environment is
 externally managed.** The system Python is not the place to install

@@ -8,22 +8,24 @@ from threading import Thread
 
 import pytest
 
-from jupyterlab_workshop.registry import (
-    RegistryError,
-    build_registry,
+from jupyterlab_workshop.collection import (
+    CollectionError,
+    CollectionMetadata,
+    build_collection,
+    collection_metadata,
     describe_installed,
     find_workshops,
     guess_repository,
     https_remote,
     index_repository,
     list_installed,
-    load_registry,
-    parse_registry,
+    load_collection,
+    parse_collection,
 )
 
 INDEX = {
     "version": 1,
-    "title": "Test registry",
+    "title": "Test collection",
     "workshops": [
         {
             "name": "demo",
@@ -63,41 +65,41 @@ def index_url() -> Iterator[str]:
         server.server_close()
 
 
-def test_load_registry_from_a_url(tmp_path: Path, index_url: str) -> None:
-    index = load_registry(index_url, tmp_path)
+def test_load_collection_from_a_url(tmp_path: Path, index_url: str) -> None:
+    index = load_collection(index_url, tmp_path)
 
-    assert index["title"] == "Test registry"
+    assert index["title"] == "Test collection"
     assert [item["name"] for item in index["workshops"]] == ["demo"]
 
 
-def test_load_registry_from_a_file_under_the_root(tmp_path: Path) -> None:
+def test_load_collection_from_a_file_under_the_root(tmp_path: Path) -> None:
     (tmp_path / "registry").mkdir()
     (tmp_path / "registry" / "index.json").write_text(json.dumps(INDEX))
 
-    assert load_registry("registry/index.json", tmp_path)["version"] == 1
+    assert load_collection("registry/index.json", tmp_path)["version"] == 1
 
-    with pytest.raises(RegistryError, match="outside"):
-        load_registry("../elsewhere.json", tmp_path)
+    with pytest.raises(CollectionError, match="outside"):
+        load_collection("../elsewhere.json", tmp_path)
 
-    with pytest.raises(RegistryError, match="no registry file"):
-        load_registry("missing.json", tmp_path)
+    with pytest.raises(CollectionError, match="no collection file"):
+        load_collection("missing.json", tmp_path)
 
-    with pytest.raises(RegistryError, match="Unsupported"):
-        load_registry("ftp://host/index.json", tmp_path)
-
-
-def test_parse_registry_checks_the_shape() -> None:
-    with pytest.raises(RegistryError, match="not valid JSON"):
-        parse_registry("{")
-
-    with pytest.raises(RegistryError, match="version"):
-        parse_registry(json.dumps({"version": 2, "workshops": []}))
-
-    with pytest.raises(RegistryError, match="list of workshops"):
-        parse_registry(json.dumps({"version": 1, "workshops": "none"}))
+    with pytest.raises(CollectionError, match="Unsupported"):
+        load_collection("ftp://host/index.json", tmp_path)
 
 
-def test_build_registry_merges_entries_and_versions() -> None:
+def test_parse_collection_checks_the_shape() -> None:
+    with pytest.raises(CollectionError, match="not valid JSON"):
+        parse_collection("{")
+
+    with pytest.raises(CollectionError, match="version"):
+        parse_collection(json.dumps({"version": 2, "workshops": []}))
+
+    with pytest.raises(CollectionError, match="list of workshops"):
+        parse_collection(json.dumps({"version": 1, "workshops": "none"}))
+
+
+def test_build_collection_merges_entries_and_versions() -> None:
     first = {
         "name": "demo",
         "title": "Demo",
@@ -117,22 +119,58 @@ def test_build_registry_merges_entries_and_versions() -> None:
         "versions": [{"version": "0.1", "source": {"git": "https://g/a/b"}}],
     }
 
-    index = build_registry(None, [first], title="Mine")
-    index = build_registry(index, [second, other])
+    index = build_collection(None, [first], CollectionMetadata(title="Mine"))
+    index = build_collection(index, [second, other])
 
+    # The existing entry keeps its place and the new one is appended.
     assert index["title"] == "Mine"
-    assert [item["name"] for item in index["workshops"]] == ["alpha", "demo"]
+    assert [item["name"] for item in index["workshops"]] == ["demo", "alpha"]
 
-    demo = index["workshops"][1]
+    demo = index["workshops"][0]
 
     assert demo["title"] == "Demo again"
     assert [item["version"] for item in demo["versions"]] == ["1.10", "1.9", "1.0"]
 
-    with pytest.raises(RegistryError, match="needs a name"):
-        build_registry(None, [{"title": "Nameless"}])
+    with pytest.raises(CollectionError, match="needs a name"):
+        build_collection(None, [{"title": "Nameless"}])
 
-    with pytest.raises(RegistryError, match="at least one version"):
-        build_registry(None, [{"name": "x", "versions": []}])
+    with pytest.raises(CollectionError, match="at least one version"):
+        build_collection(None, [{"name": "x", "versions": []}])
+
+
+def test_build_collection_keeps_and_updates_metadata() -> None:
+    entry = {
+        "name": "demo",
+        "title": "Demo",
+        "versions": [{"version": "1.0", "source": {"archive": "https://h/1.tgz"}}],
+    }
+    metadata = CollectionMetadata(
+        title="Mine",
+        description="About mine.",
+        publisher="Me",
+        publisher_url="https://me.example",
+        homepage="https://mine.example",
+        icon="icon.svg",
+        tags=("a", "b"),
+    )
+    index = build_collection(None, [entry], metadata)
+
+    assert collection_metadata(index) == {
+        "title": "Mine",
+        "description": "About mine.",
+        "publisher": {"name": "Me", "url": "https://me.example"},
+        "homepage": "https://mine.example",
+        "icon": "icon.svg",
+        "tags": ["a", "b"],
+    }
+
+    # A later build without metadata keeps it; a given field replaces it.
+    again = build_collection(index, [], CollectionMetadata(description="Changed."))
+
+    assert again["title"] == "Mine"
+    assert again["description"] == "Changed."
+    assert again["publisher"] == {"name": "Me", "url": "https://me.example"}
+    assert again["tags"] == ["a", "b"]
 
 
 def _write_workshop(directory: Path, name: str, done: int = 0) -> None:
@@ -162,6 +200,7 @@ def _write_workshop(directory: Path, name: str, done: int = 0) -> None:
                 {
                     "source": {"kind": "git", "url": "https://g/a/b"},
                     "sha256": "abc",
+                    "collection": "https://g/collection.json",
                 }
             )
         )
@@ -187,15 +226,17 @@ def test_list_installed_describes_workshops_with_progress(tmp_path: Path) -> Non
     assert beta["started"] is True
     assert beta["source"] == {"kind": "git", "url": "https://g/a/b"}
     assert beta["sha256"] == "abc"
+    assert beta["collection"] == "https://g/collection.json"
 
     alpha = records[0]
 
     assert alpha["started"] is False
     assert alpha["source"] is None
+    assert alpha["collection"] is None
 
     assert list_installed(tmp_path, "nowhere") == []
 
-    with pytest.raises(RegistryError, match="outside"):
+    with pytest.raises(CollectionError, match="outside"):
         list_installed(tmp_path, "../up")
 
 
@@ -267,7 +308,7 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
         [tmp_path / "workshops"],
         "https://github.com/org/repo",
         "main",
-        title="Mine",
+        metadata=CollectionMetadata(title="Mine"),
     )
     entry = index["workshops"][0]
 
@@ -304,10 +345,10 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
         "ref": "v1.3",
     }
 
-    with pytest.raises(RegistryError):
+    with pytest.raises(CollectionError):
         index_repository(tmp_path, [tmp_path / "missing"], "https://x", "main")
 
-    with pytest.raises(RegistryError):
+    with pytest.raises(CollectionError):
         index_repository(tmp_path / "sub", [tmp_path], "https://x", "main")
 
 

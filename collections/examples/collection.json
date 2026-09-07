@@ -1,32 +1,15 @@
 {
   "version": 1,
   "title": "Example workshops",
+  "description": "The example workshops from the jupyterlab-workshop repository: a tour of what actions can do, git from the command line, and writing a workshop of your own.",
+  "publisher": {
+    "name": "jupyterlab-workshop",
+    "url": "https://github.com/GrahamDumpleton/jupyterlab-workshop"
+  },
+  "homepage": "https://jupyterlab-workshop.readthedocs.io/",
+  "icon": "icon.svg",
+  "tags": ["examples"],
   "workshops": [
-    {
-      "name": "git-basics",
-      "title": "Git from the command line",
-      "description": "Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.",
-      "tags": ["git", "cli", "beginner"],
-      "platforms": ["linux", "macos", "windows"],
-      "capabilities": [
-        "terminal",
-        "write-files:workspace",
-        "kernel-exec",
-        "auto-run"
-      ],
-      "duration": "30m",
-      "authors": ["Graham Dumpleton"],
-      "versions": [
-        {
-          "version": "0.1.0",
-          "source": {
-            "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
-            "ref": "main",
-            "subdir": "examples/git-basics"
-          }
-        }
-      ]
-    },
     {
       "name": "hello-jupyterlab",
       "title": "Hello JupyterLab",
@@ -48,6 +31,31 @@
             "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
             "ref": "main",
             "subdir": "examples/hello-jupyterlab"
+          }
+        }
+      ]
+    },
+    {
+      "name": "git-basics",
+      "title": "Git from the command line",
+      "description": "Learn init, add, commit, diff, branch, merge and conflict resolution from the terminal.",
+      "tags": ["git", "cli", "beginner"],
+      "platforms": ["linux", "macos", "windows"],
+      "capabilities": [
+        "terminal",
+        "write-files:workspace",
+        "kernel-exec",
+        "auto-run"
+      ],
+      "duration": "30m",
+      "authors": ["Graham Dumpleton"],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "source": {
+            "git": "https://github.com/GrahamDumpleton/jupyterlab-workshop",
+            "ref": "main",
+            "subdir": "examples/git-basics"
           }
         }
       ]

@@ -18,9 +18,14 @@ just lab
 `just install` creates the Python environment, installs the JavaScript
 workspace, builds the extension and links it into JupyterLab in
 development mode. `just lab` starts JupyterLab with the repository root
-as its root directory, which is where the example workshops live. Open
-the Workshop panel in the right sidebar (the `panelSide` setting, or
-dragging the tab, moves it to the left).
+as its root directory, which is where the example workshops live, and
+with the settings in `dev/overrides.json`: it opens in the workshop
+browser with the three examples listed as installed, the examples
+collection under `collections/examples/` and the checkout's
+`collections/catalog.json` subscribed to, so the collection and catalog
+code paths have something local to work on. Open the Workshop panel in the
+right sidebar (the `panelSide` setting, or dragging the tab, moves it to
+the left).
 
 To rebuild while editing the TypeScript, run `just watch` in a second
 terminal and refresh the browser after each rebuild. `just --list` shows
@@ -28,12 +33,10 @@ every task.
 
 ## Running the examples from a checkout
 
-With `just lab` running, the `examples/git-basics` workshop opens
-automatically: the path is the `defaultWorkshop` setting of the
-extension, which the shipped settings point at the example. Change it
-under Settings, use the folder button in the panel header to pick a
-different workshop directory, or right-click a directory in the file
-browser and choose "Open as Workshop".
+With `just lab` running, open Git from the command line from the
+Installed section of the browser. The folder button in the panel header
+picks any other workshop directory, and right-clicking a directory in
+the file browser and choosing "Open as Workshop" does the same.
 
 1. On page one, click each command block in turn. The first click starts
    a terminal named `git` in a split beneath the main area and runs the

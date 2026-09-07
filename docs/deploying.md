@@ -20,12 +20,14 @@ workshop; the instructions panel then appears. Pointing
 `workshopsDirectory` at a directory of workshops shipped in the image
 lists them as installed and ready to open without a download.
 
-A launch link can do the same for one session with a `registry`
-parameter naming an index by URL or by a path relative to the JupyterLab
-root: `/lab?registry=https://example.org/workshops/index.json`. The
-registry is shown alongside the configured ones for that session only,
-and `/lab?workshop=<path or URL>` opens one workshop directly; see
-[launch links](registry.md#launch-links).
+A launch link can do the same for one session with a `collection` or
+`catalog` parameter naming one by URL or by a path relative to the
+JupyterLab root: `/lab?collection=https://example.org/python/collection.json`
+or `/lab?catalog=https://example.org/catalog.json`. The collection or
+catalog is added for that session only, alongside the subscribed
+ones, and the browser offers Subscribe to make it stay;
+`/lab?workshop=<path or URL>` opens one workshop directly; see
+[launch links](collections.md#launch-links).
 
 ## Settling trust
 
@@ -76,9 +78,10 @@ palette and the matching launch link parameter.
 | Key              | Removes                                                                                                                                                                                                                      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `open-directory` | The folder button, "Open a directory" in the browser, "Open Workshop…" and "Open Workshop Path…", the file browser context menu item, and `workshop=<path>` launch links naming a directory outside the workshops directory. |
-| `open-url`       | The download button, "Add from URL…", "Open Workshop from URL…", and `workshop=<url>` launch links for sources no configured registry lists.                                                                                 |
-| `registries`     | "Manage registries" and the `registry` launch link parameter, so only the `registries` setting counts.                                                                                                                       |
-| `available`      | The Available section of the browser and its search and tag filters, leaving only the installed workshops.                                                                                                                   |
+| `open-url`       | The download button, "Add from URL…", "Open Workshop from URL…", and `workshop=<url>` launch links for sources no subscribed collection lists.                                                                               |
+| `collections`    | Subscribing to and unsubscribing from collections: the Collections tab of the dialog, Subscribe, and the `collection` launch link parameter, so only the `collections` setting counts.                                       |
+| `catalogs`       | The same for catalogs: the Catalogs tab, "Collections you can subscribe to", and the `catalog` launch link parameter, so only the `catalogs` setting counts.                                                                 |
+| `available`      | The Available section of the browser and its search and tag filters, leaving only the installed workshops; for an image whose subscribed collection offers more than the image should let learners install.                  |
 | `remove`         | The Remove buttons and "Workshop: Remove…".                                                                                                                                                                                  |
 | `close`          | The close button and "Close Workshop".                                                                                                                                                                                       |
 | `browse`         | The browse button, the launcher card and "Browse Workshops", for an image that runs a single workshop.                                                                                                                       |
@@ -87,7 +90,8 @@ palette and the matching launch link parameter.
 The workshops under `workshopsDirectory` stay openable with
 `open-directory` disabled, from the browser or a `workshop=<path>` launch
 link, and the browser's Install and Update buttons keep working with
-`open-url` disabled, because those sources come from the registries.
+`open-url` disabled, because those sources come from the subscribed
+collections.
 Restart stays available whatever is disabled, since it is how a learner
 starts over when Remove is gone; see [Using
 workshops](using.md#starting-over-and-clearing-up).
@@ -121,7 +125,8 @@ JupyterLab with the workshops installed and trusted. It needs:
     "disabledFeatures": [
       "open-directory",
       "open-url",
-      "registries",
+      "collections",
+      "catalogs",
       "remove",
       "author"
     ]
@@ -132,15 +137,22 @@ JupyterLab with the workshops installed and trusted. It needs:
 The session then starts in the browser with every workshop in the
 checkout listed as installed and ready to open, with no download and no
 trust dialog, since the visitor chose the repository. The disabled
-features keep the learner to those workshops but leave browsing, the
-Available section and closing, so they can move between the supplied
-workshops. A launch link of `urlpath=lab%3Fworkshop%3Dworkshops%2Fgit-basics`
-opens one workshop directly, and `urlpath=lab%3Fregistry%3Dregistry.json`
+features keep the learner to those workshops but leave browsing and
+closing, so they can move between the supplied workshops; there are
+no subscriptions, so there is nothing more to install, and `available` need not
+be disabled. A launch link of `urlpath=lab%3Fworkshop%3Dworkshops%2Fgit-basics`
+opens one workshop directly, and `urlpath=lab%3Fcollection%3Dcollection.json`
 gives the browser start without the override, apart from the trust
-dialog. This repository's own `examples/` directory, `registry/` index
-and `binder/` files follow this pattern, and [Publishing
-workshops](publishing.md#several-workshops-in-one-repository) covers
-building the index.
+dialog. This repository's own `examples/` directory, its index under
+`collections/examples/` and its `binder/` files follow this pattern, and
+[Publishing workshops](publishing.md#several-workshops-in-one-repository)
+covers building the index.
+
+An image meant to show off a catalog does the opposite: it subscribes
+to nothing and disables nothing, and its launch link carries the
+catalog, `urlpath=lab%3Fcatalog%3D<encoded url>`, so the visitor lands
+in the browser with the catalog's collections on offer and can
+subscribe to and install what they like.
 
 The Finish dialog offers to shut the session down when the host is
 Binder, which the extension recognises from the environment variables
@@ -185,6 +197,7 @@ events and what they never contain.
 
 Where no server can be run at all, a JupyterLite site carries the
 workshops and runs in the browser, with the trust level, the default
-workshop and a registry set at build time; see [Publishing
+workshop and the subscribed collections and catalogs set at build time;
+see [Publishing
 workshops](publishing.md#a-jupyterlite-site) for building and hosting
 one and [JupyterLite](lite.md) for what workshops can do there.

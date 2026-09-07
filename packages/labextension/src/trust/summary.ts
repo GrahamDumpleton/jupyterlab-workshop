@@ -22,6 +22,9 @@ export const SOURCE_FILE = 'source.json';
 export interface ISourceRecord {
   source: IWorkshopSource;
   sha256: string;
+
+  /** Location of the collection the workshop was installed from, if any. */
+  collection?: string;
 }
 
 /**
@@ -42,6 +45,7 @@ export async function readSourceRecord(
     const parsed = JSON.parse(text) as {
       source?: Partial<IWorkshopSource>;
       sha256?: unknown;
+      collection?: unknown;
     };
     const source = parsed.source ?? {};
 
@@ -57,7 +61,11 @@ export async function readSourceRecord(
           ref: typeof source.ref === 'string' ? source.ref : undefined,
           subdir: typeof source.subdir === 'string' ? source.subdir : undefined
         },
-        sha256: parsed.sha256
+        sha256: parsed.sha256,
+        collection:
+          typeof parsed.collection === 'string' && parsed.collection !== ''
+            ? parsed.collection
+            : undefined
       };
     }
   } catch (error) {
@@ -69,7 +77,7 @@ export async function readSourceRecord(
 
 /**
  * The key under which decisions about a source are stored. It matches the
- * form the server uses so registries can pre-trust sources later.
+ * form the server uses so a policy can pre-trust sources by prefix.
  */
 export function sourceKey(source: IWorkshopSource): string {
   if (source.kind === 'git') {

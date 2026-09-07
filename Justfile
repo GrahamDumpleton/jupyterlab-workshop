@@ -28,8 +28,9 @@ watch:
     uv run jlpm watch
 
 # Start JupyterLab from the repository root with the extension loaded.
+# The settings in dev/overrides.json make it start in the workshop browser with the examples installed.
 lab *args:
-    uv run jupyter lab --notebook-dir=. "$@"
+    uv run jupyter lab --notebook-dir=. --LabApp.app_settings_dir=dev "$@"
 
 # Run the fast test suites: Jest for packages/core and pytest for the Python package.
 test *args:
@@ -87,7 +88,7 @@ pages *args:
     mkdir -p site/schemas/v1alpha1
     cp github-pages/index.html site/index.html
     touch site/.nojekyll
-    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/registry.schema.json site/schemas/v1alpha1/
+    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json site/schemas/v1alpha1/
     uv run jupyter workshop lite examples/hello-jupyterlab --out site/demo "$@"
 
 # Self-test a workshop directory in a real JupyterLab (default: every example).

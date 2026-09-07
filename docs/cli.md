@@ -30,9 +30,12 @@ Windows.
 
 ```
 jupyter workshop lint my-workshop [--json] [--platform linux|macos|windows|lite]
+jupyter workshop lint collection.json [--json]
+jupyter workshop lint catalog.json [--json]
 ```
 
-Parses the manifest and every page and reports problems: unknown
+Given a workshop directory, parses the manifest and every page and
+reports problems: unknown
 directives and options, missing bodies, capabilities used but not
 declared (or declared but unused), invalid checks, quizzes and forms,
 requirements that name nothing, variables used before the form that sets
@@ -42,6 +45,12 @@ listed platform. Exits with 1 when there are errors. `--json` prints the
 report as JSON for other tools. `--platform` renders the pages as that
 platform sees them, selecting its command variants and built-in
 variables, so a Linux CI job can check the Windows version of a workshop.
+
+Given a `collection.json` or `catalog.json` file, checks that it parses
+as one, and for a catalog that every collection it names can be read
+from where the catalog says it is, relative to the catalog file when not
+a URL. Exits with 1 when something is wrong, which gives a repository of
+workshops a CI check.
 
 ## render
 
@@ -65,11 +74,12 @@ Lists page ids, titles, paths and requirements.
 ## schema
 
 ```
-jupyter workshop schema [--registry]
+jupyter workshop schema [--collection | --catalog]
 ```
 
 Prints the JSON schema of `workshop.yaml`, for editors and validators,
-or with `--registry` the schema of a registry index file.
+or with `--collection` the schema of a collection index file, or with
+`--catalog` the schema of a catalog.
 
 ## publish
 
@@ -79,40 +89,64 @@ jupyter workshop publish my-workshop [--out dist] [--url URL]
 
 Builds `dist/<name>-<version>.tar.gz` (excluding `_workshop`, `.git`,
 `scratch` and similar), writes its SHA-256 next to it, and writes a
-registry entry JSON snippet with the hash and, when given, the URL the
-archive will be published at. The archive is built with fixed ownership
-and timestamps so the hash is the same on every machine.
+collection entry JSON snippet, `<name>-<version>.collection.json`, with
+the hash and, when given, the URL the archive will be published at. The
+archive is built with fixed ownership and timestamps so the hash is the
+same on every machine.
 
-## registry
+## collection
 
 ```
-jupyter workshop registry index.json ENTRY... [--title TITLE]
+jupyter workshop collection collection.json ENTRY... [METADATA...]
 ```
 
-Merges the entry files written by `publish` into a registry index,
-creating it if needed. An entry for a name that is already listed
-replaces the listing and keeps the earlier versions, newest first. See
-[Finding and installing workshops](registry.md) for the index format and
-how the extension uses it.
+Merges the entry files written by `publish` into a collection index,
+creating it if needed. An entry for a name that is already listed is
+updated in place, keeping its position and the earlier versions, newest
+first; a new entry is appended. The metadata options set the
+collection's own fields and keep an existing index's values when not
+given: `--title`, `--description`, `--publisher`, `--publisher-url`,
+`--homepage`, `--icon` (a URL, a path relative to the file, or a `data:`
+URI) and `--tag`, which may be repeated. See
+[Finding and installing workshops](collections.md) for the index format
+and how the extension uses it.
 
 ## index
 
 ```
-jupyter workshop index [DIRECTORY...] [--root ROOT] [--out FILE] [--repo URL] [--ref REF] [--title TITLE]
+jupyter workshop index [DIRECTORY...] [--root ROOT] [--out FILE] [--repo URL] [--ref REF] [METADATA...]
 ```
 
-Builds a registry index of every workshop found under the directories
+Builds a collection index of every workshop found under the directories
 given (the current directory by default), so a repository holding
 several workshops can list them all without publishing archives. Each
 entry's source is the workshop's path relative to `--root`, the git
 checkout holding the first directory unless given, fetched from `--repo`
 at `--ref`, which default to the checkout's origin and current branch; an
 SSH remote is rewritten as the https URL. The index is written to
-`registry.json` under the root, or `--out`, and an existing index is
-updated: entries are replaced by name and their other versions kept.
-Hidden directories, `node_modules`, build outputs and `_workshop` state
-are not searched, nor are the contents of a workshop.
-See [Several workshops in one repository](registry.md#several-workshops-in-one-repository).
+`collection.json` under the root, or `--out`, and an existing index is
+updated: entries already listed keep their position and other versions,
+new ones are appended in the order found. The metadata options are those
+of `collection`. Hidden directories, `node_modules`, build outputs and
+`_workshop` state are not searched, nor are the contents of a workshop.
+See [Several workshops in one repository](collections.md#several-workshops-in-one-repository).
+
+## catalog
+
+```
+jupyter workshop catalog catalog.json [COLLECTION...] [--relative] [METADATA...]
+```
+
+Builds or refreshes a catalog from collection indexes. Each collection,
+given as a URL or a file, is read and its entry written or refreshed
+from the index's own title, description, publisher, icon and tags,
+keeping an existing entry's position and appending new ones. With no
+collections named, every entry already listed is re-read from where the
+catalog says it is. `--relative` records a file by its path relative to
+the catalog, for a repository that holds a catalog and its collections.
+The metadata options set the catalog's own fields: `--title`,
+`--description`, `--publisher`, `--publisher-url`, `--homepage` and
+`--icon`. See [Catalogs](collections.md#catalogs).
 
 ## record
 
@@ -145,8 +179,9 @@ through `jupyter server list` unless `--url` and `--token` name one. See
 ```
 jupyter workshop lite my-workshop [other-workshop ...] [--out DIR]
                                   [--default NAME] [--trust LEVEL]
-                                  [--registry URL] [--no-terminal]
-                                  [--lite-dir DIR] [--serve] [--port PORT]
+                                  [--collection URL] [--catalog URL]
+                                  [--no-terminal] [--lite-dir DIR]
+                                  [--serve] [--port PORT]
 ```
 
 Builds a static [JupyterLite](lite.md) site carrying the workshops, with

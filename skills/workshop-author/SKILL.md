@@ -44,8 +44,8 @@ from `jupyter workshop mcp`.
    per action. Fix failures and run again until it is green.
 
 6. Publish when asked: `jupyter workshop publish my-workshop` writes an
-   archive, its hash and a registry entry. For a repository holding
-   several workshops, `jupyter workshop index` writes a `registry.json`
+   archive, its hash and a collection entry. For a repository holding
+   several workshops, `jupyter workshop index` writes a `collection.json`
    listing them all instead (see below).
 
 ## Manifest (`workshop.yaml`)
@@ -321,13 +321,25 @@ present tense and second person. Do not use emdashes. See
 ## Several workshops in one repository
 
 Put each workshop in its own directory (for example `workshops/<name>/`)
-and keep one `registry.json` at the repository root. Build and update it
-with `jupyter workshop index workshops` from the checkout; it reads every
+and keep one `collection.json` at the repository root: a collection is a
+published list of workshops. Build and update it with
+`jupyter workshop index workshops` from the checkout; it reads every
 manifest under the directories given and gives each entry a git source
 with the path relative to the checkout (`--repo` and `--ref` default to
-the git origin and branch, so pass `--ref` a tag to pin a release).
-Commit the index. Learners add the raw URL of `registry.json` to the
-`registries` setting or open `lab?registry=<url>`.
+the git origin and branch, so pass `--ref` a tag to pin a release). The
+order of the file is the order the browser shows and is kept on update;
+`--title`, `--description`, `--publisher`, `--icon` and `--tag` describe
+the collection itself. Commit the index. Learners subscribe to the raw
+URL of `collection.json` through the browser's Collections dialog or open
+`lab?collection=<url>`; `lab?collection=<url>&workshop=<name>` installs
+one workshop of it.
+
+Several collections can be listed in a `catalog.json`, a published list
+of collections, built with `jupyter workshop catalog catalog.json
+<collection files or URLs> --relative`, which restates each collection's
+title, description and icon; rerun it with no collections named to
+refresh. Learners subscribe to a catalog and pick collections from it, or open
+`lab?catalog=<url>`. `jupyter workshop lint` checks either file.
 
 To make the repository launch on Binder, add `binder/requirements.txt`
 (`jupyterlab>=4.6,<5` and `jupyterlab-workshop`), `binder/runtime.txt`
@@ -336,7 +348,8 @@ To make the repository launch on Binder, add `binder/requirements.txt`
 `"@jupyterlab-workshop/labextension:panel": {"defaultWorkshop": "",
 "browseOnStart": true, "workshopsDirectory": "workshops",
 "trustPolicy": {"forcedLevel": "trusted"}, "disabledFeatures":
-["open-directory", "open-url", "registries", "remove", "author"]}`. The
+["open-directory", "open-url", "collections", "catalogs", "remove",
+"author"]}`. The
 session then starts in the workshop browser with the checkout's
 workshops listed as installed, and the disabled features keep learners
 to them: no other directories or URLs, no editing, no removing, with
@@ -355,7 +368,8 @@ runs into draft pages (`jupyter workshop record` turns a saved recording
 into pages). Edits to the files re-render the panel as they are saved.
 
 Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
-`init`, `publish`, `index`, `draft`, `get_schema` and `list_registry`
+`init`, `publish`, `index`, `catalog`, `draft`, `get_schema`,
+`list_collection` and `list_catalog`
 work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`
 and `run_workshop` act on a running JupyterLab that has the workshop
 open in author mode.

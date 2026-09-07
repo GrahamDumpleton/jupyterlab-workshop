@@ -53,7 +53,11 @@ rspack(
 
     fs.mkdirSync(schemaTarget, { recursive: true });
 
-    for (const name of ['workshop.schema.json', 'registry.schema.json']) {
+    for (const name of [
+      'workshop.schema.json',
+      'collection.schema.json',
+      'catalog.schema.json'
+    ]) {
       fs.copyFileSync(
         path.join(root, 'src/schema', name),
         path.join(schemaTarget, name)

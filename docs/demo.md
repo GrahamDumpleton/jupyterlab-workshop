@@ -7,7 +7,7 @@ anything. Both use the released package.
   runs the Hello JupyterLab workshop entirely in the browser, with a
   Python kernel compiled to WebAssembly and a small shell. The link
   carries JupyterLab's `reset` and the extension's `restart=force`, so
-  every visit starts afresh; see [launch links](registry.md#launch-links).
+  every visit starts afresh; see [launch links](collections.md#launch-links).
 
 - [Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab)
   starts a full JupyterLab with a real terminal, opening in the workshop

@@ -110,6 +110,7 @@ export async function describeInstalled(
     platforms: manifest.platforms,
     source: source?.source ?? null,
     sha256: source?.sha256 ?? '',
+    collection: source?.collection ?? null,
     pages: visible ? visible.length : manifest.pages.length,
     done,
     currentPage: state.currentPage ?? '',

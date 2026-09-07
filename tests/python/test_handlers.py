@@ -210,17 +210,19 @@ async def test_preflight_endpoint(jp_fetch):
     assert payload["tools"][0]["version"] == ""
 
 
-async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root_dir):
+async def test_workshops_listing_collection_and_events_endpoints(jp_fetch, jp_root_dir):
     from tornado.httpclient import HTTPClientError
 
     workshop = jp_root_dir / "workshops" / "demo"
 
     workshop.mkdir(parents=True)
     (workshop / "workshop.yaml").write_text(MANIFEST)
-    (jp_root_dir / "registry.json").write_text(
+    (jp_root_dir / "collection.json").write_text(
         json.dumps(
             {
                 "version": 1,
+                "title": "Demo collection",
+                "icon": "icon.svg",
                 "workshops": [
                     {
                         "name": "demo",
@@ -233,6 +235,15 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
             }
         )
     )
+    (jp_root_dir / "catalog.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "title": "Demo catalog",
+                "collections": [{"url": "collection.json", "title": "Demo collection"}],
+            }
+        )
+    )
 
     response = await jp_fetch("jupyterlab-workshop", "workshops")
     listed = json.loads(response.body)["workshops"]
@@ -242,15 +253,29 @@ async def test_workshops_listing_registry_and_events_endpoints(jp_fetch, jp_root
     assert listed[0]["started"] is False
 
     response = await jp_fetch(
-        "jupyterlab-workshop", "registry", params={"url": "registry.json"}
+        "jupyterlab-workshop", "collection", params={"url": "collection.json"}
     )
     payload = json.loads(response.body)
 
-    assert payload["url"] == "registry.json"
+    assert payload["url"] == "collection.json"
     assert payload["index"]["workshops"][0]["name"] == "demo"
 
     with pytest.raises(HTTPClientError) as error:
-        await jp_fetch("jupyterlab-workshop", "registry", params={"url": "nope.json"})
+        await jp_fetch("jupyterlab-workshop", "collection", params={"url": "nope.json"})
+
+    assert error.value.code == 400
+
+    # A catalog comes back with its relative locations resolved against it.
+    response = await jp_fetch(
+        "jupyterlab-workshop", "catalog", params={"url": "catalog.json"}
+    )
+    payload = json.loads(response.body)
+
+    assert payload["catalog"]["title"] == "Demo catalog"
+    assert payload["catalog"]["collections"][0]["url"] == "collection.json"
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch("jupyterlab-workshop", "catalog", params={"url": "nope.json"})
 
     assert error.value.code == 400
 

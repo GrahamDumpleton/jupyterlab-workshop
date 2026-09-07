@@ -5,7 +5,8 @@ import {
   IDirectiveNode,
   ILintMessage,
   IPage,
-  IRegistryIndex,
+  ICatalog,
+  ICollectionIndex,
   IRequirement,
   IVariableDefinition,
   IWorkshopManifest,
@@ -397,6 +398,9 @@ export interface IInstalledWorkshop {
   source: IWorkshopSource | null;
   sha256: string;
 
+  /** Location of the collection it was installed from, or null. */
+  collection: string | null;
+
   /** Number of pages, and how many are marked done. */
   pages: number;
   done: number;
@@ -421,7 +425,8 @@ export interface IRestartResult {
 export const FEATURES = [
   'open-directory',
   'open-url',
-  'registries',
+  'collections',
+  'catalogs',
   'available',
   'remove',
   'close',
@@ -559,8 +564,11 @@ export interface IWorkshopManager {
   /** Delete a downloaded workshop that is not open. */
   removeInstalled(path: string): Promise<void>;
 
-  /** Read a registry index through the server. */
-  fetchRegistry(url: string): Promise<IRegistryIndex>;
+  /** Read and validate a collection index, by URL or root-relative path. */
+  fetchCollection(url: string): Promise<ICollectionIndex>;
+
+  /** Read and validate a catalog, with its relative locations resolved. */
+  fetchCatalog(url: string): Promise<ICatalog>;
 
   /**
    * Download a workshop from a git forge or archive URL into a directory
@@ -687,6 +695,12 @@ export interface IFetchRequest {
 
   /** Treat the URL as an archive even without an archive extension. */
   archive?: boolean;
+
+  /** Directory name to install under, instead of the manifest's name. */
+  name?: string;
+
+  /** Location of the collection the workshop comes from, recorded with it. */
+  collection?: string;
 }
 
 /** What a download produced. */
@@ -776,8 +790,11 @@ export interface IWorkshopBackend {
   /** Download a workshop into a directory under the root. */
   fetch(request: IFetchRequest): Promise<IFetchResult>;
 
-  /** Read a registry index; the manager validates it. */
-  fetchRegistry(url: string): Promise<unknown>;
+  /** Read a collection index; the manager validates it. */
+  fetchCollection(url: string): Promise<unknown>;
+
+  /** Read a catalog; the manager validates it. */
+  fetchCatalog(url: string): Promise<unknown>;
 
   /** List the workshop directories directly under a directory. */
   installed(directory: string): Promise<IInstalledWorkshop[]>;
@@ -857,6 +874,7 @@ export namespace CommandIDs {
   export const runAll = 'workshop:run-all';
   export const selfTestProgress = 'workshop:self-test-progress';
   export const browse = 'workshop:browse';
+  export const collections = 'workshop:collections';
   export const launch = 'workshop:launch';
   export const exportEvents = 'workshop:export-events';
   export const createEnvironment = 'workshop:create-environment';

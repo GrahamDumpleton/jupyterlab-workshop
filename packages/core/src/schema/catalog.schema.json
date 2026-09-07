@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/catalog.schema.json",
+  "title": "Workshop catalog",
+  "description": "A published list of collections, each with the URL of its index and a restatement of its title, description, publisher and icon so a browser can show the list without fetching every index.",
+  "type": "object",
+  "required": ["version", "collections"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "description": "Name of the catalog shown in the browser."
+    },
+    "description": {
+      "type": "string",
+      "description": "A sentence or two shown under the title."
+    },
+    "publisher": {
+      "description": "Who publishes it: a name, or an object with a name and a URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "required": ["name"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "homepage": {
+      "type": "string",
+      "description": "Web page about the catalog."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon shown beside the title: an http(s) URL, a URL relative to this file, or a data: URI."
+    },
+    "collections": {
+      "type": "array",
+      "description": "The collections, in the order they are shown.",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Location of the collection index: an http(s) URL, or a path relative to this file."
+          },
+          "title": {
+            "type": "string",
+            "description": "Name shown in the browser."
+          },
+          "description": {
+            "type": "string",
+            "description": "A sentence or two shown under the title."
+          },
+          "publisher": {
+            "description": "Who publishes it: a name, or an object with a name and a URL.",
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "homepage": {
+            "type": "string",
+            "description": "Web page about the collection."
+          },
+          "icon": {
+            "type": "string",
+            "description": "Icon shown beside the title: an http(s) URL, a URL relative to this file, or a data: URI. SVG preferred; any shape is scaled to fit a square."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

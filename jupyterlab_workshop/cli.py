@@ -15,18 +15,32 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from . import __version__ as VERSION
-from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
-from .publish import PublishError, publish_workshop
-from .registry import (
-    RegistryError,
-    build_registry,
+from .catalog import (
+    CatalogError,
+    CatalogMetadata,
+    build_catalog,
+    is_http_url,
+    parse_catalog,
+    refresh_entries,
+    resolve_location,
+)
+from .collection import (
+    CollectionError,
+    CollectionMetadata,
+    build_collection,
     checkout_root,
     guess_repository,
     index_repository,
-    parse_registry,
+    parse_collection,
 )
+from .collection import (
+    load_collection as _load_collection_index,
+)
+from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
+from .publish import PublishError, publish_workshop
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -35,7 +49,9 @@ NODE_BUNDLE = PACKAGE_DIR / "nodejs" / "workshop-cli.cjs"
 
 SCHEMA_FILE = PACKAGE_DIR / "schema" / "workshop.schema.json"
 
-REGISTRY_SCHEMA_FILE = PACKAGE_DIR / "schema" / "registry.schema.json"
+COLLECTION_SCHEMA_FILE = PACKAGE_DIR / "schema" / "collection.schema.json"
+
+CATALOG_SCHEMA_FILE = PACKAGE_DIR / "schema" / "catalog.schema.json"
 
 PLATFORMS = ["linux", "macos", "windows", "lite"]
 
@@ -118,8 +134,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init.set_defaults(func=command_init)
 
-    lint = commands.add_parser("lint", help="report problems in a workshop")
-    lint.add_argument("directory", type=Path)
+    lint = commands.add_parser(
+        "lint", help="report problems in a workshop, or check a collection or catalog"
+    )
+    lint.add_argument(
+        "directory",
+        type=Path,
+        help="workshop directory, or a collection.json or catalog.json file",
+    )
     lint.add_argument("--json", action="store_true", help="print the report as JSON")
     lint.add_argument(
         "--platform",
@@ -144,28 +166,34 @@ def build_parser() -> argparse.ArgumentParser:
     pages.set_defaults(func=command_pages)
 
     schema = commands.add_parser("schema", help="print the manifest JSON schema")
-    schema.add_argument(
-        "--registry",
+    kind = schema.add_mutually_exclusive_group()
+    kind.add_argument(
+        "--collection",
         action="store_true",
-        help="print the registry index schema instead",
+        help="print the collection index schema instead",
+    )
+    kind.add_argument(
+        "--catalog", action="store_true", help="print the catalog schema instead"
     )
     schema.set_defaults(func=command_schema)
 
-    registry = commands.add_parser(
-        "registry", help="add published entries to a registry index file"
+    collection = commands.add_parser(
+        "collection", help="add published entries to a collection index file"
     )
-    registry.add_argument("index", type=Path, help="index file to create or update")
-    registry.add_argument(
+    collection.add_argument(
+        "index", type=Path, help="collection.json file to create or update"
+    )
+    collection.add_argument(
         "entries",
         nargs="+",
         type=Path,
-        help="entry files written by publish (*.registry.json)",
+        help="entry files written by publish (*.collection.json)",
     )
-    registry.add_argument("--title", help="title of the registry")
-    registry.set_defaults(func=command_registry)
+    _add_metadata_arguments(collection, "collection", tags=True)
+    collection.set_defaults(func=command_collection)
 
     index = commands.add_parser(
-        "index", help="build a registry index for the workshops in a repository"
+        "index", help="build a collection index for the workshops in a repository"
     )
     index.add_argument(
         "directories",
@@ -182,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     index.add_argument(
         "--out",
         type=Path,
-        help="index file to create or update (default: registry.json under the root)",
+        help="index file to create or update (default: collection.json under the root)",
     )
     index.add_argument(
         "--repo", help="repository URL learners fetch from (default: the git origin)"
@@ -190,11 +218,31 @@ def build_parser() -> argparse.ArgumentParser:
     index.add_argument(
         "--ref", help="branch or tag learners fetch (default: the checked-out branch)"
     )
-    index.add_argument("--title", help="title of the registry")
+    _add_metadata_arguments(index, "collection", tags=True)
     index.set_defaults(func=command_index)
 
+    catalog = commands.add_parser(
+        "catalog", help="build or refresh a catalog from collection indexes"
+    )
+    catalog.add_argument(
+        "catalog", type=Path, help="catalog.json file to create or update"
+    )
+    catalog.add_argument(
+        "collections",
+        nargs="*",
+        help="collection index URLs or files to add or refresh "
+        "(default: refresh every entry already listed)",
+    )
+    catalog.add_argument(
+        "--relative",
+        action="store_true",
+        help="record collection files by their path relative to the catalog file",
+    )
+    _add_metadata_arguments(catalog, "catalog", tags=False)
+    catalog.set_defaults(func=command_catalog)
+
     publish = commands.add_parser(
-        "publish", help="build an archive, its sha256 and a registry entry"
+        "publish", help="build an archive, its sha256 and a collection entry"
     )
     publish.add_argument("directory", type=Path)
     publish.add_argument(
@@ -203,7 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument(
         "--url",
         default="",
-        help="URL the archive will be published at, for the registry entry",
+        help="URL the archive will be published at, for the collection entry",
     )
     publish.set_defaults(func=command_publish)
 
@@ -283,10 +331,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="apply a trust level without asking (default: show the dialog)",
     )
     lite.add_argument(
-        "--registry",
+        "--collection",
         action="append",
         default=[],
-        help="registry index URL to list in the workshop browser",
+        help="collection index URL to subscribe to in the workshop browser",
+    )
+    lite.add_argument(
+        "--catalog",
+        action="append",
+        default=[],
+        help="catalog URL to subscribe to in the workshop browser",
     )
     lite.add_argument(
         "--no-terminal",
@@ -359,7 +413,10 @@ def command_init(args: argparse.Namespace) -> int:
 
 
 def command_lint(args: argparse.Namespace) -> int:
-    """Lint a workshop through the Node bundle."""
+    """Lint a workshop through the Node bundle, or check an index file."""
+
+    if args.directory.is_file() and args.directory.suffix == ".json":
+        return _check_index_file(args.directory, args.json)
 
     extra = ["--json"] if args.json else []
 
@@ -419,10 +476,68 @@ def command_pages(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_schema(args: argparse.Namespace) -> int:
-    """Print the manifest or registry schema."""
+def _check_index_file(file: Path, as_json: bool) -> int:
+    """Check a collection or catalog file, and a catalog's collections."""
 
-    schema = REGISTRY_SCHEMA_FILE if args.registry else SCHEMA_FILE
+    completed = run_node(["check", str(file)])
+
+    if completed.returncode != 0:
+        sys.stderr.write(completed.stderr or completed.stdout)
+
+        return completed.returncode
+
+    report = json.loads(completed.stdout)
+    problems: list[str] = []
+
+    # A catalog names collections; each must be readable from where the
+    # catalog says it is, relative to the catalog file when not a URL.
+    if report["kind"] == "catalog":
+        base = file.resolve().as_posix()
+
+        for location in report["locations"]:
+            resolved = resolve_location(base, location)
+
+            try:
+                if is_http_url(resolved):
+                    _load_collection_index(resolved, Path.cwd())
+                else:
+                    resolved_path = Path(resolved)
+
+                    _load_collection_index(resolved_path.name, resolved_path.parent)
+            except CollectionError as error:
+                problems.append(f"{location}: {error}")
+
+    report["problems"] = problems
+
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        what = "workshop" if report["kind"] == "collection" else "collection"
+        count = report["entries"]
+
+        print(
+            f'{file}: {report["kind"]} "{report["title"]}" with '
+            f"{count} {what}{'' if count == 1 else 's'}"
+        )
+
+        for problem in problems:
+            print(f"error: {problem}")
+
+        print(f"{len(problems)} error(s)")
+
+    return 1 if problems else 0
+
+
+def command_schema(args: argparse.Namespace) -> int:
+    """Print the manifest, collection or catalog schema."""
+
+    schema = (
+        COLLECTION_SCHEMA_FILE
+        if args.collection
+        else CATALOG_SCHEMA_FILE
+        if args.catalog
+        else SCHEMA_FILE
+    )
 
     if not schema.is_file():
         raise CliError(
@@ -435,20 +550,55 @@ def command_schema(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_registry(args: argparse.Namespace) -> int:
-    """Merge entry files into a registry index."""
+def _add_metadata_arguments(
+    parser: argparse.ArgumentParser, what: str, tags: bool
+) -> None:
+    """Add the options that set a collection's or catalog's own fields."""
+
+    parser.add_argument("--title", help=f"title of the {what}")
+    parser.add_argument("--description", help=f"a sentence or two about the {what}")
+    parser.add_argument("--publisher", help="who publishes it")
+    parser.add_argument("--publisher-url", help="web page of the publisher")
+    parser.add_argument("--homepage", help=f"web page about the {what}")
+    parser.add_argument(
+        "--icon",
+        help="icon shown beside the title: a URL, a path relative to the file, "
+        "or a data: URI",
+    )
+
+    if tags:
+        parser.add_argument(
+            "--tag", action="append", dest="tags", help="a tag; may be repeated"
+        )
+
+
+def _collection_metadata(args: argparse.Namespace) -> CollectionMetadata:
+    return CollectionMetadata(
+        title=args.title or "",
+        description=args.description or "",
+        publisher=args.publisher or "",
+        publisher_url=args.publisher_url or "",
+        homepage=args.homepage or "",
+        icon=args.icon or "",
+        tags=tuple(args.tags) if args.tags else None,
+    )
+
+
+def _read_collection_file(index_path: Path) -> dict[str, Any] | None:
+    if not index_path.is_file():
+        return None
+
+    try:
+        return parse_collection(index_path.read_text(encoding="utf-8"), str(index_path))
+    except CollectionError as error:
+        raise CliError(str(error)) from error
+
+
+def command_collection(args: argparse.Namespace) -> int:
+    """Merge entry files into a collection index."""
 
     index_path: Path = args.index
-    existing = None
-
-    if index_path.is_file():
-        try:
-            existing = parse_registry(
-                index_path.read_text(encoding="utf-8"), str(index_path)
-            )
-        except RegistryError as error:
-            raise CliError(str(error)) from error
-
+    existing = _read_collection_file(index_path)
     entries = []
 
     for entry_path in args.entries:
@@ -458,13 +608,13 @@ def command_registry(args: argparse.Namespace) -> int:
             raise CliError(f"Unable to read {entry_path}: {error}") from error
 
         if not isinstance(entry, dict):
-            raise CliError(f"{entry_path} does not contain a registry entry")
+            raise CliError(f"{entry_path} does not contain a collection entry")
 
         entries.append(entry)
 
     try:
-        index = build_registry(existing, entries, title=args.title)
-    except RegistryError as error:
+        index = build_collection(existing, entries, _collection_metadata(args))
+    except CollectionError as error:
         raise CliError(str(error)) from error
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -494,22 +644,14 @@ def command_index(args: argparse.Namespace) -> int:
     if not repo:
         raise CliError(f"{root} has no git origin; give the repository URL with --repo")
 
-    index_path: Path = args.out or root / "registry.json"
-    existing = None
-
-    if index_path.is_file():
-        try:
-            existing = parse_registry(
-                index_path.read_text(encoding="utf-8"), str(index_path)
-            )
-        except RegistryError as error:
-            raise CliError(str(error)) from error
+    index_path: Path = args.out or root / "collection.json"
+    existing = _read_collection_file(index_path)
 
     try:
         index = index_repository(
-            root, directories, repo, ref, existing, title=args.title
+            root, directories, repo, ref, existing, _collection_metadata(args)
         )
-    except RegistryError as error:
+    except CollectionError as error:
         raise CliError(str(error)) from error
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -518,6 +660,60 @@ def command_index(args: argparse.Namespace) -> int:
     count = len(index["workshops"])
 
     print(f"wrote {index_path} with {count} workshop(s) from {repo} at {ref}")
+
+    return 0
+
+
+def command_catalog(args: argparse.Namespace) -> int:
+    """Build or refresh a catalog from collection indexes."""
+
+    catalog_path: Path = args.catalog
+    existing = None
+
+    if catalog_path.is_file():
+        try:
+            existing = parse_catalog(
+                catalog_path.read_text(encoding="utf-8"), str(catalog_path)
+            )
+        except CatalogError as error:
+            raise CliError(str(error)) from error
+
+    # Without collections named, every entry already listed is re-read
+    # from where the catalog says it is, relative to the catalog file.
+    locations: list[str] = list(args.collections)
+    relative = bool(args.relative)
+
+    if not locations and existing:
+        for item in existing.get("collections", []):
+            url = str(item.get("url") or "")
+
+            if is_http_url(url):
+                locations.append(url)
+            else:
+                locations.append(str(catalog_path.parent / url))
+                relative = True
+
+    metadata = CatalogMetadata(
+        title=args.title or "",
+        description=args.description or "",
+        publisher=args.publisher or "",
+        publisher_url=args.publisher_url or "",
+        homepage=args.homepage or "",
+        icon=args.icon or "",
+    )
+
+    try:
+        entries = refresh_entries(catalog_path, locations, relative=relative)
+        catalog = build_catalog(existing, entries, metadata)
+    except CatalogError as error:
+        raise CliError(str(error)) from error
+
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
+
+    count = len(catalog["collections"])
+
+    print(f"wrote {catalog_path} with {count} collection(s)")
 
     return 0
 
@@ -570,7 +766,8 @@ def command_lite(args: argparse.Namespace) -> int:
         default_workshop=args.default_workshop,
         trust=args.trust,
         terminal=args.terminal,
-        registries=tuple(args.registry),
+        collections=tuple(args.collection),
+        catalogs=tuple(args.catalog),
     )
 
     try:

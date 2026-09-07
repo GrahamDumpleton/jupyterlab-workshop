@@ -10,7 +10,7 @@
       "type": "string",
       "title": "Default workshop",
       "description": "Directory of the workshop to open when JupyterLab starts and no workshop was open before, relative to the JupyterLab root directory. Leave empty to open nothing.",
-      "default": "examples/git-basics"
+      "default": ""
     },
     "browseOnStart": {
       "type": "boolean",
@@ -82,13 +82,14 @@
     "disabledFeatures": {
       "type": "array",
       "title": "Disabled features",
-      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the configured registries and the installed ones openable.",
+      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser.",
       "items": {
         "type": "string",
         "enum": [
           "open-directory",
           "open-url",
-          "registries",
+          "collections",
+          "catalogs",
           "available",
           "remove",
           "close",
@@ -98,14 +99,19 @@
       },
       "default": []
     },
-    "registries": {
+    "collections": {
       "type": "array",
-      "title": "Workshop registries",
-      "description": "Registry index files listing workshops that can be installed: http(s) URLs, or paths relative to the JupyterLab root. The workshop browser shows every registry's workshops.",
+      "title": "Collections",
+      "description": "Subscribed collections: published lists of workshops that can be installed, as http(s) URLs of their collection.json files or paths relative to the JupyterLab root. The workshop browser offers every subscribed collection's workshops, and its Collections dialog edits this list.",
       "items": { "type": "string" },
-      "default": [
-        "https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop/main/registry/index.json"
-      ]
+      "default": []
+    },
+    "catalogs": {
+      "type": "array",
+      "title": "Catalogs",
+      "description": "Subscribed catalogs: published lists of collections, as http(s) URLs of their catalog.json files or paths relative to the JupyterLab root. The browser offers their collections to subscribe to.",
+      "items": { "type": "string" },
+      "default": []
     },
     "analytics": {
       "type": "object",

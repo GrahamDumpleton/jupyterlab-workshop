@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/collection.schema.json",
+  "title": "Workshop collection index",
+  "description": "A published list of workshops that can be installed, with where to fetch each version from. The order of the list is the order the browser shows.",
+  "type": "object",
+  "required": ["version", "workshops"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "description": "Name shown in the browser."
+    },
+    "description": {
+      "type": "string",
+      "description": "A sentence or two shown under the title."
+    },
+    "publisher": {
+      "description": "Who publishes it: a name, or an object with a name and a URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "required": ["name"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "homepage": {
+      "type": "string",
+      "description": "Web page about the collection."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon shown beside the title: an http(s) URL, a URL relative to this file, or a data: URI. SVG preferred; any shape is scaled to fit a square."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "workshops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "title", "versions"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["linux", "macos", "windows", "lite"]
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "description": "Capability names, with scopes as name:scope, as the manifest declares them.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "duration": {
+            "type": "string"
+          },
+          "authors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "versions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Versions newest first; the first is installed by default.",
+            "items": {
+              "type": "object",
+              "required": ["version", "source"],
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "type": ["string", "number"]
+                },
+                "source": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "git": {
+                      "type": "string",
+                      "description": "Repository URL on a forge that serves archives."
+                    },
+                    "ref": {
+                      "type": "string"
+                    },
+                    "subdir": {
+                      "type": "string"
+                    },
+                    "archive": {
+                      "type": "string",
+                      "description": "Direct URL of a .zip or .tar.gz archive."
+                    }
+                  }
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "description": "Expected SHA-256 of the archive; the install fails if it differs."
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "The workshops, in the order they are shown; a course lists them in sequence."
+    }
+  }
+}

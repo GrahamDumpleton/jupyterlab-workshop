@@ -68,8 +68,11 @@ class LiteBuildOptions:
     #: Whether to include the terminal extension.
     terminal: bool = True
 
-    #: Registry index URLs the workshop browser lists.
-    registries: tuple[str, ...] = ()
+    #: Collection index locations the workshop browser lists.
+    collections: tuple[str, ...] = ()
+
+    #: Catalog locations the workshop browser offers collections from.
+    catalogs: tuple[str, ...] = ()
 
     #: Rebuild everything rather than what changed.
     force: bool = True
@@ -202,7 +205,8 @@ def settings_overrides(
     settings: dict[str, Any] = {
         "defaultWorkshop": default,
         "workshopsDirectory": "",
-        "registries": list(options.registries),
+        "collections": list(options.collections),
+        "catalogs": list(options.catalogs),
     }
 
     if options.trust:

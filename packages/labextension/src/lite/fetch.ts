@@ -87,8 +87,9 @@ export async function fetchWorkshopFiles(
     }
   }
 
-  // The directory is named after the workshop, like a server download.
-  const target = PathExt.join(request.directory, manifest.name);
+  // The directory is named after the workshop, like a server download,
+  // unless the request names one.
+  const target = PathExt.join(request.directory, request.name || manifest.name);
   const existing = await getIfExists(contents, target, false);
 
   if (existing) {
@@ -116,9 +117,10 @@ export async function fetchWorkshopFiles(
     });
   }
 
-  // The source record is what the trust summary reads on open.
+  // The source record is what the trust summary reads on open, and the
+  // browser reads the collection from it to match installed workshops.
   const sha256 = hashFiles(texts);
-  const record = {
+  const record: Record<string, unknown> = {
     source: {
       kind: 'git',
       url: `https://${source.host}/${source.owner}/${source.repo}`,
@@ -128,13 +130,17 @@ export async function fetchWorkshopFiles(
     sha256
   };
 
+  if (request.collection) {
+    record.collection = request.collection;
+  }
+
   await writeTextFile(
     contents,
     PathExt.join(target, WORKSHOP_STATE_DIR, SOURCE_FILE),
     JSON.stringify(record, null, 2)
   );
 
-  return { path: target, name: manifest.name, sha256 };
+  return { path: target, name: request.name || manifest.name, sha256 };
 }
 
 /**

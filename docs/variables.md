@@ -74,7 +74,7 @@ list wins:
 2. **Manifest defaults**, from the `default` of a declaration.
 
 3. **Launch link overrides**: `var.<name>=<value>` parameters on a
-   [launch link](registry.md#launch-links), for a class where the
+   [launch link](collections.md#launch-links), for a class where the
    instructor sets, say, the directory everyone works in.
 
 4. **Forms**: a `form` directive the learner submits. Values are stored

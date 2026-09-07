@@ -33,7 +33,7 @@ checks the result either way. A page can hold checks that verify what
 was done, quizzes, and forms that collect values, and can wait for them
 before moving on. A workshop can snapshot the files for a later reset,
 adapt to the platform and to choices the learner makes, and be shipped
-to a class through a registry, a Binder link, or as a static site that
+to a class through a collection, a Binder link, or as a static site that
 runs entirely in the browser.
 
 The subject can be anything JupyterLab can host: a language, a library,
@@ -105,7 +105,7 @@ front matter asks for it to pass before the learner moves on.
   dialog says what a workshop asks for, and a restricted level turns
   commands into text to be typed rather than run.
 
-- **Ship anywhere.** Publish to a registry, ship in a Binder or
+- **Ship anywhere.** Publish to a collection, ship in a Binder or
   JupyterHub image, or build a JupyterLite site that runs entirely in
   the browser.
 
@@ -161,7 +161,7 @@ publishing
 :caption: Running workshops
 
 using
-registry
+collections
 deploying
 trust
 analytics
