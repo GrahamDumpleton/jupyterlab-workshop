@@ -31,6 +31,14 @@ two sections:
   its registry lists, the Available section and its search and tags are
   not shown at all.
 
+```{figure} _static/browser.png
+:alt: The workshop browser with one installed and two available workshops
+:width: 100%
+
+The workshop browser: one installed workshop, two available from the
+registry.
+```
+
 "Add from URL…" and "Open a directory…" run the corresponding commands,
 and "Manage registries" opens the settings editor at the workshop
 settings.

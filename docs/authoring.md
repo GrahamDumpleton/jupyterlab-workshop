@@ -27,6 +27,13 @@ to the panel:
 | Publish                 | Builds the archive, its SHA-256 and a registry entry under `dist/` in the workshop.                                                                                       |
 | Record                  | Records the session into draft pages; see below.                                                                                                                          |
 
+```{figure} _static/author-mode.png
+:alt: The Workshop panel in author mode
+:width: 60%
+
+The panel in author mode: the toolbar, and a gutter under each action.
+```
+
 Every action in the page also gets a small gutter with its type and
 line, and edit and delete buttons. Edit opens the same form as Insert,
 filled in, and rewrites the block in place. Lint findings that refer to

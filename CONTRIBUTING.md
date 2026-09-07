@@ -102,7 +102,10 @@ follows.
 
 `just docs` builds the documentation into `docs/_build/html`, and
 `just docs-serve` rebuilds it on change. The manifest reference page is
-generated from the JSON schema on every build.
+generated from the JSON schema on every build. The screenshots under
+`docs/_static` are committed; `just screenshots` retakes them from a
+throwaway JupyterLab after an interface change, and needs the `test`
+extra and a Chromium for Playwright.
 
 `just pages` assembles the GitHub Pages site into `site/`: the landing
 page, the JSON schemas and the example workshop built as a JupyterLite

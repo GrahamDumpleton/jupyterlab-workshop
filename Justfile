@@ -65,6 +65,10 @@ typecheck:
     uv run jlpm typecheck
     uv run mypy
 
+# Retake the screenshots in docs/_static from a throwaway JupyterLab (needs the test extra and a Chromium for Playwright).
+screenshots:
+    uv run python scripts/screenshots.py
+
 # Build the documentation with Sphinx into docs/_build/html (generates the manifest reference first).
 docs:
     uv run sphinx-build -W --keep-going -b html docs docs/_build/html

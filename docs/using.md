@@ -56,6 +56,13 @@ how far to trust it:
   an Allow button that can also allow that capability for the rest of
   the workshop.
 
+```{figure} _static/trust-dialog.png
+:alt: The trust dialog
+:width: 100%
+
+The trust dialog for an example workshop.
+```
+
 Cancel leaves the workshop closed. The choice is remembered for that
 workshop at that content, so it opens without asking next time and asks
 again only if it has changed. The badge in the panel header shows the
@@ -111,6 +118,13 @@ author may add a note there, such as where to go next. Afterwards the
 footer shows Finished with a "What next?" link that brings the dialog
 back.
 
+```{figure} _static/finish-dialog.png
+:alt: The Finish dialog
+:width: 60%
+
+The Finish dialog, with browsing and closing on offer.
+```
+
 ## Starting over and clearing up
 
 Everything the workshop records lives in a `_workshop` directory inside
@@ -153,3 +167,7 @@ from, and lets you change the ones the workshop allows; see
 action that ran, was skipped or asked for confirmation, with its time,
 page, description and result, which is also where to look when
 something did not do what the page said it would.
+
+```
+
+```

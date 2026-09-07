@@ -9,24 +9,18 @@ workshops](registry.md) describes what learners see.
 
 ## An archive and a registry entry
 
-```
-jupyter workshop publish my-workshop [--out dist] [--url URL]
-```
+`jupyter workshop publish my-workshop` builds an archive of the workshop
+under `dist/`, leaving out `_workshop`, `.git`, `scratch` and the like,
+writes its SHA-256 beside it, and writes a registry entry: a JSON
+snippet with the name, version, description and hash, and, with
+`--url`, the address the archive will be published at. The archive is
+built with fixed ownership and timestamps, so the hash is the same on
+every machine and can be checked by whoever installs it.
 
-Builds `dist/<name>-<version>.tar.gz` (excluding `_workshop`, `.git`,
-`scratch` and similar), writes its SHA-256 next to it, and writes a
-registry entry JSON snippet with the hash and, when given, the URL the
-archive will be published at. The archive is built with fixed ownership
-and timestamps so the hash is the same on every machine. `--out` names
-the output directory; the default is `dist/` in the current directory.
-
-```
-jupyter workshop registry index.json ENTRY... [--title TITLE]
-```
-
-Merges the entry files written by `publish` into a registry index,
-creating it if needed. An entry for a name that is already listed
-replaces the listing and keeps the earlier versions, newest first:
+`jupyter workshop registry index.json ENTRY...` merges such entries into
+a registry index, creating it if needed. Publishing a new version of a
+workshop that is already listed replaces its listing and keeps the
+earlier versions, newest first:
 
 ```
 jupyter workshop publish git-basics --url https://example.org/w/git-basics-1.2.0.tar.gz
@@ -37,9 +31,9 @@ Host `index.json` and the archives anywhere that serves files over
 HTTPS, such as GitHub Pages or an object store, and list the index URL
 in the `registries` setting of the learners' JupyterLab. The
 [index format](registry.md#index-format) is a JSON document, and
-`jupyter workshop schema --registry` prints its schema. The extension
-checks the archive's hash against the entry when it installs, so a
-`sha256` in the entry is worth keeping.
+`jupyter workshop schema --registry` prints its schema. The
+[command line](cli.md#publish) page lists every option of `publish`
+and `registry`.
 
 ## Several workshops in one repository
 
@@ -66,21 +60,13 @@ the repository, so no archives are built or published:
 jupyter workshop index workshops --repo https://github.com/example-org/workshops --ref main
 ```
 
-```
-jupyter workshop index [DIRECTORY...] [--root ROOT] [--out FILE] [--repo URL] [--ref REF] [--title TITLE]
-```
-
-Every workshop found under the directories given (the current directory
-by default) becomes an entry whose source is the workshop's path
-relative to `--root`, the git checkout holding the first directory
-unless given, fetched from `--repo` at `--ref`. Run from the checkout,
-the repository URL and branch are read from git and can be left out; an
-SSH remote is rewritten as the https URL. Give `--ref` a tag when a
-course is pinned to a release. The index is written to `registry.json`
-under the root, or `--out`, and an existing index is updated: entries
-are replaced by name and their other versions kept. Hidden directories,
-`node_modules`, build outputs and `_workshop` state are not searched,
-nor are the contents of a workshop.
+Every workshop found under the directories given becomes an entry whose
+source is its path in the repository, fetched from `--repo` at `--ref`.
+Run from the checkout, both are read from git and can be left out; give
+`--ref` a tag when a course is pinned to a release. An existing index
+is updated rather than replaced, so older versions stay listed. The
+[command line](cli.md#index) page has the full set of options and what
+is skipped when searching.
 
 Commit the index with the workshops. Anyone can then add the raw URL of
 `registry.json` to their `registries` setting, or start a session in it

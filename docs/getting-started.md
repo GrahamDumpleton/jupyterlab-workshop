@@ -65,6 +65,14 @@ JupyterLab, and Writing your first workshop. Install Hello JupyterLab.
 The extension downloads it into `workshops/hello-jupyterlab` under the
 directory JupyterLab was started in, then opens it.
 
+```{figure} _static/trust-dialog.png
+:alt: The trust dialog for the Hello JupyterLab workshop
+:width: 100%
+
+The trust dialog: where the workshop came from, what it asks to do, and
+the three levels.
+```
+
 Before anything runs, the trust dialog shows where the workshop came
 from, the capabilities it declares (a terminal, writing files, running
 code in kernels, and so on) with how many actions use each, and any lint
@@ -72,6 +80,14 @@ findings. The examples are safe to Trust. Restricted is the cautious
 choice for a workshop you do not know: commands are typed into the
 terminal for you to press Enter, and file and kernel actions ask before
 they run. See [Loading and trust](trust.md) for the levels.
+
+```{figure} _static/panel.png
+:alt: JupyterLab with the Hello JupyterLab workshop open in the Workshop panel
+:width: 100%
+
+The Workshop panel on the right, with the first page of Hello JupyterLab
+and its clickable actions.
+```
 
 The instructions appear in the panel and the workshop lays out the
 window: a rendered README, a terminal, whatever the workshop asked for.

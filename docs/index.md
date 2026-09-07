@@ -136,6 +136,7 @@ the setup step by step.
 getting-started
 concepts
 demo
+troubleshooting
 ```
 
 ```{toctree}
