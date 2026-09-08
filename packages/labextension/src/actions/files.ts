@@ -25,7 +25,12 @@ import {
   IWorkshopManager
 } from '../tokens';
 import { parseDuration } from '../util';
-import { ensureDirectory, getIfExists, readTextFile } from './contents';
+import {
+  deleteTree,
+  ensureDirectory,
+  getIfExists,
+  readTextFile
+} from './contents';
 import { requireOption } from './registry';
 import { TerminalSessions } from './terminal';
 
@@ -513,6 +518,234 @@ export class FileCloseAction implements IActionImplementation {
   }
 
   private _context: IFileActionContext;
+}
+
+/**
+ * The `file-delete` action: delete a file, or with `recursive` a directory
+ * and everything in it, closing any tabs showing it first. A missing path
+ * is nothing to do unless `missing` is `error`. The workshop directory
+ * and its state directory are refused, whatever the options say.
+ */
+export class FileDeleteAction implements IActionImplementation {
+  readonly type = 'file-delete';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Delete ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+    const serverPath = this._context.manager.resolvePath(path);
+    const contents = this._context.app.serviceManager.contents;
+
+    // The pages and the learner's progress are never deletable, however
+    // the path is spelt.
+    const root = this._context.manager.workshop?.path ?? '';
+    const stateDir = PathExt.join(root, '_workshop');
+
+    if (
+      serverPath === root ||
+      serverPath === stateDir ||
+      serverPath.startsWith(`${stateDir}/`)
+    ) {
+      return {
+        status: 'error',
+        message: `Refusing to delete ${path}: it holds the workshop itself`
+      };
+    }
+
+    const existing = await getIfExists(contents, serverPath, false);
+
+    if (!existing) {
+      return request.options.missing === 'error'
+        ? { status: 'error', message: `${path} does not exist` }
+        : { status: 'ok', message: `${path} was already gone` };
+    }
+
+    if (existing.type === 'directory') {
+      if (!isTrue(request.options.recursive)) {
+        return {
+          status: 'error',
+          message: `${path} is a directory; set recursive to delete it and its contents`
+        };
+      }
+
+      await closeUnder(this._context, serverPath);
+      await deleteTree(contents, serverPath);
+
+      return { status: 'ok' };
+    }
+
+    // The document manager closes the file's tabs and shuts down a
+    // kernel session that only it was using.
+    await this._context.docManager.deleteFile(serverPath);
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `file-rename` action: rename or move a file or directory. Open tabs
+ * follow the file to its new name. The destination's directory is
+ * created when missing, and an existing destination is refused.
+ */
+export class FileRenameAction implements IActionImplementation {
+  readonly type = 'file-rename';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Rename ${request.options.path ?? '(no path)'} to ${request.options.to ?? '(no destination)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+    const to = requireOption(request, 'to');
+    const from = this._context.manager.resolvePath(path);
+    const target = this._context.manager.resolvePath(to);
+    const contents = this._context.app.serviceManager.contents;
+
+    if (from === target) {
+      return { status: 'ok', message: 'Already named that' };
+    }
+
+    if (!(await getIfExists(contents, from, false))) {
+      return { status: 'error', message: `${path} does not exist` };
+    }
+
+    if (await getIfExists(contents, target, false)) {
+      return { status: 'error', message: `${to} exists already` };
+    }
+
+    await ensureDirectory(contents, PathExt.dirname(target));
+    await this._context.docManager.rename(from, target);
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `file-copy` action: copy a file to a new path, creating the
+ * destination's directory when missing. An existing destination is
+ * refused, so a copy never silently replaces the learner's work.
+ */
+export class FileCopyAction implements IActionImplementation {
+  readonly type = 'file-copy';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Copy ${request.options.path ?? '(no path)'} to ${request.options.to ?? '(no destination)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+    const to = requireOption(request, 'to');
+    const from = this._context.manager.resolvePath(path);
+    const target = this._context.manager.resolvePath(to);
+    const contents = this._context.app.serviceManager.contents;
+    const source = await getIfExists(contents, from, false);
+
+    if (!source) {
+      return { status: 'error', message: `${path} does not exist` };
+    }
+
+    if (source.type === 'directory') {
+      return {
+        status: 'error',
+        message: `${path} is a directory; only files can be copied`
+      };
+    }
+
+    if (await getIfExists(contents, target, false)) {
+      return { status: 'error', message: `${to} exists already` };
+    }
+
+    // The contents API copies into a directory and picks the name, so
+    // the copy is renamed to the one asked for.
+    const directory = PathExt.dirname(target);
+
+    await ensureDirectory(contents, directory);
+
+    const copied = await contents.copy(from, directory);
+
+    await contents.rename(copied.path, target);
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/**
+ * The `directory-create` action: create a directory and any missing
+ * parents. An existing directory is nothing to do.
+ */
+export class DirectoryCreateAction implements IActionImplementation {
+  readonly type = 'directory-create';
+
+  constructor(context: IFileActionContext) {
+    this._context = context;
+  }
+
+  describe(request: IActionRequest): string {
+    return `Create directory ${request.options.path ?? '(no path)'}`;
+  }
+
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const path = requireOption(request, 'path');
+
+    await ensureDirectory(
+      this._context.app.serviceManager.contents,
+      this._context.manager.resolvePath(path)
+    );
+
+    return { status: 'ok' };
+  }
+
+  private _context: IFileActionContext;
+}
+
+/** Whether a directive option is set on: present with no value, true or yes. */
+function isTrue(value: string | undefined): boolean {
+  return (
+    value !== undefined && ['', 'true', 'yes', 'on'].includes(value.trim())
+  );
+}
+
+/**
+ * Close every document open under a directory, so a delete does not
+ * leave tabs pointing at files that are gone.
+ */
+async function closeUnder(
+  context: IFileActionContext,
+  directory: string
+): Promise<void> {
+  const open: string[] = [];
+
+  for (const widget of context.app.shell.widgets('main')) {
+    const path = context.docManager.contextForWidget(widget)?.path;
+
+    if (path && (path === directory || path.startsWith(`${directory}/`))) {
+      open.push(path);
+    }
+  }
+
+  for (const path of new Set(open)) {
+    await context.docManager.closeFile(path);
+  }
 }
 
 /**

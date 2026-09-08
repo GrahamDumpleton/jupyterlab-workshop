@@ -26,6 +26,10 @@ text.
 | `file-write`          | write-files | optional | `path`, `open`, `mode`, `from`                                      | Write the body, or a file shipped with the workshop, to a file.                          |
 | `file-open`           | none        | none     | `path`, `line`, `split`                                             | Open a file in the editor, optionally at a line.                                         |
 | `file-close`          | none        | none     | `path`                                                              | Close every editor and preview showing a file.                                           |
+| `file-delete`         | write-files | none     | `path`, `recursive`, `missing`                                      | Delete a file, or a directory and its contents, closing its tabs.                        |
+| `file-rename`         | write-files | none     | `path`, `to`                                                        | Rename or move a file or directory, following it in open tabs.                           |
+| `file-copy`           | write-files | none     | `path`, `to`                                                        | Copy a file to a new path.                                                               |
+| `directory-create`    | write-files | none     | `path`                                                              | Create a directory and any missing parents.                                              |
 | `editor-insert`       | write-files | required | `path`, `line`, `match`, `regex`, `occurrence`, `position`, `save`  | Insert the body into a file before a line or a match, or at the end.                     |
 | `editor-replace`      | write-files | optional | `path`, `line`, `match`, `regex`, `occurrence`, `expand`, `save`    | Replace the first match of a pattern, chosen matches, or a range of lines with the body. |
 | `editor-select`       | none        | none     | `path`, `line`, `match`, `regex`, `occurrence`, `group`             | Select matching text or a range of lines in a file.                                      |
@@ -33,6 +37,16 @@ text.
 | `file-browser-reveal` | none        | none     | `path`                                                              | Show a path in the file browser.                                                         |
 | `download`            | none        | none     | `path`                                                              | Download a file to the learner’s machine.                                                |
 | `upload-prompt`       | none        | none     | `path`                                                              | Ask the learner to upload files.                                                         |
+
+`file-delete` refuses the workshop directory and its `_workshop` state
+directory however the path is spelt, and refuses a directory unless
+`recursive` is set; a path that does not exist is nothing to do unless
+`missing` is `error`. `file-rename` and `file-copy` create the
+destination's directory when it is missing and refuse a destination
+that exists, so neither replaces the learner's work; `file-rename` also
+moves, since `to` is a full path. All four go through the contents API,
+so they behave the same on every platform, including JupyterLite, and
+the paths follow the `write-files` scope like any write.
 
 ## Notebooks and kernels
 

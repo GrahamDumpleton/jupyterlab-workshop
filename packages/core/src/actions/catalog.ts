@@ -178,6 +178,38 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         ['path']
       ),
       spec(
+        'file-delete',
+        'files',
+        'Delete a file, or a directory and its contents, closing its tabs.',
+        'write-files',
+        'none',
+        ['path', 'recursive', 'missing']
+      ),
+      spec(
+        'file-rename',
+        'files',
+        'Rename or move a file or directory, following it in open tabs.',
+        'write-files',
+        'none',
+        ['path', 'to']
+      ),
+      spec(
+        'file-copy',
+        'files',
+        'Copy a file to a new path.',
+        'write-files',
+        'none',
+        ['path', 'to']
+      ),
+      spec(
+        'directory-create',
+        'files',
+        'Create a directory and any missing parents.',
+        'write-files',
+        'none',
+        ['path']
+      ),
+      spec(
         'editor-insert',
         'files',
         'Insert the body into a file before a line or a match, or at the end.',

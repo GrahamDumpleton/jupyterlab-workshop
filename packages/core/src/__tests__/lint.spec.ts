@@ -161,13 +161,51 @@ hello
 :path: ../notes.txt
 hello
 \`\`\`
+
+\`\`\`{file-rename}
+:path: notes.txt
+:to: /tmp/notes.txt
+\`\`\`
 `);
 
     expect(found).toEqual([
       'danger-pipe-to-shell',
       'undeclared-host',
       'path-outside-workspace',
+      'path-outside-workspace',
       'path-outside-workspace'
+    ]);
+  });
+
+  it('refuses a file-delete of the workshop or its state', () => {
+    const found = rules(`
+\`\`\`{execute}
+ls
+\`\`\`
+
+\`\`\`{file-delete}
+:path: .
+\`\`\`
+
+\`\`\`{file-delete}
+:path: _workshop/state.json
+\`\`\`
+
+\`\`\`{file-delete}
+:path: scratch
+:recursive: true
+:missing: maybe
+\`\`\`
+
+\`\`\`{file-delete}
+:path: scratch/notes.md
+\`\`\`
+`);
+
+    expect(found).toEqual([
+      'invalid-file-delete',
+      'invalid-file-delete',
+      'invalid-file-delete'
     ]);
   });
 

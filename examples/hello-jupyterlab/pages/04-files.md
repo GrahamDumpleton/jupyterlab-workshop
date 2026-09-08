@@ -86,3 +86,31 @@ whether the editor, a preview or both.
 ```{file-close}
 :path: scratch/notes.md
 ```
+
+Files can also be managed without a terminal, in the same way on every
+platform: copied, renamed or moved, and deleted, with directories
+created along the way. A copy or rename refuses to replace a file that
+exists, and a delete refuses a directory unless told it is meant.
+
+```{file-copy}
+:id: copy-notes
+:path: scratch/notes.md
+:to: scratch/archive/notes-copy.md
+```
+
+```{file-rename}
+:id: rename-notes
+:path: scratch/archive/notes-copy.md
+:to: scratch/archive/notes-old.md
+```
+
+```{directory-create}
+:id: create-drafts
+:path: scratch/drafts
+```
+
+```{file-delete}
+:id: delete-archive
+:path: scratch/archive
+:recursive: true
+```

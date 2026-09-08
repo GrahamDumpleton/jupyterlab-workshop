@@ -64,7 +64,7 @@ const SCANNED_BODIES: ReadonlySet<string> = new Set([
 ]);
 
 /** Option names holding a path that a write-files scope constrains. */
-const PATH_OPTIONS: readonly string[] = ['path', 'from', 'cwd'];
+const PATH_OPTIONS: readonly string[] = ['path', 'from', 'to', 'cwd'];
 
 /**
  * Lint a workshop, returning findings in page order.
@@ -112,6 +112,10 @@ function lintChecks(input: ILintInput, messages: ILintMessage[]): void {
 
         case 'form':
           problems.push(...parseForm(node.body).errors);
+          break;
+
+        case 'file-delete':
+          problems.push(...fileDeleteProblems(node.options));
           break;
 
         default:
@@ -514,6 +518,34 @@ function lintBody(
       ...where
     });
   }
+}
+
+/**
+ * Paths a `file-delete` must never aim at: the workshop directory itself
+ * and its state directory, which hold the pages and the learner's
+ * progress. Anything else is the author's call, with `recursive` saying
+ * a directory is meant.
+ */
+export function fileDeleteProblems(options: Record<string, string>): string[] {
+  const path = (options.path ?? '').trim().replace(/\/+$/, '');
+  const normalized = path.replace(/^\.\//, '');
+
+  if (normalized === '' || normalized === '.') {
+    return ['A path is required and cannot be the workshop directory'];
+  }
+
+  if (normalized === '_workshop' || normalized.startsWith('_workshop/')) {
+    return ['The _workshop state directory cannot be deleted'];
+  }
+
+  if (
+    options.missing !== undefined &&
+    !['ignore', 'error'].includes(options.missing)
+  ) {
+    return [`Unknown missing "${options.missing}", expected ignore or error`];
+  }
+
+  return [];
 }
 
 function lintPaths(

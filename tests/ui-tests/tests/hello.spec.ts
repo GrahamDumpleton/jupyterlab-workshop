@@ -188,6 +188,27 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect(fileClose).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-FileEditor')).toHaveCount(0);
 
+    // Copy, rename, create and delete go through the contents API; the
+    // directory delete takes the renamed copy with it.
+    const workshopDir = `${tmpPath}/${WORKSHOP}`;
+    const exists = (path: string): Promise<boolean> =>
+      page.contents.fileExists(`${workshopDir}/${path}`);
+
+    await runEditorAction('copy-notes');
+    expect(await exists('scratch/archive/notes-copy.md')).toBe(true);
+    await runEditorAction('rename-notes');
+    expect(await exists('scratch/archive/notes-copy.md')).toBe(false);
+    expect(await exists('scratch/archive/notes-old.md')).toBe(true);
+    await runEditorAction('create-drafts');
+    expect(
+      await page.contents.directoryExists(`${workshopDir}/scratch/drafts`)
+    ).toBe(true);
+    await runEditorAction('delete-archive');
+    expect(
+      await page.contents.directoryExists(`${workshopDir}/scratch/archive`)
+    ).toBe(false);
+    expect(await exists('scratch/notes.md')).toBe(true);
+
     // Kernels: capture output into a variable and see it in the prose.
     await goTo('Kernels');
 
