@@ -19,6 +19,15 @@ interface IExposedApp {
         ): Promise<{ content: unknown }>;
       };
     };
+    shell: { widgets(area: string): Iterable<IExposedWidget> };
+  };
+}
+
+/** A main-area widget, as far as the tests look at one. */
+interface IExposedWidget {
+  id: string;
+  content?: {
+    session?: { send(message: { type: string; content: string[] }): void };
   };
 }
 
@@ -344,15 +353,25 @@ test.describe('workshop panel', () => {
 
     // The tab keeps the workshop's name for the terminal when the shell
     // sets a title, as a prompt does; the shell's text goes into the
-    // caption. The title is set by hand here, since not every shell does.
+    // caption. The title is set by hand here, since not every shell
+    // does, and sent to the session as one line rather than typed, so
+    // it cannot interleave with a line the extension is sending.
     const tab = page.locator('.lm-DockPanel-tabBar .lm-TabBar-tab', {
       has: page.locator('.lm-TabBar-tabLabel', { hasText: /^git$/ })
     });
 
     await expect(tab).toHaveCount(1);
-    await page.locator('.jp-Terminal').first().click();
-    await page.keyboard.type("printf '\\033]0;shell says hi\\007'");
-    await page.keyboard.press('Enter');
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+      const terminal = Array.from(
+        exposed.jupyterapp.shell.widgets('main')
+      ).find(widget => widget.id === 'jupyterlab-workshop-terminal-git');
+
+      terminal?.content?.session?.send({
+        type: 'stdin',
+        content: ["printf '\\033]0;shell says hi\\007'\n"]
+      });
+    });
     await expect(tab).toHaveAttribute('title', /shell says hi/);
     await expect(tab.locator('.lm-TabBar-tabLabel')).toHaveText('git');
 
