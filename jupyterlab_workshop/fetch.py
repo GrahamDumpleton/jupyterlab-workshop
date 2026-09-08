@@ -18,12 +18,13 @@ import shutil
 import stat
 import tarfile
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -41,7 +42,24 @@ USER_AGENT = "jupyterlab-workshop"
 
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
 
+# How long one download may take from start to finish. The socket timeout
+# bounds each read; this bounds the whole transfer, so a link that keeps
+# trickling bytes cannot hold a fetch, or a bulk install, open for ever.
+DOWNLOAD_TIMEOUT = 600.0
+
+SOCKET_TIMEOUT = 60
+
+CHUNK_BYTES = 256 * 1024
+
 Downloader = Callable[[str], bytes]
+
+Clock = Callable[[], float]
+
+
+class Readable(Protocol):
+    """What ``read_limited`` needs of a response: chunked reads."""
+
+    def read(self, size: int = -1, /) -> bytes: ...
 
 
 class FetchError(Exception):
@@ -184,8 +202,14 @@ def archive_url(source: Source) -> str:
     return f"https://{host}/{owner}/{repo}/archive/{ref}.tar.gz"
 
 
-def download(url: str, limit: int = MAX_ARCHIVE_BYTES) -> bytes:
-    """Download a URL, refusing anything other than http and https."""
+def download(
+    url: str, limit: int = MAX_ARCHIVE_BYTES, timeout: float = DOWNLOAD_TIMEOUT
+) -> bytes:
+    """Download a URL, refusing anything other than http and https.
+
+    The download fails once it exceeds ``limit`` bytes or ``timeout``
+    seconds from start to finish, whichever comes first.
+    """
 
     scheme = urlsplit(url).scheme.lower()
 
@@ -195,15 +219,48 @@ def download(url: str, limit: int = MAX_ARCHIVE_BYTES) -> bytes:
     request = Request(url, headers={"User-Agent": USER_AGENT})
 
     try:
-        with urlopen(request, timeout=60) as response:
-            data: bytes = response.read(limit + 1)
+        with urlopen(request, timeout=SOCKET_TIMEOUT) as response:
+            data = read_limited(response, url, limit, timeout)
     except OSError as error:
         raise FetchError(f"Unable to download {url}: {error}") from error
 
-    if len(data) > limit:
-        raise FetchError(f"The download from {url} is larger than the limit")
-
     return data
+
+
+def read_limited(
+    response: Readable,
+    url: str,
+    limit: int = MAX_ARCHIVE_BYTES,
+    timeout: float = DOWNLOAD_TIMEOUT,
+    clock: Clock = time.monotonic,
+) -> bytes:
+    """Read a response in chunks, giving up past a size or a deadline.
+
+    The clock is a parameter so tests can drive it rather than wait.
+    """
+
+    deadline = clock() + timeout
+    chunks: list[bytes] = []
+    total = 0
+
+    while True:
+        chunk = response.read(CHUNK_BYTES)
+
+        if not chunk:
+            break
+
+        chunks.append(chunk)
+        total += len(chunk)
+
+        if total > limit:
+            raise FetchError(f"The download from {url} is larger than the limit")
+
+        if clock() > deadline:
+            raise FetchError(
+                f"The download from {url} timed out after {timeout:g} seconds"
+            )
+
+    return b"".join(chunks)
 
 
 def fetch_workshop(

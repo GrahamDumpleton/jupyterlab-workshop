@@ -82,7 +82,8 @@ palette and the matching launch link parameter.
 | `collections`    | Subscribing to and unsubscribing from collections: the Collections tab of the dialog, Subscribe, and the `collection` launch link parameter, so only the `collections` setting counts.                                       |
 | `catalogs`       | The same for catalogs: the Catalogs tab, "Collections you can subscribe to", and the `catalog` launch link parameter, so only the `catalogs` setting counts.                                                                 |
 | `available`      | The Available section of the browser and its search and tag filters, leaving only the installed workshops; for an image whose subscribed collection offers more than the image should let learners install.                  |
-| `remove`         | The Remove buttons and "Workshop: Remove…".                                                                                                                                                                                  |
+| `install-all`    | The "Install all…" button and the "Remove all" menu item on a collection's heading in the browser, leaving single installs and removes, for a shared or metered machine where a bulk download is unwelcome.                  |
+| `remove`         | The Remove buttons, "Workshop: Remove…", and "Remove all" on a collection's heading.                                                                                                                                         |
 | `close`          | The close button and "Close Workshop".                                                                                                                                                                                       |
 | `browse`         | The browse button, the launcher card and "Browse Workshops", for an image that runs a single workshop.                                                                                                                       |
 | `author`         | The edit button, author mode and its commands, and the "New Workshop" launcher card. A workshop marked as the learner's own opens as a learner would see it.                                                                 |
@@ -136,7 +137,11 @@ JupyterLab with the workshops installed and trusted. It needs:
 
 The session then starts in the browser with every workshop in the
 checkout listed as installed and ready to open, with no download and no
-trust dialog, since the visitor chose the repository. The disabled
+trust dialog, since the visitor chose the repository. An image built
+from a published collection rather than a checkout can fetch the
+workshops at build time instead, with
+`jupyter workshop install https://example.org/collection.json --root .`
+in `postBuild` or a Dockerfile; see [the CLI](cli.md#install). The disabled
 features keep the learner to those workshops but leave browsing and
 closing, so they can move between the supplied workshops; there are
 no subscriptions, so there is nothing more to install, and `available` need not

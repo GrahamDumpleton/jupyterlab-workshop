@@ -149,6 +149,32 @@ The metadata options set the catalog's own fields: `--title`,
 `--description`, `--publisher`, `--publisher-url`, `--homepage` and
 `--icon`. See [Catalogs](collections.md#catalogs).
 
+## install
+
+```
+jupyter workshop install COLLECTION [--root ROOT] [--directory DIR] [--only NAME...] [--platform PLATFORM]
+```
+
+Installs every workshop of a collection that is not installed yet, the
+way the browser's "Install all" does, for building an image or setting
+up a classroom machine from a script. `COLLECTION` is the index's URL
+or a file. The workshops land under `--directory` (`workshops`) beneath
+`--root` (the current directory), which should be the JupyterLab root
+so the browser lists them as installed; each records the collection it
+came from, by URL or by the file's path relative to the root, so a
+JupyterLab subscribed to the same collection matches them to their
+entries and offers updates. Entries are taken in the collection's
+order, the newest listed version of each, with the same hash check and
+the same directory naming as the browser, so a name another
+collection's workshop already occupies gets the collection's hash
+appended. Workshops already installed are skipped. `--only` names one
+workshop to install and may be repeated; `--platform` skips entries
+whose platforms do not include the one given, where by default every
+entry is installed since the person building an image knows its
+platform. One line is printed per workshop and a count at the end, and
+the exit status is 1 when any download failed, so a build stops on a
+missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
+
 ## record
 
 ```

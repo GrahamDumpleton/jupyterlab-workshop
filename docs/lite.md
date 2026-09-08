@@ -51,6 +51,10 @@ The `platform` built-in variable is `lite`, so prose can adapt with
 ` ```{when} platform == "lite" ` blocks, and `:when: platform != "lite"`
 hides an action.
 
+A Lite site ships its workshops prebuilt and has no server to unpack a
+download into, so the browser's "Install all" does not appear there;
+the site builder is where a collection is bundled.
+
 ## Building a site
 
 `jupyter workshop lite` builds a static site carrying one or more

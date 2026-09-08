@@ -45,7 +45,9 @@ with two sections:
   box matches names, titles, descriptions and tags across every group;
   tag buttons narrow the list further. Install downloads the newest
   version, checks its hash when the collection gives one, and lists it
-  under Installed, where Open starts it.
+  under Installed, where Open starts it. When more than one workshop of
+  a collection is left to install, its heading offers "Install all…",
+  which asks first; see [Installing a whole collection](#installing-a-whole-collection).
   Cards for workshops that do not list the current platform are dimmed
   but can still be installed. A workshop that is already installed
   appears only under Installed, where its card offers an Update button
@@ -94,6 +96,54 @@ unsubscribe.
 
 Update on an installed card downloads the collection's newest version
 over the files, without opening it either.
+
+### Installing a whole collection
+
+An ordered collection is a course, and a learner about to work offline
+wants everything at once, so a collection's heading offers "Install
+all…" whenever more than one of its workshops is not installed yet. It
+opens a dialog listing every workshop of the collection with a
+checkbox: those already installed are greyed out, those that do not
+list the current platform start unticked, and the rest start ticked,
+with the count that will be installed shown underneath. Cancel is the
+default button, so nothing downloads by accident.
+
+The downloads then run one at a time, in the collection's order, with
+a notification showing which is in progress and a Cancel action that
+stops after the current one finishes, keeping what has landed. Each
+workshop goes through the same hash check and size limit as a single
+install, and the same naming, so a name another collection has already
+installed gets the same suffix it would from the card. One failure does
+not stop the rest, but when the first few fail the same way, as when
+the network is down, the run stops rather than trying them all. A run
+that did not install everything ends with a summary of what landed,
+what failed and why, and what was not attempted, with "Retry
+remaining" to try those again. A download whose hash does not match
+the collection is called out separately, since it means the collection
+is out of date or the files have changed.
+
+```{figure} _static/install-all-dialog.png
+:alt: The Install all dialog listing a collection's workshops with checkboxes
+:width: 100%
+
+The Install all dialog for a collection with nothing installed yet.
+```
+
+Nothing runs during an install, however many workshops it covers;
+opening a workshop asks for trust as it always does. The `install-all`
+key of `disabledFeatures` removes the button on machines where a bulk
+download is unwelcome, leaving single installs; see
+[locking down a deployment](deploying.md#locking-down-a-deployment).
+
+The "…" menu beside a collection's heading holds "Remove all", which
+deletes every workshop that was installed from that collection, with
+their progress, after a confirmation listing the directories. It is
+there only when Remove is allowed, and it leaves alone workshops that
+merely share a name with the collection's entries, such as a checkout's
+own directories, since those were never installed from it.
+
+For an image or a script, `jupyter workshop install <collection>` does
+the same from the command line; see [the CLI](cli.md#install).
 
 ```{figure} _static/collections-dialog.png
 :alt: The Collections dialog

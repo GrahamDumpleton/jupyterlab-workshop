@@ -406,6 +406,17 @@ def take_screenshots(page: Any, url: str) -> None:
     time.sleep(2)
     save(browser, "browser.png")
 
+    # The Install all dialog for the collection with nothing installed yet:
+    # every workshop ticked and the count underneath.
+    browser.locator(".jp-WorkshopBrowser-group").nth(1).get_by_role(
+        "button", name="Install all…", exact=True
+    ).click()
+    dialog.locator(".jp-WorkshopBulk").wait_for(timeout=30000)
+    time.sleep(1)
+    save(dialog.locator(".jp-Dialog-content"), "install-all-dialog.png")
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
+    time.sleep(1)
+
     # The Collections dialog, listing what is subscribed to and what the
     # catalog offers.
     page.evaluate(

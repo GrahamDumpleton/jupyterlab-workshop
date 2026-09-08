@@ -12,6 +12,7 @@ from jupyterlab_workshop.fetch import (
     archive_url,
     fetch_workshop,
     parse_source,
+    read_limited,
     remove_tree,
     remove_workshop,
     unpack_archive,
@@ -303,3 +304,41 @@ def test_remove_tree_clears_read_only_files(tmp_path: Path) -> None:
     remove_tree(tree)
 
     assert not tree.exists()
+
+
+class SlowResponse:
+    """A response handing out fixed chunks, with a clock that moves per read."""
+
+    def __init__(self, chunks: list[bytes], seconds_per_read: float = 0.0) -> None:
+        self.chunks = list(chunks)
+        self.seconds_per_read = seconds_per_read
+        self.now = 0.0
+
+    def read(self, size: int = -1, /) -> bytes:
+        self.now += self.seconds_per_read
+
+        return self.chunks.pop(0) if self.chunks else b""
+
+    def clock(self) -> float:
+        return self.now
+
+
+def test_read_limited_joins_the_chunks() -> None:
+    response = SlowResponse([b"abc", b"def", b"g"])
+
+    assert read_limited(response, "https://x/a.tgz", clock=response.clock) == b"abcdefg"
+
+
+def test_read_limited_stops_past_the_size_limit() -> None:
+    response = SlowResponse([b"abcd", b"efgh", b"ijkl"])
+
+    with pytest.raises(FetchError, match="larger than the limit"):
+        read_limited(response, "https://x/a.tgz", limit=6, clock=response.clock)
+
+
+def test_read_limited_stops_past_the_deadline() -> None:
+    # Each read takes a second; the transfer as a whole may take two.
+    response = SlowResponse([b"a"] * 10, seconds_per_read=1.0)
+
+    with pytest.raises(FetchError, match="timed out after 2 seconds"):
+        read_limited(response, "https://x/a.tgz", timeout=2.0, clock=response.clock)

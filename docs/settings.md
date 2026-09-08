@@ -36,12 +36,12 @@ Binder image or a classroom uses.
 These are meant for `overrides.json`, though nothing stops a learner
 setting them.
 
-| Setting            | Type    | Default | Meaning                                                                                                                                                                                                                         |
-| ------------------ | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `browseOnStart`    | boolean | `false` | Open the workshop browser in place of the launcher, with both sidebars collapsed, when JupyterLab starts with no workshop to open or restore. See [starting in the browser](deploying.md#starting-in-the-browser).              |
-| `trustPolicy`      | object  | `{}`    | Administrator trust decisions; the keys are below. See [settling trust](deploying.md#settling-trust).                                                                                                                           |
-| `disabledFeatures` | list    | `[]`    | Parts of the extension to remove, from `open-directory`, `open-url`, `collections`, `catalogs`, `available`, `remove`, `close`, `browse` and `author`. See [locking down a deployment](deploying.md#locking-down-a-deployment). |
-| `analytics`        | object  | `{}`    | Site-wide reporting of progress events; the keys are below. See [reporting progress](deploying.md#reporting-progress).                                                                                                          |
+| Setting            | Type    | Default | Meaning                                                                                                                                                                                                                                        |
+| ------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `browseOnStart`    | boolean | `false` | Open the workshop browser in place of the launcher, with both sidebars collapsed, when JupyterLab starts with no workshop to open or restore. See [starting in the browser](deploying.md#starting-in-the-browser).                             |
+| `trustPolicy`      | object  | `{}`    | Administrator trust decisions; the keys are below. See [settling trust](deploying.md#settling-trust).                                                                                                                                          |
+| `disabledFeatures` | list    | `[]`    | Parts of the extension to remove, from `open-directory`, `open-url`, `collections`, `catalogs`, `available`, `install-all`, `remove`, `close`, `browse` and `author`. See [locking down a deployment](deploying.md#locking-down-a-deployment). |
+| `analytics`        | object  | `{}`    | Site-wide reporting of progress events; the keys are below. See [reporting progress](deploying.md#reporting-progress).                                                                                                                         |
 
 `trustPolicy` holds:
 

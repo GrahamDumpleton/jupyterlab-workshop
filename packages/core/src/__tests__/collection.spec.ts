@@ -13,6 +13,7 @@ import {
   normalizeLocation,
   parseCollectionIndex,
   parsePublisher,
+  planInstallAll,
   resolveLocation,
   searchCollection,
   supportsPlatform
@@ -176,6 +177,35 @@ describe('searching and tags', () => {
   it('treats no platforms as every platform', () => {
     expect(supportsPlatform(entries[0], 'windows')).toBe(false);
     expect(supportsPlatform(entries[1], 'windows')).toBe(true);
+  });
+
+  it('plans an install of everything not installed for the platform', () => {
+    const plan = planInstallAll(
+      entries,
+      'windows',
+      entry => entry.name === 'pandas-intro'
+    );
+
+    expect(plan.map(item => item.entry.name)).toEqual([
+      'git-basics',
+      'pandas-intro'
+    ]);
+    expect(plan[0]).toMatchObject({
+      installed: false,
+      supported: false,
+      selected: false
+    });
+    expect(plan[1]).toMatchObject({
+      installed: true,
+      supported: true,
+      selected: false
+    });
+
+    // With the platform unknown every entry counts as supported, and an
+    // entry that is neither installed nor unsupported starts ticked.
+    const unknown = planInstallAll(entries, '', () => false);
+
+    expect(unknown.map(item => item.selected)).toEqual([true, true]);
   });
 });
 

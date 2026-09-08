@@ -6,7 +6,7 @@ import {
 } from '@jupyterlab-workshop/core';
 import { CommandRegistry } from '@lumino/commands';
 
-import { CommandIDs, IInstalledWorkshop } from '../tokens';
+import { CommandIDs, IFetchRequest, IInstalledWorkshop } from '../tokens';
 import { sameLocation } from './sources';
 
 /**
@@ -57,6 +57,32 @@ export function installName(
   );
 
   return clash ? `${entry.name}-${collectionHash(collection)}` : entry.name;
+}
+
+/**
+ * The download request for the newest version of a collection entry:
+ * what the open-URL command builds from the same fields, for callers
+ * that talk to the manager directly, such as Install all.
+ */
+export function fetchRequestFor(
+  entry: ICollectionEntry,
+  collection: string,
+  directory: string,
+  installed: readonly IInstalledWorkshop[]
+): IFetchRequest {
+  const chosen = latestVersion(entry);
+  const source = chosen.source;
+
+  return {
+    url: source.archive ?? source.git ?? '',
+    ref: source.ref,
+    subdir: source.subdir,
+    sha256: chosen.sha256,
+    archive: source.archive !== undefined,
+    directory,
+    name: installName(entry, collection, installed),
+    collection
+  };
 }
 
 /** What to pass along with an install: launch link values, mostly. */

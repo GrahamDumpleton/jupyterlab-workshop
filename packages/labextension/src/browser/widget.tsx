@@ -14,11 +14,12 @@ import {
   UseSignal,
   caretDownIcon,
   caretRightIcon,
+  ellipsesIcon,
   refreshIcon
 } from '@jupyterlab/ui-components';
 import { CommandRegistry } from '@lumino/commands';
 import { ISignal, Signal } from '@lumino/signaling';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { workshopIcon } from '../icons';
 import {
@@ -29,6 +30,7 @@ import {
   errorMessage
 } from '../tokens';
 import { describeSource } from '../trust/summary';
+import { installAll, removeAll } from './bulk';
 import { showCollectionsDialog } from './dialog';
 import { SourceIcon } from './icon';
 import { installEntry, isInstalledFrom } from './install';
@@ -177,6 +179,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [version, setVersion] = useState(0);
+  const [platform, setPlatform] = useState(manager.platform?.os ?? '');
 
   // Reload when asked, when a workshop is opened or closed, when the
   // subscribed sources change, or at first.
@@ -219,11 +222,25 @@ function BrowserContent(props: IContentProps): JSX.Element {
         console.warn('Unable to list installed workshops', error);
       }
 
+      // The manager learns the platform when a workshop opens; before
+      // that the browser asks the backend itself, so cards for other
+      // platforms are dimmed and Install all leaves them unticked.
+      let os = manager.platform?.os ?? '';
+
+      if (os === '') {
+        try {
+          os = (await manager.backend.platform()).os;
+        } catch (error) {
+          console.warn('Unable to read the platform', error);
+        }
+      }
+
       if (!cancelled) {
         setCollections(loadedCollections);
         setCatalogs(loadedCatalogs);
         setInstalled(orderInstalled(list, loadedCollections));
         setDirectory(settings.workshopsDirectory);
+        setPlatform(os);
         setLoading(false);
       }
     };
@@ -249,9 +266,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
             )
         );
 
+        const removable = installed.filter(
+          item =>
+            item.collection !== null &&
+            isInstalledFrom(item, collection.url, item.name)
+        ).length;
+
         return {
           collection,
           notInstalled,
+          removable,
           shown: searchCollection(notInstalled, query, tags),
           upNext: upNext(collection, installed, collections)
         };
@@ -262,7 +286,6 @@ function BrowserContent(props: IContentProps): JSX.Element {
     () => collectionTags(groups.flatMap(group => group.notInstalled)),
     [groups]
   );
-  const platform = manager.platform?.os ?? '';
   const filtering = query.trim() !== '' || tags.length > 0;
   const anyNotInstalled = groups.some(group => group.notInstalled.length > 0);
   const anyProblem =
@@ -328,6 +351,38 @@ function BrowserContent(props: IContentProps): JSX.Element {
       `install:${normalizeLocation(collection)}:${entry.name}`,
       () =>
         installEntry(commands, collection, entry, installed, { open: false })
+    ).then(() => setVersion(value => value + 1));
+  };
+
+  // Install all and Remove all work through the manager directly, one
+  // workshop at a time; the list is reloaded once the whole run ends
+  // rather than after each step.
+  const installAllFor = (group: IGroup): void => {
+    void whileBusy(
+      `install-all:${normalizeLocation(group.collection.url)}`,
+      () =>
+        installAll({
+          manager,
+          collection: group.collection.url,
+          title: group.collection.title,
+          entries: group.collection.index?.workshops ?? [],
+          installed,
+          directory,
+          platform
+        })
+    ).then(() => setVersion(value => value + 1));
+  };
+
+  const removeAllFor = (group: IGroup): void => {
+    void whileBusy(
+      `install-all:${normalizeLocation(group.collection.url)}`,
+      () =>
+        removeAll({
+          manager,
+          collection: group.collection.url,
+          title: group.collection.title,
+          installed
+        })
     ).then(() => setVersion(value => value + 1));
   };
 
@@ -514,6 +569,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
           platform={platform}
           busy={busy}
           onInstall={install}
+          onInstallAll={
+            features.enabled('install-all') ? installAllFor : undefined
+          }
+          onRemoveAll={
+            features.enabled('install-all') && features.enabled('remove')
+              ? removeAllFor
+              : undefined
+          }
           onManage={manage}
           onSubscribe={url => void subscribeSuggested(url)}
         />
@@ -526,6 +589,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
 interface IGroup {
   collection: ILoadedCollection;
   notInstalled: ICollectionEntry[];
+
+  /** How many installed workshops record this collection as their source. */
+  removable: number;
   shown: ICollectionEntry[];
 
   /** The first workshop not yet finished, when the collection is ordered. */
@@ -553,6 +619,8 @@ function AvailableSection({
   platform,
   busy,
   onInstall,
+  onInstallAll,
+  onRemoveAll,
   onManage,
   onSubscribe
 }: {
@@ -572,6 +640,12 @@ function AvailableSection({
   /** The busy key of the card being installed, if any. */
   busy: string | null;
   onInstall: (collection: string, entry: ICollectionEntry) => void;
+
+  /** Install every workshop of a group, when the settings allow it. */
+  onInstallAll?: (group: IGroup) => void;
+
+  /** Remove every installed workshop of a group, when the settings allow it. */
+  onRemoveAll?: (group: IGroup) => void;
   onManage: (tab: SourceKind) => void;
   onSubscribe: (url: string) => void;
 }): JSX.Element {
@@ -628,6 +702,8 @@ function AvailableSection({
             platform={platform}
             busy={busy}
             onInstall={entry => onInstall(group.collection.url, entry)}
+            onInstallAll={onInstallAll ? () => onInstallAll(group) : undefined}
+            onRemoveAll={onRemoveAll ? () => onRemoveAll(group) : undefined}
           />
         ) : null
       )}
@@ -702,12 +778,16 @@ function CollectionGroup({
   group,
   platform,
   busy,
-  onInstall
+  onInstall,
+  onInstallAll,
+  onRemoveAll
 }: {
   group: IGroup;
   platform: string;
   busy: string | null;
   onInstall: (entry: ICollectionEntry) => void;
+  onInstallAll?: () => void;
+  onRemoveAll?: () => void;
 }): JSX.Element {
   const { collection } = group;
   const [collapsed, setCollapsed] = useState(() =>
@@ -726,6 +806,14 @@ function CollectionGroup({
     : undefined;
   const Caret = collapsed ? caretRightIcon : caretDownIcon;
   const count = group.notInstalled.length;
+
+  // A bulk run holds the whole group: its cards' Install buttons wait
+  // for it, so a single install cannot race the run for a directory.
+  const groupBusy = busy === `install-all:${normalizeLocation(collection.url)}`;
+  const canInstallAll =
+    onInstallAll !== undefined && !collection.error && count > 1;
+  const canRemoveAll =
+    onRemoveAll !== undefined && !collection.error && group.removable > 0;
 
   return (
     <section
@@ -795,6 +883,33 @@ function CollectionGroup({
             </p>
           ) : null}
         </div>
+        {canInstallAll || canRemoveAll ? (
+          <div className="jp-WorkshopBrowser-groupActions">
+            {canInstallAll ? (
+              <button
+                type="button"
+                className="jp-Button jp-mod-styled jp-mod-accept"
+                title="Download every workshop of this collection that is not installed yet, after choosing which"
+                disabled={groupBusy}
+                onClick={onInstallAll}
+              >
+                {groupBusy ? 'Installing…' : 'Install all…'}
+              </button>
+            ) : null}
+            {canRemoveAll ? (
+              <GroupMenu
+                items={[
+                  {
+                    label: `Remove all ${group.removable === 1 ? 'installed workshop' : `${group.removable} installed workshops`}…`,
+                    warn: true,
+                    disabled: groupBusy,
+                    run: onRemoveAll ?? ((): void => undefined)
+                  }
+                ]}
+              />
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {!collapsed && !collection.error && group.notInstalled.length === 0 ? (
         <p className="jp-WorkshopBrowser-note">
@@ -815,12 +930,93 @@ function CollectionGroup({
                 busy ===
                 `install:${normalizeLocation(collection.url)}:${entry.name}`
               }
+              disabled={groupBusy}
               onInstall={() => onInstall(entry)}
             />
           ))}
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** An item of a group's heading menu. */
+interface IMenuItem {
+  label: string;
+
+  /** Whether the item does something destructive. */
+  warn?: boolean;
+  disabled?: boolean;
+  run: () => void;
+}
+
+/**
+ * The heading menu behind an ellipsis button, holding the actions that
+ * should take a deliberate second step, such as Remove all. It closes
+ * when an item runs, on Escape, or on a click anywhere else.
+ */
+function GroupMenu({ items }: { items: IMenuItem[] }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const onPointer = (event: MouseEvent): void => {
+      if (root.current && !root.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="jp-WorkshopBrowser-groupMenu" ref={root}>
+      <button
+        type="button"
+        className="jp-Button jp-mod-styled jp-mod-minimal"
+        title="More actions for this collection"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(current => !current)}
+      >
+        <ellipsesIcon.react tag="span" width="16px" height="16px" />
+      </button>
+      {open ? (
+        <ul className="jp-WorkshopBrowser-groupMenuList" role="menu">
+          {items.map(item => (
+            <li key={item.label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className={`jp-WorkshopBrowser-groupMenuItem${item.warn ? ' jp-mod-warn' : ''}`}
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  item.run();
+                }}
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -863,6 +1059,7 @@ function CollectionCard({
   upNext,
   platform,
   busy,
+  disabled,
   onInstall
 }: {
   entry: ICollectionEntry;
@@ -875,6 +1072,9 @@ function CollectionCard({
 
   /** Whether this workshop is being installed right now. */
   busy: boolean;
+
+  /** Whether a bulk run on the collection holds the button. */
+  disabled: boolean;
   onInstall: () => void;
 }): JSX.Element {
   const version = latestVersion(entry);
@@ -931,7 +1131,7 @@ function CollectionCard({
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={busy}
+          disabled={busy || disabled}
           onClick={onInstall}
         >
           {busy ? 'Installing…' : 'Install'}

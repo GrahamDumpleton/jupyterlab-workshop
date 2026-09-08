@@ -428,6 +428,7 @@ export const FEATURES = [
   'collections',
   'catalogs',
   'available',
+  'install-all',
   'remove',
   'close',
   'browse',

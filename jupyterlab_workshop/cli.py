@@ -39,6 +39,8 @@ from .collection import (
 from .collection import (
     load_collection as _load_collection_index,
 )
+from .fetch import FetchError
+from .install import DEFAULT_DIRECTORY, install_collection
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
@@ -240,6 +242,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_metadata_arguments(catalog, "catalog", tags=False)
     catalog.set_defaults(func=command_catalog)
+
+    install = commands.add_parser(
+        "install",
+        help="install every workshop of a collection into a workshops directory",
+    )
+    install.add_argument("collection", help="collection index: a URL or a file")
+    install.add_argument(
+        "--root",
+        type=Path,
+        default=Path.cwd(),
+        help="the JupyterLab root the workshops directory sits under "
+        "(default: the current directory)",
+    )
+    install.add_argument(
+        "--directory",
+        default=DEFAULT_DIRECTORY,
+        help=f"directory under the root to install into (default: {DEFAULT_DIRECTORY})",
+    )
+    install.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="install only this workshop of the collection; repeat for several",
+    )
+    install.add_argument(
+        "--platform",
+        choices=PLATFORMS,
+        default="",
+        help="skip workshops that list platforms without this one "
+        "(default: install every workshop)",
+    )
+    install.set_defaults(func=command_install)
 
     publish = commands.add_parser(
         "publish", help="build an archive, its sha256 and a collection entry"
@@ -730,6 +765,34 @@ def command_catalog(args: argparse.Namespace) -> int:
     print(f"wrote {catalog_path} with {count} collection(s)")
 
     return 0
+
+
+def command_install(args: argparse.Namespace) -> int:
+    """Install the workshops of a collection that are not installed yet."""
+
+    try:
+        outcomes = install_collection(
+            args.collection,
+            args.root,
+            args.directory,
+            only=list(args.only),
+            platform=args.platform,
+            report=print,
+        )
+    except FetchError as error:
+        raise CliError(str(error)) from error
+
+    counts = {
+        status: len([item for item in outcomes if item.status == status])
+        for status in ("installed", "skipped", "failed")
+    }
+
+    print(
+        f"{counts['installed']} installed, {counts['skipped']} skipped, "
+        f"{counts['failed']} failed"
+    )
+
+    return 1 if counts["failed"] else 0
 
 
 def command_publish(args: argparse.Namespace) -> int:

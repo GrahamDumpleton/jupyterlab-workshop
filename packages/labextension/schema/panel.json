@@ -82,7 +82,7 @@
     "disabledFeatures": {
       "type": "array",
       "title": "Disabled features",
-      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser.",
+      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser; \"install-all\" removes the Install all button and Remove all menu item of a collection, leaving single installs.",
       "items": {
         "type": "string",
         "enum": [
@@ -91,6 +91,7 @@
           "collections",
           "catalogs",
           "available",
+          "install-all",
           "remove",
           "close",
           "browse",

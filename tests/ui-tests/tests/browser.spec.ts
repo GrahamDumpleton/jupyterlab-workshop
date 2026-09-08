@@ -969,6 +969,199 @@ test.describe('locked-down browser', () => {
   });
 });
 
+/** A collection for Install all: two good archives, a bad hash, one for Lite only. */
+const BULK_FILE = 'bulk-collection.json';
+
+const BULK = {
+  version: 1,
+  title: 'Bulk collection',
+  description: 'Four workshops to install at once.',
+  ordered: true,
+  workshops: [
+    {
+      name: 'pandas-intro',
+      title: 'Pandas for beginners',
+      versions: [
+        { version: '2.0.0', source: { archive: `<archive:${ARCHIVE_FILE}>` } }
+      ]
+    },
+    {
+      name: 'git-basics',
+      title: 'Git, the other way',
+      versions: [
+        {
+          version: '9.0.0',
+          source: { archive: `<archive:${CLASH_ARCHIVE_FILE}>` }
+        }
+      ]
+    },
+    {
+      name: 'broken',
+      title: 'Broken hash',
+      versions: [
+        {
+          version: '1.0.0',
+          source: { archive: `<archive:${GIT_ARCHIVE_FILE}>` },
+          sha256: '0'.repeat(64)
+        }
+      ]
+    },
+    {
+      name: 'lite-only',
+      title: 'Only on Lite',
+      platforms: ['lite'],
+      versions: [
+        { version: '1.0.0', source: { archive: `<archive:${ARCHIVE_FILE}>` } }
+      ]
+    }
+  ]
+};
+
+test.describe('install all', () => {
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        collections: [BULK_FILE],
+        workshopsDirectory: WORKSHOPS_DIR
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+    await page.contents.uploadContent(
+      withArchives(page, BULK),
+      'text',
+      BULK_FILE
+    );
+
+    // The uploaded git-basics would count as installed by name; this
+    // collection starts with nothing installed.
+    await page.contents.deleteDirectory(WORKSHOPS_DIR);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.contents.deleteFile(BULK_FILE);
+    await removeFixtures(page);
+  });
+
+  test('installs the chosen workshops, reports the rest, and removes them all', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const group = browser.locator('.jp-WorkshopBrowser-group');
+    const cards = browser.locator('.jp-WorkshopBrowser-card');
+    const dialog = page.locator('.jp-Dialog');
+
+    // The heading offers Install all, and the dialog lists every entry
+    // with the Lite-only one unticked and the count underneath. Cancel
+    // is the default, so Enter installs nothing.
+    await group.getByRole('button', { name: 'Install all…' }).click();
+    await expect(dialog).toContainText(
+      'Install every workshop of "Bulk collection"?'
+    );
+
+    const boxes = dialog.locator('input[type="checkbox"]');
+
+    await expect(boxes).toHaveCount(4);
+    await expect(boxes.nth(3)).not.toBeChecked();
+    await expect(dialog.locator('.jp-WorkshopBulk-count')).toHaveText(
+      '3 workshops to install, 1 not for this platform.'
+    );
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(cards.filter({ hasText: WORKSHOPS_DIR })).toHaveCount(0);
+
+    // Installing runs the three ticked ones in order; the bad hash fails
+    // and the summary says so, offering to retry it.
+    await group.getByRole('button', { name: 'Install all…' }).click();
+    await dialog.getByRole('button', { name: 'Install' }).click();
+    await expect(dialog).toContainText('Install all from "Bulk collection"', {
+      timeout: 60000
+    });
+    await expect(dialog).toContainText('Installed (2)');
+    await expect(dialog).toContainText('Failed (1)');
+    await expect(dialog).toContainText('hash did not match the collection');
+    await expect(
+      dialog.getByRole('button', { name: 'Retry remaining' })
+    ).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+
+    const installed = cards.filter({ hasText: WORKSHOPS_DIR });
+
+    await expect(installed).toHaveCount(2);
+    await expect(installed.locator('.jp-WorkshopBrowser-cardTitle')).toHaveText(
+      [/Pandas for beginners/, /Git, the other way/]
+    );
+    await expect(
+      group.locator('.jp-WorkshopBrowser-card', { hasText: 'Broken hash' })
+    ).toHaveCount(1);
+    await expect(
+      group.locator('.jp-WorkshopBrowser-card', { hasText: 'Only on Lite' })
+    ).toHaveCount(1);
+
+    const record = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/pandas-intro/_workshop/source.json?content=1`
+    );
+
+    expect(record.ok()).toBe(true);
+    expect(String((await record.json()).content)).toContain(BULK_FILE);
+
+    // Remove all sits behind the heading menu and asks first, listing
+    // the directories; confirming clears what the collection installed.
+    await group
+      .getByRole('button', { name: 'More actions for this collection' })
+      .click();
+    await group
+      .getByRole('menuitem', { name: /^Remove all 2 installed workshops/ })
+      .click();
+    await expect(dialog).toContainText(
+      'Remove every workshop of "Bulk collection"?'
+    );
+    await expect(dialog).toContainText(`${WORKSHOPS_DIR}/pandas-intro`);
+    await dialog.getByRole('button', { name: 'Remove all' }).click();
+    await expect(installed).toHaveCount(0);
+    await expect(group.locator('.jp-WorkshopBrowser-card')).toHaveCount(4);
+  });
+
+  test.describe('with install-all disabled', () => {
+    test.use({
+      mockSettings: {
+        ...galata.DEFAULT_SETTINGS,
+        [PLUGIN]: {
+          defaultWorkshop: '',
+          collections: [BULK_FILE],
+          workshopsDirectory: WORKSHOPS_DIR,
+          disabledFeatures: ['install-all']
+        }
+      }
+    });
+
+    test('keeps single installs but hides the bulk actions', async ({
+      page
+    }) => {
+      await openBrowser(page);
+
+      const browser = page.locator('#jupyterlab-workshop-browser');
+      const group = browser.locator('.jp-WorkshopBrowser-group');
+
+      await expect(
+        group.getByRole('button', { name: 'Install', exact: true })
+      ).toHaveCount(4);
+      await expect(
+        group.getByRole('button', { name: 'Install all…' })
+      ).toHaveCount(0);
+      await expect(
+        group.getByRole('button', { name: 'More actions for this collection' })
+      ).toHaveCount(0);
+    });
+  });
+});
+
 /** An ordered collection of two one-page workshops, both in the checkout. */
 const SEQUENCE_FILE = 'sequence.json';
 

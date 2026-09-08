@@ -359,7 +359,11 @@ session then starts in the workshop browser with the checkout's
 workshops listed as installed, and the disabled features keep learners
 to them: no other directories or URLs, no editing, no removing, with
 Restart to put a workshop back as it started. Other keys are
-`available`, `close` and `browse` (for an image running one workshop).
+`available`, `install-all` (the browser's Install all and Remove all
+for a collection), `close` and `browse` (for an image running one
+workshop). An image built from a published collection rather than a
+checkout can run `jupyter workshop install <collection-url> --root .`
+in postBuild to fetch the workshops at build time.
 The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;
 add `%3Fworkshop%3Dworkshops%2F<name>` to open one workshop directly.
 

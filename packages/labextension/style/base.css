@@ -1472,3 +1472,126 @@
   font-weight: 600;
   color: var(--jp-ui-font-color2);
 }
+
+/* Install all and the heading menu of a collection group. */
+
+.jp-WorkshopBrowser-groupActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.jp-WorkshopBrowser-groupMenu {
+  position: relative;
+}
+
+.jp-WorkshopBrowser-groupMenuList {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  min-width: 220px;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--jp-layout-color1);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: var(--jp-border-radius);
+  box-shadow: var(--jp-elevation-z6);
+}
+
+.jp-WorkshopBrowser-groupMenuItem {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jp-WorkshopBrowser-groupMenuItem:disabled {
+  color: var(--jp-ui-font-color3);
+  cursor: default;
+}
+
+.jp-WorkshopBrowser-groupMenuItem:hover:not(:disabled) {
+  background: var(--jp-layout-color2);
+}
+
+.jp-WorkshopBrowser-groupMenuItem.jp-mod-warn {
+  color: var(--jp-warn-color1);
+}
+
+/* The Install all, summary and Remove all dialogs. */
+
+.jp-WorkshopBulkDialog .jp-Dialog-content {
+  max-width: 560px;
+}
+
+.jp-WorkshopBulk-text {
+  margin: 0 0 8px;
+}
+
+.jp-WorkshopBulk-heading {
+  margin: 10px 0 4px;
+  font-size: var(--jp-ui-font-size1);
+  font-weight: 600;
+}
+
+.jp-WorkshopBulk-list {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: var(--jp-border-radius);
+}
+
+.jp-WorkshopBulk-list li {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--jp-border-color3);
+}
+
+.jp-WorkshopBulk-list li:last-child {
+  border-bottom: none;
+}
+
+.jp-WorkshopBulk-list li.jp-mod-installed {
+  color: var(--jp-ui-font-color3);
+}
+
+.jp-WorkshopBulk-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.jp-WorkshopBulk-list li.jp-mod-installed label {
+  cursor: default;
+}
+
+.jp-WorkshopBulk-title {
+  flex: 1;
+}
+
+.jp-WorkshopBulk-detail {
+  margin-left: 8px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopBulk-count {
+  font-weight: 600;
+}
+
+.jp-WorkshopBulk-warning {
+  color: var(--jp-warn-color1);
+}

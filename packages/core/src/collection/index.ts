@@ -223,6 +223,39 @@ export function supportsPlatform(
   return entry.platforms.length === 0 || entry.platforms.includes(platform);
 }
 
+/** One entry of a collection as the Install all dialog presents it. */
+export interface IInstallPlanItem {
+  entry: ICollectionEntry;
+
+  /** Whether the workshop is installed already, so cannot be chosen. */
+  installed: boolean;
+
+  /** Whether the entry lists the current platform, or lists none. */
+  supported: boolean;
+
+  /** Whether the dialog starts with the entry ticked. */
+  selected: boolean;
+}
+
+/**
+ * What Install all offers for a collection: every entry in the
+ * collection's order, with those already installed greyed out and the
+ * rest ticked unless they do not list the current platform. An empty
+ * platform, as when it is not known yet, leaves every entry supported.
+ */
+export function planInstallAll(
+  entries: readonly ICollectionEntry[],
+  platform: string,
+  isInstalled: (entry: ICollectionEntry) => boolean
+): IInstallPlanItem[] {
+  return entries.map(entry => {
+    const installed = isInstalled(entry);
+    const supported = platform === '' || supportsPlatform(entry, platform);
+
+    return { entry, installed, supported, selected: !installed && supported };
+  });
+}
+
 /**
  * The stable key of a collection source, in the form trust decisions and
  * `trustedSources` prefixes use.
