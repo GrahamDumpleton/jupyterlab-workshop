@@ -76,7 +76,7 @@ def test_init_tool_writes_a_workshop_and_live_tools_need_a_session(
         )
     )
     assert "workshop.yaml" in created
-    assert skill.startswith("---\nname: workshop-author")
+    assert skill.startswith("---\nname: jupyterlab-workshop-authoring")
     assert "No running JupyterLab" in status
 
 
@@ -197,7 +197,7 @@ def test_session_requests_report_server_errors() -> None:
 def test_skill_reference_matches_the_docs(name: str) -> None:
     root = Path(__file__).resolve().parents[2]
     docs = root / "docs" / name
-    reference = root / "skills" / "workshop-author" / "references" / name
+    reference = root / "skills" / "jupyterlab-workshop-authoring" / "references" / name
 
     if not docs.is_file():
         pytest.skip("needs the documentation in a checkout")

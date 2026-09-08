@@ -116,7 +116,7 @@ Nothing runs in a tab that is not in author mode.
 
 ### The authoring skill
 
-`skills/workshop-author/SKILL.md` in the repository, shipped in the
+`skills/jupyterlab-workshop-authoring/SKILL.md` in the repository, shipped in the
 package and served as the `workshop://skill` resource, explains the
 format to an agent: the manifest, page syntax, the actions and checks,
 the rules that keep lint and the self-test green, and how to read test

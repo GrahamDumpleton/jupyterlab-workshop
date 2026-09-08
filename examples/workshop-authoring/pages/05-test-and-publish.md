@@ -48,7 +48,7 @@ trust dialog and publish. Saving a page re-renders the panel. The Record
 button turns a session into draft pages, one action per step.
 
 AI agents can write workshops too: `jupyter workshop mcp` serves the
-same tools over MCP, and the `workshop-author` skill that ships with the
+same tools over MCP, and the `jupyterlab-workshop-authoring` skill that ships with the
 extension explains the format to them.
 
 ```{quiz}

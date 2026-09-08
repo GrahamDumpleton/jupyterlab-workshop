@@ -135,11 +135,11 @@ def discover_session(url: str = "", token: str = "") -> JupyterSession | None:
 
 
 def skill_directory() -> Path | None:
-    """Where the workshop-author skill files are, packaged or in a checkout."""
+    """Where the authoring skill files are, packaged or in a checkout."""
 
     for candidate in (
-        PACKAGE_DIR / "skills" / "workshop-author",
-        PACKAGE_DIR.parent / "skills" / "workshop-author",
+        PACKAGE_DIR / "skills" / "jupyterlab-workshop-authoring",
+        PACKAGE_DIR.parent / "skills" / "jupyterlab-workshop-authoring",
     ):
         if (candidate / "SKILL.md").is_file():
             return candidate

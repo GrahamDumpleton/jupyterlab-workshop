@@ -1,9 +1,13 @@
 ---
-name: workshop-author
-description: Write, check and self-test guided JupyterLab workshops in the jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, or make one pass jupyter workshop lint and jupyter workshop test.
+name: jupyterlab-workshop-authoring
+description: Write, check and self-test guided JupyterLab workshops in the jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, or make one pass jupyter workshop lint and jupyter workshop test. Not for Educates Training Platform workshops, which use a different format and their own skill.
 ---
 
-# Workshop author
+# jupyterlab-workshop authoring
+
+This skill covers workshops for the jupyterlab-workshop extension only.
+Workshops for the Educates Training Platform share the idea but not the
+format, the tooling or the actions, so use the Educates skill for those.
 
 A workshop is a directory that JupyterLab opens in a side panel. Learners
 read the page and click the actions in it; each action drives the live
@@ -70,7 +74,7 @@ gating: soft # off, soft or strict
 env: { PAGER: cat, GIT_PAGER: cat } # exported to terminals; nothing by default
 variables:
   - {
-      name: repo_dir,
+      name: repo_dir, # exported to terminals as REPO_DIR; never reuse a shell name such as path
       type: path,
       default: demo,
       description: Where the repo goes
