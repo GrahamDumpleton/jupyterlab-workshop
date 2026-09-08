@@ -107,6 +107,15 @@ and `list_catalog`. Tools that act on a running JupyterLab:
 `run_workshop`. Resources: the manifest, collection and catalog schemas,
 and the authoring skill.
 
+```{warning}
+`test`, `run_action`, `run_page` and `run_workshop` run the workshop's
+commands and checks for real, as you, on the machine JupyterLab is
+running on, and so do the Run actions and Run checks buttons. The
+authoring skill tells an agent not to run them unless asked to, or
+unless it has read every command and none reaches outside the workshop
+directory; see the [warning under test](cli.md#test).
+```
+
 The live tools reach JupyterLab through the server extension: a request
 becomes a Jupyter Server event, the extension runs the command in the
 browser tab that has the workshop open in author mode, and posts the
@@ -123,7 +132,9 @@ the rules that keep lint and the self-test green, and how to read test
 output. Its `references/` hold the full action table, a style guide and
 a page template. Point an agent at it (Claude Code loads skills from a
 `skills/` directory; other clients read the resource) and ask for a
-workshop; the loop it follows is init, write, lint, test, fix.
+workshop; the loop it follows is init, write, lint, test, fix, where the
+test step waits for your go-ahead unless the workshop is contained to
+its own directory.
 
 The `workshop-authoring` example was written that way and is a workshop
 about writing workshops.

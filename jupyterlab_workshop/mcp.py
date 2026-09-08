@@ -221,6 +221,12 @@ def create_server(
 
         Runs every action, check, quiz and form in order in a headless
         browser and reports each one. Slow: allow a few minutes.
+
+        The commands run for real, as the user, on this machine, with
+        their home directory and Python environment; only the workshop
+        directory is protected, by a temporary copy. Read every command
+        first, and unless the user asked for the test, call this only
+        when nothing reaches outside the workshop directory.
         """
 
         from .harness import SelfTestOptions, run_self_test
@@ -509,7 +515,10 @@ def create_server(
         """Run one action against the live session, as a page would.
 
         For example type "execute" with body "git status", or type "verify"
-        with options {"substrate": "contents"} and body "exists demo".
+        with options {"substrate": "contents"} and body "exists demo". The
+        action runs for real, as the user, on the machine JupyterLab is
+        running on; do not run one that reaches outside the workshop
+        directory unless the user asked.
         """
 
         return live(
@@ -527,7 +536,11 @@ def create_server(
         """Run the actions of a page of the open workshop in the live session.
 
         `page` is a page id (the current page when empty); `only` is
-        "actions", "checks" or "all". Returns each action's outcome.
+        "actions", "checks" or "all". Returns each action's outcome. The
+        actions run for real, as the user, on the machine JupyterLab is
+        running on, and not on a copy: read the page first, and do not
+        run one that reaches outside the workshop directory unless the
+        user asked.
         """
 
         return live(
@@ -543,7 +556,13 @@ def create_server(
     @server.tool()
     def run_workshop(timeout: float = 1200.0) -> Any:
         """Run every action of the open workshop in the live session and
-        report the results, as the self-test does."""
+        report the results, as the self-test does.
+
+        Everything runs for real, as the user, on the machine JupyterLab
+        is running on, and not on a copy. Read every page first, and
+        unless the user asked, call this only when nothing reaches
+        outside the workshop directory.
+        """
 
         return live(
             "bridge",

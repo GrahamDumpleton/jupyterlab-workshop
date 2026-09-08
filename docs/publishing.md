@@ -82,7 +82,11 @@ workshop from the forge. The same checkout can serve as a Binder image
 that lists the workshops as installed; see [the Binder
 recipe](collections.md#several-workshops-in-one-repository). The
 [showcase repository](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase) follows the pattern, down to a
-workflow that lints and self-tests every workshop on each push.
+workflow that lints and self-tests every workshop on each push. A
+workflow like that is also where a workshop that changes the machine it
+runs on, by installing packages or editing global configuration, should
+be self-tested, since each run gets a fresh runner; see the [warning
+under test](cli.md#test).
 
 ## A catalog of collections
 

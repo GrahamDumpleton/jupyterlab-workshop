@@ -26,6 +26,37 @@ The tooling is the `jupyter workshop` command (see the reference files
 for the complete vocabulary). The same tools are available as MCP tools
 from `jupyter workshop mcp`.
 
+## Never run a workshop without checking what it does
+
+`jupyter workshop test`, the MCP `test`, `run_action`, `run_page` and
+`run_workshop` tools, and author mode's Run actions and Run checks all
+run the workshop's commands for real: every `execute` body, every
+`execute-capture` body, every `script` verify and kernel check runs as
+the user, on their machine, with their home directory, environment
+variables and Python environment. The self-test only protects the
+workshop directory by working on a temporary copy. A workshop written
+for a throwaway container can change global git configuration, append
+to shell start-up files, install packages into the user's environment,
+clone into paths under their home directory, or delete paths it assumes
+it created, and a second run can fail or double those changes.
+
+So, before running any of them:
+
+- Read every command, check, capture body and script in the workshop.
+
+- Run without asking only when every one of them stays inside the
+  workshop directory and installs nothing: no `~`, `$HOME`, absolute
+  paths, `--global`, `sudo`, package installs, or removal of anything the
+  workshop did not itself create in its own directory.
+
+- Otherwise do not run it. Tell the user what the workshop touches
+  outside its directory and wait for them to say to run it, or suggest
+  running it in CI (`init --ci` writes a workflow that runs on a fresh
+  runner) or a container instead.
+
+- If the user has already asked for the test to be run, run it, but
+  still mention anything it will change outside the workshop.
+
 ## Workflow
 
 1. Outline: decide the 4 to 8 steps a learner takes and what proves each
@@ -45,7 +76,10 @@ from `jupyter workshop mcp`.
 
 5. Self-test: `jupyter workshop test my-workshop`. It runs every action,
    check, quiz and form in a real JupyterLab and prints PASS, FAIL or SKIP
-   per action. Fix failures and run again until it is green.
+   per action. Fix failures and run again until it is green. It runs the
+   workshop's commands on the user's machine for real, so apply the rule
+   above first: run it yourself only when everything stays inside the
+   workshop directory, and otherwise ask.
 
 6. Publish when asked: `jupyter workshop publish my-workshop` writes an
    archive, its hash and a collection entry. For a repository holding
@@ -306,7 +340,8 @@ pass, `soft` only shows what is missing.
 
 ## Reading test output
 
-`jupyter workshop test` prints one line per action:
+`jupyter workshop test` runs the workshop for real on the user's machine
+(see the rule at the top). It prints one line per action:
 `PASS page/id (type, 1.2s)`, `FAIL page/id (verify, 0.3s)  message`,
 `SKIP ...`. The message of a failed `verify` is the assertion text or
 predicate that failed; a failed `execute` usually timed out waiting for

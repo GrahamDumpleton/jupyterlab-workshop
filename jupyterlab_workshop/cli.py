@@ -291,7 +291,16 @@ def build_parser() -> argparse.ArgumentParser:
     publish.set_defaults(func=command_publish)
 
     test = commands.add_parser(
-        "test", help="run every action of a workshop in a real JupyterLab"
+        "test",
+        help="run every action of a workshop in a real JupyterLab",
+        description=(
+            "Run every action of a workshop in a real JupyterLab. Only the "
+            "workshop directory is protected, by a temporary copy: the "
+            "workshop's commands and checks run as you, on this machine, "
+            "with your home directory and Python environment, so read them "
+            "first and test a workshop that reaches outside its own "
+            "directory in CI or a container instead."
+        ),
     )
     test.add_argument("directory", type=Path)
     test.add_argument("--junit", type=Path, help="write a JUnit XML report")

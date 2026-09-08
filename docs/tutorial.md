@@ -302,7 +302,10 @@ jupyter workshop test git-tutorial
 The self-test starts a JupyterLab of its own, opens the workshop
 trusted, runs every action in order, waits for each terminal command to
 finish, answers the quiz correctly, runs every check, and prints a line
-per action:
+per action. Its commands run as you, on your machine; this workshop only
+works inside its own directory, so that is fine here, but read the
+[warning in the command reference](cli.md#test) before self-testing a
+workshop that reaches further.
 
 ```
 PASS 01-create/init (execute, 1.3s)

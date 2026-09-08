@@ -153,9 +153,9 @@ jupyter workshop lint my-workshop
 ```
 
 The self-test runs every action in a real JupyterLab and reports each
-one. It starts a JupyterLab of its own on a free port, so it is safe to
-run from a terminal inside the one you are using. It needs two more
-things. The package's `test` extra installs Playwright, a library that
+one. It starts a JupyterLab of its own on a free port, so it does not
+disturb the one you are using, and it works on a temporary copy of the
+workshop, so the workshop's files are safe. It needs two more things. The package's `test` extra installs Playwright, a library that
 drives a browser from Python, and Playwright then needs a browser of its
 own: `playwright install chromium` downloads a copy of Chromium into
 Playwright's cache, a one-time download of a few hundred megabytes that
@@ -170,8 +170,22 @@ uv run jupyter workshop test my-workshop
 With pip, `pip install "jupyterlab-workshop[test]"` and then the same
 two commands without `uv run`.
 
+```{warning}
+The copy is the only protection. The workshop's terminal commands and
+checks run as you, on this machine, with your home directory and your
+Python environment. That is fine for a workshop like this one, which
+only touches its own directory. A workshop written for a throwaway
+container may change global git settings, install packages into your
+environment or delete paths under your home directory, so read every
+command before testing a workshop you did not write, and test one that
+reaches outside its directory in CI or a container instead. See [the
+command reference](cli.md#test).
+```
+
 A green self-test is what a workshop's continuous integration runs;
-`init --ci` writes a GitHub Actions workflow for it.
+`init --ci` writes a GitHub Actions workflow for it, and its fresh
+runner is the safest place to test a workshop that changes the system
+it runs on.
 
 ## Where next
 

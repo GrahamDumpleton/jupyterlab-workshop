@@ -24,7 +24,9 @@ name defaults to a slug of the directory name. `--platform` and
 are `linux` and `macos`, and the template's capabilities); `--gating`
 sets the page gating. With `--ci` it also writes a GitHub Actions
 workflow that lints and self-tests the workshop on Linux, macOS and
-Windows.
+Windows. Each job runs on a fresh runner, which is also the safest place
+to self-test a workshop that changes anything outside its own directory;
+see the warning under [test](#test).
 
 ## lint
 
@@ -236,6 +238,23 @@ each terminal command to finish, answers quizzes correctly, submits forms
 with their defaults, and runs every check. Each action is reported as
 pass, fail or skip, and the exit code is 1 when anything failed. `--junit`
 writes a JUnit XML report for CI, `--json` the full results.
+
+```{warning}
+The temporary copy protects the workshop's own files and nothing else.
+Every terminal command, `execute-capture` body, `script` verify and
+kernel check runs as you, on this machine, with your home directory,
+your environment variables and the Python environment JupyterLab is
+running in. A workshop written for a throwaway container or a fresh
+account may change global git configuration, append to shell start-up
+files, install packages into your project's environment, clone into
+paths under your home directory, or remove paths it assumes it created.
+Run a second time, such steps can fail or double up.
+
+Read every command before testing a workshop you did not write, and test
+one that reaches outside its own directory in CI, a container or a
+disposable account rather than on a machine you care about; the
+workflow written by `init --ci` runs on a fresh runner every time.
+```
 
 An action that is still running after `--action-timeout` seconds (default 300) is reported as failed and the run stops there, since later actions
 would build on an unknown state. `--timeout` (default 1200) bounds the
