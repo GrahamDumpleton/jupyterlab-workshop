@@ -106,6 +106,20 @@ file, so the values are sent as `export` commands instead. A manifest
 `env` mapping adds fixed environment variables of its own, such as a
 pager setting; see [terminal shells](platforms.md#terminal-shells).
 
+```{warning}
+Because a declared variable is exported under its own name in upper
+case, a name that upper-cases to one the shell or operating system
+already uses replaces the real value in every workshop terminal. A
+variable called `path` becomes `PATH` and leaves the terminal unable to
+find commands; `term`, `lang`, `tmpdir`, `ps1`, `ifs` and
+`pythonpath` are equally unsafe on Linux and macOS, and `temp`, `tmp`,
+`userprofile`, `comspec`, `pathext`, `systemroot` and `windir` on
+Windows, where environment names are case-insensitive. Pick names
+that say what the workshop stores, such as `repo_dir` or
+`project_name`, rather than generic single words. Only the built-ins
+carry the `WORKSHOP_` prefix.
+```
+
 The hidden workshop kernel that runs `execute-capture`, `kernel-execute`
 without a `path`, and kernel checks has the same environment, so a check
 can read `os.environ["REPO_DIR"]`, and its code can equally use

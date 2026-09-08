@@ -117,7 +117,11 @@
         "required": ["name"],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "Identifier, exported to workshop terminals in upper case; avoid names the shell or operating system already uses, such as path, term or temp."
+          },
           "type": {
             "type": "string",
             "enum": [
