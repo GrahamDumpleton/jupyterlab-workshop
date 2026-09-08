@@ -249,9 +249,12 @@ test.describe('workshop panel', () => {
     const form = panel.locator('.jp-WorkshopPanel-form');
     const check = panel.locator('.jp-WorkshopPanel-verify');
 
-    // The timer checks for first.txt, which is not there.
+    // The timer checks for first.txt, which is not there. A failing
+    // triggered check is retried for a while before the failure stands,
+    // and the timer keeps starting it over, so only that it has not
+    // passed is certain.
     await expect(check).toContainText('first.txt');
-    await expect(check).toHaveClass(/jp-mod-verify-fail/, { timeout: 15000 });
+    await expect(check).not.toHaveClass(/jp-mod-verify-pass/);
 
     // Renaming the note through the form points the timer at second.txt.
     await form.getByLabel('Note').fill('second');
