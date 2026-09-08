@@ -157,6 +157,23 @@ test.describe('author mode', () => {
       'Git from the command line'
     );
 
+    // The Record button flips to Stop while recording and a page-break
+    // button appears; stopping with nothing recorded flips it back.
+    const record = panel.locator('.jp-WorkshopPanel-record');
+    const pageBreak = panel.locator('.jp-WorkshopPanel-authorButton', {
+      hasText: '+ Page'
+    });
+
+    await record.click();
+    await expect(record).toHaveText('■ Stop');
+    await expect(record).toHaveClass(/jp-mod-recording/);
+    await expect(pageBreak).toBeVisible();
+
+    await record.click();
+    await expect(record).toHaveText('● Record');
+    await expect(record).not.toHaveClass(/jp-mod-recording/);
+    await expect(pageBreak).toHaveCount(0);
+
     // Leaving author mode hides the toolbar; reopening does not prompt.
     await execute('workshop:author-mode', {});
     await expect(panel.locator('.jp-WorkshopPanel-author')).toHaveCount(0);

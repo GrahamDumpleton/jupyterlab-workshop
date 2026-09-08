@@ -3,7 +3,7 @@ import { CommandRegistry } from '@lumino/commands';
 import React from 'react';
 
 import { workshopIcon } from '../icons';
-import { IFeaturePolicy, IWorkshopManager } from '../tokens';
+import { CommandIDs, IFeaturePolicy, IWorkshopManager } from '../tokens';
 import { WorkshopPanelComponent } from './components';
 
 /** Id of the panel widget, also used for layout restoration. */
@@ -20,6 +20,7 @@ export class WorkshopPanel extends ReactWidget {
     this._commands = options.commands;
     this._features = options.features;
     this._features.changed.connect(this.update, this);
+    this._commands.commandChanged.connect(this._onCommandChanged, this);
 
     this.id = PANEL_ID;
     this.title.icon = workshopIcon;
@@ -33,6 +34,7 @@ export class WorkshopPanel extends ReactWidget {
     }
 
     this._features.changed.disconnect(this.update, this);
+    this._commands.commandChanged.disconnect(this._onCommandChanged, this);
     super.dispose();
   }
 
@@ -44,6 +46,19 @@ export class WorkshopPanel extends ReactWidget {
         features={this._features}
       />
     );
+  }
+
+  /**
+   * The author toolbar shows the record command's toggle state, so a
+   * change to that command repaints the panel.
+   */
+  private _onCommandChanged(
+    _: CommandRegistry,
+    args: CommandRegistry.ICommandChangedArgs
+  ): void {
+    if (args.id === CommandIDs.record) {
+      this.update();
+    }
   }
 
   private _manager: IWorkshopManager;

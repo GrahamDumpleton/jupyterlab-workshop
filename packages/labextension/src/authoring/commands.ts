@@ -789,7 +789,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
       if (!recorder.recording) {
         recorder.start();
         Notification.info(
-          'Recording. Work in the session; use "Record: New Page" to split pages, then run this command again to stop.',
+          'Recording. Work in the session. Press "+ Page" to start a new page, and "Stop" to write the draft pages.',
           { autoClose: 6000 }
         );
 

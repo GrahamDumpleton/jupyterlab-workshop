@@ -87,6 +87,22 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
       panelId: PANEL_ID
     });
 
+    // The panel's Record button and the palette's tick read the record
+    // command's toggle state, so tell the registry when a recording starts
+    // or stops. The recorder also signals on every captured event, which
+    // changes nothing the commands show.
+    let recording = recorder.recording;
+
+    recorder.changed.connect(() => {
+      if (recorder.recording === recording) {
+        return;
+      }
+
+      recording = recorder.recording;
+      app.commands.notifyCommandChanged(CommandIDs.record);
+      app.commands.notifyCommandChanged(CommandIDs.recordPageBreak);
+    });
+
     new BridgeListener({
       app,
       manager,
