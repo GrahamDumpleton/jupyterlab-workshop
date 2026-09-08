@@ -662,7 +662,9 @@ test.describe('workshop browser', () => {
     await expect(pageSelect).toHaveValue('1');
 
     // The state file is saved a moment after the page changes; the link
-    // must find it to know there is progress to ask about.
+    // must find the new page recorded in it to carry on from there. The
+    // file lists every page id from its first save, so only the current
+    // page field proves the save after Next has landed.
     await expect
       .poll(async () => {
         const response = await page.request.get(
@@ -671,7 +673,7 @@ test.describe('workshop browser', () => {
 
         return response.ok() ? String((await response.json()).content) : '';
       })
-      .toContain('02-first-commit');
+      .toContain('"currentPage": "02-first-commit"');
 
     await relaunch(`?workshop=${WORKSHOPS_DIR}/${WORKSHOP}&restart`);
     await expect(dialog).toContainText('Restart the workshop?', {
