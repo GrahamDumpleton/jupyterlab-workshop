@@ -23,6 +23,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,13 +104,19 @@ def run_self_test(options: SelfTestOptions) -> int:
 
         raise SystemExit(2) from error
 
-    with tempfile.TemporaryDirectory(prefix="workshop-test-") as tmp:
-        work = Path(tmp)
+    # The root is removed by hand rather than by a TemporaryDirectory
+    # context, whose cleanup raises on Windows when a process from the
+    # server's tree still holds a file, turning a passed run into a
+    # failure after the report; see remove_work_directory.
+    work = Path(tempfile.mkdtemp(prefix="workshop-test-"))
 
+    try:
         if options.lite:
             raw = _run_lite(options, work, sync_playwright)
         else:
             raw = _run_server(options, work, sync_playwright)
+    finally:
+        remove_work_directory(work)
 
     report = _to_report(raw)
 
@@ -534,6 +541,51 @@ def _wait_for_server(
 
 def _tail(log: Path) -> str:
     return log.read_text(errors="replace")[-4000:] if log.exists() else ""
+
+
+#: How many times, and how far apart, to retry removing the work directory.
+REMOVE_ATTEMPTS = 10
+
+REMOVE_DELAY = 1.0
+
+
+def remove_work_directory(
+    work: Path,
+    remover: Callable[[Path], None] = shutil.rmtree,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = REMOVE_ATTEMPTS,
+    delay: float = REMOVE_DELAY,
+) -> bool:
+    """Remove the self-test's root, retrying while something holds it.
+
+    Stopping the server takes its kernels and terminals down with it,
+    but on Windows they can release their files a moment after the
+    server has gone, and a directory with an open handle cannot be
+    removed. The removal is retried for a while; if it still fails the
+    directory is left behind with a warning, since by then the report is
+    what matters. Returns whether the directory is gone. The remover and
+    sleep are parameters so tests can drive them.
+    """
+
+    for attempt in range(1, attempts + 1):
+        try:
+            remover(work)
+
+            return True
+        except FileNotFoundError:
+            return True
+        except OSError as error:
+            if attempt == attempts:
+                print(
+                    f"warning: leaving {work} behind, still in use: {error}",
+                    file=sys.stderr,
+                )
+
+                return False
+
+            sleep(delay)
+
+    return False
 
 
 def _stop_server(server: subprocess.Popen[bytes]) -> None:
