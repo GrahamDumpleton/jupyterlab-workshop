@@ -37,12 +37,14 @@ edits them in place.
 
 ## Learn more
 
-- [Try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force):
-  the Hello JupyterLab workshop running in JupyterLite, started afresh
-  on every visit, or
-  [launch on Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab)
-  to pick one of the example workshops in a full JupyterLab with a real
-  terminal.
+- [Launch the showcase on Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop-showcase/main?urlpath=lab):
+  three short workshops that show what the extension does and why, in
+  a full JupyterLab with a real terminal, from the
+  [showcase repository](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase) that is also the pattern for
+  publishing a collection of your own. Or
+  [try the demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force):
+  the Hello JupyterLab example running in JupyterLite, started afresh
+  on every visit.
 
 - [How workshops work](https://jupyterlab-workshop.readthedocs.io/en/latest/concepts.html)
   and the

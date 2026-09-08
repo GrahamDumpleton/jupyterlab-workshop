@@ -1,38 +1,51 @@
-# Trying the examples
+# Trying it out
 
-Two hosted demos show the example workshops without installing
-anything. Both use the released package.
+Two hosted demos show workshops without installing anything. Both use
+the released package.
+
+- [Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop-showcase/main?urlpath=lab)
+  starts a full JupyterLab with a real terminal from the [showcase
+  repository](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase), opening in the workshop browser with its
+  three workshops listed, numbered and ready to open. A Binder session
+  is temporary and takes a minute or two to start, longer the first
+  time after a release.
 
 - The [JupyterLite demo](https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html?reset&workshop=hello-jupyterlab&restart=force)
-  runs the Hello JupyterLab workshop entirely in the browser, with a
-  Python kernel compiled to WebAssembly and a small shell. The link
-  carries JupyterLab's `reset` and the extension's `restart=force`, so
-  every visit starts afresh; see [launch links](collections.md#launch-links).
+  runs the Hello JupyterLab example entirely in the browser, with a
+  Python kernel compiled to WebAssembly and a small shell, to show a
+  workshop running with nothing installed. The link carries JupyterLab's
+  `reset` and the extension's `restart=force`, so every visit starts
+  afresh; see [launch links](collections.md#launch-links).
 
-- [Binder](https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop/main?urlpath=lab)
-  starts a full JupyterLab with a real terminal, opening in the workshop
-  browser with all three examples listed and ready to open: Git from the
-  command line, Hello JupyterLab, and Writing your first workshop. A
-  Binder session is temporary and takes a minute or two to start.
+The showcase workshops, taken in order, are:
 
-The examples are:
+- **Why a workshop?** does one small task from a notebook of
+  instructions, then does it again as a workshop: actions that open the
+  terminal and run the commands, a check that turns green by itself, a
+  panel that knows who you are and how far you have got, and a window
+  that arranges itself for the lesson. It ends by opening its own
+  source.
 
-- **Git from the command line** creates a repository in a terminal and
-  walks through add, commit, diff, branch, merge and a conflict, with
-  checks after each step. It needs `git`, which Binder has and
-  JupyterLite does not.
+- **Guided, not just documented** is about instructions that check
+  your work: three tasks done by hand, each noticed by a check, strict
+  gating that holds the next page until it passes, a form whose answer
+  flows into the text, the commands and the checks, and a checkpoint
+  that puts the files back after you delete them.
 
-- **Hello JupyterLab** is a tour of what actions can do: notebooks,
-  kernels, files and the editor, the interface, variables and tracks,
-  automatic runs, and finishing.
+- **Write your own** scaffolds a workshop with the `jupyter workshop`
+  command, adds a page with an action and a check, lints it, breaks it
+  and fixes it, and writes a collection index for it.
 
-- **Writing your first workshop** is a workshop about writing workshops
-  with the `jupyter workshop` command and author mode, and was itself
-  written that way.
+The showcase repository is also the pattern for publishing a collection
+of your own: workshops in directories, one `collection.json` at the
+root, `binder/` files, and a workflow that lints and self-tests every
+workshop. [Publishing workshops](publishing.md) describes each part.
 
-To run the examples on your own machine, [Getting started](getting-started.md)
-installs the extension and opens one from the workshop browser, or
-CONTRIBUTING.md in the repository describes running them from a
+To run the showcase on your own machine, [Getting
+started](getting-started.md) installs the extension and subscribes to
+the collection from the workshop browser. The repository of the
+extension itself holds a few example workshops that serve as its test
+fixtures; CONTRIBUTING.md there describes running them from a
 checkout.
 
 ## Reset

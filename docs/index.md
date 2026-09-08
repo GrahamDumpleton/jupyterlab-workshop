@@ -41,11 +41,12 @@ a command line tool such as git, a data workflow, or JupyterLab itself.
 
 ## Three ways in
 
-- **Try it.** The [hosted demos](demo.md) run an example workshop in the
-  browser with nothing to install, or on Binder with a real terminal.
+- **Try it.** The [hosted demos](demo.md) run the showcase workshops
+  on Binder with a real terminal, or one workshop in the browser with
+  nothing to install.
 
 - **Run workshops.** [Getting started](getting-started.md) installs the
-  extension on your machine and walks through an example,
+  extension on your machine and walks through a showcase workshop,
   [Using workshops](using.md) is the learner's guide, and
   [Deploying workshops](deploying.md) covers Binder, JupyterHub and
   locked-down images.

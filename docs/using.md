@@ -62,7 +62,7 @@ how far to trust it:
 :alt: The trust dialog
 :width: 100%
 
-The trust dialog for an example workshop.
+The trust dialog for a showcase workshop.
 ```
 
 Cancel leaves the workshop closed. The choice is remembered for that
@@ -124,7 +124,8 @@ back.
 :alt: The Finish dialog
 :width: 60%
 
-The Finish dialog, with browsing and closing on offer.
+The Finish dialog, with the next workshop of the collection, browsing
+and closing on offer.
 ```
 
 ## Starting over and clearing up

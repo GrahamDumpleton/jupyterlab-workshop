@@ -143,8 +143,9 @@ no subscriptions, so there is nothing more to install, and `available` need not
 be disabled. A launch link of `urlpath=lab%3Fworkshop%3Dworkshops%2Fgit-basics`
 opens one workshop directly, and `urlpath=lab%3Fcollection%3Dcollection.json`
 gives the browser start without the override, apart from the trust
-dialog. This repository's own `examples/` directory, its index under
-`collections/examples/` and its `binder/` files follow this pattern, and
+dialog. The [showcase repository](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase) follows this pattern,
+with its workshops under `workshops/`, its index at the root and its
+`binder/` files, and
 [Publishing workshops](publishing.md#several-workshops-in-one-repository)
 covers building the index.
 

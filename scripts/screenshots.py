@@ -1,14 +1,17 @@
 """Take the screenshots used in the documentation.
 
 A throwaway JupyterLab is started from a temporary root holding the
-Hello JupyterLab example as an installed workshop, two fixture
-collections and a fixture catalog, and Playwright drives it through the
+showcase collection's workshops as installed workshops, a fixture
+collection and a fixture catalog, and Playwright drives it through the
 states the pages show: the trust dialog, the panel with a workshop
 open, author mode, the Finish dialog, the workshop browser with its
-collection groups, and the Collections dialog. The
-images are written under ``docs/_static`` and are meant to be committed,
-so the docs build needs neither a browser nor a server; run this again
-after an interface change.
+collection groups, and the Collections dialog. The images are written
+under ``docs/_static`` and are meant to be committed, so the docs build
+needs neither a browser nor a server; run this again after an interface
+change.
+
+The showcase is cloned from GitHub, or taken from the checkout named by
+the ``WORKSHOP_SHOWCASE`` environment variable.
 
 Usage: ``just screenshots`` or ``uv run python scripts/screenshots.py``.
 Needs the ``test`` extra and ``playwright install chromium``.
@@ -17,6 +20,7 @@ Needs the ``test`` extra and ``playwright install chromium``.
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import shutil
 import socket
@@ -32,7 +36,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "_static"
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
-WORKSHOP = "workshops/hello-jupyterlab"
+SHOWCASE_REPO = "https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase"
+WORKSHOP = "workshops/why-a-workshop"
 VIEWPORT = {"width": 1440, "height": 900}
 
 #: Collections that stand in for published ones in the pictures.
@@ -192,22 +197,48 @@ def main() -> int:
     return 0
 
 
-def prepare_root(work: Path) -> Path:
-    """Lay out the JupyterLab root: one installed workshop, two collections
-    and a catalog offering a third."""
+def showcase_checkout(work: Path) -> Path:
+    """The showcase repository: a local checkout when one is named, else
+    a fresh shallow clone."""
 
-    root = work / "root"
-    installed = root / WORKSHOP
+    named = os.environ.get("WORKSHOP_SHOWCASE")
 
-    shutil.copytree(
-        ROOT / "examples" / "hello-jupyterlab",
-        installed,
-        ignore=shutil.ignore_patterns("_workshop", "scratch", "demo"),
+    if named:
+        return Path(named).resolve()
+
+    checkout = work / "showcase"
+
+    subprocess.run(
+        ["git", "clone", "--quiet", "--depth", "1", SHOWCASE_REPO, str(checkout)],
+        check=True,
     )
 
-    # The examples collection as shipped, plus fixture collections with
-    # plausible titles so the grouped browser has something to show.
-    shutil.copytree(ROOT / "collections" / "examples", root / "examples-collection")
+    return checkout
+
+
+def prepare_root(work: Path) -> Path:
+    """Lay out the JupyterLab root: the showcase workshops installed, its
+    collection and a fixture collection subscribed to, and a catalog
+    offering another."""
+
+    root = work / "root"
+    showcase = showcase_checkout(work)
+
+    # The showcase workshops as they are in its checkout, so the browser
+    # lists them as installed and matches them to its collection by name.
+    for workshop in sorted((showcase / "workshops").iterdir()):
+        if (workshop / "workshop.yaml").is_file():
+            shutil.copytree(
+                workshop,
+                root / "workshops" / workshop.name,
+                ignore=shutil.ignore_patterns("_workshop"),
+            )
+
+    (root / "showcase").mkdir(parents=True, exist_ok=True)
+    shutil.copy(showcase / "collection.json", root / "showcase" / "collection.json")
+
+    # Fixture collections with plausible titles so the grouped browser
+    # has something to offer.
 
     for name, collection in FIXTURE_COLLECTIONS.items():
         target = root / name
@@ -232,7 +263,7 @@ def write_overrides(work: Path) -> Path:
         PANEL_PLUGIN: {
             "defaultWorkshop": "",
             "collections": [
-                "examples-collection/collection.json",
+                "showcase/collection.json",
                 "python-basics/collection.json",
             ],
             "catalogs": ["catalog.json"],
@@ -319,11 +350,20 @@ def take_screenshots(page: Any, url: str) -> None:
     save(dialog.locator(".jp-Dialog-content"), "trust-dialog.png")
     dialog.get_by_role("button", name="Trust", exact=True).click()
 
-    # The workshop opens and applies its layout.
+    # The workshop opens; its second page is the one with the actions, so
+    # move there and run the first, which opens a terminal and passes the
+    # check beneath it.
     panel = page.locator("#jupyterlab-workshop-panel")
 
     panel.locator(".jp-WorkshopPanel-title").wait_for(timeout=60000)
-    time.sleep(4)
+    time.sleep(2)
+    page.evaluate("window.jupyterapp.commands.execute('workshop:next-page')")
+    panel.locator(".jp-WorkshopPanel-action.jp-mod-execute").first.wait_for(
+        timeout=30000
+    )
+    panel.locator(".jp-WorkshopPanel-action.jp-mod-execute").first.click()
+    panel.locator(".jp-WorkshopPanel-verify.jp-mod-verify-pass").wait_for(timeout=60000)
+    time.sleep(3)
     save(page, "panel.png")
 
     # Author mode adds the toolbar and the action gutters.
@@ -352,8 +392,11 @@ def take_screenshots(page: Any, url: str) -> None:
     dialog.get_by_role("button", name="Keep reading", exact=True).click()
     time.sleep(1)
 
-    # The workshop browser, with one workshop installed and the subscribed
-    # collections' workshops grouped by collection.
+    # The workshop browser, with the showcase installed in full and the
+    # other subscribed collection's workshops grouped under its heading.
+    # The browser scrolls inside the main area, so the window is made
+    # tall enough for both sections to show.
+    page.set_viewport_size({"width": VIEWPORT["width"], "height": 1900})
     page.evaluate("window.jupyterapp.commands.execute('workshop:browse')")
 
     browser = page.locator(".jp-WorkshopBrowser")

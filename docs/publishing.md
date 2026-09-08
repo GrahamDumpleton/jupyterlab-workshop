@@ -80,9 +80,9 @@ raw URL of `collection.json`, or start a session with it through a `collection`
 [launch link](collections.md#launch-links), and Install fetches each
 workshop from the forge. The same checkout can serve as a Binder image
 that lists the workshops as installed; see [the Binder
-recipe](collections.md#several-workshops-in-one-repository). This
-repository's own `examples/` directory and its index under
-`collections/examples/` follow the pattern.
+recipe](collections.md#several-workshops-in-one-repository). The
+[showcase repository](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase) follows the pattern, down to a
+workflow that lints and self-tests every workshop on each push.
 
 ## A catalog of collections
 

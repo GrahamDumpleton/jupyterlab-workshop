@@ -1,9 +1,9 @@
 # Getting started
 
-This page installs the extension on your own machine, runs one of the
-example workshops, and scaffolds a workshop of your own. It takes about
-fifteen minutes. To see a workshop without installing anything, use the
-[hosted demos](demo.md) instead.
+This page installs the extension on your own machine, subscribes to
+the showcase collection and runs a workshop from it, and scaffolds a
+workshop of your own. It takes about fifteen minutes. To see a workshop
+without installing anything, use the [hosted demos](demo.md) instead.
 
 ## Install
 
@@ -50,24 +50,33 @@ The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers
 three buttons: Browse workshops, Open a directory and Open from URL.
 
-## Run an example
+## Run a workshop from the showcase
 
-Click Open from URL and paste the address of the Hello JupyterLab
-example in the project's repository:
+Workshops reach a JupyterLab through collections: published lists of
+workshops that the workshop browser subscribes to and installs from. A
+fresh install subscribes to none, so the first step is to subscribe to
+one. The project publishes a [showcase
+collection](https://github.com/GrahamDumpleton/jupyterlab-workshop-showcase) of three short workshops that show what the
+extension does and why; it is also a repository laid out as a
+collection, the pattern to copy for one of your own.
+
+Click Browse workshops, then Collections…, paste the address of the
+showcase's index into the field and click Subscribe:
 
 ```
-https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/hello-jupyterlab
+https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop-showcase/main/collection.json
 ```
 
-The extension downloads it into `workshops/hello-jupyterlab` under the
-directory JupyterLab was started in, then opens it. Browse workshops
-would show it as installed from now on; the browser is also where
-published collections of workshops are subscribed to and installed
-from, which [Finding and installing workshops](collections.md) covers,
-and a fresh install subscribes to none.
+Close the dialog and the three workshops appear under Available, in
+order, with a step number on each. Install the first, Why a workshop?,
+and it moves to Installed; Open starts it. The extension downloads it
+into `workshops/why-a-workshop` under the directory JupyterLab was
+started in. [Finding and installing workshops](collections.md) covers
+the browser, collections and the launch links that hand a workshop to
+learners.
 
 ```{figure} _static/trust-dialog.png
-:alt: The trust dialog for the Hello JupyterLab workshop
+:alt: The trust dialog for the Why a workshop? workshop
 :width: 100%
 
 The trust dialog: where the workshop came from, what it asks to do, and
@@ -77,17 +86,17 @@ the three levels.
 Before anything runs, the trust dialog shows where the workshop came
 from, the capabilities it declares (a terminal, writing files, running
 code in kernels, and so on) with how many actions use each, and any lint
-findings. The examples are safe to Trust. Restricted is the cautious
-choice for a workshop you do not know: commands are typed into the
-terminal for you to press Enter, and file and kernel actions ask before
-they run. See [Loading and trust](trust.md) for the levels.
+findings. The showcase workshops are safe to Trust. Restricted is the
+cautious choice for a workshop you do not know: commands are typed into
+the terminal for you to press Enter, and file and kernel actions ask
+before they run. See [Loading and trust](trust.md) for the levels.
 
 ```{figure} _static/panel.png
-:alt: JupyterLab with the Hello JupyterLab workshop open in the Workshop panel
+:alt: JupyterLab with the Why a workshop? workshop open in the Workshop panel
 :width: 100%
 
-The Workshop panel on the right, with the first page of Hello JupyterLab
-and its clickable actions.
+The Workshop panel on the right, on the second page of Why a workshop?,
+after its first action has run and its check has passed.
 ```
 
 The instructions appear in the panel and the workshop lays out the
@@ -97,7 +106,8 @@ exactly what it will do, and it runs in the session beside you: a
 command in the terminal, a notebook created and run, a file written and
 opened. Move on with Next at the foot of the panel. A page with checks
 shows what is still to do, and the last page ends with Finish and a
-dialog offering what to do next.
+dialog offering what to do next: in a collection that declares its
+workshops a sequence, as the showcase does, that includes the next one.
 
 Two buttons in the panel header are worth knowing. Restart puts the
 workshop's files back as they were when it was first opened and forgets

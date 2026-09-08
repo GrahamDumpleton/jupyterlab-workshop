@@ -56,11 +56,12 @@ with two sections:
   installed keeps its heading, with a note saying so.
 
 ```{figure} _static/browser.png
-:alt: The workshop browser with one installed workshop and two collections
+:alt: The workshop browser with an installed ordered collection and another subscribed collection
 :width: 100%
 
-The workshop browser: one installed workshop, and the workshops of two
-subscribed collections grouped under their headings.
+The workshop browser: the three workshops of the showcase collection
+installed, numbered and with the first marked up next, and another
+subscribed collection's workshops grouped under its heading.
 ```
 
 "Add from URL…" and "Open a directory…" run the corresponding commands.
