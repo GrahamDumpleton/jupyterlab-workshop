@@ -138,6 +138,7 @@ getting-started
 concepts
 demo
 troubleshooting
+limitations
 ```
 
 ```{toctree}

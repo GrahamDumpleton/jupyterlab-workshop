@@ -140,6 +140,15 @@ c.ServerApp.terminado_settings = {
 }
 ```
 
+## Remote kernels
+
+The platforms above all run JupyterLab, its terminals and its kernels
+on one machine, which is what the actions assume. A JupyterLab whose
+kernels come from a Kernel Gateway or Enterprise Gateway, so that
+kernel work happens on another host, is not supported yet; the actions
+that would run on the wrong host, and what it would take to change
+that, are set out in [Known limitations](limitations.md#remote-kernels-kernel-gateway-and-enterprise-gateway).
+
 ## Windows notes
 
 - Commands run in PowerShell by default. Windows PowerShell 5, the

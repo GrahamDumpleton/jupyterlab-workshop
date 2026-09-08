@@ -170,7 +170,9 @@ Under JupyterHub the same overrides apply, placed in the image or the
 user environment. Workshops opened from a launch link land under each
 user's `workshopsDirectory`, and Restart and Remove act only on that
 user's copy. Progress events can carry the JupyterHub user name; see
-below.
+below. A hub whose single-user servers get their kernels from a Kernel
+Gateway or Enterprise Gateway is not supported; see
+[Known limitations](limitations.md#remote-kernels-kernel-gateway-and-enterprise-gateway).
 
 ## Reporting progress
 
