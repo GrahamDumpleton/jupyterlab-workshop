@@ -174,6 +174,23 @@ export class TerminalSessions {
     widget.title.icon = terminalIcon;
     widget.title.closable = true;
 
+    // The shell rewrites the title with every prompt, through the escape
+    // sequence terminals honour, and JupyterLab copies it onto the tab.
+    // A workshop names its terminals, so the name stays on the tab and
+    // the shell's text goes into the hover caption instead.
+    terminal.title.changed.connect(() => {
+      if (terminal.title.label === name) {
+        return;
+      }
+
+      const fromShell = terminal.title.label;
+
+      terminal.title.label = name;
+      terminal.title.caption = fromShell
+        ? `Workshop terminal "${name}": ${fromShell}`
+        : `Workshop terminal "${name}"`;
+    });
+
     // Place the first terminal under the main area and later ones beside it.
     const anchor = this.first;
     const area = options.area ?? (anchor ? 'right' : 'bottom');

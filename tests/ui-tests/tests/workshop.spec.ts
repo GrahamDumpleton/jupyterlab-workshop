@@ -339,6 +339,20 @@ test.describe('workshop panel', () => {
     await expect(actions.first()).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-Terminal').first()).toBeVisible();
 
+    // The tab keeps the workshop's name for the terminal when the shell
+    // sets a title, as a prompt does; the shell's text goes into the
+    // caption. The title is set by hand here, since not every shell does.
+    const tab = page.locator('.lm-DockPanel-tabBar .lm-TabBar-tab', {
+      has: page.locator('.lm-TabBar-tabLabel', { hasText: /^git$/ })
+    });
+
+    await expect(tab).toHaveCount(1);
+    await page.locator('.jp-Terminal').first().click();
+    await page.keyboard.type("printf '\\033]0;shell says hi\\007'");
+    await page.keyboard.press('Enter');
+    await expect(tab).toHaveAttribute('title', /shell says hi/);
+    await expect(tab.locator('.lm-TabBar-tabLabel')).toHaveText('git');
+
     await expect(actions.nth(1)).toContainText('git init -b main demo');
     await actions.nth(1).click();
     await expect(actions.nth(1)).toHaveClass(/jp-mod-status-ok/);
