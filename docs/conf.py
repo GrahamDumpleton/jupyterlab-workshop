@@ -31,6 +31,23 @@ exclude_patterns = ["_build"]
 
 myst_heading_anchors = 3
 
+# The PDF that Read the Docs builds from the LaTeX output; see
+# .readthedocs.yaml. One document, A4, with the manifest reference and the
+# rest of the pages in the toctree order.
+latex_documents = [
+    (
+        "index",
+        "jupyterlab-workshop.tex",
+        "jupyterlab-workshop documentation",
+        author,
+        "manual",
+    )
+]
+latex_elements = {
+    "papersize": "a4paper",
+    "pointsize": "10pt",
+}
+
 html_theme = "furo"
 html_title = "jupyterlab-workshop"
 html_theme_options = {

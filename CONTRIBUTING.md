@@ -108,7 +108,10 @@ follows.
 generated from the JSON schema on every build. The screenshots under
 `docs/_static` are committed; `just screenshots` retakes them from a
 throwaway JupyterLab after an interface change, and needs the `test`
-extra and a Chromium for Playwright.
+extra and a Chromium for Playwright. Read the Docs builds the same HTML
+and also a PDF through Sphinx's LaTeX builder, using the TeX Live on
+its build image; the steps are in `.readthedocs.yaml` and the PDF is
+not built locally, since that needs a TeX installation.
 
 `just pages` assembles the GitHub Pages site into `site/`: the landing
 page, the JSON schemas and the example workshop built as a JupyterLite

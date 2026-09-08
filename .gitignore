@@ -20,6 +20,7 @@ jupyterlab_workshop/_version.py
 # Documentation build outputs and the assembled GitHub Pages site
 docs/_build/
 docs/reference/
+_readthedocs/
 site/
 
 # Integration tests

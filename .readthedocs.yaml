@@ -1,6 +1,10 @@
 # Read the Docs build. The project itself is not installed (that would need
 # Node.js to build the extension); only the docs dependency group is synced
-# with uv, matching `just docs`.
+# with uv, matching `just docs`. The HTML site is built first, then a PDF
+# from the LaTeX builder with the TeX Live the Read the Docs image carries;
+# anything written under $READTHEDOCS_OUTPUT/<format> is published, so the
+# PDF appears in the flyout as a download. The PDF is not built locally
+# (`just docs` is HTML only), since it needs a TeX installation.
 version: 2
 
 build:
@@ -13,3 +17,6 @@ build:
     - asdf global uv latest
     - uv sync --only-group docs --no-install-project
     - uv run --no-sync sphinx-build -W --keep-going -b html docs $READTHEDOCS_OUTPUT/html
+    - uv run --no-sync sphinx-build --keep-going -b latex docs _readthedocs/latex
+    - cd _readthedocs/latex && latexmk -r latexmkrc -pdf -f -dvi- -ps- -interaction=nonstopmode
+    - mkdir -p $READTHEDOCS_OUTPUT/pdf && cp _readthedocs/latex/jupyterlab-workshop.pdf $READTHEDOCS_OUTPUT/pdf/
