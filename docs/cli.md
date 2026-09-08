@@ -198,10 +198,15 @@ jupyter workshop mcp [--url URL --token TOKEN]
 
 Serves the tools to AI agents over the Model Context Protocol on
 standard input and output; needs the `mcp` extra. Lint, render, test,
-init, publish and draft work on directories. The live tools drive a
-running JupyterLab that has a workshop open in author mode, found
-through `jupyter server list` unless `--url` and `--token` name one. See
-[Writing workshops in JupyterLab](authoring.md).
+init, publish and draft work on a directory the agent names on each
+call, relative to where the client started the server. The live tools
+drive a running JupyterLab that has a workshop open in author mode,
+found through `--url` and `--token`, else the `JUPYTER_SERVER_URL` and
+`JUPYTER_TOKEN` environment variables, else the first server that
+`jupyter server list` reports; the workshop path they open is relative
+to that server's root. See [Tools for AI
+agents](authoring.md#tools-for-ai-agents) for how the tools work and
+where to start the client and JupyterLab.
 
 ## lite
 
