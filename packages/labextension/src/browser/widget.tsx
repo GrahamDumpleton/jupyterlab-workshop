@@ -1,7 +1,6 @@
 import {
   ICatalog,
   ICollectionEntry,
-  ICollectionIndex,
   collectionTags,
   latestVersion,
   normalizeLocation,
@@ -34,6 +33,15 @@ import { showCollectionsDialog } from './dialog';
 import { SourceIcon } from './icon';
 import { installEntry, isInstalledFrom } from './install';
 import {
+  ILoadedCollection,
+  IMatchedCollection,
+  ISequenceStep,
+  collectionOf,
+  loadCollection,
+  sequenceStep,
+  upNext
+} from './match';
+import {
   ISubscribedSource,
   SourceKind,
   SourceStore,
@@ -46,13 +54,6 @@ export const BROWSER_ID = 'jupyterlab-workshop-browser';
 /** Settings the browser reads each time it refreshes. */
 export interface IBrowserSettings {
   workshopsDirectory: string;
-}
-
-/** A subscribed collection that has been read, or failed to be. */
-interface ILoadedCollection extends ISubscribedSource {
-  title: string;
-  index?: ICollectionIndex;
-  error?: string;
 }
 
 /** A subscribed catalog that has been read, or failed to be. */
@@ -251,7 +252,8 @@ function BrowserContent(props: IContentProps): JSX.Element {
         return {
           collection,
           notInstalled,
-          shown: searchCollection(notInstalled, query, tags)
+          shown: searchCollection(notInstalled, query, tags),
+          upNext: upNext(collection, installed, collections)
         };
       }),
     [collections, installed, query, tags]
@@ -472,21 +474,32 @@ function BrowserContent(props: IContentProps): JSX.Element {
         </p>
       ) : (
         <div className="jp-WorkshopBrowser-cards">
-          {installed.map(item => (
-            <InstalledCard
-              key={item.path}
-              item={item}
-              collection={collectionFor(item)?.collection}
-              open={manager.workshop?.path === item.path}
-              busy={busy === `open:${item.path}`}
-              onOpen={() => open(item.path)}
-              onRestart={() => void restart(item)}
-              onRemove={
-                features.enabled('remove') ? () => void remove(item) : undefined
-              }
-              update={updateFor(item)}
-            />
-          ))}
+          {installed.map(item => {
+            const found = collectionFor(item);
+            const next = found
+              ? upNext(found.collection, installed, collections)
+              : undefined;
+
+            return (
+              <InstalledCard
+                key={item.path}
+                item={item}
+                collection={found?.collection}
+                step={sequenceStep(found)}
+                upNext={found?.entry !== undefined && next === found.entry}
+                open={manager.workshop?.path === item.path}
+                busy={busy === `open:${item.path}`}
+                onOpen={() => open(item.path)}
+                onRestart={() => void restart(item)}
+                onRemove={
+                  features.enabled('remove')
+                    ? () => void remove(item)
+                    : undefined
+                }
+                update={updateFor(item)}
+              />
+            );
+          })}
         </div>
       )}
       {showAvailable ? (
@@ -514,6 +527,9 @@ interface IGroup {
   collection: ILoadedCollection;
   notInstalled: ICollectionEntry[];
   shown: ICollectionEntry[];
+
+  /** The first workshop not yet finished, when the collection is ordered. */
+  upNext?: ICollectionEntry;
 }
 
 /** A collection a catalog offers that is not subscribed to yet. */
@@ -792,6 +808,8 @@ function CollectionGroup({
               key={entry.name}
               entry={entry}
               collection={collection}
+              step={sequenceStep({ collection, entry })}
+              upNext={group.upNext === entry}
               platform={platform}
               busy={
                 busy ===
@@ -806,15 +824,53 @@ function CollectionGroup({
   );
 }
 
+/**
+ * The chips a card carries when its collection is ordered: the step in
+ * the sequence, and a mark on the one to take next.
+ */
+function SequenceChips({
+  step,
+  upNext
+}: {
+  step?: ISequenceStep;
+  upNext: boolean;
+}): JSX.Element | null {
+  if (!step && !upNext) {
+    return null;
+  }
+
+  return (
+    <>
+      {step ? (
+        <span
+          className="jp-WorkshopBrowser-chip jp-mod-step"
+          title="Its place in the collection's sequence"
+        >
+          {step.step} of {step.total}
+        </span>
+      ) : null}
+      {upNext ? (
+        <span className="jp-WorkshopBrowser-chip jp-mod-next">Up next</span>
+      ) : null}
+    </>
+  );
+}
+
 function CollectionCard({
   entry,
   collection,
+  step,
+  upNext,
   platform,
   busy,
   onInstall
 }: {
   entry: ICollectionEntry;
   collection: ILoadedCollection;
+
+  /** Its place in the sequence, when the collection is ordered. */
+  step?: ISequenceStep;
+  upNext: boolean;
   platform: string;
 
   /** Whether this workshop is being installed right now. */
@@ -840,6 +896,7 @@ function CollectionCard({
         <p className="jp-WorkshopBrowser-cardText">{entry.description}</p>
       ) : null}
       <div className="jp-WorkshopBrowser-cardMeta">
+        <SequenceChips step={step} upNext={upNext} />
         <span
           className="jp-WorkshopBrowser-chip jp-mod-source"
           title={collection.url}
@@ -887,6 +944,8 @@ function CollectionCard({
 function InstalledCard({
   item,
   collection,
+  step,
+  upNext,
   open,
   busy,
   onOpen,
@@ -898,6 +957,10 @@ function InstalledCard({
 
   /** The subscribed collection it came from, when known. */
   collection?: ILoadedCollection;
+
+  /** Its place in the sequence, when the collection is ordered. */
+  step?: ISequenceStep;
+  upNext: boolean;
   open: boolean;
 
   /** Whether this workshop is being opened right now. */
@@ -931,6 +994,7 @@ function InstalledCard({
         <p className="jp-WorkshopBrowser-cardText">{item.description}</p>
       ) : null}
       <div className="jp-WorkshopBrowser-cardMeta">
+        <SequenceChips step={step} upNext={upNext} />
         <span className="jp-WorkshopBrowser-chip">{item.path}</span>
         {item.source ? (
           <span
@@ -1007,19 +1071,6 @@ function InstalledCard({
   );
 }
 
-async function loadCollection(
-  manager: IWorkshopManager,
-  item: ISubscribedSource
-): Promise<ILoadedCollection> {
-  try {
-    const index = await manager.fetchCollection(item.url);
-
-    return { ...item, title: index.title ?? item.url, index };
-  } catch (error) {
-    return { ...item, title: item.url, error: errorMessage(error) };
-  }
-}
-
 async function loadCatalog(
   manager: IWorkshopManager,
   item: ISubscribedSource
@@ -1029,52 +1080,6 @@ async function loadCatalog(
   } catch (error) {
     return { ...item, error: errorMessage(error) };
   }
-}
-
-/** A subscribed collection an installed workshop belongs to, and its entry. */
-interface IMatchedCollection {
-  collection: ILoadedCollection;
-  entry?: ICollectionEntry;
-}
-
-/**
- * The subscribed collection an installed workshop belongs to, and the
- * entry listing it. An install that recorded its collection belongs to
- * that one, whether or not its index still lists the name. A workshop
- * with no record, a local directory or an older install, belongs to the
- * one subscribed collection that lists its name; a name that two
- * collections offer is ambiguous and matches neither, so the browser
- * never guesses which one a directory came from.
- */
-function collectionOf(
-  item: IInstalledWorkshop,
-  collections: ILoadedCollection[]
-): IMatchedCollection | undefined {
-  const entryIn = (
-    collection: ILoadedCollection
-  ): ICollectionEntry | undefined =>
-    collection.index?.workshops.find(candidate => candidate.name === item.name);
-
-  if (item.collection !== null) {
-    const recorded = item.collection;
-    const collection = collections.find(candidate =>
-      sameLocation(candidate.url, recorded)
-    );
-
-    return collection ? { collection, entry: entryIn(collection) } : undefined;
-  }
-
-  const matches: IMatchedCollection[] = [];
-
-  for (const collection of collections) {
-    const entry = entryIn(collection);
-
-    if (entry) {
-      matches.push({ collection, entry });
-    }
-  }
-
-  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /**

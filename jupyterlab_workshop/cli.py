@@ -571,6 +571,19 @@ def _add_metadata_arguments(
             "--tag", action="append", dest="tags", help="a tag; may be repeated"
         )
 
+        order = parser.add_mutually_exclusive_group()
+
+        order.add_argument(
+            "--ordered",
+            action="store_true",
+            help="the workshops form a sequence to take in the order listed",
+        )
+        order.add_argument(
+            "--unordered",
+            action="store_true",
+            help="the workshops are a set with no order (the default for a new index)",
+        )
+
 
 def _collection_metadata(args: argparse.Namespace) -> CollectionMetadata:
     return CollectionMetadata(
@@ -581,6 +594,7 @@ def _collection_metadata(args: argparse.Namespace) -> CollectionMetadata:
         homepage=args.homepage or "",
         icon=args.icon or "",
         tags=tuple(args.tags) if args.tags else None,
+        ordered=True if args.ordered else False if args.unordered else None,
     )
 
 

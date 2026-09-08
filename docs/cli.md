@@ -107,9 +107,10 @@ first; a new entry is appended. The metadata options set the
 collection's own fields and keep an existing index's values when not
 given: `--title`, `--description`, `--publisher`, `--publisher-url`,
 `--homepage`, `--icon` (a URL, a path relative to the file, or a `data:`
-URI) and `--tag`, which may be repeated. See
-[Finding and installing workshops](collections.md) for the index format
-and how the extension uses it.
+URI) and `--tag`, which may be repeated; `--ordered` says the workshops
+form a sequence to take in the order listed, and `--unordered` takes
+that back. See [Finding and installing workshops](collections.md) for
+the index format and how the extension uses it.
 
 ## index
 

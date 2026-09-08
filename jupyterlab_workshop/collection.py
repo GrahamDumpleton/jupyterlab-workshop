@@ -58,7 +58,8 @@ class CollectionMetadata:
     """The descriptive fields of a collection an author can set.
 
     An empty value leaves what the existing index says; ``tags`` replaces
-    the list when given.
+    the list when given, and ``ordered`` says whether the workshops form
+    a sequence, with ``None`` keeping what the index says.
     """
 
     title: str = ""
@@ -68,6 +69,7 @@ class CollectionMetadata:
     homepage: str = ""
     icon: str = ""
     tags: tuple[str, ...] | None = None
+    ordered: bool | None = None
 
     def apply(self, index: dict[str, Any], existing: dict[str, Any] | None) -> None:
         """Write the metadata into ``index``, keeping ``existing`` values."""
@@ -97,6 +99,11 @@ class CollectionMetadata:
 
         if tags:
             index["tags"] = tags
+
+        ordered = self.ordered if self.ordered is not None else previous.get("ordered")
+
+        if ordered:
+            index["ordered"] = True
 
 
 def load_collection(

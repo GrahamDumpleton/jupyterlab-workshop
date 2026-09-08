@@ -67,7 +67,8 @@ jupyter workshop index workshops --repo https://github.com/example-org/workshops
 Every workshop found under the directories given becomes an entry whose
 source is its path in the repository, fetched from `--repo` at `--ref`.
 Run from the checkout, both are read from git and can be left out; give
-`--ref` a tag when a course is pinned to a release. An existing index
+`--ref` a tag when a course is pinned to a release, and `--ordered` when
+the workshops are meant to be taken in the order listed. An existing index
 is updated rather than replaced, so older versions stay listed and the
 order of the workshops, which is the order the browser shows, is kept;
 reorder the file by hand when the course changes. The

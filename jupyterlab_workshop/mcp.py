@@ -343,6 +343,7 @@ def create_server(
         homepage: str = "",
         icon: str = "",
         tags: list[str] | None = None,
+        ordered: bool | None = None,
     ) -> Any:
         """Build or update a collection index of the workshops in a repository.
 
@@ -354,7 +355,8 @@ def create_server(
         names another file; entries already listed keep their position.
         The title, description, publisher, homepage, icon and tags describe
         the collection itself and are kept from an existing index when
-        not given.
+        not given; ordered says whether the workshops form a sequence to
+        take in the order listed.
         """
 
         searched = [Path(item) for item in directories or ["."]]
@@ -378,6 +380,7 @@ def create_server(
             homepage=homepage,
             icon=icon,
             tags=tuple(tags) if tags else None,
+            ordered=ordered,
         )
 
         try:

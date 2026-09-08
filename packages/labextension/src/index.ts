@@ -103,6 +103,7 @@ import { closeWorkshopWidgets } from './cleanup';
 import { featuresPlugin } from './features';
 import { showCollectionsDialog } from './browser/dialog';
 import { installEntry } from './browser/install';
+import { loadCollection, nextAfter } from './browser/match';
 import { SourceStore } from './browser/sources';
 import {
   BROWSER_ID,
@@ -115,7 +116,7 @@ import { isJupyterLite } from './lite/detect';
 import { WorkshopManager, normalizeWorkshopPath } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { ISelfTestProgress, runAll } from './selftest';
-import { showFinishDialog } from './panel/finish';
+import { INextStep, showFinishDialog } from './panel/finish';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { STATE_FILE, WORKSHOP_STATE_DIR } from './state';
@@ -1152,6 +1153,57 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       execute: () => manager.previous()
     });
 
+    // The workshop that follows the open one in its ordered collection,
+    // for the Finish dialog to offer: the installed copy is opened, and
+    // one not installed yet is installed and then opened.
+    const nextStep = async (): Promise<INextStep | undefined> => {
+      const workshop = manager.workshop;
+
+      if (!workshop) {
+        return undefined;
+      }
+
+      const installed = await manager.installed(await workshopsDirectory());
+      const current = installed.find(item => item.path === workshop.path);
+
+      if (!current) {
+        return undefined;
+      }
+
+      const subscribed = await store.list('collection');
+      const collections = await Promise.all(
+        subscribed.map(item => loadCollection(manager, item))
+      );
+      const next = nextAfter(current, installed, collections);
+
+      if (!next) {
+        return undefined;
+      }
+
+      const target = next.installed;
+
+      return {
+        title: next.entry.title,
+        collection: next.collection.title,
+        installed: target !== undefined,
+        run: async (): Promise<void> => {
+          await closeWorkshop();
+
+          if (target) {
+            await openWorkshopAt(target.path);
+          } else {
+            await installEntry(
+              app.commands,
+              next.collection.url,
+              next.entry,
+              installed,
+              { open: true }
+            );
+          }
+        }
+      };
+    };
+
     // Finish marks the last page done and offers what to do next; the
     // panel's "What next?" link reopens the dialog after that.
     app.commands.addCommand(CommandIDs.finish, {
@@ -1170,6 +1222,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           manager,
           features,
           commands: app.commands,
+          next: await nextStep(),
           close: closeWorkshop,
           browse: async (): Promise<void> => {
             await closeWorkshop();

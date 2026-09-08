@@ -152,8 +152,11 @@ def test_build_collection_keeps_and_updates_metadata() -> None:
         homepage="https://mine.example",
         icon="icon.svg",
         tags=("a", "b"),
+        ordered=True,
     )
     index = build_collection(None, [entry], metadata)
+
+    assert index["ordered"] is True
 
     assert collection_metadata(index) == {
         "title": "Mine",
@@ -171,6 +174,14 @@ def test_build_collection_keeps_and_updates_metadata() -> None:
     assert again["description"] == "Changed."
     assert again["publisher"] == {"name": "Me", "url": "https://me.example"}
     assert again["tags"] == ["a", "b"]
+    assert again["ordered"] is True
+
+    # Saying the workshops are unordered drops the flag; an index that
+    # never had it stays without one.
+    unordered = build_collection(again, [], CollectionMetadata(ordered=False))
+
+    assert "ordered" not in unordered
+    assert "ordered" not in build_collection(None, [entry])
 
 
 def _write_workshop(directory: Path, name: str, done: int = 0) -> None:

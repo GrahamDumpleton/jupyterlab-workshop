@@ -35,6 +35,7 @@ const COLLECTION = {
   description: 'Two workshops for the tests.',
   publisher: { name: 'Test Publisher', url: 'https://example.org' },
   tags: ['test'],
+  ordered: true,
   workshops: [
     {
       name: 'git-basics',
@@ -336,6 +337,21 @@ test.describe('workshop browser', () => {
     await expect(
       installed.getByRole('button', { name: 'Update to 0.2.0' })
     ).toHaveCount(1);
+
+    // The collection is ordered, so the cards carry their step in it, and
+    // the uploaded git-basics, first and unfinished, is the one up next.
+    await expect(
+      installed.locator('.jp-WorkshopBrowser-chip.jp-mod-step')
+    ).toHaveText('1 of 2');
+    await expect(
+      installed.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveText('Up next');
+    await expect(
+      pandas.locator('.jp-WorkshopBrowser-chip.jp-mod-step')
+    ).toHaveText('2 of 2');
+    await expect(
+      pandas.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveCount(0);
     await expect(
       cards.filter({ hasText: 'Git from the command line' })
     ).toHaveCount(1);
@@ -950,5 +966,132 @@ test.describe('locked-down browser', () => {
         `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/snapshots/pristine.tar`
       )
     ).toBe(true);
+  });
+});
+
+/** An ordered collection of two one-page workshops, both in the checkout. */
+const SEQUENCE_FILE = 'sequence.json';
+
+const SEQUENCE = {
+  version: 1,
+  title: 'Sequence',
+  ordered: true,
+  workshops: [
+    {
+      name: 'first-steps',
+      title: 'First steps',
+      versions: [
+        { version: '1.0', source: { archive: 'https://example.org/first.tgz' } }
+      ]
+    },
+    {
+      name: 'second-steps',
+      title: 'Second steps',
+      versions: [
+        {
+          version: '1.0',
+          source: { archive: 'https://example.org/second.tgz' }
+        }
+      ]
+    }
+  ]
+};
+
+test.describe('ordered collection', () => {
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        collections: [SEQUENCE_FILE],
+        workshopsDirectory: WORKSHOPS_DIR
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.contents.uploadContent(
+      JSON.stringify(SEQUENCE),
+      'text',
+      SEQUENCE_FILE
+    );
+
+    for (const entry of SEQUENCE.workshops) {
+      await page.contents.uploadContent(
+        [
+          'apiVersion: jupyterlab-workshop/v1alpha1',
+          `name: ${entry.name}`,
+          `title: ${entry.title}`,
+          'gating: off',
+          'pages: [pages/01.md]',
+          ''
+        ].join('\n'),
+        'text',
+        `${WORKSHOPS_DIR}/${entry.name}/workshop.yaml`
+      );
+      await page.contents.uploadContent(
+        ['---', 'title: The only page', '---', '', '# The only page', ''].join(
+          '\n'
+        ),
+        'text',
+        `${WORKSHOPS_DIR}/${entry.name}/pages/01.md`
+      );
+    }
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.contents.deleteFile(SEQUENCE_FILE);
+    await page.contents.deleteDirectory(WORKSHOPS_DIR);
+  });
+
+  test('numbers the workshops and offers the next one on finishing', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const cards = browser.locator('.jp-WorkshopBrowser-card');
+    const first = cards.filter({ hasText: 'First steps' });
+    const second = cards.filter({ hasText: 'Second steps' });
+
+    // Both are checkout directories matched by name, listed in the
+    // collection's order with their step in it; the first, not yet
+    // finished, is the one up next.
+    await expect(cards.first()).toContainText('First steps');
+    await expect(
+      first.locator('.jp-WorkshopBrowser-chip.jp-mod-step')
+    ).toHaveText('1 of 2');
+    await expect(
+      second.locator('.jp-WorkshopBrowser-chip.jp-mod-step')
+    ).toHaveText('2 of 2');
+    await expect(
+      first.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveText('Up next');
+    await expect(
+      second.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveCount(0);
+
+    // Finishing the first names the second and opens it.
+    await first.getByRole('button', { name: 'Open' }).click();
+    await trustWorkshop(page, 'First steps');
+    await page
+      .locator('#jupyterlab-workshop-panel')
+      .getByRole('button', { name: 'Finish' })
+      .click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText('Next in Sequence: Second steps.');
+    await dialog.getByRole('button', { name: 'Next workshop' }).click();
+    await trustWorkshop(page, 'Second steps');
+
+    // With the first finished, the second is now the one up next.
+    await openBrowser(page);
+    await expect(
+      first.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveCount(0);
+    await expect(
+      second.locator('.jp-WorkshopBrowser-chip.jp-mod-next')
+    ).toHaveText('Up next');
   });
 });

@@ -32,6 +32,7 @@ const SAMPLE = {
   homepage: 'https://example.org/workshops',
   icon: 'icon.svg',
   tags: ['sample'],
+  ordered: true,
   workshops: [
     {
       name: 'git-basics',
@@ -70,6 +71,7 @@ describe('parseCollectionIndex', () => {
     expect(index.homepage).toBe('https://example.org/workshops');
     expect(index.icon).toBe('icon.svg');
     expect(index.tags).toEqual(['sample']);
+    expect(index.ordered).toBe(true);
     expect(index.workshops).toHaveLength(2);
     expect(index.workshops[0].capabilities).toEqual([
       'terminal',
@@ -98,6 +100,7 @@ describe('parseCollectionIndex', () => {
     expect(index.publisher).toBeUndefined();
     expect(index.icon).toBeUndefined();
     expect(index.tags).toEqual([]);
+    expect(index.ordered).toBe(false);
   });
 
   it('accepts a publisher given as a bare name', () => {

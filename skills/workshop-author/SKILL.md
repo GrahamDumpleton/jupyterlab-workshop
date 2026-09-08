@@ -329,7 +329,8 @@ with the path relative to the checkout (`--repo` and `--ref` default to
 the git origin and branch, so pass `--ref` a tag to pin a release). The
 order of the file is the order the browser shows and is kept on update;
 `--title`, `--description`, `--publisher`, `--icon` and `--tag` describe
-the collection itself. Commit the index. Learners subscribe to the raw
+the collection itself, and `--ordered` says the workshops form a
+sequence, which numbers them in the browser. Commit the index. Learners subscribe to the raw
 URL of `collection.json` through the browser's Collections dialog or open
 `lab?collection=<url>`; `lab?collection=<url>&workshop=<name>` installs
 one workshop of it.

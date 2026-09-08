@@ -180,7 +180,10 @@ fill in without pressing anything else.
 The last page shows Finish in place of Next. Pressing it marks the page
 done, records the `workshop-finish` event and opens a dialog saying the
 workshop is complete, with what to do next: browse other workshops,
-close this one, or on Binder shut the session down. Which of those
+close this one, or on Binder shut the session down. When the workshop
+belongs to a collection that declares its workshops a sequence, the
+dialog also names the next one and offers to open it, installing it
+first if need be. Which of those
 appear depends on the host and the
 [disabled features](deploying.md#locking-down-a-deployment); "Keep
 reading" is always there. The footer then shows "Finished" with a "What

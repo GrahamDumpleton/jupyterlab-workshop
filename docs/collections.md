@@ -33,6 +33,9 @@ with two sections:
   so a course reads top to bottom: the collection recorded when a
   workshop was installed or, for a directory with no record, the one
   subscribed collection that lists its name. The rest follow by title.
+  A collection that declares its workshops a sequence, a course, has its
+  cards numbered, "2 of 5", in both sections, and the first one not yet
+  finished marked "Up next".
 
 - **Available** lists the workshops of every subscribed collection, one
   group per collection. A group is headed by the collection's icon,
@@ -174,6 +177,7 @@ tells its host that the learner is there, as does the icon it names.
   "homepage": "https://example.org/python-basics",
   "icon": "icon.svg",
   "tags": ["python", "beginner"],
+  "ordered": true,
   "workshops": [
     {
       "name": "python-first-steps",
@@ -205,8 +209,10 @@ a `name` and a `url`), `homepage`, `icon` and `tags`. The browser shows
 them on the group heading and in the Collections dialog.
 
 The `workshops` list is shown in the order written. A course lists its
-workshops in sequence; an unrelated set lists them however its author
-likes. Each version names a source: a git repository (`git`, `ref`,
+workshops in sequence and says so with `ordered: true`, which numbers
+the cards in the browser, marks the next one to take, and has the
+Finish dialog offer it; an unrelated set lists them however its author
+likes and leaves the flag out. Each version names a source: a git repository (`git`, `ref`,
 `subdir`) on a forge that serves archives, or a direct `archive` URL.
 Versions are listed newest first and the first is what Install fetches.
 A `sha256` is optional but recommended: the download is refused when the

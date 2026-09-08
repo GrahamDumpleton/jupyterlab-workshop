@@ -64,6 +64,12 @@ export interface ICollectionInfo {
 export interface ICollectionIndex extends ICollectionInfo {
   version: 1;
 
+  /**
+   * Whether the workshops form a sequence meant to be taken in the order
+   * listed, as a course does, rather than a set.
+   */
+  ordered: boolean;
+
   /** The workshops, in the order the collection lists them. */
   workshops: ICollectionEntry[];
 }
@@ -97,6 +103,7 @@ export function parseCollectionIndex(data: unknown): ICollectionIndex {
   return {
     version: COLLECTION_VERSION,
     ...parseCollectionInfo(data),
+    ordered: data.ordered === true,
     workshops: data.workshops.map((item: unknown, index: number) =>
       parseEntry(item, index)
     )

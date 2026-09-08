@@ -55,6 +55,10 @@
         "type": "string"
       }
     },
+    "ordered": {
+      "type": "boolean",
+      "description": "Whether the workshops form a sequence meant to be taken in the order listed, as a course does. The browser then numbers them and points at the next one to take."
+    },
     "workshops": {
       "type": "array",
       "items": {

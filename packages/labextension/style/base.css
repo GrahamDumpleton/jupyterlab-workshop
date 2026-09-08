@@ -943,6 +943,17 @@
   color: var(--jp-ui-font-color1);
 }
 
+.jp-WorkshopBrowser-chip.jp-mod-step {
+  background: var(--jp-brand-color3);
+  color: var(--jp-ui-font-color1);
+}
+
+.jp-WorkshopBrowser-chip.jp-mod-next {
+  background: var(--jp-warn-color3);
+  color: var(--jp-ui-font-color1);
+  font-weight: 600;
+}
+
 .jp-WorkshopBrowser-cardActions {
   display: flex;
   flex-wrap: wrap;

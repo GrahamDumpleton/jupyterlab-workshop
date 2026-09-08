@@ -271,6 +271,7 @@ def test_index_command_indexes_a_repository(
                 "v1",
                 "--title",
                 "Class",
+                "--ordered",
             ]
         )
         == 0
@@ -280,6 +281,7 @@ def test_index_command_indexes_a_repository(
     data = json.loads((tmp_path / "collection.json").read_text())
 
     assert data["title"] == "Class"
+    assert data["ordered"] is True
     assert [entry["name"] for entry in data["workshops"]] == ["one", "two"]
     assert data["workshops"][0]["versions"][0]["source"] == {
         "git": "https://github.com/org/workshops",
