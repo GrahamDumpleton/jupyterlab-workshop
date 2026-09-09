@@ -10,7 +10,20 @@ const PANEL = '#jupyterlab-workshop-panel';
 interface IExposedApp {
   jupyterapp: {
     commands: { execute(id: string, args: object): Promise<unknown> };
+    serviceManager: {
+      contents: {
+        get(
+          path: string,
+          options: { content: boolean }
+        ): Promise<{ content: INotebookFile }>;
+      };
+    };
   };
+}
+
+/** A saved notebook, as far as the tests look at one. */
+interface INotebookFile {
+  cells: { cell_type: string; outputs?: unknown[] }[];
 }
 
 /** Open a workshop and answer the trust dialog with the given level. */
@@ -121,7 +134,7 @@ test.describe('hello-jupyterlab workshop', () => {
 
     // The contents check sees the execution count in the open notebook
     // without waiting for a save.
-    await expect(panel.locator('.jp-WorkshopPanel-verify')).toHaveClass(
+    await expect(panel.locator('.jp-WorkshopPanel-verify').first()).toHaveClass(
       /jp-mod-verify-pass/,
       { timeout: 30000 }
     );
@@ -139,6 +152,28 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect(
       page.locator('.jp-NotebookPanel .jp-OutputArea-output').last()
     ).toContainText('84');
+
+    // Running the cell triggers the check in the notebook's kernel, whose
+    // body is a bare expression rather than a print.
+    await expect(panel.locator('.jp-WorkshopPanel-verify').last()).toHaveClass(
+      /jp-mod-verify-pass/,
+      { timeout: 30000 }
+    );
+
+    // The run saved the notebook afterwards, so the file has the output
+    // of the cell that was just run, not only the cell.
+    const saved = await page.evaluate(async (path: string) => {
+      const exposed = window as unknown as IExposedApp;
+      const model = await exposed.jupyterapp.serviceManager.contents.get(path, {
+        content: true
+      });
+
+      return model.content.cells
+        .filter(cell => cell.cell_type === 'code')
+        .map(cell => (cell.outputs ?? []).length);
+    }, `${tmpPath}/${WORKSHOP}/scratch/hello.ipynb`);
+
+    expect(saved[saved.length - 1]).toBeGreaterThan(0);
 
     // Files: writing opens the editor, the editor actions change what it
     // shows, and file-close takes it away again.

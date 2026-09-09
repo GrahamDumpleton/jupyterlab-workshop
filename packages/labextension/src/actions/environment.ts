@@ -26,11 +26,19 @@ export class EnvironmentCreateAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
-    const status = await this._manager.createEnvironment();
+    const before = this._manager.environment?.createdAt;
+    const status = await this._manager.createEnvironment(
+      request.options.force === 'true'
+    );
 
+    // An environment built earlier from the same requirements is kept, so
+    // the step reads as done rather than as a second install.
     return {
       status: 'ok',
-      message: `Environment ready with kernel "${status.kernel}"`
+      message:
+        before && before === status.createdAt
+          ? `Environment already exists with kernel "${status.kernel}"`
+          : `Environment ready with kernel "${status.kernel}"`
     };
   }
 

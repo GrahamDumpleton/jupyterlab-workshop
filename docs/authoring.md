@@ -41,7 +41,11 @@ a line are shown under the block they refer to.
 
 While author mode is on, progress events are not recorded, and edits to
 the files re-render the panel as they are saved, whether they were made
-in JupyterLab or elsewhere.
+in JupyterLab or elsewhere. Saving a page, the manifest or the
+environment's requirements file also retakes the snapshot that Restart
+puts back, so restarting to try the workshop from the top keeps your
+edits; outside author mode Restart restores every file, pages included,
+as they were when the workshop was first opened.
 
 "Workshop: New Workshop…" (also in the launcher under Workshops)
 scaffolds a directory from a template, `starter`, `blank` or

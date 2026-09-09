@@ -333,7 +333,11 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: 'The notebook has no kernel' };
     }
 
-    const output = await executeInKernel(kernel, request.body, true);
+    // Not silent: a silent execute never yields an execute_result, so the
+    // value of a bare expression would be lost and only printed text
+    // would count. History is still not stored, so the notebook's In and
+    // Out counters are untouched.
+    const output = await executeInKernel(kernel, request.body, false);
 
     if (output.error) {
       return { status: 'error', message: failureMessage(output.error) };

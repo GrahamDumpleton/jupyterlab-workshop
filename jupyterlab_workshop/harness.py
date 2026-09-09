@@ -29,6 +29,9 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
+import yaml
+
+from .environment import EnvironmentSetupError, environment_status, remove_environment
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
@@ -170,6 +173,50 @@ def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> o
         return raw
     finally:
         _stop_server(server)
+
+        # The copy is about to be deleted, and a kernelspec pointing into
+        # it would linger in every kernel picker; in place the workshop
+        # stays, and so does its kernel.
+        if not options.in_place:
+            forget_environment(root, name)
+
+
+def forget_environment(root: Path, name: str) -> str | None:
+    """Unregister the kernel of the environment a self-test created for
+    the workshop ``name`` under ``root``, and drop the venv with it.
+
+    Returns the kernel name when one was registered, else None. A workshop
+    that declares no environment, or has none created, is left alone.
+    """
+
+    try:
+        environment = yaml.safe_load((root / name / "workshop.yaml").read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+
+    if not isinstance(environment, dict):
+        return None
+
+    declared = environment.get("environment")
+
+    if not isinstance(declared, dict) or not declared.get("requirements"):
+        return None
+
+    kernel = str(declared.get("kernel") or f"workshop-{environment.get('name')}")
+
+    try:
+        registered = environment_status(root, name, kernel).registered
+
+        remove_environment(root, name, kernel)
+    except EnvironmentSetupError as error:
+        _say(f"unable to remove the workshop environment: {error}")
+
+        return None
+
+    if registered:
+        _say(f"unregistered the kernel {kernel} the test created")
+
+    return kernel if registered else None
 
 
 def _dump_server_log(log: Path) -> None:

@@ -156,10 +156,14 @@ deal with it:
   or Restart on the workshop's card in the browser) puts the workshop's
   files back as they were when it was first opened, deleting anything
   added since, forgets all progress, closes the documents and terminals
-  it had open, and reopens it at the first page. It works offline and
-  in JupyterLite. It only covers files inside the workshop directory,
-  so a workshop that writes elsewhere, such as into the home directory,
-  is not undone there.
+  it had open, and reopens it at the first page. Every file in the
+  workshop directory is covered, the pages and manifest included, so
+  an edit to a page made after the workshop was first opened is undone
+  too, unless it was saved in [author mode](authoring.md#author-mode),
+  which moves the baseline along. It works offline and in JupyterLite.
+  It only covers files inside the workshop directory, so a workshop
+  that writes elsewhere, such as into the home directory, is not undone
+  there.
 
 - **Reset Progress** ("Workshop: Reset Progress…") forgets page
   progress, action results, captured variables and the action log,

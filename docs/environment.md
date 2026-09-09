@@ -32,7 +32,10 @@ the environment. Creating it:
 The steps are logged to `_workshop/environment.log`, and
 `_workshop/environment.json` records the kernel name and the hash of
 the requirements file. If the requirements change later the banner
-returns, offering to recreate the environment.
+returns, offering to recreate the environment. Creating an environment
+that already exists from the same requirements, with its kernel
+registered, does nothing and reports so; the banner's Recreate button
+and the action's `:force: true` option rebuild it regardless.
 
 Once the kernel is registered, notebooks created by `notebook-create`
 without an explicit `kernel` use it, and so does the hidden workshop
@@ -57,8 +60,14 @@ make it a visible step:
 ```
 ````
 
-The command "Workshop: Create Environment" does the same from the
-palette.
+While a page with the action is showing, the banner stays out of the
+way, since the page is explaining the step, and the action shows as
+done once the environment exists, whether the learner clicked it, used
+the banner on an earlier page, or created it in an earlier session.
+Put the action on the first page of a notebook workshop: the self-test
+runs only what the pages carry, so without it the test's notebooks
+would run on the server's kernel. The command "Workshop: Create
+Environment" does the same from the palette.
 
 ## Limits
 

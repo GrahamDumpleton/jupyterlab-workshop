@@ -262,11 +262,21 @@ workflow written by `init --ci` runs on a fresh runner every time.
 ```
 
 An action that is still running after `--action-timeout` seconds (default 300) is reported as failed and the run stops there, since later actions
-would build on an unknown state. `--timeout` (default 1200) bounds the
+would build on an unknown state. An action that opens a dialog nothing
+will answer, such as a kernel selection or a confirmation, is failed
+sooner, after the dialog has been open for ten seconds, with the
+dialog's title in the message. `--timeout` (default 1200) bounds the
 whole run: when it passes, the harness collects the results gathered so
-far, records the action in flight as failed, and exits with code 1. Both
-limits exist so that a stuck action in CI produces a report naming it
-rather than a job that never ends.
+far, records the action in flight as failed, and exits with code 1. All
+three limits exist so that a stuck action in CI produces a report naming
+it rather than a job that never ends.
+
+A workshop with an [isolated environment](environment.md) creates it
+inside the temporary copy, and registers its kernel for your user. The
+test unregisters that kernel again when it removes the copy, so no
+kernel pointing at a deleted directory is left in the kernel picker.
+With `--in-place` the environment and its kernel stay, since the
+workshop does.
 
 Requirements: the `test` extra, which installs Playwright, a library
 that drives a browser from Python (`uv add "jupyterlab-workshop[test]"`

@@ -54,6 +54,18 @@ Run just that cell, then highlight it.
 :cell: doubled
 ```
 
+A check can run in the notebook's own kernel and see what the cells
+computed; the value of its last expression decides.
+
+```{verify}
+:id: answer-doubled
+:label: answer times two is 84 in the notebook's kernel
+:substrate: learner-kernel
+:path: scratch/hello.ipynb
+:trigger: cell-executed doubled
+answer * 2 == 84
+```
+
 ```{cell-highlight}
 :path: scratch/hello.ipynb
 :cell: doubled

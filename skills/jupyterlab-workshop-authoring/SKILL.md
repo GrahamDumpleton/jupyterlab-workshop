@@ -135,7 +135,10 @@ of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
 `notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
 `terminal-only` and `notebook`), `tracks` (alternative paths chosen with
 `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
-`environment` (`requirements`, `kernel`), `analytics` (`sink`).
+`environment` (`requirements`, `kernel`), `analytics` (`sink`). A
+workshop with an `environment` puts an `environment-create` action on
+its first page, before any notebook: the self-test runs only what pages
+carry, and the action is a no-op once the environment exists.
 
 ## Pages
 

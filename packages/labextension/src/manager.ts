@@ -28,7 +28,7 @@ import {
   renderEnvSh
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
-import { Contents } from '@jupyterlab/services';
+import { Contents, KernelSpec } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
 import { PartialJSONValue } from '@lumino/coreutils';
@@ -114,6 +114,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._prompts = options.prompts;
     this._settings = options.settings ?? null;
     this._features = options.features ?? null;
+    this._kernelspecs = options.kernelspecs ?? null;
+    this._rebaseliner = new Debouncer(() => this._rebaseline(), 1000);
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
     this._reloader = new Debouncer(() => this.reload(), 300);
@@ -551,7 +553,7 @@ export class WorkshopManager implements IWorkshopManager {
     }
   }
 
-  async createEnvironment(): Promise<IEnvironmentStatus> {
+  async createEnvironment(force = false): Promise<IEnvironmentStatus> {
     const workshop = this._workshop;
     const environment = workshop?.manifest.environment;
 
@@ -573,8 +575,16 @@ export class WorkshopManager implements IWorkshopManager {
         workshop: workshop.path,
         requirements: environment.requirements,
         kernel,
-        display: `${workshop.manifest.title} (workshop)`
+        display: `${workshop.manifest.title} (workshop)`,
+        force
       });
+
+      // The frontend caches the kernelspec list and polls it only every
+      // minute; a notebook opened on the new kernel before the list knows
+      // it would bring up the kernel selection dialog instead.
+      if (status.registered) {
+        await this._kernelspecs?.refreshSpecs();
+      }
 
       if (this._workshop === workshop) {
         this._environment = { ...status, creating: false };
@@ -1661,12 +1671,30 @@ export class WorkshopManager implements IWorkshopManager {
 
     const relative = saved.slice(prefix.length);
 
+    // The snapshot Restart puts back was taken when the workshop first
+    // opened, so an author's edit to a page or the manifest would be
+    // undone by a Restart; saving one moves the baseline along with it.
     if (
       relative === MANIFEST_FILE ||
-      workshop.manifest.pages.includes(relative)
+      workshop.manifest.pages.includes(relative) ||
+      relative === workshop.manifest.environment?.requirements
     ) {
       void this._reloader.invoke();
+      void this._rebaseliner.invoke();
     }
+  }
+
+  /**
+   * Retake the pristine snapshot of the open workshop while authoring.
+   */
+  private async _rebaseline(): Promise<void> {
+    const workshop = this._workshop;
+
+    if (!workshop || !this._authoring) {
+      return;
+    }
+
+    await this._snapshotPristine(workshop.path);
   }
 
   private _onVariablesChanged(): void {
@@ -1992,6 +2020,8 @@ export class WorkshopManager implements IWorkshopManager {
   private _store = new VariableStore();
   private _envWriter: Debouncer;
   private _reloader: Debouncer;
+  private _rebaseliner: Debouncer;
+  private _kernelspecs: KernelSpec.IManager | null;
   private _authoring = false;
   private _features: IFeaturePolicy | null;
   private _workshop: ILoadedWorkshop | null = null;
@@ -2025,6 +2055,12 @@ export namespace WorkshopManager {
 
     /** Which features the settings disable; author mode may be one. */
     features?: IFeaturePolicy | null;
+
+    /**
+     * The frontend's kernelspec list, refreshed when an environment
+     * registers a kernel so notebooks can be opened on it at once.
+     */
+    kernelspecs?: KernelSpec.IManager | null;
   }
 }
 

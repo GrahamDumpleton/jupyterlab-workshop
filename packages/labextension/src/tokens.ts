@@ -554,7 +554,11 @@ export interface IWorkshopManager {
   refreshEnvironment(): Promise<void>;
 
   /** Create the isolated environment and register its kernel. */
-  createEnvironment(): Promise<IEnvironmentStatus>;
+  /**
+   * Create the declared environment, or keep one that already matches
+   * its requirements unless `force` is set.
+   */
+  createEnvironment(force?: boolean): Promise<IEnvironmentStatus>;
 
   /** The kernel of the environment once it is ready, else undefined. */
   environmentKernel(): string | undefined;
@@ -765,6 +769,9 @@ export interface IEnvironmentRequest {
   requirements: string;
   kernel: string;
   display: string;
+
+  /** Rebuild an environment that already matches its requirements. */
+  force?: boolean;
 }
 
 /** What running a verify script needs. */

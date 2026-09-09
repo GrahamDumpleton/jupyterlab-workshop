@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from jupyterlab_workshop.harness import remove_work_directory, timed_out_report
+from jupyterlab_workshop.harness import (
+    forget_environment,
+    remove_work_directory,
+    timed_out_report,
+)
 
 
 def test_timed_out_report_keeps_results_and_names_the_running_action() -> None:
@@ -92,3 +96,41 @@ def test_remove_work_directory_removes_a_real_tree(tmp_path: Path) -> None:
 
     assert remove_work_directory(root)
     assert not root.exists()
+
+
+def test_forget_environment_drops_what_a_test_created(tmp_path: Path) -> None:
+    from jupyterlab_workshop.environment import create_environment
+
+    workshop = tmp_path / "ws"
+
+    workshop.mkdir()
+    (workshop / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: demo\ntitle: Demo\n"
+        "capabilities: [install-packages]\n"
+        "environment: {requirements: requirements.txt}\npages: [a.md]\n"
+    )
+    (workshop / "requirements.txt").write_text("# nothing\n")
+    create_environment(
+        tmp_path, "ws", "requirements.txt", "workshop-demo", register=False
+    )
+
+    assert (workshop / "_workshop" / "venv").is_dir()
+
+    # Nothing was registered, so no kernel is reported, but the venv and
+    # its record are gone.
+    assert forget_environment(tmp_path, "ws") is None
+    assert not (workshop / "_workshop" / "venv").exists()
+    assert not (workshop / "_workshop" / "environment.json").exists()
+
+
+def test_forget_environment_leaves_other_workshops_alone(tmp_path: Path) -> None:
+    workshop = tmp_path / "plain"
+
+    workshop.mkdir()
+    (workshop / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: plain\ntitle: P\n"
+        "pages: [a.md]\n"
+    )
+
+    assert forget_environment(tmp_path, "plain") is None
+    assert forget_environment(tmp_path, "missing") is None

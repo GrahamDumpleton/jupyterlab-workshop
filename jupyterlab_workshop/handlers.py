@@ -373,13 +373,19 @@ class EnvironmentHandler(WorkshopHandler):
         kernel = str(body.get("kernel") or "")
         requirements = str(body.get("requirements") or "")
         display_name = str(body.get("display") or "")
+        force = bool(body.get("force"))
 
         try:
             if action == "create":
                 status = await IOLoop.current().run_in_executor(
                     None,
                     lambda: create_environment(
-                        self.root_dir, workshop, requirements, kernel, display_name
+                        self.root_dir,
+                        workshop,
+                        requirements,
+                        kernel,
+                        display_name,
+                        force=force,
                     ),
                 )
             elif action == "remove":

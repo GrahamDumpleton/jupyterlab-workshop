@@ -66,6 +66,42 @@ def test_create_environment_builds_a_venv_and_tracks_requirements(
     assert not (workshop / "_workshop" / "environment.json").exists()
 
 
+def test_create_environment_keeps_a_matching_environment(tmp_path: Path) -> None:
+    workshop = _workshop(tmp_path)
+
+    create_environment(
+        tmp_path, "ws", "requirements.txt", "workshop-demo", register=False
+    )
+
+    # A marker inside the venv survives a second create, since the
+    # requirements have not changed, and goes when a rebuild is forced.
+    marker = workshop / "_workshop" / "venv" / "marker"
+
+    marker.write_text("")
+
+    kept = create_environment(
+        tmp_path, "ws", "requirements.txt", "workshop-demo", register=False
+    )
+
+    assert kept.ready is True
+    assert marker.is_file()
+
+    create_environment(
+        tmp_path, "ws", "requirements.txt", "workshop-demo", register=False, force=True
+    )
+
+    assert not marker.exists()
+
+    # Changed requirements rebuild without force.
+    marker.write_text("")
+    (workshop / "requirements.txt").write_text("# changed\n")
+    create_environment(
+        tmp_path, "ws", "requirements.txt", "workshop-demo", register=False
+    )
+
+    assert not marker.exists()
+
+
 def test_create_environment_checks_its_inputs(tmp_path: Path) -> None:
     _workshop(tmp_path)
 

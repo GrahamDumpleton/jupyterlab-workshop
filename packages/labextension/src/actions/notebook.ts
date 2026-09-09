@@ -127,10 +127,13 @@ async function kernelspecMetadata(
 
   const spec = specs.specs?.kernelspecs[name];
 
+  // A spec the frontend has not seen yet is still a Python one, as far
+  // as the environments this extension creates go; an empty language
+  // would make JupyterLab ask which kernel to use.
   return {
     name,
     display_name: spec?.display_name ?? name,
-    language: spec?.language ?? ''
+    language: spec?.language ?? 'python'
   };
 }
 
@@ -350,11 +353,14 @@ export class CellInsertAction implements IActionImplementation {
     });
 
     panel.content.activeCellIndex = index;
-    await panel.context.save();
 
     if (request.options.run === 'true') {
       await NotebookActions.run(panel.content, panel.sessionContext);
     }
+
+    // Saved after the run, so the file holds the cell's output as well as
+    // the cell.
+    await panel.context.save();
 
     return { status: 'ok' };
   }
@@ -418,6 +424,10 @@ export class CellRunAction implements IActionImplementation {
         ok = await NotebookActions.run(notebook, panel.sessionContext);
       }
     }
+
+    // The file should show what the learner saw, so the outputs are
+    // saved rather than left to autosave.
+    await panel.context.save();
 
     return ok
       ? { status: 'ok' }

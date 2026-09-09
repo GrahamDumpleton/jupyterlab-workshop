@@ -199,13 +199,16 @@ export async function runCurrentPage(
       limit
     );
 
-    if (result === null) {
+    if (result === null || 'dialog' in result) {
       results.push({
         page: pageId,
         id: node.id,
         type: node.name,
         status: 'error',
-        message: `Still running after ${Math.round(limit / 1000)}s; the self-test stopped here`,
+        message:
+          result === null
+            ? `Still running after ${Math.round(limit / 1000)}s; the self-test stopped here`
+            : `Blocked by a dialog nobody can answer: "${result.dialog}"; the self-test stopped here`,
         seconds: (Date.now() - started) / 1000,
         timedOut: true
       });
@@ -234,20 +237,57 @@ export async function runCurrentPage(
  * Resolve with the action's result, or with null once the limit passes
  * first. The action itself keeps running; the caller decides what to do.
  */
+/** How long a dialog may stay open under a running action. */
+const DIALOG_GRACE_MS = 10000;
+
+/** An action that stopped at a dialog, named by the dialog's title. */
+interface IBlockedByDialog {
+  dialog: string;
+}
+
+/**
+ * Wait for an action, giving up with `null` after the limit, or with
+ * the dialog's title when a dialog has been open for a while under it:
+ * headless, nothing will ever answer a kernel selection or a
+ * confirmation, and naming it beats waiting out the limit.
+ */
 async function withLimit(
   action: Promise<IActionResult>,
   limitMs: number
-): Promise<IActionResult | null> {
+): Promise<IActionResult | IBlockedByDialog | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let poll: ReturnType<typeof setInterval> | undefined;
 
   const expired = new Promise<null>(resolve => {
     timer = setTimeout(() => resolve(null), limitMs);
   });
+  const blocked = new Promise<IBlockedByDialog>(resolve => {
+    let since: number | null = null;
+
+    poll = setInterval(() => {
+      const dialog = document.querySelector('.jp-Dialog');
+
+      if (!dialog) {
+        since = null;
+
+        return;
+      }
+
+      since = since ?? Date.now();
+
+      if (Date.now() - since >= DIALOG_GRACE_MS) {
+        const title = dialog.querySelector('.jp-Dialog-header')?.textContent;
+
+        resolve({ dialog: title?.trim() || 'untitled dialog' });
+      }
+    }, 1000);
+  });
 
   try {
-    return await Promise.race([action, expired]);
+    return await Promise.race([action, expired, blocked]);
   } finally {
     clearTimeout(timer);
+    clearInterval(poll);
   }
 }
 

@@ -110,10 +110,10 @@ the paths follow the `write-files` scope like any write.
 
 ## External
 
-| Directive            | Capability       | Body     | Options | Description                                                                       |
-| -------------------- | ---------------- | -------- | ------- | --------------------------------------------------------------------------------- |
-| `copy`               | none             | required | (none)  | Copy the body to the clipboard.                                                   |
-| `environment-create` | install-packages | none     | (none)  | Create the isolated environment declared in the manifest and register its kernel. |
+| Directive            | Capability       | Body     | Options | Description                                                                                                                     |
+| -------------------- | ---------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `copy`               | none             | required | (none)  | Copy the body to the clipboard.                                                                                                 |
+| `environment-create` | install-packages | none     | `force` | Create the isolated environment declared in the manifest and register its kernel; a no-op once it exists unless `:force: true`. |
 
 ## Inline roles
 

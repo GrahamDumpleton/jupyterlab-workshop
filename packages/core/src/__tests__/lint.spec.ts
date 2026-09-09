@@ -616,3 +616,21 @@ hello
     expect(found[1].message).toContain('"issues"');
   });
 });
+
+describe('environment-create', () => {
+  it('accepts the force option', () => {
+    const found = rules(
+      `---
+title: One
+---
+
+\`\`\`{environment-create}
+:force: true
+\`\`\`
+`,
+      `${MANIFEST}environment:\n  requirements: requirements.txt\n`
+    );
+
+    expect(found).not.toContain('unknown-option');
+  });
+});

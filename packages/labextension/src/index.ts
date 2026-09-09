@@ -196,7 +196,8 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       trustStore,
       prompts: trustPrompts,
       settings: settingRegistry,
-      features
+      features,
+      kernelspecs: app.serviceManager.kernelspecs
     });
 
     // Progress events go to the workshop's events file and any sink.

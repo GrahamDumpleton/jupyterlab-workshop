@@ -549,7 +549,8 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'external',
         'Create the isolated environment declared in the manifest and register its kernel.',
         'install-packages',
-        'none'
+        'none',
+        ['force']
       )
     ].map(item => [item.name, item])
   );

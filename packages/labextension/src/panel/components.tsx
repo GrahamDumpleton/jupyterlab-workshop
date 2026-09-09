@@ -44,9 +44,11 @@ import { infoIcon } from '../icons';
 import {
   CommandIDs,
   IActionRequest,
+  IActionStatus,
   IFeaturePolicy,
   IWorkshopManager
 } from '../tokens';
+import { visibleDirectives } from '../util';
 
 /** Props shared by the panel components. */
 export interface IPanelProps {
@@ -853,7 +855,7 @@ function ActionBlock({
   node: IDirectiveNode;
   manager: IWorkshopManager;
 }): JSX.Element {
-  const status = manager.actionStatus(node.id);
+  const status = effectiveStatus(node, manager);
   const request: IActionRequest = {
     type: node.name,
     id: node.id,
@@ -970,6 +972,35 @@ function PreflightBanner({
       </ul>
     </div>
   );
+}
+
+/**
+ * The status an action block shows. An `environment-create` step that
+ * has not been clicked reads as done once the environment exists, since
+ * the banner or an earlier session may have created it.
+ */
+function effectiveStatus(
+  node: IDirectiveNode,
+  manager: IWorkshopManager
+): IActionStatus {
+  const status = manager.actionStatus(node.id);
+  const environment = manager.environment;
+
+  if (
+    node.name === 'environment-create' &&
+    status.status === 'idle' &&
+    environment?.ready &&
+    environment.registered &&
+    !environment.stale
+  ) {
+    return {
+      status: 'ok',
+      message: `Environment ready with kernel "${environment.kernel}"`,
+      runs: 0
+    };
+  }
+
+  return status;
 }
 
 /** How the platforms are named to learners. */
@@ -1094,11 +1125,27 @@ function EnvironmentBanner({
     return null;
   }
 
+  // A page that carries the step explains it itself; the banner would
+  // offer the same thing twice. It still shows for an error, which the
+  // page's action cannot report as fully.
+  const page = manager.currentPage;
+  const onPage =
+    page !== null &&
+    visibleDirectives(page, manager.variables.values).some(
+      node => node.name === 'environment-create'
+    );
+
+  if (onPage && !environment.error) {
+    return null;
+  }
+
+  // Recreate rebuilds an environment that exists; Create is a no-op for
+  // one that already matches its requirements.
   const request: IActionRequest = {
     type: 'environment-create',
     id: 'environment-create',
     argument: '',
-    options: {},
+    options: environment.ready ? { force: 'true' } : {},
     body: ''
   };
   const disposition = manager.disposition({

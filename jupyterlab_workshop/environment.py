@@ -103,12 +103,16 @@ def create_environment(
     register: bool = True,
     python: str = sys.executable,
     timeout: float = INSTALL_TIMEOUT,
+    force: bool = False,
 ) -> EnvironmentStatus:
     """Create the venv, install the requirements and register the kernel.
 
-    An existing environment is replaced. ``register`` can be turned off to
-    build the venv without ``ipykernel`` and a kernelspec, which the tests
-    use to stay offline.
+    An environment that was built from the current requirements file and
+    still has its kernel registered is kept as it is, so the action can
+    sit on a page and be clicked more than once; ``force`` replaces it
+    regardless, as the banner's Recreate button does. ``register`` can be
+    turned off to build the venv without ``ipykernel`` and a kernelspec,
+    which the tests use to stay offline.
     """
 
     workshop = _workshop(root_dir, workshop_path)
@@ -125,6 +129,19 @@ def create_environment(
 
     if not kernel:
         raise EnvironmentSetupError("The environment needs a kernel name")
+
+    # Nothing to do when the environment already matches: same
+    # requirements, a venv with its python, and the kernel registered
+    # when registration is wanted.
+    if not force:
+        existing = environment_status(root_dir, workshop_path, kernel)
+
+        if (
+            existing.ready
+            and not existing.stale
+            and (existing.registered or not register)
+        ):
+            return existing
 
     state_dir = workshop / STATE_DIR
     venv = state_dir / VENV_DIR
