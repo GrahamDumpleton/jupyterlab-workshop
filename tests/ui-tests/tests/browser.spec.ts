@@ -123,7 +123,31 @@ const MANIFEST = (name: string, title: string, version: string): string =>
 interface IExposedApp {
   jupyterapp: {
     commands: { execute(id: string, args: object): Promise<unknown> };
+    shell: {
+      widgets(area: string): Iterable<{ id: string; node: HTMLElement }>;
+    };
   };
+}
+
+/**
+ * The share of the main area's height a widget takes, its tab bar aside.
+ */
+function mainShare(page: Page, id: string): Promise<number | null> {
+  return page.evaluate((target: string) => {
+    const exposed = window as unknown as IExposedApp;
+    const dock = document.getElementById('jp-main-dock-panel');
+
+    for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+      if (widget.id === target && dock) {
+        return (
+          widget.node.getBoundingClientRect().height /
+          dock.getBoundingClientRect().height
+        );
+      }
+    }
+
+    return null;
+  }, id);
 }
 
 /**
@@ -391,6 +415,16 @@ test.describe('workshop browser', () => {
     await expect(
       page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
     ).toHaveText('Git from the command line');
+
+    // The browser and the launcher have both gone, and the layout's
+    // terminal has the share it asked for, 0.4, rather than the half it
+    // gets when a closing tab's share is split evenly.
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    await expect(browser).toHaveCount(0);
+    await expect(page.locator('.jp-Launcher')).toHaveCount(0);
+    await expect
+      .poll(() => mainShare(page, 'jupyterlab-workshop-terminal-git'))
+      .toBeLessThan(0.45);
   });
 
   test('installs from a collection, recording it, and suffixes a clash', async ({

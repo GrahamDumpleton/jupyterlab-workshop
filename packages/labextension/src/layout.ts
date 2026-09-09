@@ -267,6 +267,7 @@ export class LayoutManager {
       )
     );
     const onlyLaunchers = !wantsLauncher && isPlaceholderMain(shell);
+    const sized: [Widget, ILayoutArea][] = [];
 
     for (const area of spec.main) {
       const widgets: Widget[] = [];
@@ -304,11 +305,19 @@ export class LayoutManager {
       }
 
       this._resizeRegion(first, area);
+      sized.push([first, area]);
       anchor = first;
     }
 
+    // The placeholder's share of the split goes to its siblings in equal
+    // parts when it closes, not in proportion, so the regions are sized
+    // again once it has gone.
     if (anchor && onlyLaunchers) {
       closePlaceholders(shell);
+
+      for (const [first, area] of sized) {
+        this._resizeRegion(first, area);
+      }
     }
   }
 

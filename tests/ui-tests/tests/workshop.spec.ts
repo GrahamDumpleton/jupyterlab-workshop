@@ -41,6 +41,7 @@ interface IExposedApp {
 /** A main-area widget, as far as the tests look at one. */
 interface IExposedWidget {
   id: string;
+  node: HTMLElement;
   content?: {
     session?: { send(message: { type: string; content: string[] }): void };
     editor?: { getCursorPosition(): { line: number; column: number } };
@@ -185,6 +186,66 @@ test.describe('workshop panel', () => {
     );
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toHaveCount(0);
+  });
+
+  test('gives a bottom region the share the layout asks for', async ({
+    page,
+    tmpPath
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    // The layout is applied while the launcher still holds a share of
+    // the main area; the region's size must survive the launcher closing.
+    const sized = `${tmpPath}/sized`;
+
+    await page.contents.uploadDirectory(EXAMPLE_DIR, sized);
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: sized',
+        'title: Sized',
+        'version: 0.1.0',
+        'description: Layout sizing.',
+        'capabilities: [terminal]',
+        'layout: default',
+        'layouts:',
+        '  default:',
+        '    left: collapsed',
+        '    right: { widget: instructions, size: 0.3 }',
+        '    main:',
+        '      - { area: top, widgets: ["markdown:../README.md"] }',
+        '      - { area: bottom, widgets: ["terminal:shell"], size: 0.33 }',
+        'pages:',
+        '  - pages/01-create-a-repository.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${sized}/workshop.yaml`
+    );
+    await openWorkshop(page, sized);
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+
+    // The terminal's share of the dock, its tab bar aside: a third, not
+    // the half it gets when the launcher's share is split evenly.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const exposed = window as unknown as IExposedApp;
+          const dock = document.getElementById('jp-main-dock-panel');
+
+          for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+            if (widget.id === 'jupyterlab-workshop-terminal-shell' && dock) {
+              return (
+                widget.node.getBoundingClientRect().height /
+                dock.getBoundingClientRect().height
+              );
+            }
+          }
+
+          return null;
+        })
+      )
+      .toBeLessThan(0.4);
   });
 
   test('keeps the environment across a reset and drops it on restart', async ({
