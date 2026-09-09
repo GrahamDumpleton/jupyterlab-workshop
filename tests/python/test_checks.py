@@ -11,6 +11,7 @@ from jupyterlab_workshop.checks import (
     list_checkpoints,
     restore_checkpoint,
     run_script,
+    venv_bin_dir,
 )
 
 MANIFEST = (
@@ -49,6 +50,23 @@ class TestRunScript:
 
         assert result.code == 3
         assert result.stdout.split() == ["ws", "pip"]
+
+    def test_puts_a_named_environment_first_on_path(self, tmp_path: Path) -> None:
+        workshop = make_workshop(tmp_path)
+
+        (workshop / "check.py").write_text(
+            "import os\nprint(os.environ['PATH'].split(os.pathsep)[0])\n"
+            "print(os.environ['VIRTUAL_ENV'])\n"
+        )
+
+        result = run_script(
+            tmp_path, "ws", "check.py", environment={"VIRTUAL_ENV": str(tmp_path / "v")}
+        )
+
+        assert result.stdout.split() == [
+            str(venv_bin_dir(tmp_path / "v")),
+            str(tmp_path / "v"),
+        ]
 
     @pytest.mark.skipif(os.name == "nt", reason="needs an executable bit")
     def test_runs_executable_scripts(self, tmp_path: Path) -> None:

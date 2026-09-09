@@ -60,6 +60,23 @@ describe('parseManifest', () => {
     ).toBe('Well done. Try the *next* one.\n');
   });
 
+  it('parses the environment terminals flag', () => {
+    expect(parseManifest(VALID).environment?.terminals).toBe(true);
+    expect(
+      parseManifest(
+        VALID.replace(
+          '  kernel: workshop-git\n',
+          '  kernel: workshop-git\n  terminals: false\n'
+        )
+      ).environment?.terminals
+    ).toBe(false);
+    expect(() =>
+      parseManifest(
+        VALID.replace('  kernel: workshop-git\n', '  terminals: no\n')
+      )
+    ).toThrow(WorkshopFormatError);
+  });
+
   it('parses the links', () => {
     expect(parseManifest(VALID).homepage).toBeUndefined();
     expect(parseManifest(VALID).issues).toBeUndefined();
@@ -102,7 +119,8 @@ describe('parseManifest', () => {
     ]);
     expect(manifest.environment).toEqual({
       requirements: 'requirements.txt',
-      kernel: 'workshop-git'
+      kernel: 'workshop-git',
+      terminals: true
     });
     expect(manifest.layout).toBe('default');
     expect(manifest.layouts.default).toEqual({

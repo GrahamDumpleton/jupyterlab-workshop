@@ -53,6 +53,13 @@ class ScriptResult:
         return asdict(self)
 
 
+def venv_bin_dir(venv: Path) -> Path:
+    """The directory of a virtual environment that holds its programs:
+    ``Scripts`` on Windows, ``bin`` elsewhere."""
+
+    return venv / ("Scripts" if sys.platform == "win32" else "bin")
+
+
 def run_script(
     root_dir: Path,
     workshop_path: str,
@@ -83,6 +90,16 @@ def run_script(
 
     if environment:
         env.update(environment)
+
+    # A workshop environment is named by VIRTUAL_ENV, as an activated venv
+    # would be; its programs then come first, so a script's `python` or
+    # `pytest` is the environment's.
+    venv = env.get("VIRTUAL_ENV")
+
+    if venv:
+        env["PATH"] = os.pathsep.join(
+            [str(venv_bin_dir(Path(venv))), env.get("PATH", "")]
+        )
 
     try:
         completed = subprocess.run(

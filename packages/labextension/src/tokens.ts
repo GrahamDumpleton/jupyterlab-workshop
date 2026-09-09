@@ -5,6 +5,7 @@ import {
   IDirectiveNode,
   ILintMessage,
   IPage,
+  IVenvExports,
   ICatalog,
   ICollectionIndex,
   IRequirement,
@@ -374,6 +375,10 @@ export interface IEnvironmentStatus {
   ready: boolean;
   registered: boolean;
   python: string;
+
+  /** The venv directory and its programs directory; empty until ready. */
+  venv: string;
+  bin: string;
   requirements: string;
 
   /** Whether the requirements changed since the environment was created. */
@@ -553,7 +558,6 @@ export interface IWorkshopManager {
   /** Ask the server again about the environment. */
   refreshEnvironment(): Promise<void>;
 
-  /** Create the isolated environment and register its kernel. */
   /**
    * Create the declared environment, or keep one that already matches
    * its requirements unless `force` is set.
@@ -562,6 +566,12 @@ export interface IWorkshopManager {
 
   /** The kernel of the environment once it is ready, else undefined. */
   environmentKernel(): string | undefined;
+
+  /**
+   * The environment's directories for a terminal's PATH, once it is
+   * ready and unless the manifest keeps terminals off it.
+   */
+  environmentVenv(): IVenvExports | undefined;
 
   /** List the workshops under a directory relative to the JupyterLab root. */
   installed(directory: string): Promise<IInstalledWorkshop[]>;

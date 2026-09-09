@@ -106,6 +106,11 @@ with `:wait: prompt`.
 In JupyterLite terminals run cockle, a small shell described in
 [JupyterLite](lite.md); variables reach it through `export` commands.
 
+A workshop with an [isolated environment](environment.md) has its
+`bin` directory put first on `PATH` by the same file once the
+environment exists, with `VIRTUAL_ENV` set, unless the manifest turns
+that off with `terminals: false`.
+
 A manifest `env` mapping exports further environment variables through
 the same file, after the variables. The usual reason is a pager: in a
 terminal a few lines tall, `git diff` or `man` waits for a key press and

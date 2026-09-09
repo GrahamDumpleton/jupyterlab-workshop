@@ -135,10 +135,16 @@ of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
 `notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
 `terminal-only` and `notebook`), `tracks` (alternative paths chosen with
 `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
-`environment` (`requirements`, `kernel`), `analytics` (`sink`). A
-workshop with an `environment` puts an `environment-create` action on
-its first page, before any notebook: the self-test runs only what pages
-carry, and the action is a no-op once the environment exists.
+`environment` (`requirements`, `kernel`, `terminals`), `analytics`
+(`sink`). A workshop with an `environment` puts an `environment-create`
+action on its first page, before any notebook: the self-test runs only
+what pages carry, and the action is a no-op once the environment
+exists. Once created, the environment is first on `PATH` in workshop
+terminals, captures and checks as well as being the notebook kernel, so
+a terminal workshop that needs packages declares them in the
+requirements file rather than walking the learner through `python -m
+venv`; `terminals: false` keeps terminals on the bare `python` for a
+workshop that teaches venvs.
 
 ## Pages
 

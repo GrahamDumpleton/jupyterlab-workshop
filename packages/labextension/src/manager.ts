@@ -23,6 +23,7 @@ import {
   lineDiff,
   parseManifest,
   parsePage,
+  IVenvExports,
   renderEnvCmd,
   renderEnvPs1,
   renderEnvSh
@@ -558,6 +559,7 @@ export class WorkshopManager implements IWorkshopManager {
       if (this._workshop === workshop) {
         this._environment = { ...status, creating: false };
         this._changed.emit();
+        void this._envWriter.invoke();
       }
     } catch (error) {
       console.warn('Unable to read the workshop environment', error);
@@ -600,6 +602,9 @@ export class WorkshopManager implements IWorkshopManager {
       if (this._workshop === workshop) {
         this._environment = { ...status, creating: false };
         this._changed.emit();
+
+        // Terminals pick the environment up through the env files.
+        void this._envWriter.invoke();
       }
 
       this._emit('environment-created', { kernel: status.kernel });
@@ -623,6 +628,17 @@ export class WorkshopManager implements IWorkshopManager {
     const status = this._environment;
 
     return status?.ready && status.registered ? status.kernel : undefined;
+  }
+
+  environmentVenv(): IVenvExports | undefined {
+    const status = this._environment;
+    const declared = this._workshop?.manifest.environment;
+
+    if (!status?.ready || !status.venv || declared?.terminals === false) {
+      return undefined;
+    }
+
+    return { root: status.venv, bin: status.bin };
   }
 
   async installed(directory: string): Promise<IInstalledWorkshop[]> {
@@ -1771,23 +1787,24 @@ export class WorkshopManager implements IWorkshopManager {
 
     const values = this._store.values;
     const env = workshop.manifest.env;
+    const venv = this.environmentVenv();
     const directory = PathExt.join(workshop.path, WORKSHOP_STATE_DIR);
 
     try {
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.sh'),
-        renderEnvSh(values, env)
+        renderEnvSh(values, env, venv)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.ps1'),
-        renderEnvPs1(values, env)
+        renderEnvPs1(values, env, venv)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.cmd'),
-        renderEnvCmd(values, env)
+        renderEnvCmd(values, env, venv)
       );
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);
@@ -2125,6 +2142,8 @@ function emptyEnvironment(kernel: string): IEnvironmentStatus {
     ready: false,
     registered: false,
     python: '',
+    venv: '',
+    bin: '',
     requirements: '',
     stale: false,
     createdAt: '',

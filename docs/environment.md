@@ -40,7 +40,36 @@ and the action's `:force: true` option rebuild it regardless.
 Once the kernel is registered, notebooks created by `notebook-create`
 without an explicit `kernel` use it, and so does the hidden workshop
 kernel behind `execute-capture`, `kernel-execute` without a `path`, and
-kernel checks.
+kernel checks. The kernelspec sets `VIRTUAL_ENV` and puts the
+environment's programs first on `PATH` for every kernel started from
+it, as activating the environment would, so `!pip` in a notebook and a
+`subprocess` in a check reach the environment rather than the server's
+Python.
+
+## Terminals and commands
+
+Workshop terminals see the environment too: once it exists, the
+environment file the terminals load exports `VIRTUAL_ENV` and puts the
+environment's `bin` (`Scripts` on Windows) first on `PATH`, so `python`,
+`pip`, `pytest` and whatever the requirements installed are the
+environment's, with no activation step on the page. Terminals already
+open pick it up when the environment is created. `execute-capture`,
+`shell` checks and `script` checks run with the same `PATH`. A workshop
+that needs Python packages in a terminal therefore declares them in the
+requirements file and lets the learner start work, instead of walking
+them through `python -m venv` and `pip install`.
+
+A workshop that teaches virtual environments wants the bare `python`
+in its terminals, and says so:
+
+```yaml
+environment:
+  requirements: requirements.txt
+  terminals: false
+```
+
+The kernel still comes from the environment; only terminals and the
+commands that run without one are left alone.
 
 Nothing outside the workshop directory changes except the kernelspec.
 "Workshop: Remove…" unregisters it before deleting the directory, and

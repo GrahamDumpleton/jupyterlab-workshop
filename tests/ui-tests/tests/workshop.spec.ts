@@ -192,7 +192,7 @@ test.describe('workshop panel', () => {
         'apiVersion: jupyterlab-workshop/v1alpha1',
         'name: envy',
         'title: Envy',
-        'capabilities: [install-packages]',
+        'capabilities: [install-packages, kernel-exec]',
         'environment: { requirements: requirements.txt }',
         'pages: [pages/01.md]',
         ''
@@ -206,7 +206,28 @@ test.describe('workshop panel', () => {
       `${envy}/requirements.txt`
     );
     await page.contents.uploadContent(
-      '---\ntitle: Only page\n---\n\nNothing to do here.\n',
+      [
+        '---',
+        'title: Only page',
+        '---',
+        '',
+        'Which python does a command see?',
+        '',
+        '```{execute-capture}',
+        ':id: which-python',
+        ':capture: prefix',
+        'python -c "import sys; print(sys.prefix)"',
+        '```',
+        '',
+        '```{verify}',
+        ':id: venv-active',
+        ':label: The environment is active in the kernel',
+        'import os',
+        'assert os.environ.get("VIRTUAL_ENV", "").endswith("venv"), os.environ.get("VIRTUAL_ENV", "unset")',
+        'print(os.environ["VIRTUAL_ENV"])',
+        '```',
+        ''
+      ].join('\n'),
       'text',
       `${envy}/pages/01.md`
     );
@@ -233,6 +254,37 @@ test.describe('workshop panel', () => {
     await expect(banner).toHaveCount(0, { timeout: 180000 });
     expect(await kernels()).toContain('workshop-envy');
     expect(await hasVenv()).toBe(true);
+
+    // Commands and checks now run with the environment first on PATH:
+    // the capture's python is the venv's, and the kernel check sees
+    // VIRTUAL_ENV through the kernelspec.
+    const capture = panel.locator('[data-action-id="which-python"]');
+
+    await capture.click();
+    await expect(capture).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    await expect(
+      capture.locator('.jp-WorkshopPanel-actionOutput')
+    ).toContainText('_workshop/venv');
+
+    const check = panel.locator('[data-action-id="venv-active"]');
+
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 60000 });
+
+    // Terminals get it through the environment file they source.
+    await expect
+      .poll(async () => {
+        const model = await page.evaluate(async (path: string) => {
+          const exposed = window as unknown as IExposedApp;
+
+          return exposed.jupyterapp.serviceManager.contents.get(path, {
+            content: true
+          });
+        }, `${envy}/_workshop/env.sh`);
+
+        return String(model.content);
+      })
+      .toContain('export VIRTUAL_ENV=');
 
     // Each command waits for its dialog, and then for the workshop to
     // reopen, so the command's promise is the signal that it is done.

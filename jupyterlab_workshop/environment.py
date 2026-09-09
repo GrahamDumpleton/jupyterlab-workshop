@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .checks import CheckError, _workshop_dir
+from .checks import CheckError, _workshop_dir, venv_bin_dir
 from .fetch import FetchError, _resolve_inside
 
 STATE_DIR = "_workshop"
@@ -46,6 +47,11 @@ class EnvironmentStatus:
     ready: bool
     registered: bool
     python: str = ""
+
+    #: The virtual environment's directory and the directory of its
+    #: programs, for putting it on a terminal's PATH; empty until ready.
+    venv: str = ""
+    bin: str = ""
     requirements: str = ""
 
     #: Whether the requirements file changed since the environment was made.
@@ -82,11 +88,15 @@ def environment_status(
 
         stale = current != str(record.get("sha256") or "")
 
+    venv = workshop / STATE_DIR / VENV_DIR
+
     return EnvironmentStatus(
         kernel=str(record.get("kernel") or kernel),
         ready=ready,
         registered=ready and _kernelspec_exists(str(record.get("kernel") or kernel)),
         python=str(python) if ready else "",
+        venv=str(venv) if ready else "",
+        bin=str(venv_bin_dir(venv)) if ready else "",
         requirements=requirements,
         stale=stale,
         created_at=str(record.get("createdAt") or ""),
@@ -202,6 +212,7 @@ def create_environment(
             log,
             timeout,
         )
+        _write_kernel_env(kernel, kernel_env(venv))
 
     record = {
         "kernel": kernel,
@@ -253,12 +264,45 @@ def _workshop(root_dir: Path, workshop_path: str) -> Path:
 
 
 def _venv_python(workshop: Path) -> Path:
-    venv = workshop / STATE_DIR / VENV_DIR
+    bin_dir = venv_bin_dir(workshop / STATE_DIR / VENV_DIR)
 
-    if sys.platform == "win32":
-        return venv / "Scripts" / "python.exe"
+    return bin_dir / ("python.exe" if sys.platform == "win32" else "python")
 
-    return venv / "bin" / "python"
+
+def kernel_env(venv: Path) -> dict[str, str]:
+    """Environment variables for the environment's kernelspec.
+
+    Every kernel started from it, a notebook's or the hidden workshop
+    kernel, then has the environment's programs first on its PATH and
+    ``VIRTUAL_ENV`` set, as an activated venv would, so ``!pip`` in a
+    notebook and a ``subprocess`` in a check reach the environment rather
+    than the server's Python. ``${PATH}`` is filled in by jupyter_client
+    when the kernel starts.
+    """
+
+    return {
+        "VIRTUAL_ENV": str(venv),
+        "PATH": f"{venv_bin_dir(venv)}{os.pathsep}${{PATH}}",
+    }
+
+
+def _write_kernel_env(name: str, env: dict[str, str]) -> None:
+    """Add ``env`` to a registered kernelspec's kernel.json."""
+
+    from jupyter_client.kernelspec import KernelSpecManager
+
+    try:
+        spec = KernelSpecManager().get_kernel_spec(name)
+    except Exception as error:
+        raise EnvironmentSetupError(
+            f"The kernel {name} was not registered: {error}"
+        ) from error
+
+    path = Path(spec.resource_dir) / "kernel.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["env"] = {**data.get("env", {}), **env}
+
+    path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
 
 
 def _run(command: list[str], cwd: Path, log: Path, timeout: float) -> None:

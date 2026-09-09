@@ -114,11 +114,17 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: 'The check names no script' };
     }
 
+    // VIRTUAL_ENV tells the server to put the workshop environment first
+    // on the script's PATH.
+    const venv = manager.environmentVenv();
     const result = await manager.backend.runScript({
       workshop: manager.workshop?.path ?? '',
       script,
       timeout: parseDuration(request.options.timeout, 60000) / 1000,
-      environment: environmentVariables(manager.variables.values)
+      environment: {
+        ...environmentVariables(manager.variables.values),
+        ...(venv ? { VIRTUAL_ENV: venv.root } : {})
+      }
     });
 
     const text = `${result.stdout}${result.stderr}`.trim();

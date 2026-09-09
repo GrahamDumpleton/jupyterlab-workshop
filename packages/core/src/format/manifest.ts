@@ -70,6 +70,12 @@ export interface IEnvironment {
 
   /** Kernelspec name to register for the environment. */
   kernel?: string;
+
+  /**
+   * Whether terminals and commands see the environment on their PATH;
+   * true unless the manifest says false.
+   */
+  terminals: boolean;
 }
 
 /** Where a workshop asks to report progress events. */
@@ -428,9 +434,19 @@ function parseEnvironment(
     );
   }
 
+  const terminals = value.terminals;
+
+  if (terminals !== undefined && typeof terminals !== 'boolean') {
+    throw new WorkshopFormatError(
+      'Field "environment.terminals" must be true or false',
+      path
+    );
+  }
+
   return {
     requirements: optionalString(value, 'requirements', path),
-    kernel: optionalString(value, 'kernel', path)
+    kernel: optionalString(value, 'kernel', path),
+    terminals: terminals !== false
   };
 }
 

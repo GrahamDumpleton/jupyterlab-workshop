@@ -94,19 +94,6 @@ export class WorkshopKernel {
       throw new Error('No workshop is open');
     }
 
-    const existing = this._session;
-
-    if (
-      existing &&
-      !existing.isDisposed &&
-      existing.kernel &&
-      workshop.path === this._path
-    ) {
-      return existing.kernel;
-    }
-
-    await this.shutdown();
-
     const sessions = this._app.serviceManager.sessions;
     const specs = this._app.serviceManager.kernelspecs;
 
@@ -115,6 +102,22 @@ export class WorkshopKernel {
     // The workshop's own environment is used once it exists; before that
     // the server default keeps captures and checks working.
     const name = this._manager.environmentKernel() ?? specs.specs?.default;
+    const existing = this._session;
+
+    // A session started on the server default before the environment
+    // existed is replaced the first time the environment's kernel is
+    // wanted, so captures and checks move onto it as well.
+    if (
+      existing &&
+      !existing.isDisposed &&
+      existing.kernel &&
+      workshop.path === this._path &&
+      existing.kernel.name === name
+    ) {
+      return existing.kernel;
+    }
+
+    await this.shutdown();
 
     if (!name) {
       throw new Error('No kernel is available');

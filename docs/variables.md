@@ -124,6 +124,9 @@ The hidden workshop kernel that runs `execute-capture`, `kernel-execute`
 without a `path`, and kernel checks has the same environment, so a check
 can read `os.environ["REPO_DIR"]`, and its code can equally use
 `{{ repo_dir }}` directly, since bodies are substituted before they run.
+A workshop with an [isolated environment](environment.md) also has
+`VIRTUAL_ENV` set and the environment first on `PATH`, in terminals and
+kernels alike.
 
 ## Conditions
 
