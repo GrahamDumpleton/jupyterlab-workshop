@@ -36,6 +36,7 @@ import { Debouncer } from '@lumino/polling';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import {
+  deleteChildrenExcept,
   deleteTree,
   readIfExists,
   readTextFile,
@@ -90,6 +91,16 @@ const STATE_KEY = '@jupyterlab-workshop/labextension:state';
 const SETTLE_DELAYS_MS: readonly number[] = [500, 1000, 2000, 4000];
 
 const MANIFEST_FILE = 'workshop.yaml';
+
+/** The environment's record under the state directory. */
+const ENVIRONMENT_RECORD = 'environment.json';
+
+/** State directory entries that make up the environment. */
+const ENVIRONMENT_ENTRIES: ReadonlySet<string> = new Set([
+  'venv',
+  ENVIRONMENT_RECORD,
+  'environment.log'
+]);
 
 interface IStoredState {
   workshopPath: string;
@@ -821,7 +832,14 @@ export class WorkshopManager implements IWorkshopManager {
     this.stopChain();
     await this._restoreSettings(settings);
     await this._state.unload();
-    await deleteTree(this._contents, PathExt.join(path, WORKSHOP_STATE_DIR));
+
+    // Progress goes, the files stay, and so does the environment, which
+    // is part of the workshop's setup rather than of its progress.
+    await deleteChildrenExcept(
+      this._contents,
+      PathExt.join(path, WORKSHOP_STATE_DIR),
+      ENVIRONMENT_ENTRIES
+    );
 
     this._workshop = null;
     this._currentPageId = '';
@@ -866,6 +884,11 @@ export class WorkshopManager implements IWorkshopManager {
       files = false;
     }
 
+    // The environment goes too: a learner restarts when something is
+    // broken, and a venv they can pip into is one of the things that can
+    // be. The server removes it, unregistering the kernel rather than
+    // leaving one that points at a deleted Python.
+    await this._removeEnvironmentFiles(target);
     await deleteTree(this._contents, PathExt.join(target, WORKSHOP_STATE_DIR));
 
     // Reopening as a launch does applies the layout again, so the window
@@ -1393,6 +1416,29 @@ export class WorkshopManager implements IWorkshopManager {
 
     if (!this._finished) {
       this._emit('workshop-abandon', { page: this._currentPageId });
+    }
+  }
+
+  /**
+   * Remove a workshop's environment through the server when it has one,
+   * whether or not the workshop is open. The record file says whether
+   * there is anything to remove, so JupyterLite and workshops without an
+   * environment never reach the server.
+   */
+  private async _removeEnvironmentFiles(path: string): Promise<void> {
+    const record = await readIfExists(
+      this._contents,
+      PathExt.join(path, WORKSHOP_STATE_DIR, ENVIRONMENT_RECORD)
+    );
+
+    if (record === null) {
+      return;
+    }
+
+    try {
+      await this._backend.removeEnvironment(path, '');
+    } catch (error) {
+      console.warn('Unable to remove the workshop environment', error);
     }
   }
 

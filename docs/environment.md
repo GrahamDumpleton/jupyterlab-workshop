@@ -42,8 +42,13 @@ without an explicit `kernel` use it, and so does the hidden workshop
 kernel behind `execute-capture`, `kernel-execute` without a `path`, and
 kernel checks.
 
-Nothing outside the workshop directory changes except the kernelspec,
-and "Workshop: Remove…" unregisters it before deleting the directory.
+Nothing outside the workshop directory changes except the kernelspec.
+"Workshop: Remove…" unregisters it before deleting the directory, and
+"Workshop: Restart…" removes the environment with the rest of the
+workshop's state, kernelspec included, so the banner returns and a
+fresh one can be created: a learner who has installed into the
+environment by hand can get back to a known one that way. "Workshop:
+Reset Progress…" keeps it, as it keeps the files.
 
 ## Trust
 

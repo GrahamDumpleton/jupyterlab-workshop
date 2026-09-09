@@ -18,6 +18,10 @@ interface IExposedApp {
           options: { content: boolean }
         ): Promise<{ content: unknown }>;
       };
+      kernelspecs: {
+        refreshSpecs(): Promise<void>;
+        specs: { kernelspecs: Record<string, unknown> } | null;
+      };
     };
     shell: { widgets(area: string): Iterable<IExposedWidget> };
   };
@@ -169,6 +173,99 @@ test.describe('workshop panel', () => {
     );
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toHaveCount(0);
+  });
+
+  test('keeps the environment across a reset and drops it on restart', async ({
+    page,
+    tmpPath
+  }) => {
+    // Creating the environment installs ipykernel with pip, which takes
+    // longer than the default test timeout allows.
+    test.setTimeout(300000);
+
+    // A workshop with nothing but an environment to create; the
+    // requirements are empty so only ipykernel is installed.
+    const envy = `${tmpPath}/envy`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: envy',
+        'title: Envy',
+        'capabilities: [install-packages]',
+        'environment: { requirements: requirements.txt }',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${envy}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# nothing beyond ipykernel\n',
+      'text',
+      `${envy}/requirements.txt`
+    );
+    await page.contents.uploadContent(
+      '---\ntitle: Only page\n---\n\nNothing to do here.\n',
+      'text',
+      `${envy}/pages/01.md`
+    );
+    await openWorkshop(page, envy);
+
+    const panel = page.locator(PANEL);
+    const banner = panel.locator('.jp-WorkshopPanel-environment');
+    const dialog = page.locator('.jp-Dialog');
+    const kernels = (): Promise<string[]> =>
+      page.evaluate(async () => {
+        const exposed = window as unknown as IExposedApp;
+        const specs = exposed.jupyterapp.serviceManager.kernelspecs;
+
+        await specs.refreshSpecs();
+
+        return Object.keys(specs.specs?.kernelspecs ?? {});
+      });
+    const hasVenv = (): Promise<boolean> =>
+      page.contents.directoryExists(`${envy}/_workshop/venv`);
+
+    // Create the environment from the banner; pip takes a while.
+    await expect(banner).toBeVisible();
+    await banner.getByRole('button', { name: 'Create environment' }).click();
+    await expect(banner).toHaveCount(0, { timeout: 180000 });
+    expect(await kernels()).toContain('workshop-envy');
+    expect(await hasVenv()).toBe(true);
+
+    // Each command waits for its dialog, and then for the workshop to
+    // reopen, so the command's promise is the signal that it is done.
+    const run = (command: string): Promise<unknown> =>
+      page.evaluate((id: string) => {
+        const exposed = window as unknown as IExposedApp;
+
+        return exposed.jupyterapp.commands.execute(id, {});
+      }, command);
+
+    // Reset Progress keeps it.
+    const reset = run('workshop:reset');
+
+    await dialog.getByRole('button', { name: 'Reset', exact: true }).click();
+    await reset;
+    await expect(dialog).toHaveCount(0);
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText('Envy');
+    await expect(banner).toHaveCount(0);
+    expect(await hasVenv()).toBe(true);
+    expect(await kernels()).toContain('workshop-envy');
+
+    // Restart removes it, kernel included, and offers it again.
+    const restart = run('workshop:restart');
+
+    await expect(dialog.locator('.jp-Dialog-body')).toContainText(
+      'environment'
+    );
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await restart;
+    await expect(dialog).toHaveCount(0);
+    await expect(banner).toBeVisible({ timeout: 60000 });
+    expect(await hasVenv()).toBe(false);
+    expect(await kernels()).not.toContain('workshop-envy');
   });
 
   test('retries a triggered check while its command finishes', async ({

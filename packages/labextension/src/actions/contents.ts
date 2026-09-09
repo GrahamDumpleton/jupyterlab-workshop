@@ -72,6 +72,34 @@ export async function deleteTree(
 }
 
 /**
+ * Delete everything inside a directory except the entries named, leaving
+ * the directory itself in place. A missing directory is not an error.
+ */
+export async function deleteChildrenExcept(
+  contents: Contents.IManager,
+  path: string,
+  keep: ReadonlySet<string>
+): Promise<void> {
+  const model = await getIfExists(contents, path, true);
+
+  if (!model || model.type !== 'directory' || !Array.isArray(model.content)) {
+    return;
+  }
+
+  for (const child of model.content as Contents.IModel[]) {
+    if (keep.has(child.name)) {
+      continue;
+    }
+
+    if (child.type === 'directory') {
+      await deleteTree(contents, child.path);
+    } else {
+      await contents.delete(child.path);
+    }
+  }
+}
+
+/**
  * Create a directory and any missing parents through the contents API.
  */
 export async function ensureDirectory(

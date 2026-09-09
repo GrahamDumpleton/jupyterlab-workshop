@@ -163,12 +163,15 @@ deal with it:
   which moves the baseline along. It works offline and in JupyterLite.
   It only covers files inside the workshop directory, so a workshop
   that writes elsewhere, such as into the home directory, is not undone
-  there.
+  there. A workshop with an [isolated environment](environment.md)
+  loses that too, kernel registration included, and offers to create it
+  again: a restart is for when something is broken, and an environment
+  that has been installed into is one of the things that can be.
 
 - **Reset Progress** ("Workshop: Reset Progress…") forgets page
   progress, action results, captured variables and the action log,
   restores any JupyterLab settings the workshop changed, and reopens it
-  at the first page, keeping the files as they are.
+  at the first page, keeping the files and the environment as they are.
 
 - **Remove** ("Workshop: Remove…", or Remove on the card in the
   browser) lists what it will do before doing it: delete the workshop
