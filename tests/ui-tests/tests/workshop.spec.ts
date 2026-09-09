@@ -32,6 +32,7 @@ interface IExposedWidget {
   id: string;
   content?: {
     session?: { send(message: { type: string; content: string[] }): void };
+    editor?: { getCursorPosition(): { line: number; column: number } };
   };
 }
 
@@ -367,6 +368,14 @@ test.describe('workshop panel', () => {
         '```',
         '',
         '```{file-write}',
+        ':id: append-notes',
+        ':path: notes.txt',
+        ':mode: append',
+        ':open: true',
+        'more notes',
+        '```',
+        '',
+        '```{file-write}',
         ':id: copy-hello',
         ':path: copy.txt',
         ':from: files/hello.txt',
@@ -417,9 +426,31 @@ test.describe('workshop panel', () => {
     };
 
     await runAction('write-notes');
+    await runAction('append-notes');
+
+    // An append that opens the file lands on the first appended line.
+    await expect(page.locator('.jp-FileEditor')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const exposed = window as unknown as IExposedApp;
+
+          for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+            const editor = widget.content?.editor;
+
+            if (editor) {
+              return editor.getCursorPosition();
+            }
+          }
+
+          return null;
+        })
+      )
+      .toEqual({ line: 1, column: 0 });
+
     await runAction('copy-hello');
     await runAction('where');
-    expect(await read('work/notes.txt')).toBe('notes\n');
+    expect(await read('work/notes.txt')).toBe('notes\nmore notes\n');
     expect(await read('work/copy.txt')).toBe('hello\n');
     await expect(
       panel.locator('[data-action-id="where"] .jp-WorkshopPanel-actionOutput')

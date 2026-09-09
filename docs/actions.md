@@ -40,6 +40,14 @@ which names a shipped file and is relative to the workshop directory; see
 | `download`            | none        | none     | `path`                                                              | Download a file to the learner’s machine.                                                |
 | `upload-prompt`       | none        | none     | `path`                                                              | Ask the learner to upload files.                                                         |
 
+`file-write` with `open` shows the file in the editor with the cursor
+at the start of what it wrote: the top of the file, or with `mode:
+append` the first appended line, so a long file opens where the change
+is. An editor already showing the file is moved there whether or not
+`open` is set, since its cursor may have been in text the write
+replaced. `editor-insert` leaves the cursor on the first inserted line,
+and `editor-replace` selects the new text.
+
 `file-delete` refuses the workshop directory and its `_workshop` state
 directory however the path is spelt, and refuses a directory unless
 `recursive` is set; a path that does not exist is nothing to do unless

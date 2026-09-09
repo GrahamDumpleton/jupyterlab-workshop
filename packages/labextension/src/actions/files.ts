@@ -101,8 +101,16 @@ export class FileWriteAction implements IActionImplementation {
       return { status: 'error', message: `${path} already exists` };
     }
 
+    // An editor showing the file goes to the start of what was written:
+    // the line after the existing content for an append, the top
+    // otherwise.
+    let firstLine = 0;
+
     if (mode === 'append' && existing && typeof existing.content === 'string') {
-      content = withTrailingNewline(existing.content) + content;
+      const kept = withTrailingNewline(existing.content);
+
+      content = kept + content;
+      firstLine = countLines(kept);
     }
 
     await ensureDirectory(contents, PathExt.dirname(serverPath));
@@ -113,6 +121,7 @@ export class FileWriteAction implements IActionImplementation {
     if (widget) {
       widget.content.model.sharedModel.setSource(content);
       await widget.context.save();
+      revealLine(widget, firstLine);
     } else {
       await contents.save(serverPath, {
         type: 'file',
@@ -122,7 +131,9 @@ export class FileWriteAction implements IActionImplementation {
     }
 
     if (request.options.open === 'true') {
-      await openEditor(this._context, serverPath);
+      const opened = await openEditor(this._context, serverPath);
+
+      revealLine(opened, firstLine);
     }
 
     return { status: 'ok' };
