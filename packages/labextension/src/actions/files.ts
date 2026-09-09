@@ -121,7 +121,7 @@ export class FileWriteAction implements IActionImplementation {
     if (widget) {
       widget.content.model.sharedModel.setSource(content);
       await widget.context.save();
-      revealLine(widget, firstLine);
+      revealLine(widget, firstLine, 'start');
     } else {
       await contents.save(serverPath, {
         type: 'file',
@@ -133,7 +133,7 @@ export class FileWriteAction implements IActionImplementation {
     if (request.options.open === 'true') {
       const opened = await openEditor(this._context, serverPath);
 
-      revealLine(opened, firstLine);
+      revealLine(opened, firstLine, 'start');
     }
 
     return { status: 'ok' };
@@ -176,7 +176,7 @@ export class FileOpenAction implements IActionImplementation {
         };
       }
 
-      revealLine(widget, line - 1);
+      revealLine(widget, line - 1, 'center');
     }
 
     return { status: 'ok' };
@@ -255,7 +255,7 @@ export class EditorInsertAction implements IActionImplementation {
     }
 
     await saveIfWanted(widget, request);
-    revealLine(widget, Math.max(0, firstLine));
+    revealLine(widget, Math.max(0, firstLine), 'start');
 
     return { status: 'ok' };
   }
@@ -315,10 +315,11 @@ export class EditorReplaceAction implements IActionImplementation {
     }
 
     await saveIfWanted(widget, request);
-    showSpan(widget, {
-      start: edits[0].start,
-      end: edits[0].start + edits[0].text.length
-    });
+    showSpan(
+      widget,
+      { start: edits[0].start, end: edits[0].start + edits[0].text.length },
+      'start'
+    );
 
     return { status: 'ok' };
   }
@@ -355,7 +356,7 @@ export class EditorSelectAction implements IActionImplementation {
       return { status: 'error', message: 'Nothing to select was found' };
     }
 
-    showSpan(widget, span);
+    showSpan(widget, span, 'center');
     widget.content.editor.focus();
 
     return { status: 'ok' };
@@ -394,7 +395,7 @@ export class EditorHighlightAction implements IActionImplementation {
       return { status: 'error', message: 'Nothing to highlight was found' };
     }
 
-    const range = showSpan(widget, span);
+    const range = showSpan(widget, span, 'center');
 
     window.setTimeout(
       () => {
@@ -860,15 +861,63 @@ function isFileEditor(
   return widget.content instanceof FileEditor;
 }
 
+/**
+ * Where a revealed position goes in the view: new text starts at the top
+ * so it reads downward and fills the screen; existing text is centred so
+ * it has context on both sides. Either is clamped by the ends of the
+ * file, so a match near the top sits as far down as the lines before it
+ * allow.
+ */
+type RevealPlacement = 'start' | 'center';
+
+/** The reveal signature of JupyterLab's CodeMirror editor, which takes
+ * the placement; the abstract editor interface declares only the
+ * position. */
+interface IPlacedReveal {
+  revealPosition(
+    position: CodeEditor.IPosition,
+    options?: ScrollIntoViewOptions
+  ): void;
+}
+
+/**
+ * Scroll a position into view at the given placement, unless it is
+ * already in view, in which case nothing moves.
+ */
+function revealAt(
+  editor: CodeEditor.IEditor,
+  position: CodeEditor.IPosition,
+  placement: RevealPlacement
+): void {
+  const coordinate = editor.getCoordinateForPosition(position);
+  const viewport = editor.host.getBoundingClientRect();
+
+  if (
+    coordinate &&
+    coordinate.top >= viewport.top &&
+    coordinate.bottom <= viewport.bottom
+  ) {
+    return;
+  }
+
+  (editor as unknown as IPlacedReveal).revealPosition(position, {
+    block: placement
+  });
+}
+
 function revealLine(
   widget: IDocumentWidget<FileEditor>,
-  lineIndex: number
+  lineIndex: number,
+  placement: RevealPlacement
 ): void {
   const editor = widget.content.editor;
   const line = Math.max(0, Math.min(lineIndex, editor.lineCount - 1));
 
-  editor.setCursorPosition({ line, column: 0 });
-  editor.revealPosition({ line, column: 0 });
+  // Setting the cursor scrolls minimally on its own, which would put the
+  // line at the edge of the view and count as already in view; the
+  // placement below decides where it goes.
+  editor.setCursorPosition({ line, column: 0 }, { scroll: false });
+  revealAt(editor, { line, column: 0 }, placement);
 }
 
 async function saveIfWanted(
@@ -1000,7 +1049,8 @@ function insertionLines(
  */
 function showSpan(
   widget: IDocumentWidget<FileEditor>,
-  span: IOffsetSpan
+  span: IOffsetSpan,
+  placement: RevealPlacement
 ): CodeEditor.IRange | undefined {
   const editor = widget.content.editor;
   const start = editor.getPositionAt(span.start);
@@ -1010,13 +1060,15 @@ function showSpan(
     return undefined;
   }
 
+  // The placement decides the scroll, so the cursor is set without one;
+  // a selection is placed after the scroll for the same reason.
+  revealAt(editor, start, placement);
+
   if (span.end > span.start) {
     editor.setSelection({ start, end });
   } else {
-    editor.setCursorPosition(start);
+    editor.setCursorPosition(start, { scroll: false });
   }
-
-  editor.revealPosition(start);
 
   return { start, end };
 }

@@ -7,6 +7,17 @@ const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
 const PANEL = '#jupyterlab-workshop-panel';
 
+/** Enough lines that an append lands below the editor's view. */
+const NOTES_LINES: string[] = Array.from(
+  { length: 60 },
+  (_, index) => `note ${index + 1}`
+);
+
+const MORE_LINES: string[] = Array.from(
+  { length: 40 },
+  (_, index) => `more ${index + 1}`
+);
+
 interface IExposedApp {
   jupyterapp: {
     commands: { execute(id: string, args: object): Promise<unknown> };
@@ -364,7 +375,7 @@ test.describe('workshop panel', () => {
         '```{file-write}',
         ':id: write-notes',
         ':path: notes.txt',
-        'notes',
+        ...NOTES_LINES,
         '```',
         '',
         '```{file-write}',
@@ -372,7 +383,7 @@ test.describe('workshop panel', () => {
         ':path: notes.txt',
         ':mode: append',
         ':open: true',
-        'more notes',
+        ...MORE_LINES,
         '```',
         '',
         '```{file-write}',
@@ -428,7 +439,8 @@ test.describe('workshop panel', () => {
     await runAction('write-notes');
     await runAction('append-notes');
 
-    // An append that opens the file lands on the first appended line.
+    // An append that opens the file lands on the first appended line,
+    // scrolled to the top of the view so the block reads downward.
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
     await expect
       .poll(() =>
@@ -446,11 +458,34 @@ test.describe('workshop panel', () => {
           return null;
         })
       )
-      .toEqual({ line: 1, column: 0 });
+      .toEqual({ line: NOTES_LINES.length, column: 0 });
+    await expect
+      .poll(() =>
+        page.evaluate((first: string) => {
+          const scroller = document.querySelector(
+            '.jp-FileEditor .cm-scroller'
+          );
+          const line = Array.from(
+            scroller?.querySelectorAll('.cm-line') ?? []
+          ).find(element => element.textContent === first);
+
+          if (!scroller || !line) {
+            return null;
+          }
+
+          return (
+            line.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top
+          );
+        }, MORE_LINES[0])
+      )
+      .toBeLessThan(24);
 
     await runAction('copy-hello');
     await runAction('where');
-    expect(await read('work/notes.txt')).toBe('notes\nmore notes\n');
+    expect(await read('work/notes.txt')).toBe(
+      [...NOTES_LINES, ...MORE_LINES, ''].join('\n')
+    );
     expect(await read('work/copy.txt')).toBe('hello\n');
     await expect(
       panel.locator('[data-action-id="where"] .jp-WorkshopPanel-actionOutput')

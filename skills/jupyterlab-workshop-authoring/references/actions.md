@@ -46,7 +46,13 @@ append` the first appended line, so a long file opens where the change
 is. An editor already showing the file is moved there whether or not
 `open` is set, since its cursor may have been in text the write
 replaced. `editor-insert` leaves the cursor on the first inserted line,
-and `editor-replace` selects the new text.
+and `editor-replace` selects the new text. New text is scrolled to the
+top of the view so it reads downward from there; the text `file-open`
+with `line`, `editor-select` and `editor-highlight` point at is
+centred, so it has context on both sides. Either way a position that is
+already in view is left where it is, and the ends of the file limit
+the scroll, so a match near the top sits as far down as the lines
+before it allow.
 
 `file-delete` refuses the workshop directory and its `_workshop` state
 directory however the path is spelt, and refuses a directory unless
