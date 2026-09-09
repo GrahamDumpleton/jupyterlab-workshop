@@ -1013,6 +1013,30 @@ test.describe('workshop panel', () => {
   });
 });
 
+test.describe('narrow panel', () => {
+  // A window this small leaves the panel too narrow for the title and
+  // every header button on one line.
+  test.use({ viewport: { width: 800, height: 600 } });
+
+  test.beforeEach(async ({ page, tmpPath }) => {
+    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+  });
+
+  test('keeps the title in view beside the header tools', async ({
+    page,
+    tmpPath
+  }) => {
+    await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const title = page.locator(`${PANEL} .jp-WorkshopPanel-title`);
+
+    await expect(title).toHaveText('Git from the command line');
+    await expect(title).toBeVisible();
+    expect((await title.boundingBox())?.width ?? 0).toBeGreaterThan(80);
+  });
+});
+
 test.describe('startup restore', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
     await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);

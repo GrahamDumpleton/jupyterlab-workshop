@@ -24,20 +24,35 @@
   border-bottom: 1px solid var(--jp-border-color2);
 }
 
+/* The tools drop below the title as a group when the panel is too narrow
+   for both, rather than squeezing the title out of view, and flow onto a
+   further line when the panel is too narrow even for them. */
 .jp-WorkshopPanel-titleRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
 }
 
 .jp-WorkshopPanel-title {
   flex: 1 1 auto;
+  min-width: 8em;
   margin: 0;
   font-size: var(--jp-ui-font-size2);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.jp-WorkshopPanel-headerTools {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .jp-WorkshopPanel-iconButton {

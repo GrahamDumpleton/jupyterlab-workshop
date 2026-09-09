@@ -149,71 +149,76 @@ function PanelContent({
           >
             {workshop.manifest.title}
           </h2>
-          <TrustBadge manager={manager} onClick={() => run(CommandIDs.trust)} />
-          <IconButton
-            icon={infoIcon}
-            title="About this workshop"
-            onClick={() => run(CommandIDs.about)}
-          />
-          {manager.chainRunning ? (
-            <IconButton
-              icon={stopIcon}
-              title="Stop running actions"
-              onClick={() => run(CommandIDs.stopChain)}
+          <div className="jp-WorkshopPanel-headerTools">
+            <TrustBadge
+              manager={manager}
+              onClick={() => run(CommandIDs.trust)}
             />
-          ) : null}
-          <IconButton
-            icon={settingsIcon}
-            title="Variables"
-            onClick={() => run(CommandIDs.variables)}
-          />
-          <IconButton
-            icon={listIcon}
-            title="Action log"
-            onClick={() => run(CommandIDs.showLog)}
-          />
-          <IconButton
-            icon={refreshIcon}
-            title="Restart this workshop"
-            onClick={() => run(CommandIDs.restart)}
-          />
-          {features.enabled('author') ? (
             <IconButton
-              icon={editIcon}
-              title={
-                manager.authoring ? 'Leave author mode' : 'Edit this workshop'
-              }
-              onClick={() => run(CommandIDs.authorMode)}
+              icon={infoIcon}
+              title="About this workshop"
+              onClick={() => run(CommandIDs.about)}
             />
-          ) : null}
-          {features.enabled('browse') ? (
+            {manager.chainRunning ? (
+              <IconButton
+                icon={stopIcon}
+                title="Stop running actions"
+                onClick={() => run(CommandIDs.stopChain)}
+              />
+            ) : null}
             <IconButton
-              icon={launcherIcon}
-              title="Browse workshops"
-              onClick={() => run(CommandIDs.browse)}
+              icon={settingsIcon}
+              title="Variables"
+              onClick={() => run(CommandIDs.variables)}
             />
-          ) : null}
-          {features.enabled('open-directory') ? (
             <IconButton
-              icon={folderIcon}
-              title="Open another workshop"
-              onClick={() => run(CommandIDs.open)}
+              icon={listIcon}
+              title="Action log"
+              onClick={() => run(CommandIDs.showLog)}
             />
-          ) : null}
-          {features.enabled('open-url') ? (
             <IconButton
-              icon={downloadIcon}
-              title="Open a workshop from a URL"
-              onClick={() => run(CommandIDs.openUrl)}
+              icon={refreshIcon}
+              title="Restart this workshop"
+              onClick={() => run(CommandIDs.restart)}
             />
-          ) : null}
-          {features.enabled('close') ? (
-            <IconButton
-              icon={closeIcon}
-              title="Close this workshop"
-              onClick={() => run(CommandIDs.close)}
-            />
-          ) : null}
+            {features.enabled('author') ? (
+              <IconButton
+                icon={editIcon}
+                title={
+                  manager.authoring ? 'Leave author mode' : 'Edit this workshop'
+                }
+                onClick={() => run(CommandIDs.authorMode)}
+              />
+            ) : null}
+            {features.enabled('browse') ? (
+              <IconButton
+                icon={launcherIcon}
+                title="Browse workshops"
+                onClick={() => run(CommandIDs.browse)}
+              />
+            ) : null}
+            {features.enabled('open-directory') ? (
+              <IconButton
+                icon={folderIcon}
+                title="Open another workshop"
+                onClick={() => run(CommandIDs.open)}
+              />
+            ) : null}
+            {features.enabled('open-url') ? (
+              <IconButton
+                icon={downloadIcon}
+                title="Open a workshop from a URL"
+                onClick={() => run(CommandIDs.openUrl)}
+              />
+            ) : null}
+            {features.enabled('close') ? (
+              <IconButton
+                icon={closeIcon}
+                title="Close this workshop"
+                onClick={() => run(CommandIDs.close)}
+              />
+            ) : null}
+          </div>
         </div>
         <div
           className="jp-WorkshopPanel-progress"
