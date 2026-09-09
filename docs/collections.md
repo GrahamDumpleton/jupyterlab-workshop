@@ -41,7 +41,8 @@ with two sections:
   group per collection. A group is headed by the collection's icon,
   title, description and publisher, and can be collapsed; the cards
   under it show each workshop's title, version, description, platforms,
-  capabilities and duration, and carry the collection's name. A search
+  capabilities and duration, and carry the collection's name; the title
+  links to the workshop's website when its manifest gives one. A search
   box matches names, titles, descriptions and tags across every group;
   tag buttons narrow the list further. Install downloads the newest
   version, checks its hash when the collection gives one, and lists it

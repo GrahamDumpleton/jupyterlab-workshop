@@ -40,6 +40,7 @@ import React, {
   useState
 } from 'react';
 
+import { infoIcon } from '../icons';
 import {
   CommandIDs,
   IActionRequest,
@@ -147,6 +148,11 @@ function PanelContent({
             {workshop.manifest.title}
           </h2>
           <TrustBadge manager={manager} onClick={() => run(CommandIDs.trust)} />
+          <IconButton
+            icon={infoIcon}
+            title="About this workshop"
+            onClick={() => run(CommandIDs.about)}
+          />
           {manager.chainRunning ? (
             <IconButton
               icon={stopIcon}
@@ -967,7 +973,7 @@ function PreflightBanner({
 }
 
 /** How the platforms are named to learners. */
-const PLATFORM_LABELS: Readonly<Record<string, string>> = {
+export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
   linux: 'Linux',
   macos: 'macOS',
   windows: 'Windows',

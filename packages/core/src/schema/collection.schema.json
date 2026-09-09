@@ -106,6 +106,16 @@
               "type": "string"
             }
           },
+          "homepage": {
+            "type": "string",
+            "pattern": "^https?://",
+            "description": "Web page for the workshop, as its manifest gives it."
+          },
+          "issues": {
+            "type": "string",
+            "pattern": "^https?://",
+            "description": "Where to report a problem with the workshop, as its manifest gives it."
+          },
           "versions": {
             "type": "array",
             "minItems": 1,

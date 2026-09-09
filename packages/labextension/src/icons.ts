@@ -1,5 +1,6 @@
 import { LabIcon } from '@jupyterlab/ui-components';
 
+import infoSvg from '../style/icons/info.svg';
 import newWorkshopSvg from '../style/icons/workshop-new.svg';
 import workshopSvg from '../style/icons/workshop.svg';
 
@@ -20,4 +21,14 @@ export const workshopIcon = new LabIcon({
 export const newWorkshopIcon = new LabIcon({
   name: 'jupyterlab-workshop:cap-new',
   svgstr: newWorkshopSvg
+});
+
+/**
+ * The About button in the panel header: a filled circle with an i, drawn
+ * at the same weight as JupyterLab's toolbar icons, since the info icon
+ * JupyterLab ships is a thin outline meant for the status bar.
+ */
+export const infoIcon = new LabIcon({
+  name: 'jupyterlab-workshop:info',
+  svgstr: infoSvg
 });

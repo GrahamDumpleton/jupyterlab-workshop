@@ -60,6 +60,21 @@ describe('parseManifest', () => {
     ).toBe('Well done. Try the *next* one.\n');
   });
 
+  it('parses the links', () => {
+    expect(parseManifest(VALID).homepage).toBeUndefined();
+    expect(parseManifest(VALID).issues).toBeUndefined();
+
+    const manifest = parseManifest(
+      `${VALID}\nhomepage: https://example.org/w\nissues: https://example.org/w/issues\n`
+    );
+
+    expect(manifest.homepage).toBe('https://example.org/w');
+    expect(manifest.issues).toBe('https://example.org/w/issues');
+    expect(() => parseManifest(`${VALID}\nhomepage: [a]\n`)).toThrow(
+      WorkshopFormatError
+    );
+  });
+
   it('parses a valid manifest', () => {
     const manifest = parseManifest(VALID);
 

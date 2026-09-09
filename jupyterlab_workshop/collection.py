@@ -26,7 +26,12 @@ from urllib.parse import urlsplit
 import yaml
 
 from .fetch import Downloader, FetchError, _relative, _resolve_inside, download
-from .publish import PublishError, flatten_capabilities, read_manifest
+from .publish import (
+    PublishError,
+    flatten_capabilities,
+    manifest_links,
+    read_manifest,
+)
 
 COLLECTION_VERSION = 1
 
@@ -289,6 +294,7 @@ def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, 
         "capabilities": flatten_capabilities(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),
+        **manifest_links(manifest),
         "versions": [
             {"version": str(manifest.get("version") or "0.0.0"), "source": source}
         ],

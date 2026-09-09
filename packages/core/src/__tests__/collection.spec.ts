@@ -104,6 +104,25 @@ describe('parseCollectionIndex', () => {
     expect(index.ordered).toBe(false);
   });
 
+  it('keeps the links of an entry when they are web URLs', () => {
+    const [first, second] = parseCollectionIndex({
+      version: 1,
+      workshops: [
+        {
+          ...SAMPLE.workshops[0],
+          homepage: 'https://example.org/w',
+          issues: 'https://example.org/w/issues'
+        },
+        { ...SAMPLE.workshops[1], homepage: 'example.org', issues: 42 }
+      ]
+    }).workshops;
+
+    expect(first.homepage).toBe('https://example.org/w');
+    expect(first.issues).toBe('https://example.org/w/issues');
+    expect(second.homepage).toBeUndefined();
+    expect(second.issues).toBeUndefined();
+  });
+
   it('accepts a publisher given as a bare name', () => {
     expect(parsePublisher('Example Org')).toEqual({ name: 'Example Org' });
     expect(parsePublisher({ name: 'X', url: 'https://x' })).toEqual({

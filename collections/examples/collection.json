@@ -24,6 +24,8 @@
       ],
       "duration": "20m",
       "authors": ["Graham Dumpleton"],
+      "homepage": "https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/hello-jupyterlab",
+      "issues": "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues",
       "versions": [
         {
           "version": "0.1.0",
@@ -49,6 +51,8 @@
       ],
       "duration": "30m",
       "authors": ["Graham Dumpleton"],
+      "homepage": "https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/git-basics",
+      "issues": "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues",
       "versions": [
         {
           "version": "0.1.0",
@@ -69,6 +73,8 @@
       "capabilities": ["terminal", "write-files:workspace", "kernel-exec"],
       "duration": "25m",
       "authors": ["Graham Dumpleton"],
+      "homepage": "https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/workshop-authoring",
+      "issues": "https://github.com/GrahamDumpleton/jupyterlab-workshop/issues",
       "versions": [
         {
           "version": "0.1.0",

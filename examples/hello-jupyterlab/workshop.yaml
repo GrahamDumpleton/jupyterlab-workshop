@@ -4,6 +4,8 @@ title: Hello JupyterLab
 version: 0.1.0
 description: A tour of what workshop actions can do with notebooks, kernels, the interface and variables.
 authors: [Graham Dumpleton]
+homepage: https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/hello-jupyterlab
+issues: https://github.com/GrahamDumpleton/jupyterlab-workshop/issues
 tags: [jupyterlab, notebooks, demo]
 duration: 20m
 platforms: [linux, macos, windows, lite]

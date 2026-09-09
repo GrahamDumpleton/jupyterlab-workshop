@@ -86,7 +86,11 @@ export async function showFinishDialog(
 
   const result = await showDialog({
     title: `Finished: ${workshop.manifest.title}`,
-    body: new FinishBody(workshop.manifest.finish, next),
+    body: new FinishBody(
+      workshop.manifest.finish,
+      next,
+      workshop.manifest.issues
+    ),
     buttons,
     defaultButton: buttons.length - 1
   });
@@ -115,11 +119,16 @@ export async function showFinishDialog(
 
 /**
  * The dialog body: a completion line, the author's `finish` Markdown
- * from the manifest when there is one, and the next workshop of the
- * sequence when there is one.
+ * from the manifest when there is one, the next workshop of the
+ * sequence when there is one, and where to report a problem when the
+ * manifest says.
  */
 class FinishBody extends Widget {
-  constructor(finish: string | undefined, next: INextStep | undefined) {
+  constructor(
+    finish: string | undefined,
+    next: INextStep | undefined,
+    issues: string | undefined
+  ) {
     super();
 
     this.addClass('jp-WorkshopFinish');
@@ -148,6 +157,19 @@ class FinishBody extends Widget {
         createRenderEnv('finish', {})
       );
       this.node.appendChild(message);
+    }
+
+    if (issues) {
+      const report = document.createElement('p');
+      const anchor = document.createElement('a');
+
+      report.className = 'jp-WorkshopFinish-issues';
+      anchor.href = issues;
+      anchor.target = '_blank';
+      anchor.rel = 'noreferrer';
+      anchor.textContent = 'Report a problem with this workshop';
+      report.appendChild(anchor);
+      this.node.appendChild(report);
     }
   }
 }

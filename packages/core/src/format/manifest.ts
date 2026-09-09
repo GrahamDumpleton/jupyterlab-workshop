@@ -127,6 +127,12 @@ export interface IWorkshopManifest {
   /** Environment variables exported to the workshop terminals. */
   env: Record<string, string>;
   authors: string[];
+
+  /** Web page for the workshop, such as the repository it lives in. */
+  homepage?: string;
+
+  /** Where to report a problem with the workshop. */
+  issues?: string;
   tags: string[];
   platforms: string[];
   capabilities: string[];
@@ -225,6 +231,8 @@ export function parseManifest(
     finish: optionalString(data, 'finish', path),
     duration: optionalString(data, 'duration', path),
     authors: optionalStringList(data, 'authors', path),
+    homepage: optionalString(data, 'homepage', path),
+    issues: optionalString(data, 'issues', path),
     tags: optionalStringList(data, 'tags', path),
     platforms: optionalStringList(data, 'platforms', path),
     capabilities: parseCapabilities(data.capabilities, path),

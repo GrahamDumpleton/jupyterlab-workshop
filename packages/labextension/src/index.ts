@@ -121,6 +121,7 @@ import { WorkshopManager, normalizeWorkshopPath } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
 import { ISelfTestProgress, runAll } from './selftest';
 import { INextStep, showFinishDialog } from './panel/finish';
+import { showAboutDialog } from './panel/about';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { STATE_FILE, WORKSHOP_STATE_DIR } from './state';
@@ -1240,6 +1241,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    app.commands.addCommand(CommandIDs.about, {
+      label: 'Workshop: About This Workshop…',
+      isEnabled: () => manager.workshop !== null,
+      execute: () => showAboutDialog(manager)
+    });
+
     app.commands.addCommand(CommandIDs.variables, {
       label: 'Workshop: Variables…',
       isEnabled: () => manager.workshop !== null,
@@ -1325,6 +1332,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         CommandIDs.nextPage,
         CommandIDs.previousPage,
         CommandIDs.finish,
+        CommandIDs.about,
         CommandIDs.variables,
         CommandIDs.showLog,
         CommandIDs.stopChain,

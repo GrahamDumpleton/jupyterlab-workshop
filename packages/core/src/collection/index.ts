@@ -5,7 +5,7 @@
  * through this module.
  */
 
-import { isRecord, isStringArray } from '../util';
+import { isRecord, isStringArray, isWebLink } from '../util';
 
 /** Who publishes a collection or a catalog. */
 export interface IPublisher {
@@ -43,6 +43,12 @@ export interface ICollectionEntry {
   capabilities: string[];
   duration?: string;
   authors: string[];
+
+  /** Web page for the workshop, as its manifest gives it. */
+  homepage?: string;
+
+  /** Where to report a problem with the workshop, as its manifest gives it. */
+  issues?: string;
 
   /** Versions newest first. */
   versions: ICollectionVersion[];
@@ -434,6 +440,8 @@ function parseEntry(item: unknown, index: number): ICollectionEntry {
     capabilities: stringList(item.capabilities),
     duration: typeof item.duration === 'string' ? item.duration : undefined,
     authors: stringList(item.authors),
+    homepage: optionalLink(item.homepage),
+    issues: optionalLink(item.issues),
     versions: item.versions.map((version: unknown) =>
       parseVersion(version, item.name as string)
     )
@@ -478,4 +486,8 @@ function parseVersion(item: unknown, name: string): ICollectionVersion {
 
 function stringList(value: unknown): string[] {
   return isStringArray(value) ? value : [];
+}
+
+function optionalLink(value: unknown): string | undefined {
+  return typeof value === 'string' && isWebLink(value) ? value : undefined;
 }

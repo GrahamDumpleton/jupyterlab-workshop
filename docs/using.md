@@ -94,6 +94,23 @@ remembered, and "Workshop: Reset Layout" puts the workshop's own back.
 Commands typed by hand into a workshop terminal work as well as clicked
 ones; the workshop's checks look at results, not at what was clicked.
 
+## About the workshop
+
+The info button in the panel header, or "Workshop: About This
+Workshop…" in the command palette, opens a dialog with what the manifest
+says about the workshop: its description, version, authors, expected
+duration, the platforms it was written for and its tags. When the author
+gives them it also has a link to the workshop's website, usually the
+repository it is developed in, and a link for reporting a problem with
+it. The Finish dialog repeats the problem-report link.
+
+```{figure} _static/about-dialog.png
+:alt: The About dialog
+:width: 60%
+
+The About dialog for a showcase workshop.
+```
+
 ## Checks, quizzes and forms
 
 A check is a box with a label, a Check button and its last result. Many

@@ -104,6 +104,9 @@ def test_publish_builds_a_stable_archive(
     (target / "_workshop").mkdir()
     (target / "_workshop" / "state.json").write_text("{}")
 
+    with (target / "workshop.yaml").open("a") as manifest:
+        manifest.write("issues: https://example.org/pub/issues\n")
+
     out = tmp_path / "dist"
 
     assert (
@@ -133,6 +136,8 @@ def test_publish_builds_a_stable_archive(
     entry = json.loads((out / "pub-0.1.0.collection.json").read_text())
 
     assert entry["name"] == "pub"
+    assert entry["issues"] == "https://example.org/pub/issues"
+    assert "homepage" not in entry
     assert entry["versions"][0]["sha256"] == digest
     assert entry["versions"][0]["source"] == {
         "archive": "https://example.org/pub-0.1.0.tar.gz"

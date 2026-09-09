@@ -44,6 +44,7 @@ import {
   mentionsAbsolutePath,
   urlHosts
 } from './danger';
+import { isWebLink } from '../util';
 import { ILintMessage } from './types';
 
 /** What the linter looks at. */
@@ -91,8 +92,35 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintFormOrder(input, messages);
   lintLayouts(input, manifestPath, messages);
   lintCapabilities(input, manifestPath, messages);
+  lintLinks(input, manifestPath, messages);
 
   return messages;
+}
+
+/**
+ * The manifest's `homepage` and `issues` are opened in the learner's
+ * browser from the About dialog, so each must be an http or https URL.
+ */
+function lintLinks(
+  input: ILintInput,
+  manifestPath: string,
+  messages: ILintMessage[]
+): void {
+  const links: [string, string | undefined][] = [
+    ['homepage', input.manifest.homepage],
+    ['issues', input.manifest.issues]
+  ];
+
+  for (const [field, value] of links) {
+    if (value !== undefined && !isWebLink(value)) {
+      messages.push({
+        level: 'error',
+        rule: 'invalid-link',
+        message: `Field "${field}" must be an http or https URL, not "${value}"`,
+        path: manifestPath
+      });
+    }
+  }
 }
 
 function lintChecks(input: ILintInput, messages: ILintMessage[]): void {

@@ -1087,7 +1087,19 @@ function CollectionCard({
       data-collection={collection.url}
     >
       <div className="jp-WorkshopBrowser-cardTitle">
-        {entry.title}
+        {entry.homepage ? (
+          <a
+            className="jp-WorkshopBrowser-cardLink"
+            href={entry.homepage}
+            target="_blank"
+            rel="noreferrer"
+            title={entry.homepage}
+          >
+            {entry.title}
+          </a>
+        ) : (
+          entry.title
+        )}
         <span className="jp-WorkshopBrowser-cardVersion">
           {version.version}
         </span>

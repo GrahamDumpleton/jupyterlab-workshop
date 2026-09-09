@@ -574,3 +574,45 @@ import sys
     expect(found.filter(rule => rule.startsWith('invalid-'))).toEqual([]);
   });
 });
+
+describe('manifest links', () => {
+  // The manifest declares two capabilities, so the page uses both.
+  const PAGE = `---
+title: One
+---
+
+\`\`\`{execute}
+git status
+\`\`\`
+
+\`\`\`{file-write}
+:path: notes.txt
+hello
+\`\`\`
+`;
+
+  it('accepts http and https links', () => {
+    expect(
+      rules(
+        PAGE,
+        `${MANIFEST}homepage: https://example.org/w\nissues: http://example.org/w/issues\n`
+      )
+    ).toEqual([]);
+  });
+
+  it('rejects anything that is not a web URL', () => {
+    const found = lint(
+      PAGE,
+      `${MANIFEST}homepage: example.org/w\nissues: "mailto:me@example.org"\n`
+    );
+
+    expect(found.map(message => message.rule)).toEqual([
+      'invalid-link',
+      'invalid-link'
+    ]);
+    expect(found[0].level).toBe('error');
+    expect(found[0].path).toBe('workshop.yaml');
+    expect(found[0].message).toContain('"homepage"');
+    expect(found[1].message).toContain('"issues"');
+  });
+});

@@ -94,6 +94,8 @@ name: git-basics # lower case, digits, hyphens
 title: Git from the command line
 version: 0.1.0
 description: One or two sentences.
+homepage: https://github.com/me/workshops/tree/main/git-basics # optional; shown in the About dialog
+issues: https://github.com/me/workshops/issues # optional; where learners report problems
 tags: [git, cli]
 duration: 30m
 platforms: [linux, macos, windows]

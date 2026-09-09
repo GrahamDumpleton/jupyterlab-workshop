@@ -25,6 +25,16 @@
       "description": "Expected duration such as 45m or 2h."
     },
     "authors": { "type": "array", "items": { "type": "string" } },
+    "homepage": {
+      "type": "string",
+      "pattern": "^https?://",
+      "description": "Web page for the workshop, such as the repository it is developed in; shown in the About dialog and the browser."
+    },
+    "issues": {
+      "type": "string",
+      "pattern": "^https?://",
+      "description": "Where to report a problem with the workshop, such as the repository's issue tracker; shown in the About dialog and when the workshop is finished."
+    },
     "tags": { "type": "array", "items": { "type": "string" } },
     "platforms": {
       "type": "array",

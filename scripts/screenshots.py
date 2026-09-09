@@ -4,8 +4,9 @@ A throwaway JupyterLab is started from a temporary root holding the
 showcase collection's workshops as installed workshops, a fixture
 collection and a fixture catalog, and Playwright drives it through the
 states the pages show: the trust dialog, the panel with a workshop
-open, author mode, the Finish dialog, the workshop browser with its
-collection groups, and the Collections dialog. The images are written
+open, the About dialog, author mode, the Finish dialog, the workshop
+browser with its collection groups, and the Collections dialog. The
+images are written
 under ``docs/_static`` and are meant to be committed, so the docs build
 needs neither a browser nor a server; run this again after an interface
 change.
@@ -234,6 +235,11 @@ def prepare_root(work: Path) -> Path:
                 ignore=shutil.ignore_patterns("_workshop"),
             )
 
+    # The About dialog is pictured with its links, which the showcase
+    # manifests can only carry once they may require a release with the
+    # fields; until then the copy is given the real ones.
+    ensure_links(root / WORKSHOP / "workshop.yaml")
+
     (root / "showcase").mkdir(parents=True, exist_ok=True)
     shutil.copy(showcase / "collection.json", root / "showcase" / "collection.json")
 
@@ -250,6 +256,23 @@ def prepare_root(work: Path) -> Path:
     (root / "catalog.json").write_text(json.dumps(FIXTURE_CATALOG, indent=2))
 
     return root
+
+
+def ensure_links(manifest: Path) -> None:
+    """Give a manifest the showcase repository's website and issue tracker
+    as its links, unless it has its own."""
+
+    text = manifest.read_text()
+    links = {
+        "homepage": f"{SHOWCASE_REPO}/tree/main/{WORKSHOP}",
+        "issues": f"{SHOWCASE_REPO}/issues",
+    }
+    missing = [
+        f"{field}: {url}" for field, url in links.items() if f"\n{field}:" not in text
+    ]
+
+    if missing:
+        manifest.write_text(text.rstrip("\n") + "\n" + "\n".join(missing) + "\n")
 
 
 def write_overrides(work: Path) -> Path:
@@ -365,6 +388,14 @@ def take_screenshots(page: Any, url: str) -> None:
     panel.locator(".jp-WorkshopPanel-verify.jp-mod-verify-pass").wait_for(timeout=60000)
     time.sleep(3)
     save(page, "panel.png")
+
+    # The About dialog, from the info button in the header.
+    panel.locator('button[title="About this workshop"]').click()
+    dialog.locator(".jp-WorkshopAbout").wait_for(timeout=30000)
+    time.sleep(1)
+    save(dialog.locator(".jp-Dialog-content"), "about-dialog.png")
+    dialog.get_by_role("button", name="Close", exact=True).click()
+    time.sleep(1)
 
     # Author mode adds the toolbar and the action gutters.
     page.evaluate("window.jupyterapp.commands.execute('workshop:author-mode')")

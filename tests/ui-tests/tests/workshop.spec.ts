@@ -142,6 +142,35 @@ test.describe('workshop panel', () => {
     );
   });
 
+  test('shows what the manifest says about the workshop', async ({
+    page,
+    tmpPath
+  }) => {
+    await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
+
+    const panel = page.locator(PANEL);
+    const dialog = page.locator('.jp-Dialog');
+
+    await panel.locator('button[title="About this workshop"]').click();
+    await expect(dialog.locator('.jp-WorkshopAbout')).toBeVisible();
+    await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
+      'Git from the command line'
+    );
+
+    const details = dialog.locator('.jp-WorkshopAbout-details');
+
+    await expect(details).toContainText('Graham Dumpleton');
+    await expect(details).toContainText('Linux, macOS, Windows');
+    await expect(
+      details.getByRole('link', { name: /\/issues$/ })
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/GrahamDumpleton/jupyterlab-workshop/issues'
+    );
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test('retries a triggered check while its command finishes', async ({
     page,
     tmpPath

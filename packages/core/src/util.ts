@@ -32,3 +32,12 @@ export function pathStem(path: string): string {
 
   return dot > 0 ? base.slice(0, dot) : base;
 }
+
+/**
+ * Test whether a string is an `http` or `https` URL, the only kind the
+ * manifest's `homepage` and `issues` links may be, since they are opened
+ * in the learner's browser.
+ */
+export function isWebLink(value: string): boolean {
+  return /^https?:\/\/\S+$/.test(value);
+}

@@ -4,6 +4,8 @@ title: Writing your first workshop
 version: 0.1.0
 description: Scaffold, edit, lint and publish a workshop of your own with the jupyter workshop command and author mode.
 authors: [Graham Dumpleton]
+homepage: https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/workshop-authoring
+issues: https://github.com/GrahamDumpleton/jupyterlab-workshop/issues
 tags: [authoring, cli, meta]
 duration: 25m
 platforms: [linux, macos, windows]

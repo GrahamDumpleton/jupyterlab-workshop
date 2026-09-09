@@ -8,6 +8,8 @@ finish: |
   **Hello JupyterLab** workshop next to see what actions can do with
   notebooks and kernels, or come back to any page here to review it.
 authors: [Graham Dumpleton]
+homepage: https://github.com/GrahamDumpleton/jupyterlab-workshop/tree/main/examples/git-basics
+issues: https://github.com/GrahamDumpleton/jupyterlab-workshop/issues
 tags: [git, cli, beginner]
 duration: 30m
 platforms: [linux, macos, windows]

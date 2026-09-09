@@ -101,6 +101,7 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
         "capabilities": flatten_capabilities(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),
+        **manifest_links(manifest),
         "versions": [
             {
                 "version": version,
@@ -119,6 +120,21 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
         entry_path=entry_path,
         entry=collection_entry,
     )
+
+
+def manifest_links(manifest: dict[str, Any]) -> dict[str, str]:
+    """The ``homepage`` and ``issues`` links of a manifest, as collection
+    entry fields, leaving out any that are absent or empty."""
+
+    links: dict[str, str] = {}
+
+    for field in ("homepage", "issues"):
+        value = manifest.get(field)
+
+        if value:
+            links[field] = str(value)
+
+    return links
 
 
 def flatten_capabilities(value: object) -> list[str]:

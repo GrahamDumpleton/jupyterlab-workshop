@@ -311,6 +311,8 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
     workshop.joinpath("workshop.yaml").write_text(
         "name: git-basics\ntitle: Git\nversion: 1.2.0\ntags: [git]\n"
         "capabilities:\n  - terminal\n  - write-files: [workspace]\n"
+        "homepage: https://example.org/git\n"
+        "issues: https://example.org/git/issues\n"
         "pages: [pages/01.md]\n"
     )
 
@@ -326,6 +328,8 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
     assert index["title"] == "Mine"
     assert entry["name"] == "git-basics"
     assert entry["capabilities"] == ["terminal", "write-files:workspace"]
+    assert entry["homepage"] == "https://example.org/git"
+    assert entry["issues"] == "https://example.org/git/issues"
     assert entry["versions"] == [
         {
             "version": "1.2.0",
