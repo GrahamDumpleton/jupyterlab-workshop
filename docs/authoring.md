@@ -41,13 +41,9 @@ a line are shown under the block they refer to.
 
 While author mode is on, progress events are not recorded, and edits to
 the files re-render the panel as they are saved, whether they were made
-in JupyterLab or elsewhere. In a workshop with a declared
-[workspace](concepts.md#the-workspace) Restart never touches the pages,
-so editing while learners restart is safe. Without one, saving a page,
-the manifest or the environment's requirements file retakes the
-snapshot that Restart puts back, so restarting to try the workshop from
-the top keeps your edits; outside author mode Restart restores every
-file, pages included, as they were when the workshop was first opened.
+in JupyterLab or elsewhere. Restart only ever refills the
+[workspace](concepts.md#the-workspace), so restarting to try the
+workshop from the top keeps every edit to the pages and the manifest.
 
 "Workshop: New Workshop…" (also in the launcher under Workshops)
 scaffolds a directory from a template, `starter`, `blank` or

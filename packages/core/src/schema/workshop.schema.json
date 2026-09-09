@@ -95,7 +95,8 @@
     },
     "workspace": {
       "type": "string",
-      "description": "Directory, relative to the workshop, where the learner works: created when the workshop first opens and filled with a copy of the files directory. Restart empties and refills it and leaves every other file alone, and checkpoints archive it alone. Without it, Restart and checkpoints cover the whole workshop directory."
+      "default": "work",
+      "description": "Directory, relative to the workshop, where the learner works; work unless set. It is created when the workshop first opens and filled with a copy of the files directory, Restart empties and refills it and leaves every other file alone, checkpoints archive it alone, and the workspace write scope means it."
     },
     "environment": {
       "type": "object",

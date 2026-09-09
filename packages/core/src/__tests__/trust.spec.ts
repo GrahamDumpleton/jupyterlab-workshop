@@ -206,27 +206,29 @@ describe('write targets', () => {
     });
 
   it("refuses the workshop's own files at every scope", () => {
-    expect(decide({ path: 'pages/01.md' })).toMatchObject({
+    expect(decide({ path: '../pages/01.md' })).toMatchObject({
       kind: 'reject',
       reason: expect.stringContaining('part of the workshop')
     });
-    expect(decide({ path: 'workshop.yaml' })).toMatchObject({ kind: 'reject' });
+    expect(decide({ path: '../workshop.yaml' })).toMatchObject({
+      kind: 'reject'
+    });
     expect(
-      decide({ path: 'requirements.txt' }, { requirements: 'requirements.txt' })
+      decide(
+        { path: '../requirements.txt' },
+        { requirements: 'requirements.txt' }
+      )
     ).toMatchObject({ kind: 'reject' });
-    expect(
-      decide({ path: '../files/x.py' }, { workspace: 'work' })
-    ).toMatchObject({ kind: 'reject' });
+    expect(decide({ path: '../files/x.py' })).toMatchObject({ kind: 'reject' });
     expect(decide({ path: 'notes.txt' })).toEqual({ kind: 'run' });
+    expect(decide({ path: 'pages/01.md' })).toEqual({ kind: 'run' });
   });
 
-  it('confines the workspace scope to a declared workspace', () => {
+  it('confines the workspace scope to the workspace', () => {
     expect(decide({ path: 'notes.txt' }, { workspace: 'work' })).toEqual({
       kind: 'run'
     });
-    expect(
-      decide({ path: '../notes.txt' }, { workspace: 'work' })
-    ).toMatchObject({
+    expect(decide({ path: '../notes.txt' })).toMatchObject({
       kind: 'reject',
       reason: expect.stringContaining('outside the workspace')
     });

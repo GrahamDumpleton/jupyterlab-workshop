@@ -120,7 +120,7 @@ export function loadWorkshopFiles(
   const builtins = BUILTINS[platform];
   const variables: Variables = {
     ...builtins,
-    workspace: manifest.workspace ?? builtins.workspace
+    workspace: manifest.workspace
   };
   const declared = new Set<string>(
     manifest.variables.map(definition => definition.name)

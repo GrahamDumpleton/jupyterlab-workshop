@@ -1144,14 +1144,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             await closeWorkshopWidgets(cleanup, target);
           }
 
-          const outcome = await manager.restart(path);
-
-          if (!outcome.files) {
-            Notification.warning(
-              'Progress was forgotten but the files were kept: the workshop was first opened before a snapshot of them was taken.',
-              { autoClose: 8000 }
-            );
-          }
+          await manager.restart(path);
         } catch (error) {
           console.error('Unable to restart the workshop', error);
           await showErrorMessage(

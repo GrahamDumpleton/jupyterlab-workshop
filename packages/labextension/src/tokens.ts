@@ -78,7 +78,7 @@ export interface ITrustSummary {
   /** Number of actions that run without a click. */
   automatic: number;
 
-  /** The declared workspace, which confines the write-files scope. */
+  /** The workspace, which the write-files workspace scope confines writes to. */
   workspace?: string;
 
   lint: ILintMessage[];
@@ -419,16 +419,6 @@ export interface IInstalledWorkshop {
   started: boolean;
 }
 
-/** What a restart managed to do. */
-export interface IRestartResult {
-  /**
-   * Whether the files were put back. False when a workshop without a
-   * workspace was first opened before the snapshot existed, in which
-   * case only progress was forgotten and the files stay as they are.
-   */
-  files: boolean;
-}
-
 /** Features an administrator can remove for a locked-down deployment. */
 export const FEATURES = [
   'open-directory',
@@ -523,8 +513,8 @@ export interface IWorkshopManager {
   readonly authoring: boolean;
 
   /**
-   * The open workshop's declared workspace, relative to the JupyterLab
-   * root, or null when it has none.
+   * The open workshop's workspace, relative to the JupyterLab root, or
+   * null when no workshop is open.
    */
   readonly workspacePath: string | null;
 
@@ -629,7 +619,7 @@ export interface IWorkshopManager {
    * forget its progress and, when it is the open workshop, reopen it from
    * the first page. Without a path the open workshop restarts.
    */
-  restart(path?: string): Promise<IRestartResult>;
+  restart(path?: string): Promise<void>;
 
   /** Whether the current page's requirements allow moving on. */
   gate(pageId?: string): IGateStatus;
@@ -736,9 +726,8 @@ export interface IFetchResult {
 }
 
 /**
- * Where a relative path starts: the learner's workspace (the workshop
- * directory when none is declared), or the workshop directory itself
- * for shipped files and state.
+ * Where a relative path starts: the learner's workspace, or the
+ * workshop directory itself for shipped files and state.
  */
 export type PathBase = 'workspace' | 'workshop';
 

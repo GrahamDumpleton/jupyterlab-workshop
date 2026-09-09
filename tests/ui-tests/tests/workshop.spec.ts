@@ -67,7 +67,7 @@ test.describe('workshop panel', () => {
 
     // A development session may have left runtime directories in the
     // example; they must not leak into the test.
-    for (const name of ['_workshop', 'scratch', 'demo']) {
+    for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
       const directory = `${tmpPath}/${WORKSHOP}/${name}`;
 
       if (await page.contents.directoryExists(directory)) {
@@ -112,9 +112,9 @@ test.describe('workshop panel', () => {
     // back; give the command time to have run if it were going to, then
     // check that nothing was created.
     await page.waitForTimeout(3000);
-    expect(await page.contents.directoryExists(`${workshopPath}/demo`)).toBe(
-      false
-    );
+    expect(
+      await page.contents.directoryExists(`${workshopPath}/work/demo`)
+    ).toBe(false);
 
     // Writes ask first and can be declined.
     const write = panel.locator('.jp-WorkshopPanel-action.jp-mod-file-write');
@@ -580,7 +580,13 @@ test.describe('workshop panel', () => {
       'text',
       `${timed}/pages/01.md`
     );
-    await page.contents.uploadContent('second', 'text', `${timed}/second.txt`);
+    // The check looks in the workspace, which opening creates and leaves
+    // as it finds it.
+    await page.contents.uploadContent(
+      'second',
+      'text',
+      `${timed}/work/second.txt`
+    );
 
     await openWorkshop(page, timed);
     await page.sidebar.openTab('jupyterlab-workshop-panel');
@@ -711,7 +717,7 @@ test.describe('workshop panel', () => {
     await expect(actions.nth(1)).toHaveClass(/jp-mod-status-ok/);
 
     await expect
-      .poll(() => page.contents.directoryExists(`${workshopPath}/demo`), {
+      .poll(() => page.contents.directoryExists(`${workshopPath}/work/demo`), {
         timeout: 20000
       })
       .toBe(true);
@@ -745,7 +751,7 @@ test.describe('workshop panel', () => {
     await expect(writeAction).toHaveClass(/jp-mod-status-ok/);
 
     expect(
-      await page.contents.fileExists(`${workshopPath}/demo/README.md`)
+      await page.contents.fileExists(`${workshopPath}/work/demo/README.md`)
     ).toBe(true);
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
 
@@ -858,7 +864,7 @@ test.describe('workshop panel', () => {
           );
 
           return String(model.content);
-        }, `${workshopPath}/demo/README.md`)
+        }, `${workshopPath}/work/demo/README.md`)
       )
       .toContain('Learned how git diff shows unstaged changes.');
 

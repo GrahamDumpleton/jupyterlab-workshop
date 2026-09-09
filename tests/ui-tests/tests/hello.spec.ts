@@ -58,7 +58,7 @@ test.describe('hello-jupyterlab workshop', () => {
 
     // A development session may have left runtime directories in the
     // example; they must not leak into the test.
-    for (const name of ['_workshop', 'scratch', 'demo']) {
+    for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
       const directory = `${tmpPath}/${WORKSHOP}/${name}`;
 
       if (await page.contents.directoryExists(directory)) {
@@ -171,7 +171,7 @@ test.describe('hello-jupyterlab workshop', () => {
       return model.content.cells
         .filter(cell => cell.cell_type === 'code')
         .map(cell => (cell.outputs ?? []).length);
-    }, `${tmpPath}/${WORKSHOP}/scratch/hello.ipynb`);
+    }, `${tmpPath}/${WORKSHOP}/work/hello.ipynb`);
 
     expect(saved[saved.length - 1]).toBeGreaterThan(0);
 
@@ -230,19 +230,19 @@ test.describe('hello-jupyterlab workshop', () => {
       page.contents.fileExists(`${workshopDir}/${path}`);
 
     await runEditorAction('copy-notes');
-    expect(await exists('scratch/archive/notes-copy.md')).toBe(true);
+    expect(await exists('work/archive/notes-copy.md')).toBe(true);
     await runEditorAction('rename-notes');
-    expect(await exists('scratch/archive/notes-copy.md')).toBe(false);
-    expect(await exists('scratch/archive/notes-old.md')).toBe(true);
+    expect(await exists('work/archive/notes-copy.md')).toBe(false);
+    expect(await exists('work/archive/notes-old.md')).toBe(true);
     await runEditorAction('create-drafts');
     expect(
-      await page.contents.directoryExists(`${workshopDir}/scratch/drafts`)
+      await page.contents.directoryExists(`${workshopDir}/work/drafts`)
     ).toBe(true);
     await runEditorAction('delete-archive');
     expect(
-      await page.contents.directoryExists(`${workshopDir}/scratch/archive`)
+      await page.contents.directoryExists(`${workshopDir}/work/archive`)
     ).toBe(false);
-    expect(await exists('scratch/notes.md')).toBe(true);
+    expect(await exists('work/notes.md')).toBe(true);
 
     // Kernels: capture output into a variable and see it in the prose.
     await goTo('Kernels');
@@ -286,7 +286,7 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect(autoWrite).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
     expect(
       await page.contents.fileExists(
-        `${tmpPath}/${WORKSHOP}/scratch/automation.txt`
+        `${tmpPath}/${WORKSHOP}/work/automation.txt`
       )
     ).toBe(true);
     await expect(panel.locator('[data-action-id="auto-echo"]')).toHaveClass(

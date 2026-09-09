@@ -146,7 +146,13 @@ def test_declared_workspace_is_read_from_the_manifest(tmp_path: Path) -> None:
 
     assert declared_workspace(tmp_path) == ["work"]
 
+    (tmp_path / "workshop.yaml").write_text(
+        "name: w\ntitle: W\nworkspace: learner\npages: [a.md]\n"
+    )
+
+    assert declared_workspace(tmp_path) == ["learner"]
+
     (tmp_path / "workshop.yaml").write_text("name: w\ntitle: W\npages: [a.md]\n")
 
-    assert declared_workspace(tmp_path) == []
+    assert declared_workspace(tmp_path) == ["work"]
     assert declared_workspace(tmp_path / "missing") == []

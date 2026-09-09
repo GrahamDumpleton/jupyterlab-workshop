@@ -22,6 +22,9 @@ const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
  */
 export const WORKSHOP_FILES_DIR = 'files';
 
+/** The learner's working directory when the manifest names none. */
+export const DEFAULT_WORKSPACE = 'work';
+
 /** The manifest API version this package understands. */
 export const MANIFEST_API_VERSION = 'jupyterlab-workshop/v1alpha1';
 
@@ -151,10 +154,10 @@ export interface IWorkshopManifest {
   requires: IRequirements;
 
   /**
-   * The learner's working directory, relative to the workshop, when the
-   * workshop declares one; see `parseWorkspace` for what it changes.
+   * The learner's working directory, relative to the workshop; `work`
+   * unless the manifest says otherwise. See `parseWorkspace`.
    */
-  workspace?: string;
+  workspace: string;
   environment?: IEnvironment;
   analytics?: IAnalytics;
   variables: IVariableDefinition[];
@@ -443,11 +446,11 @@ const RESERVED_WORKSPACE_NAMES: ReadonlySet<string> = new Set([
 /**
  * The `workspace` field: a relative directory path inside the workshop,
  * with trailing slashes dropped, that is not one of the workshop's own
- * directories. Declaring one moves Restart and checkpoints onto it.
+ * directories. Every workshop has one; it is `work` unless set.
  */
-function parseWorkspace(value: unknown, path: string): string | undefined {
+function parseWorkspace(value: unknown, path: string): string {
   if (value === undefined || value === null) {
-    return undefined;
+    return DEFAULT_WORKSPACE;
   }
 
   if (typeof value !== 'string') {

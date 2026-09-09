@@ -7,7 +7,6 @@ import {
   ICatalog,
   ICollectionIndex,
   IWorkshopManifest,
-  PRISTINE_CHECKPOINT,
   TrustLevel,
   Variables,
   parseCatalog,
@@ -23,6 +22,7 @@ import {
   lineDiff,
   parseManifest,
   parsePage,
+  DEFAULT_WORKSPACE,
   IVenvExports,
   WORKSHOP_FILES_DIR,
   renderEnvCmd,
@@ -47,7 +47,7 @@ import {
   readTextFile,
   writeTextFile
 } from './actions/contents';
-import { STATE_FILE, StateStore, WORKSHOP_STATE_DIR } from './state';
+import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
   IActionLogEntry,
@@ -65,7 +65,6 @@ import {
   IOpenOptions,
   IPreflightResult,
   IPageProgress,
-  IRestartResult,
   IPlatformInfo,
   ITrustDecision,
   ITrustPrompts,
@@ -132,7 +131,6 @@ export class WorkshopManager implements IWorkshopManager {
     this._settings = options.settings ?? null;
     this._features = options.features ?? null;
     this._kernelspecs = options.kernelspecs ?? null;
-    this._rebaseliner = new Debouncer(() => this._rebaseline(), 1000);
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
     this._reloader = new Debouncer(() => this.reload(), 300);
@@ -174,7 +172,7 @@ export class WorkshopManager implements IWorkshopManager {
   get workspacePath(): string | null {
     const workshop = this._workshop;
 
-    return workshop?.manifest.workspace
+    return workshop
       ? PathExt.join(workshop.path, workshop.manifest.workspace)
       : null;
   }
@@ -346,22 +344,10 @@ export class WorkshopManager implements IWorkshopManager {
       // A workshop marked as the learner's own reopens in author mode.
       this._authoring = await this._trustStore.isAuthored(trust.sourceKey);
 
-      // The first time a workshop opens, before any action can touch its
-      // files, they are snapshotted so that "Restart" can put them back.
-      // A workshop with a declared workspace gets the workspace created
-      // and filled from files/ instead, and never a snapshot: Restart
-      // refills the workspace and leaves the rest alone.
-      const fresh =
-        (await readIfExists(
-          this._contents,
-          PathExt.join(workshopPath, WORKSHOP_STATE_DIR, STATE_FILE)
-        )) === null;
-
-      if (manifest.workspace) {
-        await this._populateWorkspace(workshopPath, manifest.workspace);
-      } else if (fresh) {
-        await this._snapshotPristine(workshopPath);
-      }
+      // The workspace is created and filled from files/ before any
+      // action can touch it; an existing one holds the learner's work
+      // and is left alone.
+      await this._populateWorkspace(workshopPath, manifest.workspace);
 
       const state = await this._state.load(
         workshopPath,
@@ -384,7 +370,7 @@ export class WorkshopManager implements IWorkshopManager {
         launched: options.launch === true
       };
       this._store.load(
-        buildBuiltins(workshopPath, platform),
+        buildBuiltins(workshopPath, platform, manifest.workspace),
         manifest.variables,
         state.variables
       );
@@ -489,7 +475,9 @@ export class WorkshopManager implements IWorkshopManager {
       // The trust summary carries the lint findings and the content hash,
       // so it is rebuilt; the decision itself stands.
       const declared = this._collectDeclared(manifest, sources);
-      const defaults: Variables = { ...buildBuiltins(workshop.path, platform) };
+      const defaults: Variables = {
+        ...buildBuiltins(workshop.path, platform, manifest.workspace)
+      };
 
       for (const definition of manifest.variables) {
         if (definition.default !== undefined) {
@@ -529,7 +517,7 @@ export class WorkshopManager implements IWorkshopManager {
       }
 
       this._store.load(
-        buildBuiltins(workshop.path, platform),
+        buildBuiltins(workshop.path, platform, manifest.workspace),
         manifest.variables,
         this._store.persistable()
       );
@@ -884,7 +872,7 @@ export class WorkshopManager implements IWorkshopManager {
     await this.open(path);
   }
 
-  async restart(path?: string): Promise<IRestartResult> {
+  async restart(path?: string): Promise<void> {
     const workshop = this._workshop;
     const target =
       path === undefined ? workshop?.path : normalizeWorkshopPath(path);
@@ -909,30 +897,16 @@ export class WorkshopManager implements IWorkshopManager {
       this._store.load({}, []);
     }
 
-    // Put the files back: a declared workspace is emptied and refilled
-    // from files/, leaving the pages and everything else alone; without
-    // one the pristine snapshot of the whole directory is restored. Then
-    // drop the state directory, snapshot included: reopening takes a
-    // fresh one of the restored files.
+    // Put the files back: the workspace is emptied and refilled from
+    // files/, leaving the pages and everything else alone. A workshop
+    // that is not open is asked which directory that is.
     const manifest = open
       ? workshop.manifest
       : await this._readManifest(target);
-    let files = true;
+    const workspace = manifest?.workspace ?? DEFAULT_WORKSPACE;
 
-    if (manifest?.workspace) {
-      await deleteTree(
-        this._contents,
-        PathExt.join(target, manifest.workspace)
-      );
-      await this._populateWorkspace(target, manifest.workspace);
-    } else {
-      try {
-        await this._backend.restoreCheckpoint(target, PRISTINE_CHECKPOINT);
-      } catch (error) {
-        console.warn('No pristine snapshot to restore', error);
-        files = false;
-      }
-    }
+    await deleteTree(this._contents, PathExt.join(target, workspace));
+    await this._populateWorkspace(target, workspace);
 
     // The environment goes too: a learner restarts when something is
     // broken, and a venv they can pip into is one of the things that can
@@ -946,8 +920,6 @@ export class WorkshopManager implements IWorkshopManager {
     if (open) {
       await this.open(target, { launch: true });
     }
-
-    return { files };
   }
 
   /**
@@ -1774,31 +1746,12 @@ export class WorkshopManager implements IWorkshopManager {
 
     const relative = saved.slice(prefix.length);
 
-    // The snapshot Restart puts back was taken when the workshop first
-    // opened, so an author's edit to a page or the manifest would be
-    // undone by a Restart; saving one moves the baseline along with it.
     if (
       relative === MANIFEST_FILE ||
-      workshop.manifest.pages.includes(relative) ||
-      relative === workshop.manifest.environment?.requirements
+      workshop.manifest.pages.includes(relative)
     ) {
       void this._reloader.invoke();
-      void this._rebaseliner.invoke();
     }
-  }
-
-  /**
-   * Retake the pristine snapshot of the open workshop while authoring.
-   * A workshop with a workspace has no snapshot to retake.
-   */
-  private async _rebaseline(): Promise<void> {
-    const workshop = this._workshop;
-
-    if (!workshop || !this._authoring || workshop.manifest.workspace) {
-      return;
-    }
-
-    await this._snapshotPristine(workshop.path);
   }
 
   /**
@@ -2102,19 +2055,6 @@ export class WorkshopManager implements IWorkshopManager {
     return chosen;
   }
 
-  /**
-   * Archive the workshop's files as the reserved pristine checkpoint. A
-   * failure is logged rather than raised: the workshop still opens, and
-   * a restart then keeps the files.
-   */
-  private async _snapshotPristine(path: string): Promise<void> {
-    try {
-      await this._backend.checkpoint(path, PRISTINE_CHECKPOINT, {});
-    } catch (error) {
-      console.warn('Unable to snapshot the workshop files', error);
-    }
-  }
-
   private async _restoreSettings(
     changes: { plugin: string; key: string; previous?: unknown }[]
   ): Promise<void> {
@@ -2176,7 +2116,6 @@ export class WorkshopManager implements IWorkshopManager {
   private _store = new VariableStore();
   private _envWriter: Debouncer;
   private _reloader: Debouncer;
-  private _rebaseliner: Debouncer;
   private _kernelspecs: KernelSpec.IManager | null;
   private _authoring = false;
   private _features: IFeaturePolicy | null;
@@ -2247,14 +2186,14 @@ function emptyEnvironment(kernel: string): IEnvironmentStatus {
 function buildBuiltins(
   workshopPath: string,
   platform: IPlatformInfo,
-  workspace?: string
+  workspace: string
 ): Variables {
   return {
     platform: platform.os,
     shell: platform.shell,
     path_sep: platform.path_sep,
     workshop_dir: workshopPath,
-    workspace: workspace ? PathExt.join(workshopPath, workspace) : workshopPath,
+    workspace: PathExt.join(workshopPath, workspace),
     home: platform.home,
     user: platform.user,
     host: platform.host,

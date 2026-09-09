@@ -467,8 +467,10 @@ export class LayoutManager {
 
     switch (kind) {
       case 'terminal':
+        // Layout terminals start where action terminals do: in the
+        // workspace when one is declared.
         return terminals.get(target || 'workshop', {
-          cwd: manager.workshop?.path
+          cwd: manager.workspacePath ?? manager.workshop?.path
         });
       case 'editor':
         return this._context.app.shell.currentWidget ?? null;

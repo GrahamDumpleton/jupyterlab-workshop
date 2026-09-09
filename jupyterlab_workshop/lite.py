@@ -27,6 +27,8 @@ from typing import Any
 
 import yaml
 
+from .publish import DEFAULT_WORKSPACE
+
 MANIFEST_FILE = "workshop.yaml"
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
@@ -124,8 +126,8 @@ def missing_requirements(terminal: bool) -> list[str]:
 
 
 def _declared_workspace(directory: Path) -> list[str]:
-    """The workspace directory the manifest declares, if any, which is
-    generated on first open and so not shipped."""
+    """The workshop's workspace directory, ``work`` unless the manifest
+    says otherwise, which is generated on first open and so not shipped."""
 
     try:
         manifest = yaml.safe_load((directory / "workshop.yaml").read_text("utf-8"))
@@ -134,7 +136,7 @@ def _declared_workspace(directory: Path) -> list[str]:
 
     workspace = manifest.get("workspace") if isinstance(manifest, dict) else None
 
-    return [str(workspace).strip("/")] if workspace else []
+    return [str(workspace or DEFAULT_WORKSPACE).strip("/")]
 
 
 def workshop_name(directory: Path) -> str:

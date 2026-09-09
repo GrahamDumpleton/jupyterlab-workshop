@@ -168,11 +168,13 @@ hello
 \`\`\`
 `);
 
+    // The write to ../notes.txt lands inside the workshop but outside
+    // the workspace, which is refused rather than merely warned about.
     expect(found).toEqual([
       'danger-pipe-to-shell',
       'undeclared-host',
       'path-outside-workspace',
-      'path-outside-workspace',
+      'write-refused',
       'path-outside-workspace'
     ]);
   });
@@ -456,18 +458,6 @@ describe('layout rules', () => {
     ).toEqual([]);
   });
 
-  it('reports the reserved checkpoint name', () => {
-    const reserved = (page: string): string[] =>
-      rules(page).filter(rule => rule === 'reserved-checkpoint-name');
-
-    expect(
-      reserved(
-        '```{checkpoint}\n:name: pristine\n```\n```{restore}\n:name: pristine\n```\n'
-      )
-    ).toHaveLength(2);
-    expect(reserved('```{checkpoint}\n:name: start\n```\n')).toEqual([]);
-  });
-
   it('reports layouts that are neither declared nor built in', () => {
     const findings = lint(
       '```{layout}\n:name: missing\n```\n',
@@ -650,13 +640,11 @@ hello
 \`\`\`
 `;
 
-  it('flags .. without a workspace and allows it within one', () => {
-    expect(rules(page('../notes.txt'))).toContain('path-outside-workspace');
+  it('flags a path that climbs out of the workshop, counting the workspace depth', () => {
+    expect(rules(page('notes.txt'))).toEqual([]);
+    expect(rules(page('../../notes.txt'))).toContain('path-outside-workspace');
     expect(
-      rules(page('../notes.txt'), `${MANIFEST}workspace: work\n`)
-    ).not.toContain('path-outside-workspace');
-    expect(
-      rules(page('../../notes.txt'), `${MANIFEST}workspace: work\n`)
+      rules(page('../../../x'), `${MANIFEST}workspace: learner/src\n`)
     ).toContain('path-outside-workspace');
     expect(
       rules(page('../../x'), `${MANIFEST}workspace: learner/src\n`)
@@ -680,14 +668,13 @@ hello
 `;
 
   it("reports writes to the workshop's own files and outside the workspace", () => {
-    expect(rules(page('pages/01.md'))).toContain('write-refused');
-    expect(rules(page('workshop.yaml'))).toContain('write-refused');
+    expect(rules(page('../pages/01.md'))).toContain('write-refused');
+    expect(rules(page('../workshop.yaml'))).toContain('write-refused');
+    expect(rules(page('../notes.txt'))).toContain('write-refused');
     expect(rules(page('notes.txt'))).not.toContain('write-refused');
+    expect(rules(page('pages/01.md'))).not.toContain('write-refused');
     expect(
-      rules(page('../notes.txt'), `${MANIFEST}workspace: work\n`)
+      rules(page('../work/notes.txt'), `${MANIFEST}workspace: learner\n`)
     ).toContain('write-refused');
-    expect(
-      rules(page('notes.txt'), `${MANIFEST}workspace: work\n`)
-    ).not.toContain('write-refused');
   });
 });

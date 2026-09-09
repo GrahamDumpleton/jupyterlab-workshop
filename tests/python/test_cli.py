@@ -33,6 +33,7 @@ def test_init_writes_a_workshop_and_refuses_to_overwrite(
     )
     assert (target / "pages" / "01-welcome.md").exists()
     assert (target / ".github" / "workflows" / "workshop.yml").exists()
+    assert (target / "files" / ".gitkeep").exists()
     assert "wrote" in capsys.readouterr().out
 
     assert cli.main(["init", str(target)]) == 2

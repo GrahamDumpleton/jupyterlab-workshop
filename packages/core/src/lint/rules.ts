@@ -26,7 +26,6 @@ import {
   LAYOUT_WIDGET_PATH_KINDS,
   parseLayoutWidget
 } from '../format/layouts';
-import { PRISTINE_CHECKPOINT } from '../format/checkpoints';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import { liteShellProblems, usesSubprocess } from '../lite';
@@ -344,7 +343,6 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
 
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
-      lintCheckpointName(node, where, messages);
       lintPaths(node, workspaceOnly, input.manifest, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
       lintVariants(node, input.manifest.platforms, where, messages);
@@ -373,25 +371,6 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
  * workshop that named its own checkpoint the same way would overwrite
  * the files "Restart" puts back.
  */
-function lintCheckpointName(
-  node: IDirectiveNode,
-  where: { path: string; line?: number },
-  messages: ILintMessage[]
-): void {
-  if (node.name !== 'checkpoint' && node.name !== 'restore') {
-    return;
-  }
-
-  if (node.options.name === PRISTINE_CHECKPOINT) {
-    messages.push({
-      level: 'error',
-      rule: 'reserved-checkpoint-name',
-      message: `The checkpoint name "${PRISTINE_CHECKPOINT}" is reserved for the snapshot taken when a workshop is first opened`,
-      ...where
-    });
-  }
-}
-
 /** Action types that need the server and so cannot run in JupyterLite. */
 const LITE_UNSUPPORTED: ReadonlySet<string> = new Set(['environment-create']);
 

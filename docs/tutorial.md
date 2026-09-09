@@ -33,8 +33,9 @@ exists, a question is answered.
 jupyter workshop init git-tutorial --title "Git in three steps"
 ```
 
-The command writes `git-tutorial/workshop.yaml`, two pages, a README and
-a `.gitignore`. The pages are a starting point that we will replace.
+The command writes `git-tutorial/workshop.yaml`, two pages, an empty
+`files/` directory, a README and a `.gitignore`. The pages are a
+starting point that we will replace.
 Open the manifest and make it read:
 
 ```yaml
@@ -147,8 +148,7 @@ The front matter names the page and says it is not done until the
   pages. The `:id:` on the first block is not needed yet; a block
   without one gets an id from the page and its position.
 
-- `file-write` writes its body to a path relative to the workshop
-  directory (or to the workspace, when the manifest declares one),
+- `file-write` writes its body to a path relative to the workspace,
   whatever directory the terminal is in, and with
   `:open: true` shows it in the editor. The path uses the `repo_dir`
   variable.

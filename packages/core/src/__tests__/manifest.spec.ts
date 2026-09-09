@@ -78,7 +78,7 @@ describe('parseManifest', () => {
   });
 
   it('parses and checks the workspace', () => {
-    expect(parseManifest(VALID).workspace).toBeUndefined();
+    expect(parseManifest(VALID).workspace).toBe('work');
     expect(parseManifest(`${VALID}\nworkspace: work/\n`).workspace).toBe(
       'work'
     );

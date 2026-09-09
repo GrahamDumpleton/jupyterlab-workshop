@@ -24,11 +24,11 @@ my-workshop/
   work/                  the learner's workspace, generated; never commit it
 ```
 
-Declare `workspace: work` in the manifest when the learner creates or
-edits files. The workspace is created and filled from `files/` when the
+The workspace is `work/` unless the manifest's `workspace` field names
+another directory. It is created and filled from `files/` when the
 workshop opens; Restart empties and refills it and leaves the pages
-alone, and checkpoints archive it alone. Without the field, Restart and
-checkpoints cover the whole workshop directory, pages included.
+alone; checkpoints archive it alone; and paths in actions, terminals
+and checks start there, so pages name the learner's files plainly.
 
 The tooling is the `jupyter workshop` command (see the reference files
 for the complete vocabulary). The same tools are available as MCP tools
@@ -114,6 +114,7 @@ capabilities: # what the pages need; lint checks this
 requires:
   tools:
     - { name: git, version: '>=2.30', hint: { linux: apt install git } }
+workspace: work # the default; the learner's directory, filled from files/
 gating: soft # off, soft or strict
 env: { PAGER: cat, GIT_PAGER: cat } # exported to terminals; nothing by default
 variables:
@@ -129,9 +130,8 @@ pages:
 ```
 
 Capabilities: `terminal` (run commands), `write-files` (create and change
-files; scope `workspace` keeps writes inside the declared workspace, or
-the workshop directory without one; the pages, manifest and `files/`
-are never writable),
+files; scope `workspace` keeps writes inside the workspace; the pages,
+manifest and `files/` are never writable),
 `kernel-exec` (run code in kernels; also needed by code checks),
 `network`, `install-packages` (needed by `environment`), `auto-run`
 (actions that run without a click: `:auto:` and `:cascade:`),
@@ -141,7 +141,8 @@ missing and unused capabilities.
 Other fields: `layout` and `layouts` (named panel arrangements: `left` and
 `right` take `instructions`, `collapsed`, a sidebar widget id, or a mapping
 of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
-`widgets` such as `terminal:git`, `markdown:README.md`, `file:<path>`,
+`widgets` such as `terminal:git`, `markdown:../README.md` (paths start at
+the workspace, so a shipped README needs the `../`), `file:<path>`,
 `notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
 `terminal-only` and `notebook`), `tracks` (alternative paths chosen with
 `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
@@ -324,10 +325,8 @@ pass, `soft` only shows what is missing.
 - Ids referred to elsewhere (`requires`, `after:`, `cascade`) must exist;
   lint reports `unknown-requirement` and `unknown-action-id`.
 
-- Never name a checkpoint `pristine`: the extension takes a checkpoint
-  under that name when a workshop is first opened and "Restart" restores
-  it (`reserved-checkpoint-name`). Restart only puts back files inside
-  the workshop directory, so keep what a workshop creates inside it.
+- Restart and checkpoints only ever cover the workspace, so keep what a
+  workshop creates inside it.
 
 - A page is done when the learner leaves it forwards with its `requires`
   met; there is no button to mark it. The last page shows Finish, which
@@ -335,10 +334,10 @@ pass, `soft` only shows what is missing.
   where to go next) and what to do now. To checkpoint after a check,
   give the `verify` a `:cascade:` naming a `checkpoint` block.
 
-- Keep `write-files` paths inside the workspace (or the workshop
-  directory without one) unless the scope is wider; lint warns on `..`,
-  `~` and absolute paths, and reports as an error a write aimed at the
-  pages, the manifest, `files/` or outside a declared workspace.
+- Keep `write-files` paths inside the workspace unless the scope is
+  wider; lint warns on `..`, `~` and absolute paths, and reports as an
+  error a write aimed at the pages, the manifest, `files/` or anywhere
+  else outside the workspace.
 
 - Do not pipe downloads into a shell, use `sudo`, or `rm -rf` outside the
   workshop; lint flags these and the trust dialog shows them.

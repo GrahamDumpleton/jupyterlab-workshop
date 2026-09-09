@@ -153,18 +153,14 @@ it, and three commands in the panel header and the command palette
 deal with it:
 
 - **Restart** ("Workshop: Restart…", the restart button in the header,
-  or Restart on the workshop's card in the browser) puts the workshop's
-  files back as they were when it was first opened, deleting anything
-  added since, forgets all progress, closes the documents and terminals
-  it had open, and reopens it at the first page. In a workshop with a
-  declared [workspace](concepts.md#the-workspace) only that directory
-  is emptied and refilled; the pages and manifest are never touched.
-  Otherwise every file in the workshop directory is covered, the pages
-  and manifest included, so an edit to a page made after the workshop
-  was first opened is undone too, unless it was saved in [author
-  mode](authoring.md#author-mode), which moves the baseline along. It
-  works offline and in JupyterLite.
-  It only covers files inside the workshop directory, so a workshop
+  or Restart on the workshop's card in the browser) empties the
+  [workspace](concepts.md#the-workspace) and fills it again from the
+  workshop's shipped files, so everything made in it goes and it looks
+  as it did when the workshop was first opened; the pages and the
+  manifest are never touched. It forgets all progress, closes the
+  documents and terminals it had open, and reopens the workshop at the
+  first page. It works offline and in JupyterLite. It only covers the
+  workspace, so a workshop
   that writes elsewhere, such as into the home directory, is not undone
   there. A workshop with an [isolated environment](environment.md)
   loses that too, kernel registration included, and offers to create it

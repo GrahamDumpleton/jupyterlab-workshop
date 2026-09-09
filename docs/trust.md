@@ -67,8 +67,7 @@ capabilities:
 The `write-files` scopes are `workspace` (the default), `home` and `any`
 (paths may reach anywhere under the JupyterLab root; the contents API
 cannot go higher). Under the `workspace` scope writes must stay inside
-the workshop's declared [workspace](concepts.md#the-workspace), or
-inside the workshop directory when it declares none, and the trust
+the workshop's [workspace](concepts.md#the-workspace), and the trust
 dialog says so. Under every scope the workshop's own files, the
 manifest, the pages, the shipped `files/` and the requirements file,
 are read-only to actions: an action that names one is refused with a

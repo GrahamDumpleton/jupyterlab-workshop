@@ -1,18 +1,18 @@
 /**
- * Where a write-files action may write. With a declared workspace the
- * `workspace` scope means the workspace itself, and the workshop's own
+ * Where a write-files action may write. The `workspace` scope means
+ * the workshop's workspace directory, and the workshop's own
  * files (the manifest, the pages, the shipped files and the
  * requirements file) are never a target under any scope. Shared by the
  * trust policy, which refuses the action, and the linter, which reports
  * it while the workshop is written.
  */
 
-import { WORKSHOP_FILES_DIR } from '../format/manifest';
+import { DEFAULT_WORKSPACE, WORKSHOP_FILES_DIR } from '../format/manifest';
 import { capabilityName, capabilityScope } from './capabilities';
 
 /** The parts of a manifest that say where writes may go. */
 export interface IWriteLayout {
-  /** The declared workspace, relative to the workshop, if any. */
+  /** The workspace, relative to the workshop; `work` when not given. */
   workspace?: string;
 
   /** The environment's requirements file, relative to the workshop. */
@@ -88,10 +88,8 @@ export function writeTargetProblem(
     .filter(item => capabilityName(item) === 'write-files')
     .map(capabilityScope)
     .filter(Boolean);
-  const confined =
-    layout.workspace !== undefined &&
-    !scopes.some(scope => scope === 'home' || scope === 'any');
-  const start = layout.workspace ?? '';
+  const confined = !scopes.some(scope => scope === 'home' || scope === 'any');
+  const start = layout.workspace ?? DEFAULT_WORKSPACE;
 
   for (const option of WRITE_OPTIONS) {
     const value = options[option];
