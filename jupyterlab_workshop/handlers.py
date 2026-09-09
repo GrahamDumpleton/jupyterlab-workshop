@@ -175,12 +175,16 @@ class VerifyHandler(WorkshopHandler):
         script = str(body.get("script") or "")
         timeout = float(body.get("timeout") or 60)
         environment = body.get("environment")
+        cwd = body.get("cwd")
 
         if not script:
             raise tornado.web.HTTPError(400, "A script is required")
 
         if environment is not None and not isinstance(environment, dict):
             raise tornado.web.HTTPError(400, "environment must be an object")
+
+        if cwd is not None and not isinstance(cwd, str):
+            raise tornado.web.HTTPError(400, "cwd must be a string")
 
         try:
             result = await IOLoop.current().run_in_executor(
@@ -194,6 +198,7 @@ class VerifyHandler(WorkshopHandler):
                         str(key): str(value)
                         for key, value in (environment or {}).items()
                     },
+                    cwd=cwd or None,
                 ),
             )
         except CheckError as error:

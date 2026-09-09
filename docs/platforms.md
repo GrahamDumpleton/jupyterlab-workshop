@@ -20,8 +20,9 @@ and how they reach terminals. The built-in variables `platform`
 (`linux`, `macos`, `windows` or `lite`), `shell` (`bash`, `zsh`, `sh`,
 `fish`, `powershell`, `cmd` or `cockle` in JupyterLite), `path_sep`,
 `home` and `user` describe the machine, `workshop_dir` is the workshop
-directory relative to the JupyterLab root, and `when` conditions can
-test them:
+directory relative to the JupyterLab root and `workspace` the learner's
+[workspace](concepts.md#the-workspace) the same way (the workshop
+directory when none is declared), and `when` conditions can test them:
 
 ````markdown
 ```{when} platform == "windows"
@@ -82,8 +83,15 @@ JupyterLite.
 
 ## Paths
 
-Paths in options such as `path` and `cwd` use forward slashes on every
-platform; the extension normalises them. To show a path in prose or a
+Paths in options such as `path` and `cwd` are relative to the learner's
+[workspace](concepts.md#the-workspace) when the manifest declares one,
+and to the workshop directory otherwise; `../` from a workspace reaches
+the workshop's own files, such as a shipped `README.md`. The exception
+is `:from:` on `file-write`, which names a shipped file and so is
+always relative to the workshop directory. Terminals, the hidden
+workshop kernel and script checks start in the same place. Paths use
+forward slashes on every platform; the extension normalises them. To
+show a path in prose or a
 command with the platform's separator use the `path` filter or the
 `path` helper:
 

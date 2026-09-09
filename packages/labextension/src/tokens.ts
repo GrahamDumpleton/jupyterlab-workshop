@@ -692,10 +692,10 @@ export interface IWorkshopManager {
    * Resolve a path relative to the workshop directory to a path relative
    * to the JupyterLab root, refusing paths that escape the workshop.
    */
-  resolvePath(path: string): string;
+  resolvePath(path: string, base?: PathBase): string;
 
   /** Absolute path of the workshop directory on the server, when known. */
-  absolutePath(path?: string): string;
+  absolutePath(path?: string, base?: PathBase): string;
 }
 
 /** A request to download a workshop. */
@@ -731,6 +731,13 @@ export interface IFetchResult {
   name: string;
   sha256: string;
 }
+
+/**
+ * Where a relative path starts: the learner's workspace (the workshop
+ * directory when none is declared), or the workshop directory itself
+ * for shipped files and state.
+ */
+export type PathBase = 'workspace' | 'workshop';
 
 /** What a checkpoint records besides the files. */
 export interface ICheckpointRecord {
@@ -797,6 +804,9 @@ export interface IEnvironmentRequest {
 export interface IScriptRequest {
   workshop: string;
   script: string;
+
+  /** Working directory for the script, relative to the workshop. */
+  cwd?: string;
 
   /** Seconds to allow. */
   timeout: number;

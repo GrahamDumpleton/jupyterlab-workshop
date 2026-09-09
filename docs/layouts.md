@@ -73,7 +73,7 @@ Widgets are named by kind and target:
 | Reference         | Opens                                                          |
 | ----------------- | -------------------------------------------------------------- |
 | `terminal:<name>` | A workshop terminal with that name, created if needed.         |
-| `file:<path>`     | The file, relative to the workshop directory, in the editor.   |
+| `file:<path>`     | The file, relative to the workspace, in the editor.            |
 | `markdown:<path>` | The Markdown file rendered as a preview rather than as source. |
 | `notebook:<path>` | The notebook.                                                  |
 | `launcher`        | A new launcher.                                                |

@@ -344,7 +344,7 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
       lintCheckpointName(node, where, messages);
-      lintPaths(node, workspaceOnly, where, messages);
+      lintPaths(node, workspaceOnly, input.manifest.workspace, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
       lintVariants(node, input.manifest.platforms, where, messages);
     }
@@ -579,6 +579,7 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
 function lintPaths(
   node: IDirectiveNode,
   workspaceOnly: boolean,
+  workspace: string | undefined,
   where: { path: string; line: number },
   messages: ILintMessage[]
 ): void {
@@ -588,7 +589,9 @@ function lintPaths(
     return;
   }
 
-  // Paths in a workspace-scoped workshop stay inside the workshop.
+  // Paths in a workspace-scoped workshop stay inside the workshop. From
+  // a declared workspace, `..` may climb as far as the workshop
+  // directory, which holds the shipped files; `from` starts there.
   for (const option of PATH_OPTIONS) {
     const value = node.options[option];
 
@@ -596,12 +599,11 @@ function lintPaths(
       continue;
     }
 
+    const start = option === 'from' ? undefined : workspace;
     const escapes =
       value.startsWith('/') ||
       value.startsWith('~') ||
-      value === '..' ||
-      value.startsWith('../') ||
-      value.includes('/../') ||
+      climbsOut(value, start) ||
       mentionsAbsolutePath(value);
 
     if (escapes) {
@@ -613,6 +615,29 @@ function lintPaths(
       });
     }
   }
+}
+
+/**
+ * Whether a relative path leaves the workshop directory: from the
+ * workshop itself any `..` does, from a workspace inside it `..` may
+ * climb as many levels as the workspace is deep.
+ */
+function climbsOut(value: string, workspace: string | undefined): boolean {
+  let depth = workspace ? workspace.split('/').filter(Boolean).length : 0;
+
+  for (const part of value.split('/')) {
+    if (part === '..') {
+      depth -= 1;
+
+      if (depth < 0) {
+        return true;
+      }
+    } else if (part !== '' && part !== '.') {
+      depth += 1;
+    }
+  }
+
+  return false;
 }
 
 function lintHosts(

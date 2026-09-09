@@ -75,6 +75,7 @@ import {
   IWorkshopBackend,
   IWorkshopEvent,
   IWorkshopManager,
+  PathBase,
   IWorkshopSource,
   errorMessage
 } from './tokens';
@@ -301,7 +302,9 @@ export class WorkshopManager implements IWorkshopManager {
       // built-ins and manifest defaults, as the learner will first see it.
       const pathSep = platform.path_sep;
       const declared = this._collectDeclared(manifest, sources);
-      const defaults: Variables = { ...buildBuiltins(workshopPath, platform) };
+      const defaults: Variables = {
+        ...buildBuiltins(workshopPath, platform, manifest.workspace)
+      };
 
       for (const definition of manifest.variables) {
         if (definition.default !== undefined) {
@@ -1302,13 +1305,17 @@ export class WorkshopManager implements IWorkshopManager {
     return conditionHolds(condition, this._store.values);
   }
 
-  resolvePath(path: string): string {
+  resolvePath(path: string, base: PathBase = 'workspace'): string {
     if (!this._workshop) {
       throw new Error('No workshop is open');
     }
 
+    // Learner paths start at the declared workspace, when there is one;
+    // `../` from there reaches the workshop's own files. Source paths,
+    // such as `:from:` and the state directory, start at the workshop.
     const root = this._workshop.path;
-    const resolved = PathExt.normalize(PathExt.join(root, path));
+    const start = base === 'workspace' ? (this.workspacePath ?? root) : root;
+    const resolved = PathExt.normalize(PathExt.join(start, path));
     const inside =
       root === ''
         ? !resolved.startsWith('..')
@@ -1330,15 +1337,17 @@ export class WorkshopManager implements IWorkshopManager {
     return resolved;
   }
 
-  absolutePath(path = ''): string {
+  absolutePath(path = '', base: PathBase = 'workspace'): string {
     if (!this._workshop) {
       throw new Error('No workshop is open');
     }
 
     const root = this._platform?.root_dir ?? '';
-    const relative = path
-      ? PathExt.join(this._workshop.path, path)
-      : this._workshop.path;
+    const start =
+      base === 'workspace'
+        ? (this.workspacePath ?? this._workshop.path)
+        : this._workshop.path;
+    const relative = path ? PathExt.join(start, path) : start;
     const separator = this._platform?.path_sep ?? '/';
 
     return [root, ...relative.split('/')]
@@ -2010,7 +2019,7 @@ export class WorkshopManager implements IWorkshopManager {
         const content = request.options.from
           ? await readTextFile(
               this._contents,
-              this.resolvePath(request.options.from)
+              this.resolvePath(request.options.from, 'workshop')
             )
           : request.body;
         const next =
@@ -2233,13 +2242,15 @@ function emptyEnvironment(kernel: string): IEnvironmentStatus {
 
 function buildBuiltins(
   workshopPath: string,
-  platform: IPlatformInfo
+  platform: IPlatformInfo,
+  workspace?: string
 ): Variables {
   return {
     platform: platform.os,
     shell: platform.shell,
     path_sep: platform.path_sep,
     workshop_dir: workshopPath,
+    workspace: workspace ? PathExt.join(workshopPath, workspace) : workshopPath,
     home: platform.home,
     user: platform.user,
     host: platform.host,

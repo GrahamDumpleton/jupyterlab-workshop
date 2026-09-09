@@ -196,7 +196,7 @@ Inline roles: `{copy}`git status``, `{open}`README.md``, `{var}`repo_dir``.
 Variables: `{{ name }}` with filters `lower`, `upper`, `slug`, `default`,
 `shell`, `path`; `{{ path "src/app.py" }}` renders the platform's
 separator; `\{{` escapes. Built-ins: `platform`, `shell`, `path_sep`,
-`home`, `user`, `workshop_dir`, `host` (`binder`, `jupyterhub`, `local`
+`home`, `user`, `workshop_dir`, `workspace`, `host` (`binder`, `jupyterhub`, `local`
 or `lite`) and `container` (`true` inside a container). Values come from
 the manifest defaults, launch links, forms, captures and the variables
 panel.
@@ -365,7 +365,7 @@ pass, `soft` only shows what is missing.
 `SKIP ...`. The message of a failed `verify` is the assertion text or
 predicate that failed; a failed `execute` usually timed out waiting for
 the prompt (a command waiting for input) or ran in the wrong directory
-(`:cwd:` is relative to the workshop). `--json report.json` writes the
+(`:cwd:` is relative to the workspace). `--json report.json` writes the
 full results. Fix, lint, test again.
 
 ## Style

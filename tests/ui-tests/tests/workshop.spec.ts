@@ -344,6 +344,7 @@ test.describe('workshop panel', () => {
         'name: roomy',
         'title: Roomy',
         'workspace: work',
+        'capabilities: [write-files: [workspace], kernel-exec]',
         'pages: [pages/01.md]',
         ''
       ].join('\n'),
@@ -351,7 +352,43 @@ test.describe('workshop panel', () => {
     );
     await upload('hello\n', 'files/hello.txt');
     await upload('data\n', 'files/data/rows.csv');
-    await upload('---\ntitle: First\n---\n\nWork in work/.\n', 'pages/01.md');
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        'Work in work/.',
+        '',
+        '```{file-write}',
+        ':id: write-notes',
+        ':path: notes.txt',
+        'notes',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: copy-hello',
+        ':path: copy.txt',
+        ':from: files/hello.txt',
+        '```',
+        '',
+        '```{execute-capture}',
+        ':id: where',
+        ':capture: here',
+        'python -c "import os; print(os.getcwd())"',
+        '```',
+        '',
+        '```{verify}',
+        ':id: notes-exist',
+        ':label: The notes are in the workspace',
+        ':substrate: contents',
+        'exists notes.txt',
+        'exists ../pages/01.md',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
     await openWorkshop(page, roomy);
 
     // Opening filled the workspace from files/.
@@ -363,6 +400,29 @@ test.describe('workshop panel', () => {
     expect(await page.contents.fileExists(`${roomy}/files/hello.txt`)).toBe(
       true
     );
+
+    // Action paths start at the workspace; from names a shipped file;
+    // commands and contents checks start there too.
+    const runAction = async (id: string): Promise<void> => {
+      const action = panel.locator(`[data-action-id="${id}"]`);
+
+      await action.click();
+      await expect(action).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    };
+
+    await runAction('write-notes');
+    await runAction('copy-hello');
+    await runAction('where');
+    expect(await read('work/notes.txt')).toBe('notes\n');
+    expect(await read('work/copy.txt')).toBe('hello\n');
+    await expect(
+      panel.locator('[data-action-id="where"] .jp-WorkshopPanel-actionOutput')
+    ).toContainText('/roomy/work');
+
+    const check = panel.locator('[data-action-id="notes-exist"]');
+
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 30000 });
 
     // The learner works, and the author edits a page meanwhile.
     await upload('changed\n', 'work/hello.txt');

@@ -66,15 +66,23 @@ def run_script(
     script: str,
     timeout: float = 60.0,
     environment: dict[str, str] | None = None,
+    cwd: str | None = None,
 ) -> ScriptResult:
     """Run a script shipped with the workshop and capture its output.
 
     The script must live inside the workshop directory. Python files run
     with the server's interpreter; anything else runs directly and so
-    needs to be executable, or on Windows have a registered handler.
+    needs to be executable, or on Windows have a registered handler. The
+    script runs in ``cwd``, the workshop's declared workspace relative to
+    the workshop directory, when given and present, else in the workshop
+    directory.
     """
 
     workshop = _workshop_dir(root_dir, workshop_path)
+    working = workshop / _check_subdir(cwd) if cwd else workshop
+
+    if not working.is_dir():
+        working = workshop
 
     try:
         target = _resolve_inside(workshop, script)
@@ -104,7 +112,7 @@ def run_script(
     try:
         completed = subprocess.run(
             command,
-            cwd=workshop,
+            cwd=working,
             env=env,
             capture_output=True,
             text=True,

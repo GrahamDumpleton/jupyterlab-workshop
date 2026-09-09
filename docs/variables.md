@@ -67,9 +67,9 @@ Several sources can set the same variable. The one furthest down this
 list wins:
 
 1. **Built-ins** describe the machine and the session: `platform`,
-   `shell`, `path_sep`, `workshop_dir`, `home`, `user`, `host` and
-   `container`. They cannot be changed. [Platforms](platforms.md) says
-   what each holds.
+   `shell`, `path_sep`, `workshop_dir`, `workspace`, `home`, `user`,
+   `host` and `container`. They cannot be changed.
+   [Platforms](platforms.md) says what each holds.
 
 2. **Manifest defaults**, from the `default` of a declaration.
 

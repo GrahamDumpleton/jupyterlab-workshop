@@ -36,6 +36,7 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     shell: 'bash',
     path_sep: '/',
     workshop_dir: '.',
+    workspace: '.',
     home: '/home/learner',
     user: 'learner',
     lite: 'false',
@@ -46,6 +47,7 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     shell: 'zsh',
     path_sep: '/',
     workshop_dir: '.',
+    workspace: '.',
     home: '/Users/learner',
     user: 'learner',
     lite: 'false',
@@ -56,6 +58,7 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     shell: 'powershell',
     path_sep: '\\',
     workshop_dir: '.',
+    workspace: '.',
     home: 'C:\\Users\\learner',
     user: 'learner',
     lite: 'false',
@@ -66,6 +69,7 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     shell: '',
     path_sep: '/',
     workshop_dir: '.',
+    workspace: '.',
     home: '/home/learner',
     user: 'learner',
     lite: 'true',
@@ -114,7 +118,10 @@ export function loadWorkshopFiles(
   // Names set anywhere in the workshop render as placeholders, not
   // warnings, the same way the extension treats them.
   const builtins = BUILTINS[platform];
-  const variables: Variables = { ...builtins };
+  const variables: Variables = {
+    ...builtins,
+    workspace: manifest.workspace ?? builtins.workspace
+  };
   const declared = new Set<string>(
     manifest.variables.map(definition => definition.name)
   );

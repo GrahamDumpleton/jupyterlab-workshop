@@ -634,3 +634,32 @@ title: One
     expect(found).not.toContain('unknown-option');
   });
 });
+
+describe('paths from a workspace', () => {
+  const page = (path: string): string => `---
+title: One
+---
+
+\`\`\`{execute}
+git status
+\`\`\`
+
+\`\`\`{file-write}
+:path: ${path}
+hello
+\`\`\`
+`;
+
+  it('flags .. without a workspace and allows it within one', () => {
+    expect(rules(page('../notes.txt'))).toContain('path-outside-workspace');
+    expect(
+      rules(page('../notes.txt'), `${MANIFEST}workspace: work\n`)
+    ).not.toContain('path-outside-workspace');
+    expect(
+      rules(page('../../notes.txt'), `${MANIFEST}workspace: work\n`)
+    ).toContain('path-outside-workspace');
+    expect(
+      rules(page('../../x'), `${MANIFEST}workspace: learner/src\n`)
+    ).not.toContain('path-outside-workspace');
+  });
+});

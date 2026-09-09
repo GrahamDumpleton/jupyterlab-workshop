@@ -76,7 +76,7 @@ export class FileWriteAction implements IActionImplementation {
     if (request.options.from) {
       content = await readTextFile(
         contents,
-        this._context.manager.resolvePath(request.options.from)
+        this._context.manager.resolvePath(request.options.from, 'workshop')
       );
 
       // A shipped file is copied as it is, since it may legitimately

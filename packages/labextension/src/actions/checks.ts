@@ -120,6 +120,7 @@ export class VerifyAction implements IActionImplementation {
     const result = await manager.backend.runScript({
       workshop: manager.workshop?.path ?? '',
       script,
+      cwd: manager.workshop?.manifest.workspace,
       timeout: parseDuration(request.options.timeout, 60000) / 1000,
       environment: {
         ...environmentVariables(manager.variables.values),

@@ -51,6 +51,21 @@ class TestRunScript:
         assert result.code == 3
         assert result.stdout.split() == ["ws", "pip"]
 
+    def test_runs_in_the_workspace_when_asked(self, tmp_path: Path) -> None:
+        workshop = make_workshop(tmp_path)
+
+        (workshop / "check.py").write_text("import os\nprint(os.getcwd())\n")
+        (workshop / "work").mkdir()
+
+        result = run_script(tmp_path, "ws", "check.py", cwd="work")
+
+        assert Path(result.stdout.strip()) == (workshop / "work").resolve()
+
+        # A workspace that does not exist yet falls back to the workshop.
+        result = run_script(tmp_path, "ws", "check.py", cwd="later")
+
+        assert Path(result.stdout.strip()) == workshop.resolve()
+
     def test_puts_a_named_environment_first_on_path(self, tmp_path: Path) -> None:
         workshop = make_workshop(tmp_path)
 

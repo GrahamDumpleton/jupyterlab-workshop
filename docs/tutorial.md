@@ -148,7 +148,8 @@ The front matter names the page and says it is not done until the
   without one gets an id from the page and its position.
 
 - `file-write` writes its body to a path relative to the workshop
-  directory, whatever directory the terminal is in, and with
+  directory (or to the workspace, when the manifest declares one),
+  whatever directory the terminal is in, and with
   `:open: true` shows it in the editor. The path uses the `repo_dir`
   variable.
 

@@ -12,6 +12,7 @@ export const BUILTIN_VARIABLES: readonly string[] = [
   'shell',
   'path_sep',
   'workshop_dir',
+  'workspace',
   'home',
   'user',
   'host',
