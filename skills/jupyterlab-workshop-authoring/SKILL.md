@@ -143,9 +143,11 @@ Other fields: `layout` and `layouts` (named panel arrangements: `left` and
 of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
 `widgets` such as `terminal:git`, `markdown:../README.md` (paths start at
 the workspace, so a shipped README needs the `../`), `file:<path>`,
-`notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
-`terminal-only` and `notebook`), `tracks` (alternative paths chosen with
-`choice` or a form field), `defaults` (`actions: { delay: 1s }`),
+`notebook:<path>` or `launcher`, and `size`, the fraction of the main
+area the region takes, so `bottom` at `0.33` leaves two thirds for the
+editors above it, while on `left` and `right` it is that sidebar's share
+of the window; built-ins are `default`, `terminal-only` and `notebook`),
+`tracks` (alternative paths chosen with `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
 `environment` (`requirements`, `kernel`, `terminals`), `analytics`
 (`sink`). A workshop with an `environment` puts an `environment-create`
 action on its first page, before any notebook: the self-test runs only
@@ -186,6 +188,17 @@ git commit -m "Add README"
 ```
 ````
 
+A directive whose body holds a fenced code block, such as a `hint` that
+quotes output or a `when` with a command in it, must itself be fenced
+with more backticks than the block inside: four for the directive,
+three for the code. Lint cannot see this mistake: the inner fence
+closes the directive, its body is cut short and the prose after it
+renders as code. A blank line straight after the options is a separator
+and is dropped, the line break before the closing fence ends the last
+line, and every other blank line, leading or trailing, is kept; so a
+`file-write` append that must leave two blank lines above a Python
+definition starts its body with three.
+
 Every directive gets an id from `:id:` or, failing that, from the page id
 and its position (`first-commit-2`). Give an explicit `:id:` to anything
 another block refers to (a `requires` entry, a `trigger`, a `cascade`).
@@ -215,20 +228,20 @@ before the first marker is the default. Windows terminals are PowerShell
 
 ## Actions you will use most
 
-| Directive                                                          | Purpose                                                                                                                                                        |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execute`                                                          | Run a command in a terminal (`:session:`, `:cwd:`, `:wait: prompt` to wait for it to finish).                                                                  |
-| `execute-capture`                                                  | Run a command in the background and store its output in a variable (`:capture:`).                                                                              |
-| `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`), or copy a shipped file with `:from:` (`:substitute: true` to fill in variables).       |
-| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:` with `:line:` or `:match:`, plus `:regex:`, `:occurrence:`, `:expand:`); `file-close` closes a file's tabs.        |
-| `file-delete`, `file-rename`, `file-copy`, `directory-create`      | Manage files without a terminal, the same on every platform (`:path:`, `:to:` for the new path, `:recursive: true` to delete a directory, `:missing: ignore`). |
-| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`.                                                          |
-| `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).                                                                  |
-| `hint`                                                             | Collapsible Markdown help.                                                                                                                                     |
-| `verify`                                                           | A check; see below.                                                                                                                                            |
-| `quiz`, `form`, `choice`                                           | Questions, value entry and track selection.                                                                                                                    |
-| `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                       |
-| `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                            |
+| Directive                                                          | Purpose                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute`                                                          | Run a command in a terminal (`:session:`, `:cwd:`, `:wait: prompt` to wait for it to finish).                                                                                                                                                                                                                                   |
+| `execute-capture`                                                  | Run a command in the background and store its output in a variable (`:capture:`).                                                                                                                                                                                                                                               |
+| `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`), or copy a shipped file with `:from:` (`:substitute: true` to fill in variables).                                                                                                                                                                        |
+| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:` with `:line:` or `:match:`, plus `:regex:` and `:occurrence:`; `editor-replace` alone takes `:expand: true`, to expand regex group references in its body; a highlight with context is a `:line:` range); edits are saved unless `:save: false`; `file-close` closes a file's tabs. |
+| `file-delete`, `file-rename`, `file-copy`, `directory-create`      | Manage files without a terminal, the same on every platform (`:path:`, `:to:` for the new path, `:recursive: true` to delete a directory, `:missing: ignore`).                                                                                                                                                                  |
+| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`.                                                                                                                                                                                                                           |
+| `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).                                                                                                                                                                                                                                   |
+| `hint`                                                             | Collapsible Markdown help.                                                                                                                                                                                                                                                                                                      |
+| `verify`                                                           | A check; see below.                                                                                                                                                                                                                                                                                                             |
+| `quiz`, `form`, `choice`                                           | Questions, value entry and track selection.                                                                                                                                                                                                                                                                                     |
+| `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                                                                                                                                                                                        |
+| `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                                                                                                                                                                                             |
 
 The full table with every option is in `references/actions.md`, and
 `references/pages.md` covers the page syntax, the common options and how
@@ -249,11 +262,20 @@ assert out.strip(), "No commits yet: run git commit"
 
 `:substrate:` chooses where the check runs:
 
-- `kernel` (default): Python in a hidden kernel, cwd is the workshop
-  directory, variables in the environment. Raise or assert to fail; the
-  assertion message is shown. Needs `kernel-exec`.
+- `kernel` (default): Python in a hidden kernel, cwd is the workspace,
+  variables in the environment. Raise or assert to fail; the assertion
+  message is shown. Needs `kernel-exec`.
 
 - `script`: a file in the workshop named by `:script:`, run by the server.
+
+- `shell`: one command, run without a terminal by the hidden kernel as
+  `subprocess.run(..., shell=True)` in the workspace, so under `/bin/sh`
+  (no `pipefail`); exit code 0 passes and the whole trimmed output is the
+  message, so shape it (see the style guide). It runs in the server's
+  environment, not a shell the learner activated, so name the learner's
+  tools by path (`.venv/bin/python -m pytest`), unless the manifest
+  declares an `environment`, which is first on `PATH` here too. Needs
+  `kernel-exec`.
 
 - `contents`: predicates, one per line, no capability needed:
   `exists <path>`, `missing <path>`, `contains <path> <text>`,
@@ -284,6 +306,10 @@ options:
 explanation: git add stages, git commit records.
 ```
 ````
+
+The quiz body is YAML: quote any `question`, `text` or `explanation`
+that contains `: `, `{`, `}` or, inside the one-line `{ ... }` option
+form, a comma; lint reports the parse error, not the cause.
 
 Form (fields become variables; `set_track: true` also picks the track):
 
@@ -368,8 +394,12 @@ pass, `soft` only shows what is missing.
 `SKIP ...`. The message of a failed `verify` is the assertion text or
 predicate that failed; a failed `execute` usually timed out waiting for
 the prompt (a command waiting for input) or ran in the wrong directory
-(`:cwd:` is relative to the workspace). `--json report.json` writes the
-full results. Fix, lint, test again.
+(`:cwd:` is relative to the workspace). `Blocked by a dialog nobody can
+answer: "<title>"` means a JupyterLab dialog opened under the action and
+the run stopped there; the title says which, and a kernel picker means a
+notebook or console opened on a kernel the server does not have. The
+server log is printed only after a failure; `--json report.json` writes
+the full results with every action's message. Fix, lint, test again.
 
 ## Style
 
@@ -439,4 +469,8 @@ Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
 `list_collection` and `list_catalog`
 work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`
 and `run_workshop` act on a running JupyterLab that has the workshop
-open in author mode.
+open in author mode. That JupyterLab is the one named by `--url` and
+`--token` on `jupyter workshop mcp`, else by `JUPYTER_SERVER_URL` and
+`JUPYTER_TOKEN`, else the first server `jupyter server list` reports,
+which with several running may be another checkout's: pin it when
+`session_status` answers for the wrong one.

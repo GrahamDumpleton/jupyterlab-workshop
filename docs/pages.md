@@ -63,6 +63,23 @@ A body may hold alternatives for particular platforms, marked by a line
 holding only `:windows:`, `:linux:`, `:macos:` or `:lite:`; see
 [command variants](platforms.md#command-variants).
 
+A directive whose body holds a fenced code block, such as a `hint` that
+quotes some output or a `when` with a command in it, must itself be
+fenced with more backticks than the block inside: four for the
+directive, three for the code, as the examples on this page are. Lint
+cannot see the mistake, since the result is valid Markdown: the inner
+fence closes the directive, its body stops there, and the prose after
+it renders as a code block.
+
+Blank lines in a body follow two rules. A single blank line straight
+after the options is taken as the separator between options and body
+and dropped. The line break before the closing fence ends the last
+line rather than adding a blank one, and actions that write the body to
+a file end it with a single newline. Every other blank line is kept,
+leading or trailing, so a `file-write` with `mode: append` that must
+leave two blank lines above a Python definition starts its body with
+three.
+
 ## Common options
 
 - `id` names the directive so other blocks can refer to it.
@@ -183,6 +200,12 @@ stops short of a newline is replaced cleanly; the bodies of
 lines. After a replace the new text is left selected, so a select, an
 explanation and a replace with the same pattern show the learner what
 is about to change and then what did.
+
+`editor-insert` and `editor-replace` save the file after the edit
+unless `save: false`, which leaves it modified in the editor. A
+`file-write` to a file that is open in the editor goes through the
+editor and saves, so it sees an unsaved edit rather than the stale file
+on disk, and the two can be mixed freely on one file.
 
 Highlight a function and its body, then replace the body and keep the
 signature:

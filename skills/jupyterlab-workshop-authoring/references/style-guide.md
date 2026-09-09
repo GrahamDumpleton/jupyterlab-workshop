@@ -34,6 +34,12 @@ time, so pages are short, concrete and ordered.
 - Put background, alternatives and troubleshooting in a `hint`, not in
   the main flow.
 
+- The instructions are a side panel; the editor, notebook and terminals
+  are beside it, not above or below it. Point at them by name (`orders.py`,
+  open in the editor; the workshop terminal) and keep "above" and "below"
+  for things inside the panel, such as the step above or the Finish
+  button below.
+
 - No emdashes; use commas, colons or separate sentences.
 
 ## Actions
@@ -75,6 +81,29 @@ git init command above first"`.
 
 - Use the `contents` substrate when a file check is enough; it needs no
   capability and no kernel.
+
+- A `shell` check's message is its whole output, so shape it: colour off,
+  one line on success and the full output on failure. `pytest -q` prints
+  the dots and the summary, `-qq` drops the summary, which is the wrong
+  way round. This POSIX `sh` pattern does it, with the learner's tools
+  named by path since no terminal is involved:
+
+  ```
+  out=$(.venv/bin/python -m pytest -q --color=no test_orders.py 2>&1) && { printf '%s\n' "$out" | tail -n 1; exit 0; }; printf '%s\n' "$out"; exit 1
+  ```
+
+## Notebook pages
+
+- One thing per cell whose result the learner should see: a cell shows
+  only its last expression, so a cell that changes some state and then
+  makes a call shows the call's result and never the change.
+
+- A value that is a multi-line string is shown with `print()`; as a bare
+  expression it appears as a repr with `\n` in it.
+
+- Add cells with `cell-insert` and `:run: true` where the learner should
+  see the output appear, and keep one page per idea so the notebook and
+  the panel stay in step.
 
 ## Quizzes and forms
 

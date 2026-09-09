@@ -40,7 +40,12 @@ which names a shipped file and is relative to the workshop directory; see
 | `download`            | none        | none     | `path`                                                              | Download a file to the learner’s machine.                                                |
 | `upload-prompt`       | none        | none     | `path`                                                              | Ask the learner to upload files.                                                         |
 
-`file-write` with `open` shows the file in the editor with the cursor
+`file-write` writes its body line for line with one newline at the
+end; a blank line straight after the options is dropped as the
+separator, and other blank lines are kept, so an appended Python
+definition that must sit two blank lines below the last one starts its
+body with three (see [directives](pages.md#directives)). With `open` it
+shows the file in the editor with the cursor
 at the start of what it wrote: the top of the file, or with `mode:
 append` the first appended line, so a long file opens where the change
 is. An editor already showing the file is moved there whether or not
