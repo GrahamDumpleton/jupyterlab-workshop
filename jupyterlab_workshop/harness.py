@@ -500,13 +500,32 @@ def _prepare_root(options: SelfTestOptions, work: Path) -> tuple[Path, str]:
     root = work / "root"
     target = root / source.name
 
+    # A declared workspace is generated when the workshop opens, so a
+    # copy of a working checkout leaves it behind and the test starts
+    # from the state a learner starts from.
     shutil.copytree(
         source,
         target,
-        ignore=shutil.ignore_patterns("_workshop", ".git", "node_modules"),
+        ignore=shutil.ignore_patterns(
+            "_workshop", ".git", "node_modules", *declared_workspace(source)
+        ),
     )
 
     return root, source.name
+
+
+def declared_workspace(directory: Path) -> list[str]:
+    """The workspace directory a workshop's manifest declares, as a list
+    of zero or one names for an ignore pattern."""
+
+    try:
+        manifest = yaml.safe_load((directory / "workshop.yaml").read_text("utf-8"))
+    except (OSError, yaml.YAMLError):
+        return []
+
+    workspace = manifest.get("workspace") if isinstance(manifest, dict) else None
+
+    return [str(workspace).strip("/")] if workspace else []
 
 
 def _write_overrides(work: Path, trust: str) -> Path:

@@ -133,6 +133,47 @@ class TestCheckpoints:
         assert (workshop / "_workshop" / "state.json").read_text() == '{"kept": true}'
         assert (workshop / "workshop.yaml").read_text() == MANIFEST
 
+    def test_checkpoints_a_workspace_alone(self, tmp_path: Path) -> None:
+        workshop = make_workshop(tmp_path)
+
+        (workshop / "work").mkdir()
+        (workshop / "work" / "shop.py").write_text("bug\n")
+        (workshop / "notes.txt").write_text("outside\n")
+
+        record = create_checkpoint(tmp_path, "ws", "buggy", subdir="work")
+
+        assert record["subdir"] == "work"
+
+        # The learner fixes the bug, adds a file, and edits a page; only
+        # the workspace goes back.
+        (workshop / "work" / "shop.py").write_text("fixed\n")
+        (workshop / "work" / "test_shop.py").write_text("t\n")
+        (workshop / "notes.txt").write_text("edited\n")
+        (workshop / "pages" / "01.md").write_text("# Edited\n")
+
+        restore_checkpoint(tmp_path, "ws", "buggy")
+
+        assert (workshop / "work" / "shop.py").read_text() == "bug\n"
+        assert not (workshop / "work" / "test_shop.py").exists()
+        assert (workshop / "notes.txt").read_text() == "edited\n"
+        assert (workshop / "pages" / "01.md").read_text() == "# Edited\n"
+
+        # A workspace that does not exist yet archives as empty and
+        # restores to an empty directory.
+        create_checkpoint(tmp_path, "ws", "empty", subdir="later")
+        (workshop / "later").mkdir()
+        (workshop / "later" / "x").write_text("x")
+        restore_checkpoint(tmp_path, "ws", "empty")
+
+        assert (workshop / "later").is_dir()
+        assert list((workshop / "later").iterdir()) == []
+
+        with pytest.raises(CheckError, match="relative path"):
+            create_checkpoint(tmp_path, "ws", "bad", subdir="../out")
+
+        with pytest.raises(CheckError, match="state directory"):
+            create_checkpoint(tmp_path, "ws", "bad", subdir="_workshop")
+
     def test_rejects_bad_names_and_missing_checkpoints(self, tmp_path: Path) -> None:
         make_workshop(tmp_path)
 

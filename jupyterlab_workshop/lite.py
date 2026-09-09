@@ -123,6 +123,20 @@ def missing_requirements(terminal: bool) -> list[str]:
     return problems
 
 
+def _declared_workspace(directory: Path) -> list[str]:
+    """The workspace directory the manifest declares, if any, which is
+    generated on first open and so not shipped."""
+
+    try:
+        manifest = yaml.safe_load((directory / "workshop.yaml").read_text("utf-8"))
+    except (OSError, yaml.YAMLError):
+        return []
+
+    workspace = manifest.get("workspace") if isinstance(manifest, dict) else None
+
+    return [str(workspace).strip("/")] if workspace else []
+
+
 def workshop_name(directory: Path) -> str:
     """The name of a workshop from its manifest, or its directory name."""
 
@@ -160,7 +174,7 @@ def stage_contents(workshops: Sequence[Path], staging: Path) -> list[str]:
         shutil.copytree(
             directory,
             staging / name,
-            ignore=shutil.ignore_patterns(*IGNORED),
+            ignore=shutil.ignore_patterns(*IGNORED, *_declared_workspace(directory)),
             dirs_exist_ok=False,
         )
         names.append(name)

@@ -24,6 +24,7 @@ import {
   parseManifest,
   parsePage,
   IVenvExports,
+  WORKSHOP_FILES_DIR,
   renderEnvCmd,
   renderEnvPs1,
   renderEnvSh
@@ -37,8 +38,11 @@ import { Debouncer } from '@lumino/polling';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import {
+  copyTree,
   deleteChildrenExcept,
   deleteTree,
+  ensureDirectory,
+  getIfExists,
   readIfExists,
   readTextFile,
   writeTextFile
@@ -164,6 +168,14 @@ export class WorkshopManager implements IWorkshopManager {
 
   get workshop(): ILoadedWorkshop | null {
     return this._workshop;
+  }
+
+  get workspacePath(): string | null {
+    const workshop = this._workshop;
+
+    return workshop?.manifest.workspace
+      ? PathExt.join(workshop.path, workshop.manifest.workspace)
+      : null;
   }
 
   get variables(): VariableStore {
@@ -333,13 +345,18 @@ export class WorkshopManager implements IWorkshopManager {
 
       // The first time a workshop opens, before any action can touch its
       // files, they are snapshotted so that "Restart" can put them back.
+      // A workshop with a declared workspace gets the workspace created
+      // and filled from files/ instead, and never a snapshot: Restart
+      // refills the workspace and leaves the rest alone.
       const fresh =
         (await readIfExists(
           this._contents,
           PathExt.join(workshopPath, WORKSHOP_STATE_DIR, STATE_FILE)
         )) === null;
 
-      if (fresh) {
+      if (manifest.workspace) {
+        await this._populateWorkspace(workshopPath, manifest.workspace);
+      } else if (fresh) {
         await this._snapshotPristine(workshopPath);
       }
 
@@ -889,15 +906,29 @@ export class WorkshopManager implements IWorkshopManager {
       this._store.load({}, []);
     }
 
-    // Put the files back, then drop the state directory, snapshot
-    // included: reopening takes a fresh one of the restored files.
+    // Put the files back: a declared workspace is emptied and refilled
+    // from files/, leaving the pages and everything else alone; without
+    // one the pristine snapshot of the whole directory is restored. Then
+    // drop the state directory, snapshot included: reopening takes a
+    // fresh one of the restored files.
+    const manifest = open
+      ? workshop.manifest
+      : await this._readManifest(target);
     let files = true;
 
-    try {
-      await this._backend.restoreCheckpoint(target, PRISTINE_CHECKPOINT);
-    } catch (error) {
-      console.warn('No pristine snapshot to restore', error);
-      files = false;
+    if (manifest?.workspace) {
+      await deleteTree(
+        this._contents,
+        PathExt.join(target, manifest.workspace)
+      );
+      await this._populateWorkspace(target, manifest.workspace);
+    } else {
+      try {
+        await this._backend.restoreCheckpoint(target, PRISTINE_CHECKPOINT);
+      } catch (error) {
+        console.warn('No pristine snapshot to restore', error);
+        files = false;
+      }
     }
 
     // The environment goes too: a learner restarts when something is
@@ -1033,7 +1064,8 @@ export class WorkshopManager implements IWorkshopManager {
     await this._backend.checkpoint(
       workshop.path,
       name,
-      this._store.persistable()
+      this._store.persistable(),
+      workshop.manifest.workspace
     );
 
     if (!state.checkpoints.includes(name)) {
@@ -1748,15 +1780,63 @@ export class WorkshopManager implements IWorkshopManager {
 
   /**
    * Retake the pristine snapshot of the open workshop while authoring.
+   * A workshop with a workspace has no snapshot to retake.
    */
   private async _rebaseline(): Promise<void> {
     const workshop = this._workshop;
 
-    if (!workshop || !this._authoring) {
+    if (!workshop || !this._authoring || workshop.manifest.workspace) {
       return;
     }
 
     await this._snapshotPristine(workshop.path);
+  }
+
+  /**
+   * Create the declared workspace and fill it with a copy of files/ when
+   * it does not exist yet. An existing workspace is left as it is, since
+   * it holds the learner's work.
+   */
+  private async _populateWorkspace(
+    path: string,
+    workspace: string
+  ): Promise<void> {
+    const target = PathExt.join(path, workspace);
+
+    if (await getIfExists(this._contents, target, false)) {
+      return;
+    }
+
+    const source = PathExt.join(path, WORKSHOP_FILES_DIR);
+
+    try {
+      await ensureDirectory(this._contents, target);
+
+      if (await getIfExists(this._contents, source, false)) {
+        await copyTree(this._contents, source, target, []);
+      }
+    } catch (error) {
+      console.warn('Unable to fill the workshop workspace', error);
+    }
+  }
+
+  /**
+   * Read and parse the manifest of a workshop that is not open, or null
+   * when it cannot be read.
+   */
+  private async _readManifest(path: string): Promise<IWorkshopManifest | null> {
+    const manifestPath = PathExt.join(path, MANIFEST_FILE);
+
+    try {
+      return parseManifest(
+        await readTextFile(this._contents, manifestPath),
+        manifestPath
+      );
+    } catch (error) {
+      console.warn(`Unable to read ${manifestPath}`, error);
+
+      return null;
+    }
   }
 
   private _onVariablesChanged(): void {

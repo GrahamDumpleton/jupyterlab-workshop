@@ -183,3 +183,48 @@ export async function writeTextFile(
   await ensureDirectory(contents, PathExt.dirname(path));
   await contents.save(path, { type: 'file', format: 'text', content });
 }
+
+/**
+ * Copy a directory tree through the contents API, skipping the named
+ * top-level entries. Files are read and written whole, since the server
+ * cannot copy a directory in one request; a large tree takes a while.
+ */
+export async function copyTree(
+  contents: Contents.IManager,
+  from: string,
+  to: string,
+  skip: readonly string[]
+): Promise<void> {
+  const model = await contents.get(from, { content: true });
+
+  await ensureDirectory(contents, to);
+
+  for (const child of childrenOf(model)) {
+    if (skip.includes(child.name)) {
+      continue;
+    }
+
+    const target = PathExt.join(to, child.name);
+
+    if (child.type === 'directory') {
+      await copyTree(contents, child.path, target, []);
+    } else {
+      const file = await contents.get(child.path, { content: true });
+
+      await contents.save(target, {
+        type: file.type,
+        format: file.format,
+        content: file.content
+      });
+    }
+  }
+}
+
+/**
+ * The entries of a directory model, or nothing for a file.
+ */
+export function childrenOf(model: Contents.IModel): Contents.IModel[] {
+  return model.type === 'directory' && Array.isArray(model.content)
+    ? (model.content as Contents.IModel[])
+    : [];
+}

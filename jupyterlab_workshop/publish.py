@@ -81,9 +81,13 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
 
     archive = out / f"{name}-{version}.tar.gz"
 
+    # The workspace is generated when the workshop opens, so it is no
+    # more part of the archive than the state directory is.
+    workspace = str(manifest.get("workspace") or "").strip("/")
+
     with tarfile.open(archive, "w:gz") as tar:
         for entry in sorted(directory.iterdir()):
-            if entry.name in PUBLISH_EXCLUDES:
+            if entry.name in PUBLISH_EXCLUDES or entry.name == workspace:
                 continue
 
             tar.add(entry, arcname=f"{name}-{version}/{entry.name}", filter=_clean_tar)

@@ -320,6 +320,82 @@ test.describe('workshop panel', () => {
     expect(await kernels()).not.toContain('workshop-envy');
   });
 
+  test('fills a declared workspace and refills it on restart', async ({
+    page,
+    tmpPath
+  }) => {
+    const roomy = `${tmpPath}/roomy`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${roomy}/${path}`);
+    const read = (path: string): Promise<string> =>
+      page.evaluate(async (target: string) => {
+        const exposed = window as unknown as IExposedApp;
+        const model = await exposed.jupyterapp.serviceManager.contents.get(
+          target,
+          { content: true }
+        );
+
+        return String(model.content);
+      }, `${roomy}/${path}`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: roomy',
+        'title: Roomy',
+        'workspace: work',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload('hello\n', 'files/hello.txt');
+    await upload('data\n', 'files/data/rows.csv');
+    await upload('---\ntitle: First\n---\n\nWork in work/.\n', 'pages/01.md');
+    await openWorkshop(page, roomy);
+
+    // Opening filled the workspace from files/.
+    const panel = page.locator(PANEL);
+    const dialog = page.locator('.jp-Dialog');
+
+    expect(await read('work/hello.txt')).toBe('hello\n');
+    expect(await read('work/data/rows.csv')).toBe('data\n');
+    expect(await page.contents.fileExists(`${roomy}/files/hello.txt`)).toBe(
+      true
+    );
+
+    // The learner works, and the author edits a page meanwhile.
+    await upload('changed\n', 'work/hello.txt');
+    await upload('mine\n', 'work/extra.txt');
+    await upload(
+      '---\ntitle: Edited\n---\n\nStill work in work/.\n',
+      'pages/01.md'
+    );
+
+    // Restart refills the workspace and keeps the edited page. The edit
+    // changed the workshop's hash, so reopening asks about trust again.
+    const restart = page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:restart', {});
+    });
+
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible({
+      timeout: 60000
+    });
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await restart;
+    await expect(panel.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Edited'
+    );
+    expect(await read('work/hello.txt')).toBe('hello\n');
+    expect(await page.contents.fileExists(`${roomy}/work/extra.txt`)).toBe(
+      false
+    );
+    expect(await read('pages/01.md')).toContain('Still work');
+  });
+
   test('retries a triggered check while its command finishes', async ({
     page,
     tmpPath

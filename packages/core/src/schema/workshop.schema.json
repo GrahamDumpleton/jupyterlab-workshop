@@ -93,6 +93,10 @@
         "shell": { "type": "string" }
       }
     },
+    "workspace": {
+      "type": "string",
+      "description": "Directory, relative to the workshop, where the learner works: created when the workshop first opens and filled with a copy of the files directory. Restart empties and refills it and leaves every other file alone, and checkpoints archive it alone. Without it, Restart and checkpoints cover the whole workshop directory."
+    },
     "environment": {
       "type": "object",
       "description": "An isolated Python environment created for the workshop from a requirements file, with its own kernel. Needs the install-packages capability.",

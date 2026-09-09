@@ -77,6 +77,28 @@ describe('parseManifest', () => {
     ).toThrow(WorkshopFormatError);
   });
 
+  it('parses and checks the workspace', () => {
+    expect(parseManifest(VALID).workspace).toBeUndefined();
+    expect(parseManifest(`${VALID}\nworkspace: work/\n`).workspace).toBe(
+      'work'
+    );
+    expect(parseManifest(`${VALID}\nworkspace: learner/src\n`).workspace).toBe(
+      'learner/src'
+    );
+
+    for (const bad of ['', '/abs', '../up', 'a/../b', '~/x', 'C:/x']) {
+      expect(() => parseManifest(`${VALID}\nworkspace: "${bad}"\n`)).toThrow(
+        WorkshopFormatError
+      );
+    }
+
+    for (const reserved of ['_workshop', 'pages', 'files', 'workshop.yaml']) {
+      expect(() => parseManifest(`${VALID}\nworkspace: ${reserved}\n`)).toThrow(
+        'uses itself'
+      );
+    }
+  });
+
   it('parses the links', () => {
     expect(parseManifest(VALID).homepage).toBeUndefined();
     expect(parseManifest(VALID).issues).toBeUndefined();

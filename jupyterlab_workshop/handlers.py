@@ -223,16 +223,24 @@ class CheckpointsHandler(WorkshopHandler):
         name = str(body.get("name") or "")
         action = str(body.get("action") or "create")
         variables = body.get("variables")
+        subdir = body.get("subdir")
 
         if variables is not None and not isinstance(variables, dict):
             raise tornado.web.HTTPError(400, "variables must be an object")
+
+        if subdir is not None and not isinstance(subdir, str):
+            raise tornado.web.HTTPError(400, "subdir must be a string")
 
         try:
             if action == "create":
                 record = await IOLoop.current().run_in_executor(
                     None,
                     lambda: create_checkpoint(
-                        self.root_dir, workshop, name, variables=variables
+                        self.root_dir,
+                        workshop,
+                        name,
+                        variables=variables,
+                        subdir=subdir or None,
                     ),
                 )
             elif action == "restore":

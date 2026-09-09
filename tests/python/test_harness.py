@@ -134,3 +134,19 @@ def test_forget_environment_leaves_other_workshops_alone(tmp_path: Path) -> None
 
     assert forget_environment(tmp_path, "plain") is None
     assert forget_environment(tmp_path, "missing") is None
+
+
+def test_declared_workspace_is_read_from_the_manifest(tmp_path: Path) -> None:
+    from jupyterlab_workshop.harness import declared_workspace
+
+    (tmp_path / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: w\ntitle: W\n"
+        "workspace: work/\npages: [a.md]\n"
+    )
+
+    assert declared_workspace(tmp_path) == ["work"]
+
+    (tmp_path / "workshop.yaml").write_text("name: w\ntitle: W\npages: [a.md]\n")
+
+    assert declared_workspace(tmp_path) == []
+    assert declared_workspace(tmp_path / "missing") == []

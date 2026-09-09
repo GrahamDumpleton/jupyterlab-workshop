@@ -209,9 +209,12 @@ finish: |
 ```
 ````
 
-A checkpoint archives everything in the workshop directory except its
-`_workshop` state directory, together with the learner's variables, into
-`_workshop/snapshots/<name>.tar` and `<name>.json` through the server.
+A checkpoint archives the learner's files, together with the learner's
+variables, into `_workshop/snapshots/<name>.tar` and `<name>.json`
+through the server. In a workshop with a declared
+[workspace](concepts.md#the-workspace) that is the workspace directory
+alone; otherwise it is everything in the workshop directory except its
+`_workshop` state directory, pages included.
 Without `:name:` the current page id is used. To checkpoint once a check
 passes rather than on a click, give the `verify` a `:cascade:` naming
 the checkpoint block's id, and say in the page what is being saved and
@@ -219,8 +222,9 @@ why. The name `pristine` is reserved: the extension takes a checkpoint under it
 when a workshop is first opened, and "Restart" restores it, so lint
 reports a workshop that uses it (`reserved-checkpoint-name`).
 
-Restoring deletes the current files (again leaving `_workshop` alone),
-extracts the archive and puts the variables back. Files open in editors
+Restoring deletes the current files of the same scope (the workspace,
+or everything but `_workshop`), extracts the archive and puts the
+variables back. Files open in editors
 are not reloaded automatically; JupyterLab offers to reload them when
 they are next focused. The `restore` action needs the `write-files`
 capability.

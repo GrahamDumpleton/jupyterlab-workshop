@@ -40,6 +40,37 @@ Everything is plain text, so a workshop lives happily in git, and the
 `jupyter workshop` [command line](cli.md) scaffolds, lints, self-tests
 and publishes one from the files alone.
 
+### The workspace
+
+A workshop that has the learner create and edit files can keep those
+apart from its own by declaring a workspace:
+
+```yaml
+workspace: work
+```
+
+```
+my-workshop/
+  workshop.yaml         the manifest
+  pages/*.md            the instructions
+  files/                what ships for the learner: starter code, data
+  work/                 the learner's directory, generated, not committed
+  _workshop/            state
+```
+
+The workspace is created the first time the workshop opens and filled
+with a copy of `files/`, before the first page shows. From then on the
+learner's work lives there, and the extension treats the two halves
+differently: Restart empties and refills the workspace and leaves the
+pages and the manifest alone, and a checkpoint archives and restores the
+workspace alone, so "put the bug back" cannot put an old page back. The
+`files/` directory is committed; the workspace never is, and `jupyter
+workshop publish` and the self-test leave it out.
+
+Without a `workspace` field everything in the directory is the
+learner's: Restart puts back a snapshot of the whole directory taken when
+the workshop was first opened, and checkpoints cover it all.
+
 ## Actions
 
 An action is a fenced block whose name is in braces, such as
@@ -125,9 +156,9 @@ Everything the extension records about a workshop lives in a
 | `environment.json`, `venv/`    | An [isolated environment](environment.md), when the workshop asks for one. |
 | `recordings/`                  | Sessions recorded in author mode.                                          |
 
-Restart restores the pristine snapshot and forgets the progress; Reset
-Progress keeps the files; Remove deletes a downloaded workshop
-altogether. The trust decision is kept in JupyterLab's own state
+Restart restores the pristine snapshot, or refills the workspace when
+the workshop declares one, and forgets the progress; Reset Progress
+keeps the files; Remove deletes a downloaded workshop altogether. The trust decision is kept in JupyterLab's own state
 database rather than here, so removing the directory does not forget it
 on its own, but Remove does.
 

@@ -20,7 +20,15 @@ my-workshop/
   pages/01-welcome.md    one Markdown page per step, listed in the manifest
   pages/02-....md
   requirements.txt       optional, for an isolated Python environment
+  files/                 optional, starter files copied into the workspace
+  work/                  the learner's workspace, generated; never commit it
 ```
+
+Declare `workspace: work` in the manifest when the learner creates or
+edits files. The workspace is created and filled from `files/` when the
+workshop opens; Restart empties and refills it and leaves the pages
+alone, and checkpoints archive it alone. Without the field, Restart and
+checkpoints cover the whole workshop directory, pages included.
 
 The tooling is the `jupyter workshop` command (see the reference files
 for the complete vocabulary). The same tools are available as MCP tools

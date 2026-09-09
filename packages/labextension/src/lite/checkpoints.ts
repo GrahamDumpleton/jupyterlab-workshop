@@ -2,6 +2,8 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 
 import {
+  childrenOf,
+  copyTree,
   deleteTree,
   ensureDirectory,
   getIfExists,
@@ -30,7 +32,8 @@ export async function createCheckpoint(
   contents: Contents.IManager,
   workshop: string,
   name: string,
-  variables: ICheckpointRecord['variables']
+  variables: ICheckpointRecord['variables'],
+  subdir?: string
 ): Promise<ICheckpointRecord> {
   const checkpoint = checkName(name);
   const directory = PathExt.join(
@@ -40,13 +43,28 @@ export async function createCheckpoint(
     checkpoint
   );
 
+  // A declared workspace is archived alone; otherwise the whole
+  // workshop but its state. A workspace that does not exist yet
+  // archives as empty.
+  const source = subdir ? PathExt.join(workshop, subdir) : workshop;
+
   await deleteTree(contents, directory);
-  await copyTree(contents, workshop, directory, [WORKSHOP_STATE_DIR]);
+  await ensureDirectory(contents, directory);
+
+  if (await getIfExists(contents, source, false)) {
+    await copyTree(
+      contents,
+      source,
+      directory,
+      subdir ? [] : [WORKSHOP_STATE_DIR]
+    );
+  }
 
   const record: ICheckpointRecord = {
     name: checkpoint,
     createdAt: new Date().toISOString(),
-    variables
+    variables,
+    ...(subdir ? { subdir } : {})
   };
 
   await writeTextFile(
@@ -80,10 +98,16 @@ export async function restoreCheckpoint(
     throw new Error(`There is no checkpoint named ${name}`);
   }
 
-  const model = await contents.get(workshop, { content: true });
+  const parsed = JSON.parse(text) as Partial<ICheckpointRecord>;
+  const subdir = typeof parsed.subdir === 'string' ? parsed.subdir : '';
+  const target = subdir ? PathExt.join(workshop, subdir) : workshop;
+
+  await ensureDirectory(contents, target);
+
+  const model = await contents.get(target, { content: true });
 
   for (const child of childrenOf(model)) {
-    if (child.name === WORKSHOP_STATE_DIR) {
+    if (!subdir && child.name === WORKSHOP_STATE_DIR) {
       continue;
     }
 
@@ -94,56 +118,14 @@ export async function restoreCheckpoint(
     }
   }
 
-  await copyTree(contents, directory, workshop, []);
-
-  const parsed = JSON.parse(text) as Partial<ICheckpointRecord>;
+  await copyTree(contents, directory, target, []);
 
   return {
     name: parsed.name ?? checkpoint,
     createdAt: parsed.createdAt ?? '',
-    variables: parsed.variables ?? {}
+    variables: parsed.variables ?? {},
+    ...(subdir ? { subdir } : {})
   };
-}
-
-/**
- * Copy a directory tree through the contents API, skipping the named
- * top-level entries.
- */
-export async function copyTree(
-  contents: Contents.IManager,
-  from: string,
-  to: string,
-  skip: readonly string[]
-): Promise<void> {
-  const model = await contents.get(from, { content: true });
-
-  await ensureDirectory(contents, to);
-
-  for (const child of childrenOf(model)) {
-    if (skip.includes(child.name)) {
-      continue;
-    }
-
-    const target = PathExt.join(to, child.name);
-
-    if (child.type === 'directory') {
-      await copyTree(contents, child.path, target, []);
-    } else {
-      const file = await contents.get(child.path, { content: true });
-
-      await contents.save(target, {
-        type: file.type,
-        format: file.format,
-        content: file.content
-      });
-    }
-  }
-}
-
-function childrenOf(model: Contents.IModel): Contents.IModel[] {
-  return model.type === 'directory' && Array.isArray(model.content)
-    ? (model.content as Contents.IModel[])
-    : [];
 }
 
 function checkName(name: string): string {

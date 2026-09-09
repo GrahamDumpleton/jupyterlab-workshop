@@ -106,6 +106,10 @@ def test_publish_builds_a_stable_archive(
 
     with (target / "workshop.yaml").open("a") as manifest:
         manifest.write("issues: https://example.org/pub/issues\n")
+        manifest.write("workspace: work\n")
+
+    (target / "work").mkdir()
+    (target / "work" / "learner.txt").write_text("mine\n")
 
     out = tmp_path / "dist"
 
@@ -131,6 +135,7 @@ def test_publish_builds_a_stable_archive(
     assert "pub-0.1.0/workshop.yaml" in names
     assert "pub-0.1.0/pages/01-welcome.md" in names
     assert not any("_workshop" in name for name in names)
+    assert not any("/work/" in name or name.endswith("/work") for name in names)
 
     digest = (out / "pub-0.1.0.tar.gz.sha256").read_text().split()[0]
     entry = json.loads((out / "pub-0.1.0.collection.json").read_text())

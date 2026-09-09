@@ -155,17 +155,22 @@ def create_checkpoint(
     workshop_path: str,
     name: str,
     variables: dict[str, Any] | None = None,
+    subdir: str | None = None,
 ) -> dict[str, Any]:
     """Archive the workshop directory under ``_workshop/snapshots/<name>``.
 
     The state directory is left out so restoring never clobbers progress.
-    Variables passed in are stored next to the archive for the frontend to
-    put back on restore.
+    With ``subdir``, the workshop's declared workspace, only that
+    directory is archived, and restoring touches only it; the record
+    remembers which so a restore needs no manifest. Variables passed in
+    are stored next to the archive for the frontend to put back on
+    restore.
     """
 
     workshop = _workshop_dir(root_dir, workshop_path)
     checkpoint_name = _check_name(name)
     directory = workshop / STATE_DIR / CHECKPOINTS_DIR
+    source = workshop / _check_subdir(subdir) if subdir else workshop
 
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -178,8 +183,10 @@ def create_checkpoint(
 
     try:
         with tarfile.open(partial, "w") as tar:
-            for entry in sorted(workshop.iterdir()):
-                if entry.name == STATE_DIR:
+            # A workspace that does not exist yet archives as empty, which
+            # restores to an empty workspace.
+            for entry in sorted(source.iterdir()) if source.is_dir() else []:
+                if not subdir and entry.name == STATE_DIR:
                     continue
 
                 tar.add(entry, arcname=entry.name)
@@ -193,6 +200,9 @@ def create_checkpoint(
         "createdAt": datetime.now(UTC).isoformat(timespec="seconds"),
         "variables": variables or {},
     }
+
+    if subdir:
+        record["subdir"] = _check_subdir(subdir)
 
     (directory / f"{checkpoint_name}.json").write_text(
         json.dumps(record, indent=2) + "\n", encoding="utf-8"
@@ -224,8 +234,9 @@ def restore_checkpoint(root_dir: Path, workshop_path: str, name: str) -> dict[st
     """Replace the workshop files with those of a checkpoint.
 
     Everything except the state directory is removed first, so files the
-    learner created after the checkpoint disappear too. Returns the
-    checkpoint record, including its variables.
+    learner created after the checkpoint disappear too. A checkpoint
+    taken of a workspace subdirectory empties and refills only that
+    directory. Returns the checkpoint record, including its variables.
     """
 
     workshop = _workshop_dir(root_dir, workshop_path)
@@ -236,6 +247,10 @@ def restore_checkpoint(root_dir: Path, workshop_path: str, name: str) -> dict[st
     if not archive.is_file():
         raise CheckError(f"There is no checkpoint named {name}")
 
+    record = _read_record(directory, checkpoint_name)
+    subdir = str(record.get("subdir") or "")
+    target = workshop / _check_subdir(subdir) if subdir else workshop
+
     with tarfile.open(archive) as tar:
         members = tar.getmembers()
 
@@ -245,8 +260,10 @@ def restore_checkpoint(root_dir: Path, workshop_path: str, name: str) -> dict[st
                     f"The checkpoint contains an unsafe path {member.name}"
                 )
 
-        for entry in workshop.iterdir():
-            if entry.name == STATE_DIR:
+        target.mkdir(parents=True, exist_ok=True)
+
+        for entry in target.iterdir():
+            if not subdir and entry.name == STATE_DIR:
                 continue
 
             if entry.is_dir() and not entry.is_symlink():
@@ -254,9 +271,9 @@ def restore_checkpoint(root_dir: Path, workshop_path: str, name: str) -> dict[st
             else:
                 entry.unlink()
 
-        tar.extractall(workshop, members=members, filter="data")
+        tar.extractall(target, members=members, filter="data")
 
-    return _read_record(directory, checkpoint_name)
+    return record
 
 
 def _workshop_dir(root_dir: Path, workshop_path: str) -> Path:
@@ -279,6 +296,22 @@ def _check_name(name: str) -> str:
 
     if "/" in cleaned or "\\" in cleaned:
         raise CheckError("A checkpoint name must not contain path separators")
+
+    return cleaned
+
+
+def _check_subdir(subdir: str) -> str:
+    """A workspace path: relative, inside the workshop, not the state
+    directory."""
+
+    cleaned = subdir.strip().replace("\\", "/").strip("/")
+    parts = cleaned.split("/")
+
+    if not cleaned or any(part in {"", ".", ".."} for part in parts):
+        raise CheckError(f"The workspace must be a relative path, not {subdir!r}")
+
+    if parts[0] == STATE_DIR:
+        raise CheckError("The workspace cannot be the state directory")
 
     return cleaned
 

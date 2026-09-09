@@ -419,9 +419,9 @@ export interface IInstalledWorkshop {
 /** What a restart managed to do. */
 export interface IRestartResult {
   /**
-   * Whether the files were put back. False when the workshop was first
-   * opened before the snapshot existed, in which case only progress was
-   * forgotten and the files stay as they are.
+   * Whether the files were put back. False when a workshop without a
+   * workspace was first opened before the snapshot existed, in which
+   * case only progress was forgotten and the files stay as they are.
    */
   files: boolean;
 }
@@ -518,6 +518,12 @@ export interface IWorkshopManager {
 
   /** Whether the open workshop is being edited rather than followed. */
   readonly authoring: boolean;
+
+  /**
+   * The open workshop's declared workspace, relative to the JupyterLab
+   * root, or null when it has none.
+   */
+  readonly workspacePath: string | null;
 
   /** Lint findings for the open workshop, refreshed on reload. */
   readonly lint: ILintMessage[];
@@ -733,6 +739,9 @@ export interface ICheckpointRecord {
 
   /** The learner's variable values at the time, to put back on restore. */
   variables: Record<string, { value: string; source: VariableSource }>;
+
+  /** The workspace the checkpoint covers, when it covers only that. */
+  subdir?: string;
 }
 
 /** What running a verify script produced. */
@@ -824,7 +833,8 @@ export interface IWorkshopBackend {
   checkpoint(
     workshop: string,
     name: string,
-    variables: ICheckpointRecord['variables']
+    variables: ICheckpointRecord['variables'],
+    subdir?: string
   ): Promise<void>;
 
   /** Put a checkpoint's files back and return its record. */

@@ -156,11 +156,14 @@ deal with it:
   or Restart on the workshop's card in the browser) puts the workshop's
   files back as they were when it was first opened, deleting anything
   added since, forgets all progress, closes the documents and terminals
-  it had open, and reopens it at the first page. Every file in the
-  workshop directory is covered, the pages and manifest included, so
-  an edit to a page made after the workshop was first opened is undone
-  too, unless it was saved in [author mode](authoring.md#author-mode),
-  which moves the baseline along. It works offline and in JupyterLite.
+  it had open, and reopens it at the first page. In a workshop with a
+  declared [workspace](concepts.md#the-workspace) only that directory
+  is emptied and refilled; the pages and manifest are never touched.
+  Otherwise every file in the workshop directory is covered, the pages
+  and manifest included, so an edit to a page made after the workshop
+  was first opened is undone too, unless it was saved in [author
+  mode](authoring.md#author-mode), which moves the baseline along. It
+  works offline and in JupyterLite.
   It only covers files inside the workshop directory, so a workshop
   that writes elsewhere, such as into the home directory, is not undone
   there. A workshop with an [isolated environment](environment.md)
