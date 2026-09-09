@@ -62,8 +62,10 @@ The workspace is created the first time the workshop opens and filled
 with a copy of `files/`, before the first page shows. From then on the
 learner's work lives there, and the extension treats the two halves
 differently: Restart empties and refills the workspace and leaves the
-pages and the manifest alone, and a checkpoint archives and restores the
-workspace alone, so "put the bug back" cannot put an old page back. The
+pages and the manifest alone, a checkpoint archives and restores the
+workspace alone, so "put the bug back" cannot put an old page back, and
+the `workspace` scope of `write-files` means the workspace, so a page
+can read the shipped files with a `../` path but never write them. The
 `files/` directory is committed; the workspace never is, and `jupyter
 workshop publish` and the self-test leave it out.
 

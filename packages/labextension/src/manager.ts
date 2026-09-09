@@ -1954,7 +1954,11 @@ export class WorkshopManager implements IWorkshopManager {
       automatic,
       declared: workshop.manifest.capabilities,
       allowed: decision.allowed,
-      disabled: this._trustStore.policy.disabledCapabilities
+      disabled: this._trustStore.policy.disabledCapabilities,
+      layout: {
+        workspace: workshop.manifest.workspace,
+        requirements: workshop.manifest.environment?.requirements
+      }
     });
   }
 

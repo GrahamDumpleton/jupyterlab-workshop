@@ -44,6 +44,7 @@ import {
   mentionsAbsolutePath,
   urlHosts
 } from './danger';
+import { writeTargetProblem } from '../trust/paths';
 import { isWebLink } from '../util';
 import { ILintMessage } from './types';
 
@@ -344,7 +345,7 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
       lintCheckpointName(node, where, messages);
-      lintPaths(node, workspaceOnly, input.manifest.workspace, where, messages);
+      lintPaths(node, workspaceOnly, input.manifest, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
       lintVariants(node, input.manifest.platforms, where, messages);
     }
@@ -579,19 +580,47 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
 function lintPaths(
   node: IDirectiveNode,
   workspaceOnly: boolean,
-  workspace: string | undefined,
+  manifest: IWorkshopManifest,
   where: { path: string; line: number },
   messages: ILintMessage[]
 ): void {
   const capability = actionCapability(node.name);
 
-  if (capability !== 'write-files' || !workspaceOnly) {
+  if (capability !== 'write-files') {
+    return;
+  }
+
+  // What the trust policy would refuse outright is an error here.
+  const refused = writeTargetProblem(
+    node.name,
+    node.options,
+    manifest.capabilities,
+    {
+      workspace: manifest.workspace,
+      requirements: manifest.environment?.requirements
+    }
+  );
+
+  if (refused) {
+    messages.push({
+      level: 'error',
+      rule: 'write-refused',
+      message: `${refused} (${node.name} "${node.id}")`,
+      ...where
+    });
+
+    return;
+  }
+
+  if (!workspaceOnly) {
     return;
   }
 
   // Paths in a workspace-scoped workshop stay inside the workshop. From
-  // a declared workspace, `..` may climb as far as the workshop
-  // directory, which holds the shipped files; `from` starts there.
+  // a declared workspace, `..` on a read such as `from` may climb as far
+  // as the workshop directory, which holds the shipped files.
+  const workspace = manifest.workspace;
+
   for (const option of PATH_OPTIONS) {
     const value = node.options[option];
 

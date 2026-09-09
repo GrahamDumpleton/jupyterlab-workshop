@@ -385,6 +385,12 @@ test.describe('workshop panel', () => {
         'exists notes.txt',
         'exists ../pages/01.md',
         '```',
+        '',
+        '```{file-write}',
+        ':id: clobber-page',
+        ':path: ../pages/01.md',
+        'gone',
+        '```',
         ''
       ].join('\n'),
       'pages/01.md'
@@ -423,6 +429,17 @@ test.describe('workshop panel', () => {
 
     await check.getByRole('button', { name: 'Check' }).click();
     await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 30000 });
+
+    // A write aimed at a page is refused, badge and all, and the page
+    // is untouched.
+    const clobber = panel.locator('[data-action-id="clobber-page"]');
+
+    await expect(clobber.locator('.jp-WorkshopPanel-badge')).toHaveText(
+      'not allowed'
+    );
+    await clobber.click();
+    await expect(clobber).toHaveClass(/jp-mod-status-error/);
+    expect(await read('pages/01.md')).toContain('Work in work/');
 
     // The learner works, and the author edits a page meanwhile.
     await upload('changed\n', 'work/hello.txt');

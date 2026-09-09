@@ -78,6 +78,9 @@ export interface ITrustSummary {
   /** Number of actions that run without a click. */
   automatic: number;
 
+  /** The declared workspace, which confines the write-files scope. */
+  workspace?: string;
+
   lint: ILintMessage[];
 
   /** URL the workshop asks to report progress to, if any. */

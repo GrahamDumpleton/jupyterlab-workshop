@@ -663,3 +663,31 @@ hello
     ).not.toContain('path-outside-workspace');
   });
 });
+
+describe('refused writes', () => {
+  const page = (path: string): string => `---
+title: One
+---
+
+\`\`\`{execute}
+git status
+\`\`\`
+
+\`\`\`{file-write}
+:path: ${path}
+hello
+\`\`\`
+`;
+
+  it("reports writes to the workshop's own files and outside the workspace", () => {
+    expect(rules(page('pages/01.md'))).toContain('write-refused');
+    expect(rules(page('workshop.yaml'))).toContain('write-refused');
+    expect(rules(page('notes.txt'))).not.toContain('write-refused');
+    expect(
+      rules(page('../notes.txt'), `${MANIFEST}workspace: work\n`)
+    ).toContain('write-refused');
+    expect(
+      rules(page('notes.txt'), `${MANIFEST}workspace: work\n`)
+    ).not.toContain('write-refused');
+  });
+});

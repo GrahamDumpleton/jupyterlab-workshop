@@ -64,9 +64,15 @@ capabilities:
 | `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
 | `ui-settings`      | Changing JupyterLab settings.                                        |
 
-The `write-files` scopes are `workspace` (paths must stay inside the
-workshop directory, the default), `home` and `any` (paths may reach
-anywhere under the JupyterLab root; the contents API cannot go higher).
+The `write-files` scopes are `workspace` (the default), `home` and `any`
+(paths may reach anywhere under the JupyterLab root; the contents API
+cannot go higher). Under the `workspace` scope writes must stay inside
+the workshop's declared [workspace](concepts.md#the-workspace), or
+inside the workshop directory when it declares none, and the trust
+dialog says so. Under every scope the workshop's own files, the
+manifest, the pages, the shipped `files/` and the requirements file,
+are read-only to actions: an action that names one is refused with a
+"not allowed" badge, and lint reports it as an error.
 
 An action whose capability the manifest does not declare never runs, at
 any trust level. It shows a "not allowed" badge in the panel and the trust

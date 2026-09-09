@@ -129,7 +129,9 @@ pages:
 ```
 
 Capabilities: `terminal` (run commands), `write-files` (create and change
-files; scope `workspace` keeps writes inside the workshop directory),
+files; scope `workspace` keeps writes inside the declared workspace, or
+the workshop directory without one; the pages, manifest and `files/`
+are never writable),
 `kernel-exec` (run code in kernels; also needed by code checks),
 `network`, `install-packages` (needed by `environment`), `auto-run`
 (actions that run without a click: `:auto:` and `:cascade:`),
@@ -333,8 +335,10 @@ pass, `soft` only shows what is missing.
   where to go next) and what to do now. To checkpoint after a check,
   give the `verify` a `:cascade:` naming a `checkpoint` block.
 
-- Keep `write-files` paths inside the workshop directory unless the
-  scope is wider; lint warns on `..`, `~` and absolute paths.
+- Keep `write-files` paths inside the workspace (or the workshop
+  directory without one) unless the scope is wider; lint warns on `..`,
+  `~` and absolute paths, and reports as an error a write aimed at the
+  pages, the manifest, `files/` or outside a declared workspace.
 
 - Do not pipe downloads into a shell, use `sudo`, or `rm -rf` outside the
   workshop; lint flags these and the trust dialog shows them.
