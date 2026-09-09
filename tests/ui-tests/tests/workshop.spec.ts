@@ -885,3 +885,65 @@ test.describe('workshop panel', () => {
     ).toHaveText('Edit and diff');
   });
 });
+
+test.describe('startup restore', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+  });
+
+  test('forgets a workshop whose directory has gone', async ({
+    page,
+    tmpPath
+  }) => {
+    const workshopPath = `${tmpPath}/${WORKSHOP}`;
+
+    await openWorkshop(page, workshopPath);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    // The state database saves after a short debounce; then the
+    // directory goes away under it, as when a server starts elsewhere.
+    await page.waitForTimeout(2000);
+    await page.contents.deleteDirectory(workshopPath);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+
+    await expect(panel).toContainText('No workshop is open.');
+    await expect(panel.locator('.jp-WorkshopPanel-error')).toHaveCount(0);
+  });
+});
+
+test.describe('startup restore from another server', () => {
+  // The state database is per user, not per server, so an entry written
+  // by a server with another root must be left alone rather than opened
+  // relative to this one.
+  test.use({
+    mockState: {
+      '@jupyterlab-workshop/labextension:state': {
+        servers: {
+          '/somewhere/else': { workshopPath: 'examples/git-basics' }
+        }
+      }
+    }
+  });
+
+  test('ignores the workshop another server had open', async ({ page }) => {
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+
+    await expect(panel).toContainText('No workshop is open.');
+    await expect(panel.locator('.jp-WorkshopPanel-error')).toHaveCount(0);
+  });
+});

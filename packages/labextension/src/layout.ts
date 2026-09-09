@@ -14,6 +14,7 @@ import { DockLayout, DockPanel, SplitPanel, Widget } from '@lumino/widgets';
 
 import { openEditor } from './actions/files';
 import { TerminalSessions } from './actions/terminal';
+import { fetchForServer, saveForServer } from './statedb';
 import { ILoadedWorkshop, IWorkshopManager } from './tokens';
 
 /** Widget factory that renders a Markdown file as a preview. */
@@ -50,7 +51,10 @@ export interface ILayoutContext {
 
 /** What the state database holds under the layouts key. */
 interface ILayoutRecord {
-  /** Paths of the workshops whose layout has been applied in this workspace. */
+  /**
+   * Paths of the workshops whose layout has been applied in this
+   * workspace, on this server.
+   */
   applied: string[];
 }
 
@@ -221,7 +225,7 @@ export class LayoutManager {
     }
 
     try {
-      await stateDB.save(STATE_KEY, {
+      await saveForServer(stateDB, STATE_KEY, {
         applied: [...record.applied, path]
       });
     } catch (error) {
@@ -237,7 +241,7 @@ export class LayoutManager {
     }
 
     try {
-      const stored = await stateDB.fetch(STATE_KEY);
+      const stored = await fetchForServer(stateDB, STATE_KEY);
 
       return isLayoutRecord(stored) ? stored : { applied: [] };
     } catch (error) {

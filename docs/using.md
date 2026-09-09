@@ -37,6 +37,12 @@ link](collections.md#launch-links), opens a workshop as soon as JupyterLab
 starts, which is how a course hands one out. A deployment may remove
 some of these routes; see [Deploying workshops](deploying.md).
 
+The workshop that was open when the browser tab closed opens again when
+JupyterLab next starts on the same server, at the page it was on. That
+is remembered per server, since a workshop is named by its path under
+the server's root, and a workshop whose directory has since gone is
+simply forgotten.
+
 ## The trust dialog
 
 Before a workshop runs anything it shows a dialog with where it came

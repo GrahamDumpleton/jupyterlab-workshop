@@ -110,7 +110,11 @@ off by default, asking whether progress may be reported to it; see
 
 Cancelling leaves the workshop closed. The decision is stored in the
 JupyterLab state database keyed by source and hash, so the same content
-opens again without asking, and a changed workshop asks again. The badge
+opens again without asking, and a changed workshop asks again. The state
+database is shared by every JupyterLab server the same user runs, but a
+local workshop is named by its path under the server's root, so
+decisions are kept per server: a workshop trusted under one root asks
+again under another, and so does one marked as your own. The badge
 in the panel header shows the current level; clicking it, or the
 "Workshop: Change Trust Level…" command, reopens the dialog.
 

@@ -78,6 +78,7 @@ import {
   IWorkshopSource,
   errorMessage
 } from './tokens';
+import { fetchForServer, saveForServer } from './statedb';
 import { buildTrustSummary, readSourceRecord } from './trust/summary';
 import {
   conditionHolds,
@@ -923,7 +924,12 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   /**
-   * Reopen the workshop that was open in a previous session.
+   * Reopen the workshop that was open in a previous session on this
+   * server.
+   *
+   * Restoring is speculative, the learner asked for nothing, so a stored
+   * workshop whose manifest is gone is forgotten silently rather than
+   * reported as a failed open.
    *
    * Returns whether a workshop was restored.
    */
@@ -932,9 +938,21 @@ export class WorkshopManager implements IWorkshopManager {
       return false;
     }
 
-    const stored = await this._stateDB.fetch(STATE_KEY);
+    const stored = await fetchForServer(this._stateDB, STATE_KEY);
 
     if (!isStoredState(stored) || stored.workshopPath === '') {
+      return false;
+    }
+
+    // Look before opening, so a stale entry never shows an error.
+    try {
+      await this._contents.get(
+        PathExt.join(stored.workshopPath, MANIFEST_FILE),
+        { content: false }
+      );
+    } catch {
+      await this._saveStateDB();
+
       return false;
     }
 
@@ -2089,7 +2107,7 @@ export class WorkshopManager implements IWorkshopManager {
     };
 
     try {
-      await this._stateDB.save(STATE_KEY, { ...state });
+      await saveForServer(this._stateDB, STATE_KEY, { ...state });
     } catch (error) {
       console.warn('Unable to save workshop state', error);
     }
