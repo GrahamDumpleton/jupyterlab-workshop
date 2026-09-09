@@ -39,10 +39,13 @@ interface ICellSpec {
  * Scroll a notebook so the cell at `index` is in view with its output,
  * unless the action's `scroll` option is `false`.
  *
- * Inserting or running a cell does not scroll on its own, so once a
- * notebook has grown past its panel the learner would have to find the
- * cell by hand. Aligning the cell's end keeps its output in view as well
- * as the cell.
+ * Inserting a cell does not scroll on its own, and running one scrolls
+ * to the cell before its output exists, so once a notebook has grown
+ * past its panel the learner would have to find the output by hand. The
+ * scroll asks for no margin: JupyterLab's default is a quarter of the
+ * viewport, which in a short notebook pushes an early cell off the top
+ * rather than leaving room under it. Auto alignment leaves a cell that
+ * is already fully in view where it is and otherwise brings its end in.
  */
 async function revealCell(
   panel: NotebookPanel,
@@ -53,10 +56,8 @@ async function revealCell(
     return;
   }
 
-  const cell = panel.content.widgets[index];
-
-  if (cell) {
-    await panel.content.scrollToCell(cell, 'end');
+  if (index < panel.content.widgets.length) {
+    await panel.content.scrollToItem(index, 'auto', 0);
   }
 }
 
