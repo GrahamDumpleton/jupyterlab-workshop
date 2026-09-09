@@ -36,6 +36,31 @@ interface ICellSpec {
 }
 
 /**
+ * Scroll a notebook so the cell at `index` is in view with its output,
+ * unless the action's `scroll` option is `false`.
+ *
+ * Inserting or running a cell does not scroll on its own, so once a
+ * notebook has grown past its panel the learner would have to find the
+ * cell by hand. Aligning the cell's end keeps its output in view as well
+ * as the cell.
+ */
+async function revealCell(
+  panel: NotebookPanel,
+  index: number,
+  request: IActionRequest
+): Promise<void> {
+  if (request.options.scroll === 'false') {
+    return;
+  }
+
+  const cell = panel.content.widgets[index];
+
+  if (cell) {
+    await panel.content.scrollToCell(cell, 'end');
+  }
+}
+
+/**
  * Open a notebook, placing it above the workshop terminal when it is new,
  * and wait until it is ready.
  */
@@ -353,9 +378,14 @@ export class CellInsertAction implements IActionImplementation {
     });
 
     panel.content.activeCellIndex = index;
+    await revealCell(panel, index, request);
+
+    // Scrolled again after the run, since the output the run added is
+    // what the learner is waiting to see.
 
     if (request.options.run === 'true') {
       await NotebookActions.run(panel.content, panel.sessionContext);
+      await revealCell(panel, index, request);
     }
 
     // Saved after the run, so the file holds the cell's output as well as
@@ -408,11 +438,13 @@ export class CellRunAction implements IActionImplementation {
     await panel.sessionContext.ready;
 
     let ok: boolean;
+    let index: number;
 
     if (this._mode === 'all') {
       ok = await NotebookActions.runAll(notebook, panel.sessionContext);
+      index = notebook.widgets.length - 1;
     } else {
-      const { index } = findCell(panel, requireOption(request, 'cell'));
+      index = findCell(panel, requireOption(request, 'cell')).index;
 
       notebook.activeCellIndex = index;
 
@@ -424,6 +456,11 @@ export class CellRunAction implements IActionImplementation {
         ok = await NotebookActions.run(notebook, panel.sessionContext);
       }
     }
+
+    // The learner is waiting on the output of the last cell run, so the
+    // notebook ends up showing it.
+
+    await revealCell(panel, index, request);
 
     // The file should show what the learner saw, so the outputs are
     // saved rather than left to autosave.

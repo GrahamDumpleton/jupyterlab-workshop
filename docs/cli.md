@@ -274,6 +274,15 @@ far, records the action in flight as failed, and exits with code 1. All
 three limits exist so that a stuck action in CI produces a report naming
 it rather than a job that never ends.
 
+The server runs with JupyterLab workspace and user settings directories
+of its own under the temporary directory, so nothing from your own
+JupyterLab sessions reaches the run: no tabs the layout restorer would
+put back (a console whose kernel the test server lacks would otherwise
+raise a kernel selection dialog under the first action), no default
+kernel, theme or disabled extension of yours, and the run writes nothing
+into your JupyterLab state either. `--in-place` isolates the same way;
+only the workshop directory is shared in that mode.
+
 A workshop with an [isolated environment](environment.md) creates it
 inside the temporary copy, and registers its kernel for your user. The
 test unregisters that kernel again when it removes the copy, so no

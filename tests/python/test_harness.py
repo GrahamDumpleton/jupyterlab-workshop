@@ -1,8 +1,16 @@
+import io
+import os
+import subprocess
+import sys
+import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from jupyterlab_workshop.harness import (
+    _emit,
+    _start_server,
     forget_environment,
     remove_work_directory,
     timed_out_report,
@@ -156,3 +164,95 @@ def test_declared_workspace_is_read_from_the_manifest(tmp_path: Path) -> None:
 
     assert declared_workspace(tmp_path) == ["work"]
     assert declared_workspace(tmp_path / "missing") == []
+
+
+def test_start_server_keeps_jupyterlab_state_under_the_work_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The server must not share the user's workspace or settings, whose
+    # restored tabs and preferences would change the run, so the flags
+    # point at fresh directories under the work directory.
+
+    started: dict[str, Any] = {}
+
+    class FakeProcess:
+        pass
+
+    def fake_popen(command: list[str], **kwargs: Any) -> FakeProcess:
+        started["command"] = command
+        started["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    root = tmp_path / "root"
+    settings = tmp_path / "settings"
+    state = tmp_path / "lab"
+    log = tmp_path / "jupyterlab.log"
+    root.mkdir()
+    settings.mkdir()
+
+    _start_server(root, 8888, "token", settings, state, log)
+
+    command = started["command"]
+    assert f"--LabApp.app_settings_dir={settings}" in command
+    assert f"--LabApp.workspaces_dir={state / 'workspaces'}" in command
+    assert f"--LabApp.user_settings_dir={state / 'user-settings'}" in command
+    assert (state / "workspaces").is_dir()
+    assert (state / "user-settings").is_dir()
+    assert started["kwargs"]["cwd"] == root
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="O_NONBLOCK is a POSIX flag")
+def test_emit_waits_out_a_non_blocking_pipe(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Node puts a pipe it inherits into non-blocking mode, and a plain
+    # print() to it then fails as soon as the pipe is full. _emit must
+    # deliver every byte regardless, retrying while a slow reader drains.
+
+    read_end, write_end = os.pipe()
+    os.set_blocking(write_end, False)
+    writer = os.fdopen(write_end, "w", encoding="utf-8")
+    monkeypatch.setattr(sys, "stdout", writer)
+
+    received = bytearray()
+
+    def drain() -> None:
+        os.set_blocking(read_end, True)
+        while True:
+            chunk = os.read(read_end, 4096)
+            if not chunk:
+                break
+            received.extend(chunk)
+
+    # Well past any pipe buffer, so the writer is forced to wait.
+    text = "x" * 300_000
+
+    # A plain print fails outright on the full pipe, which is the bug.
+    with pytest.raises(BlockingIOError):
+        while True:
+            writer.write(text)
+            writer.flush()
+
+    reader = threading.Thread(target=drain)
+    reader.start()
+
+    try:
+        _emit(text)
+        _emit("done")
+    finally:
+        writer.close()
+        reader.join()
+
+    assert received.endswith(b"done\n")
+    assert received.count(b"x") >= len(text)
+
+
+def test_emit_writes_plainly_to_a_stream_without_a_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured)
+
+    _emit("warning: something", error=True)
+
+    assert captured.getvalue() == "warning: something\n"

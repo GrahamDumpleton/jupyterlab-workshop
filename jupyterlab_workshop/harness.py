@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import select
 import shutil
 import socket
 import subprocess
@@ -52,10 +53,87 @@ RESULT_SLOT = "__jupyterlabWorkshopSelfTest"
 POLL_MS = 2000
 
 
+def _emit(text: str, *, error: bool = False) -> None:
+    """Write a line to stdout, or stderr with ``error``, waiting out a
+    pipe that has been put into non-blocking mode.
+
+    Node, which Playwright runs its driver in, puts every pipe it
+    inherits into non-blocking mode, and the flag lives on the file
+    description the harness shares with it. When stderr and stdout are
+    the same pipe (``2>&1 | tee`` in a CI job, say) a plain print() then
+    raises BlockingIOError whenever the pipe is momentarily full, which
+    loses progress lines and, in an exception handler, hides the failure
+    being reported. So harness output is written at the descriptor
+    level, retrying until the reader has made room.
+    """
+
+    stream = sys.stderr if error else sys.stdout
+    line = text + "\n"
+
+    # A stream that is not a real file (pytest's capture, pythonw) has
+    # no descriptor to write to, and no non-blocking flag either.
+    try:
+        fd = stream.fileno()
+    except (AttributeError, OSError, ValueError):
+        stream.write(line)
+        stream.flush()
+        return
+
+    # Anything the stream still buffers goes first, so lines keep their
+    # order; a flush can hit the same error, and leaves the rest buffered
+    # for the next attempt.
+    while True:
+        try:
+            stream.flush()
+            break
+        except BlockingIOError:
+            _wait_writable(fd)
+
+    data = line.encode(stream.encoding or "utf-8", errors="replace")
+
+    while data:
+        try:
+            written = os.write(fd, data)
+        except BlockingIOError:
+            _wait_writable(fd)
+            continue
+
+        data = data[written:]
+
+
+def _wait_writable(fd: int) -> None:
+    # A pipe refills in small steps once it has been full (macOS hands
+    # out a few hundred bytes at a time), so waiting on select() rather
+    # than sleeping keeps up with the reader instead of pausing after
+    # every step. select() cannot watch a pipe on Windows, but no pipe
+    # is non-blocking there either, so a short sleep is the fallback.
+    try:
+        select.select([], [fd], [], 1.0)
+    except (OSError, ValueError):
+        time.sleep(0.02)
+
+
+def _restore_blocking() -> None:
+    """Put stdout and stderr back into blocking mode.
+
+    Called once Playwright's Node driver is running, since that is what
+    sets the non-blocking flag (see ``_emit``). ``_emit`` copes either
+    way; this is for everything that does not go through it, such as a
+    traceback Python prints on the way out, and for anything else in the
+    process that writes to the same pipes.
+    """
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            os.set_blocking(stream.fileno(), True)
+        except (AttributeError, OSError, ValueError):
+            continue
+
+
 def _say(message: str) -> None:
     """Print a progress line straight away, so a CI log shows where a run is."""
 
-    print(f"[self-test] {message}", flush=True)
+    _emit(f"[self-test] {message}")
 
 
 @dataclass(frozen=True)
@@ -99,11 +177,11 @@ def run_self_test(options: SelfTestOptions) -> int:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as error:
-        print(
+        _emit(
             "error: `jupyter workshop test` needs the test extra: pip install "
             '"jupyterlab-workshop[test]" and then '
             "`playwright install chromium`",
-            file=sys.stderr,
+            error=True,
         )
 
         raise SystemExit(2) from error
@@ -128,11 +206,11 @@ def run_self_test(options: SelfTestOptions) -> int:
 
     if options.junit:
         options.junit.write_text(_junit(report), encoding="utf-8")
-        print(f"wrote {options.junit}")
+        _emit(f"wrote {options.junit}")
 
     if options.json_out:
         options.json_out.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
-        print(f"wrote {options.json_out}")
+        _emit(f"wrote {options.json_out}")
 
     return 1 if report.failed > 0 else 0
 
@@ -146,7 +224,7 @@ def _run_server(options: SelfTestOptions, work: Path, sync_playwright: Any) -> o
 
     _say(f"starting JupyterLab on port {port} with root {root}")
 
-    server = _start_server(root, port, token, settings, log)
+    server = _start_server(root, port, token, settings, work / "lab", log)
 
     try:
         _wait_for_server(port, token, server, log)
@@ -224,8 +302,8 @@ def _dump_server_log(log: Path) -> None:
     tail = _tail(log).strip()
 
     if tail:
-        print("[self-test] JupyterLab server log (tail):", flush=True)
-        print(tail, flush=True)
+        _emit("[self-test] JupyterLab server log (tail):")
+        _emit(tail)
 
 
 def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> object:
@@ -273,6 +351,9 @@ def _drive(
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
     with sync_playwright() as playwright:
+        # The driver is running now, and has had its way with the pipes.
+        _restore_blocking()
+
         browser = playwright.chromium.launch(headless=not options.headed)
         page = browser.new_page()
 
@@ -368,7 +449,8 @@ def _drive(
 
 def _is_routine_console_noise(text: str) -> bool:
     # JupyterLab logs a 404 for every optional resource it probes, such as
-    # workspaces and per-user settings, so those say nothing about a run.
+    # the run's own (empty) workspace and per-user settings, so those say
+    # nothing about a run.
     return text.startswith("Failed to load resource:")
 
 
@@ -555,8 +637,28 @@ def _free_port() -> int:
 
 
 def _start_server(
-    root: Path, port: int, token: str, settings: Path, log: Path
+    root: Path, port: int, token: str, settings: Path, state: Path, log: Path
 ) -> subprocess.Popen[bytes]:
+    """Start JupyterLab on ``root`` with the overrides in ``settings`` and
+    its workspaces and user settings under ``state``, logging to ``log``.
+    """
+
+    # JupyterLab keys its workspace file by workspace name, not by server,
+    # so every server the user runs shares the layout saved under
+    # ~/.jupyter/lab/, and the layout restorer would put tabs from the
+    # user's other sessions back into the run: a console whose kernel this
+    # server does not have raises a "Select Kernel" dialog under the first
+    # action. User settings (a default kernel, a theme, a disabled
+    # extension) would shape the run the same way. Both live under the
+    # work directory instead, so the run sees neither and writes into
+    # neither.
+
+    workspaces = state / "workspaces"
+    user_settings = state / "user-settings"
+
+    workspaces.mkdir(parents=True, exist_ok=True)
+    user_settings.mkdir(parents=True, exist_ok=True)
+
     command = [
         sys.executable,
         "-m",
@@ -569,6 +671,8 @@ def _start_server(
         "--ServerApp.open_browser=False",
         "--LabApp.expose_app_in_browser=True",
         f"--LabApp.app_settings_dir={settings}",
+        f"--LabApp.workspaces_dir={workspaces}",
+        f"--LabApp.user_settings_dir={user_settings}",
     ]
 
     # Nothing is added to the environment: a command that pages, in a
@@ -644,9 +748,9 @@ def remove_work_directory(
             return True
         except OSError as error:
             if attempt == attempts:
-                print(
+                _emit(
                     f"warning: leaving {work} behind, still in use: {error}",
-                    file=sys.stderr,
+                    error=True,
                 )
 
                 return False
@@ -700,12 +804,12 @@ def _print_report(report: SelfTestReport) -> None:
         message = str(result.get("message") or "").strip().splitlines()
         detail = f"  {message[0]}" if message else ""
 
-        print(
+        _emit(
             f"{mark} {result.get('page')}/{result.get('id')} ({result.get('type')},"
             f" {float(result.get('seconds', 0)):.1f}s){detail}"
         )
 
-    print(f"\n{report.passed} passed, {report.failed} failed, {report.skipped} skipped")
+    _emit(f"\n{report.passed} passed, {report.failed} failed, {report.skipped} skipped")
 
 
 def _attr(text: str) -> str:

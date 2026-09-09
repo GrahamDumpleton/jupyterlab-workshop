@@ -83,7 +83,10 @@ holding only `:windows:`, `:linux:`, `:macos:` or `:lite:`; see
   `2s`. `defaults.actions.delay` in the manifest sets the fallback.
 
 - `scroll: false` stops the panel scrolling to the action when it runs
-  automatically.
+  automatically, and stops the notebook actions that insert or run cells
+  (`cell-insert`, `cell-run`, `cell-run-to`, `cell-run-all`) scrolling
+  the notebook to the cell they acted on, which they otherwise do so the
+  cell and its output are in view.
 
 - `when` shows the action only while a condition holds, written the same
   way as the argument of the `{when}` directive below.
