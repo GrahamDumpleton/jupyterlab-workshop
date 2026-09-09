@@ -60,6 +60,45 @@ describe('parseManifest', () => {
     ).toBe('Well done. Try the *next* one.\n');
   });
 
+  it('parses the environment terminals flag', () => {
+    expect(parseManifest(VALID).environment?.terminals).toBe(true);
+    expect(
+      parseManifest(
+        VALID.replace(
+          '  kernel: workshop-git\n',
+          '  kernel: workshop-git\n  terminals: false\n'
+        )
+      ).environment?.terminals
+    ).toBe(false);
+    expect(() =>
+      parseManifest(
+        VALID.replace('  kernel: workshop-git\n', '  terminals: no\n')
+      )
+    ).toThrow(WorkshopFormatError);
+  });
+
+  it('parses and checks the workspace', () => {
+    expect(parseManifest(VALID).workspace).toBe('work');
+    expect(parseManifest(`${VALID}\nworkspace: work/\n`).workspace).toBe(
+      'work'
+    );
+    expect(parseManifest(`${VALID}\nworkspace: learner/src\n`).workspace).toBe(
+      'learner/src'
+    );
+
+    for (const bad of ['', '/abs', '../up', 'a/../b', '~/x', 'C:/x']) {
+      expect(() => parseManifest(`${VALID}\nworkspace: "${bad}"\n`)).toThrow(
+        WorkshopFormatError
+      );
+    }
+
+    for (const reserved of ['_workshop', 'pages', 'files', 'workshop.yaml']) {
+      expect(() => parseManifest(`${VALID}\nworkspace: ${reserved}\n`)).toThrow(
+        'uses itself'
+      );
+    }
+  });
+
   it('parses the links', () => {
     expect(parseManifest(VALID).homepage).toBeUndefined();
     expect(parseManifest(VALID).issues).toBeUndefined();
@@ -102,7 +141,8 @@ describe('parseManifest', () => {
     ]);
     expect(manifest.environment).toEqual({
       requirements: 'requirements.txt',
-      kernel: 'workshop-git'
+      kernel: 'workshop-git',
+      terminals: true
     });
     expect(manifest.layout).toBe('default');
     expect(manifest.layouts.default).toEqual({

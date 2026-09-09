@@ -93,6 +93,11 @@
         "shell": { "type": "string" }
       }
     },
+    "workspace": {
+      "type": "string",
+      "default": "work",
+      "description": "Directory, relative to the workshop, where the learner works; work unless set. It is created when the workshop first opens and filled with a copy of the files directory, Restart empties and refills it and leaves every other file alone, checkpoints archive it alone, and the workspace write scope means it."
+    },
     "environment": {
       "type": "object",
       "description": "An isolated Python environment created for the workshop from a requirements file, with its own kernel. Needs the install-packages capability.",
@@ -105,6 +110,10 @@
         "kernel": {
           "type": "string",
           "description": "Name of the kernelspec registered for the environment; defaults to workshop-<name>."
+        },
+        "terminals": {
+          "type": "boolean",
+          "description": "Whether workshop terminals, execute-capture and script checks see the environment first on their PATH once it exists; true unless set to false, for a workshop that teaches virtual environments itself."
         }
       }
     },

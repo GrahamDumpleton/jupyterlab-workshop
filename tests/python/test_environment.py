@@ -51,6 +51,8 @@ def test_create_environment_builds_a_venv_and_tracks_requirements(
     assert status.ready is True
     assert status.registered is False
     assert Path(status.python).is_file()
+    assert status.venv == str(workshop / "_workshop" / "venv")
+    assert Path(status.bin) == Path(status.python).parent
     assert status.stale is False
     assert "-m venv" in (workshop / "_workshop" / "environment.log").read_text()
     assert (workshop / "_workshop" / "environment.json").is_file()
@@ -113,3 +115,14 @@ def test_create_environment_checks_its_inputs(tmp_path: Path) -> None:
 
     with pytest.raises(EnvironmentSetupError, match="kernel name"):
         create_environment(tmp_path, "ws", "requirements.txt", "", register=False)
+
+
+def test_kernel_env_puts_the_environment_first_on_path(tmp_path: Path) -> None:
+    from jupyterlab_workshop.checks import venv_bin_dir
+    from jupyterlab_workshop.environment import kernel_env
+
+    env = kernel_env(tmp_path / "venv")
+
+    assert env["VIRTUAL_ENV"] == str(tmp_path / "venv")
+    assert env["PATH"].startswith(str(venv_bin_dir(tmp_path / "venv")))
+    assert env["PATH"].endswith("${PATH}")

@@ -26,7 +26,6 @@ import {
   LAYOUT_WIDGET_PATH_KINDS,
   parseLayoutWidget
 } from '../format/layouts';
-import { PRISTINE_CHECKPOINT } from '../format/checkpoints';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import { liteShellProblems, usesSubprocess } from '../lite';
@@ -44,6 +43,7 @@ import {
   mentionsAbsolutePath,
   urlHosts
 } from './danger';
+import { writeTargetProblem } from '../trust/paths';
 import { isWebLink } from '../util';
 import { ILintMessage } from './types';
 
@@ -343,8 +343,7 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
 
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
-      lintCheckpointName(node, where, messages);
-      lintPaths(node, workspaceOnly, where, messages);
+      lintPaths(node, workspaceOnly, input.manifest, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
       lintVariants(node, input.manifest.platforms, where, messages);
     }
@@ -372,25 +371,6 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
  * workshop that named its own checkpoint the same way would overwrite
  * the files "Restart" puts back.
  */
-function lintCheckpointName(
-  node: IDirectiveNode,
-  where: { path: string; line?: number },
-  messages: ILintMessage[]
-): void {
-  if (node.name !== 'checkpoint' && node.name !== 'restore') {
-    return;
-  }
-
-  if (node.options.name === PRISTINE_CHECKPOINT) {
-    messages.push({
-      level: 'error',
-      rule: 'reserved-checkpoint-name',
-      message: `The checkpoint name "${PRISTINE_CHECKPOINT}" is reserved for the snapshot taken when a workshop is first opened`,
-      ...where
-    });
-  }
-}
-
 /** Action types that need the server and so cannot run in JupyterLite. */
 const LITE_UNSUPPORTED: ReadonlySet<string> = new Set(['environment-create']);
 
@@ -579,16 +559,47 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
 function lintPaths(
   node: IDirectiveNode,
   workspaceOnly: boolean,
+  manifest: IWorkshopManifest,
   where: { path: string; line: number },
   messages: ILintMessage[]
 ): void {
   const capability = actionCapability(node.name);
 
-  if (capability !== 'write-files' || !workspaceOnly) {
+  if (capability !== 'write-files') {
     return;
   }
 
-  // Paths in a workspace-scoped workshop stay inside the workshop.
+  // What the trust policy would refuse outright is an error here.
+  const refused = writeTargetProblem(
+    node.name,
+    node.options,
+    manifest.capabilities,
+    {
+      workspace: manifest.workspace,
+      requirements: manifest.environment?.requirements
+    }
+  );
+
+  if (refused) {
+    messages.push({
+      level: 'error',
+      rule: 'write-refused',
+      message: `${refused} (${node.name} "${node.id}")`,
+      ...where
+    });
+
+    return;
+  }
+
+  if (!workspaceOnly) {
+    return;
+  }
+
+  // Paths in a workspace-scoped workshop stay inside the workshop. From
+  // a declared workspace, `..` on a read such as `from` may climb as far
+  // as the workshop directory, which holds the shipped files.
+  const workspace = manifest.workspace;
+
   for (const option of PATH_OPTIONS) {
     const value = node.options[option];
 
@@ -596,12 +607,11 @@ function lintPaths(
       continue;
     }
 
+    const start = option === 'from' ? undefined : workspace;
     const escapes =
       value.startsWith('/') ||
       value.startsWith('~') ||
-      value === '..' ||
-      value.startsWith('../') ||
-      value.includes('/../') ||
+      climbsOut(value, start) ||
       mentionsAbsolutePath(value);
 
     if (escapes) {
@@ -613,6 +623,29 @@ function lintPaths(
       });
     }
   }
+}
+
+/**
+ * Whether a relative path leaves the workshop directory: from the
+ * workshop itself any `..` does, from a workspace inside it `..` may
+ * climb as many levels as the workspace is deep.
+ */
+function climbsOut(value: string, workspace: string | undefined): boolean {
+  let depth = workspace ? workspace.split('/').filter(Boolean).length : 0;
+
+  for (const part of value.split('/')) {
+    if (part === '..') {
+      depth -= 1;
+
+      if (depth < 0) {
+        return true;
+      }
+    } else if (part !== '' && part !== '.') {
+      depth += 1;
+    }
+  }
+
+  return false;
 }
 
 function lintHosts(

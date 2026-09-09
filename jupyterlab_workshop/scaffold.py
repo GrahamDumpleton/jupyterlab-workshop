@@ -91,10 +91,10 @@ def starter_variables() -> str:
     """Variables declared by the starter template."""
 
     return """variables:
-  - name: work_dir
-    type: path
-    default: work
-    description: Directory the exercises are done in
+  - name: learner
+    type: text
+    default: friend
+    description: What the workshop calls you
 """
 
 
@@ -122,28 +122,32 @@ This workshop runs inside JupyterLab. The instructions are on this side,
 and the actions in boxes drive the session: click one and it runs. You can
 also type the commands yourself.
 
-Start by checking which directory you are in.
+Start by checking which directory you are in. Terminals start in the
+workshop's `work` directory, the workspace named in `workshop.yaml`,
+where everything you make in this workshop goes.
 
 ```{{execute}}
 pwd
 ```
 
-Create the directory the exercises use. The name comes from the
-`work_dir` variable declared in `workshop.yaml`.
+Leave a first file there. The greeting uses the `learner` variable
+declared in `workshop.yaml`.
 
 ```{{execute}}
-mkdir -p {{{{ work_dir }}}} && cd {{{{ work_dir }}}}
+echo "Hello, {{{{ learner }}}}" > hello.txt
+:windows:
+Set-Content hello.txt "Hello, {{{{ learner }}}}"
 ```
 
-The check below passes once the directory exists. It runs after the
-command above and can also be run with the Check button.
+The check below passes once the file exists. It runs after the command
+above and can also be run with the Check button.
 
 ```{{verify}}
-:id: work-dir-exists
-:label: The working directory exists
+:id: hello-exists
+:label: The first file exists
 :substrate: contents
 :trigger: after:welcome-2
-exists {{{{ work_dir }}}}
+exists hello.txt
 ```
 """
 
@@ -158,14 +162,17 @@ requires: [quiz:panel-quiz]
 
 # First steps
 
-Write a file into the working directory and open it in the editor.
+Write a file into the workspace and open it in the editor. Paths in
+actions are relative to the workspace too.
 
 ```{file-write}
-:path: {{ work_dir }}/notes.md
+:path: notes.md
 :open: true
 # Notes
 
 - Files written by actions open in the editor when asked to.
+- Starter files shipped in the workshop's `files/` directory are copied
+  here when the workshop opens, and Restart puts them back.
 ```
 
 A quick question to finish.
@@ -309,6 +316,13 @@ uv run jupyter lab
 Then use "Open Workshop…" in the Workshop panel, or right-click this
 directory in the file browser and choose "Open as Workshop".
 
+## Layout
+
+`workshop.yaml` and `pages/` are the workshop. Starter files for the
+learner go in `files/`; they are copied into `work/`, the workspace,
+when the workshop opens, and that is where the learner's files land.
+`work/` is generated, so it is not committed.
+
 ## Check it
 
 ```
@@ -334,7 +348,7 @@ _workshop/
 # Published archives
 dist/
 
-# Exercise output
+# The learner's workspace, filled from files/ when the workshop opens
 work/
 """
 
@@ -443,6 +457,10 @@ def scaffold_files(
 
     files[directory / "README.md"] = readme(name, title)
     files[directory / ".gitignore"] = gitignore()
+
+    # An empty files/ marks where starter files go; it is copied into the
+    # workspace when the workshop opens.
+    files[directory / "files" / ".gitkeep"] = ""
 
     if ci:
         files[directory / ".github" / "workflows" / "workshop.yml"] = ci_workflow()

@@ -8,7 +8,7 @@ Workshops can run code in a notebook's kernel without adding a cell, and
 capture the output into a variable. This stores the Python version.
 
 ```{kernel-execute}
-:path: scratch/hello.ipynb
+:path: hello.ipynb
 :capture: python_version
 import sys
 print(sys.version.split()[0])
@@ -35,15 +35,15 @@ The answer is {var}`answer`.
 Kernels can be interrupted and restarted.
 
 ```{kernel-interrupt}
-:path: scratch/hello.ipynb
+:path: hello.ipynb
 ```
 
 ```{kernel-restart}
-:path: scratch/hello.ipynb
+:path: hello.ipynb
 ```
 
 A console attached to the notebook's kernel lets you poke at its state.
 
 ```{console-open}
-:path: scratch/hello.ipynb
+:path: hello.ipynb
 ```

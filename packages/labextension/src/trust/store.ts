@@ -2,6 +2,7 @@ import { TRUST_LEVELS, TrustLevel } from '@jupyterlab-workshop/core';
 import { IStateDB } from '@jupyterlab/statedb';
 import { ReadonlyPartialJSONValue } from '@lumino/coreutils';
 
+import { fetchForServer, saveForServer } from '../statedb';
 import { ITrustDecision, ITrustPolicy, ITrustStore } from '../tokens';
 
 const DECISIONS_KEY = '@jupyterlab-workshop/labextension:trust';
@@ -25,6 +26,11 @@ interface IStoredDecisions {
 /**
  * Trust decisions keyed by source and hash, persisted in the state
  * database so they survive reloads.
+ *
+ * Decisions and the authored list are kept per server: a local source key
+ * is a path relative to the server root, so a workshop marked as the
+ * user's own under one root must not be trusted at the same path under
+ * another.
  */
 export class TrustStore implements ITrustStore {
   constructor(stateDB: IStateDB | null) {
@@ -87,7 +93,7 @@ export class TrustStore implements ITrustStore {
     }
 
     try {
-      await this._stateDB.save(AUTHORED_KEY, { authored: next });
+      await saveForServer(this._stateDB, AUTHORED_KEY, { authored: next });
     } catch (error) {
       console.warn('Unable to save the authored workshops', error);
     }
@@ -102,7 +108,7 @@ export class TrustStore implements ITrustStore {
 
     if (this._stateDB) {
       try {
-        const stored = await this._stateDB.fetch(AUTHORED_KEY);
+        const stored = await fetchForServer(this._stateDB, AUTHORED_KEY);
         const list = (stored as { authored?: unknown } | undefined)?.authored;
 
         if (Array.isArray(list)) {
@@ -127,7 +133,7 @@ export class TrustStore implements ITrustStore {
 
     if (this._stateDB) {
       try {
-        const stored = await this._stateDB.fetch(DECISIONS_KEY);
+        const stored = await fetchForServer(this._stateDB, DECISIONS_KEY);
 
         if (isStoredDecisions(stored)) {
           this._cache = stored.decisions;
@@ -152,7 +158,8 @@ export class TrustStore implements ITrustStore {
     try {
       const value: IStoredDecisions = { decisions };
 
-      await this._stateDB.save(
+      await saveForServer(
+        this._stateDB,
         DECISIONS_KEY,
         value as unknown as ReadonlyPartialJSONValue
       );

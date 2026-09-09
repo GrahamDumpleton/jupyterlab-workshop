@@ -89,9 +89,10 @@ export class LiteBackend implements IWorkshopBackend {
   async checkpoint(
     workshop: string,
     name: string,
-    variables: ICheckpointRecord['variables']
+    variables: ICheckpointRecord['variables'],
+    subdir?: string
   ): Promise<void> {
-    await createCheckpoint(this._contents, workshop, name, variables);
+    await createCheckpoint(this._contents, workshop, name, variables, subdir);
   }
 
   restoreCheckpoint(

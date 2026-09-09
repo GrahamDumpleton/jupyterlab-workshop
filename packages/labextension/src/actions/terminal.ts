@@ -403,17 +403,26 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
     case 'bash':
     case 'zsh':
     case 'sh': {
-      const path = manager.absolutePath(`${WORKSHOP_STATE_DIR}/env.sh`);
+      const path = manager.absolutePath(
+        `${WORKSHOP_STATE_DIR}/env.sh`,
+        'workshop'
+      );
 
       return `source '${path.replace(/'/g, "'\\''")}'`;
     }
     case 'powershell': {
-      const path = manager.absolutePath(`${WORKSHOP_STATE_DIR}/env.ps1`);
+      const path = manager.absolutePath(
+        `${WORKSHOP_STATE_DIR}/env.ps1`,
+        'workshop'
+      );
 
       return `. '${path.replace(/'/g, "''")}'`;
     }
     case 'cmd': {
-      const path = manager.absolutePath(`${WORKSHOP_STATE_DIR}/env.cmd`);
+      const path = manager.absolutePath(
+        `${WORKSHOP_STATE_DIR}/env.cmd`,
+        'workshop'
+      );
 
       return `call "${path}"`;
     }
@@ -502,9 +511,7 @@ function terminalCwd(
   request: IActionRequest,
   manager: IWorkshopManager
 ): string | undefined {
-  return request.options.cwd
-    ? manager.resolvePath(request.options.cwd)
-    : manager.workshop?.path;
+  return manager.resolvePath(request.options.cwd ?? '.');
 }
 
 /**

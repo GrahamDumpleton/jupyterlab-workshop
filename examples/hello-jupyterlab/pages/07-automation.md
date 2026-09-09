@@ -24,7 +24,7 @@ echo "Cascaded into the terminal"
 
 ```{file-write}
 :id: auto-write
-:path: scratch/automation.txt
+:path: automation.txt
 :open: true
 Written by a cascade.
 ```

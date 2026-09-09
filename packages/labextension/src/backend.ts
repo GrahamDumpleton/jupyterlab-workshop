@@ -92,11 +92,12 @@ export class ServerBackend implements IWorkshopBackend {
   async checkpoint(
     workshop: string,
     name: string,
-    variables: ICheckpointRecord['variables']
+    variables: ICheckpointRecord['variables'],
+    subdir?: string
   ): Promise<void> {
     await requestAPI('checkpoints', this._settings, {
       method: 'POST',
-      body: JSON.stringify({ workshop, name, variables })
+      body: JSON.stringify({ workshop, name, variables, subdir })
     });
   }
 

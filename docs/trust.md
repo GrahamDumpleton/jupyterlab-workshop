@@ -64,9 +64,14 @@ capabilities:
 | `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
 | `ui-settings`      | Changing JupyterLab settings.                                        |
 
-The `write-files` scopes are `workspace` (paths must stay inside the
-workshop directory, the default), `home` and `any` (paths may reach
-anywhere under the JupyterLab root; the contents API cannot go higher).
+The `write-files` scopes are `workspace` (the default), `home` and `any`
+(paths may reach anywhere under the JupyterLab root; the contents API
+cannot go higher). Under the `workspace` scope writes must stay inside
+the workshop's [workspace](concepts.md#the-workspace), and the trust
+dialog says so. Under every scope the workshop's own files, the
+manifest, the pages, the shipped `files/` and the requirements file,
+are read-only to actions: an action that names one is refused with a
+"not allowed" badge, and lint reports it as an error.
 
 An action whose capability the manifest does not declare never runs, at
 any trust level. It shows a "not allowed" badge in the panel and the trust
@@ -105,7 +110,11 @@ off by default, asking whether progress may be reported to it; see
 
 Cancelling leaves the workshop closed. The decision is stored in the
 JupyterLab state database keyed by source and hash, so the same content
-opens again without asking, and a changed workshop asks again. The badge
+opens again without asking, and a changed workshop asks again. The state
+database is shared by every JupyterLab server the same user runs, but a
+local workshop is named by its path under the server's root, so
+decisions are kept per server: a workshop trusted under one root asks
+again under another, and so does one marked as your own. The badge
 in the panel header shows the current level; clicking it, or the
 "Workshop: Change Trust Level…" command, reopens the dialog.
 

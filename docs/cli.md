@@ -15,8 +15,11 @@ jupyter workshop init my-workshop [--name NAME] [--title TITLE] [--ci]
                                   [--gating off|soft|strict]
 ```
 
-Creates a directory with a `workshop.yaml`, starter pages, a README and
-a `.gitignore`. The `starter` template's pages show commands, a check,
+Creates a directory with a `workshop.yaml`, starter pages, an empty
+`files/` for starter files (copied into the learner's `work/`
+[workspace](concepts.md#the-workspace) when the workshop opens), a
+README and a `.gitignore`. The `starter` template's pages show commands,
+a check,
 a file write and a quiz; `blank` is one page of prose; `notebook`
 creates a notebook, runs its cells and checks a value in its kernel. The
 name defaults to a slug of the directory name. `--platform` and

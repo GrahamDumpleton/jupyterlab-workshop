@@ -175,12 +175,16 @@ class VerifyHandler(WorkshopHandler):
         script = str(body.get("script") or "")
         timeout = float(body.get("timeout") or 60)
         environment = body.get("environment")
+        cwd = body.get("cwd")
 
         if not script:
             raise tornado.web.HTTPError(400, "A script is required")
 
         if environment is not None and not isinstance(environment, dict):
             raise tornado.web.HTTPError(400, "environment must be an object")
+
+        if cwd is not None and not isinstance(cwd, str):
+            raise tornado.web.HTTPError(400, "cwd must be a string")
 
         try:
             result = await IOLoop.current().run_in_executor(
@@ -194,6 +198,7 @@ class VerifyHandler(WorkshopHandler):
                         str(key): str(value)
                         for key, value in (environment or {}).items()
                     },
+                    cwd=cwd or None,
                 ),
             )
         except CheckError as error:
@@ -223,16 +228,24 @@ class CheckpointsHandler(WorkshopHandler):
         name = str(body.get("name") or "")
         action = str(body.get("action") or "create")
         variables = body.get("variables")
+        subdir = body.get("subdir")
 
         if variables is not None and not isinstance(variables, dict):
             raise tornado.web.HTTPError(400, "variables must be an object")
+
+        if subdir is not None and not isinstance(subdir, str):
+            raise tornado.web.HTTPError(400, "subdir must be a string")
 
         try:
             if action == "create":
                 record = await IOLoop.current().run_in_executor(
                     None,
                     lambda: create_checkpoint(
-                        self.root_dir, workshop, name, variables=variables
+                        self.root_dir,
+                        workshop,
+                        name,
+                        variables=variables,
+                        subdir=subdir or None,
                     ),
                 )
             elif action == "restore":

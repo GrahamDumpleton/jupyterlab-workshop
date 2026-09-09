@@ -11,6 +11,7 @@ import React from 'react';
 import {
   ConfirmAnswer,
   IConfirmRequest,
+  ICapabilitySummary,
   ITrustChoice,
   ITrustPrompts,
   ITrustSummary
@@ -76,7 +77,7 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
                 ) : null}
                 <span className="jp-WorkshopTrust-description">
                   {' '}
-                  {CAPABILITY_DESCRIPTIONS[item.capability]}
+                  {describeCapability(item, summary.workspace)}
                   {item.count > 0
                     ? ` Used by ${item.count} ${item.count === 1 ? 'action' : 'actions'}.`
                     : ' Not used by any action.'}
@@ -140,6 +141,27 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
 
   private _summary: ITrustSummary;
   private _analytics = false;
+}
+
+/**
+ * The one-line explanation of a capability, with where writes go when
+ * the workshop declares a workspace and the write scope is confined.
+ */
+function describeCapability(
+  item: ICapabilitySummary,
+  workspace: string | undefined
+): string {
+  const description = CAPABILITY_DESCRIPTIONS[item.capability];
+
+  if (
+    item.capability !== 'write-files' ||
+    !workspace ||
+    item.scopes.some(scope => scope === 'home' || scope === 'any')
+  ) {
+    return description;
+  }
+
+  return `${description} Only under ${workspace}/ in the workshop; the pages and the workshop's own files are never changed.`;
 }
 
 function sinkHost(url: string): string {

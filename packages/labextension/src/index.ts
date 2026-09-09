@@ -1037,7 +1037,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       execute: async (): Promise<void> => {
         const result = await showDialog({
           title: 'Reset workshop progress?',
-          body: 'Page progress, action results, captured variables and the action log will be forgotten and the workshop will reopen at its first page.',
+          body: 'Page progress, action results, captured variables and the action log will be forgotten and the workshop will reopen at its first page. The files and the workshop environment are kept.',
           buttons: [
             Dialog.cancelButton(),
             Dialog.warnButton({ label: 'Reset' })
@@ -1113,9 +1113,20 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
+        // The open workshop says whether it has an environment; one
+        // restarted from its card in the browser is not loaded, so the
+        // wording covers the possibility.
+        const declares =
+          path === undefined
+            ? manager.workshop?.manifest.environment?.requirements !== undefined
+            : true;
         const result = await showDialog({
           title: `Restart workshop "${title}"?`,
-          body: 'The files in the workshop directory will be put back as they were when the workshop was first opened, anything added since will be deleted, and all progress will be forgotten.',
+          body:
+            'The files in the workshop directory will be put back as they were when the workshop was first opened, anything added since will be deleted, and all progress will be forgotten.' +
+            (declares
+              ? ' The workshop environment, if it has one, will be removed and can be created again.'
+              : ''),
           buttons: [
             Dialog.cancelButton(),
             Dialog.warnButton({ label: 'Restart' })
@@ -1133,14 +1144,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             await closeWorkshopWidgets(cleanup, target);
           }
 
-          const outcome = await manager.restart(path);
-
-          if (!outcome.files) {
-            Notification.warning(
-              'Progress was forgotten but the files were kept: the workshop was first opened before a snapshot of them was taken.',
-              { autoClose: 8000 }
-            );
-          }
+          await manager.restart(path);
         } catch (error) {
           console.error('Unable to restart the workshop', error);
           await showErrorMessage(

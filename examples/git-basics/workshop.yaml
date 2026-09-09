@@ -32,7 +32,7 @@ layouts:
     left: collapsed
     right: { widget: instructions, size: 0.25 }
     main:
-      - { area: top, widgets: ["markdown:README.md"] }
+      - { area: top, widgets: ["markdown:../README.md"] }
       - { area: bottom, widgets: ["terminal:git"], size: 0.4 }
 variables:
   - name: repo_dir

@@ -5,6 +5,7 @@ import {
   IDirectiveNode,
   ILintMessage,
   IPage,
+  IVenvExports,
   ICatalog,
   ICollectionIndex,
   IRequirement,
@@ -76,6 +77,9 @@ export interface ITrustSummary {
 
   /** Number of actions that run without a click. */
   automatic: number;
+
+  /** The workspace, which the write-files workspace scope confines writes to. */
+  workspace?: string;
 
   lint: ILintMessage[];
 
@@ -374,6 +378,10 @@ export interface IEnvironmentStatus {
   ready: boolean;
   registered: boolean;
   python: string;
+
+  /** The venv directory and its programs directory; empty until ready. */
+  venv: string;
+  bin: string;
   requirements: string;
 
   /** Whether the requirements changed since the environment was created. */
@@ -409,16 +417,6 @@ export interface IInstalledWorkshop {
 
   /** Whether a state file exists, that is, the learner has opened it. */
   started: boolean;
-}
-
-/** What a restart managed to do. */
-export interface IRestartResult {
-  /**
-   * Whether the files were put back. False when the workshop was first
-   * opened before the snapshot existed, in which case only progress was
-   * forgotten and the files stay as they are.
-   */
-  files: boolean;
 }
 
 /** Features an administrator can remove for a locked-down deployment. */
@@ -514,6 +512,12 @@ export interface IWorkshopManager {
   /** Whether the open workshop is being edited rather than followed. */
   readonly authoring: boolean;
 
+  /**
+   * The open workshop's workspace, relative to the JupyterLab root, or
+   * null when no workshop is open.
+   */
+  readonly workspacePath: string | null;
+
   /** Lint findings for the open workshop, refreshed on reload. */
   readonly lint: ILintMessage[];
 
@@ -553,7 +557,6 @@ export interface IWorkshopManager {
   /** Ask the server again about the environment. */
   refreshEnvironment(): Promise<void>;
 
-  /** Create the isolated environment and register its kernel. */
   /**
    * Create the declared environment, or keep one that already matches
    * its requirements unless `force` is set.
@@ -562,6 +565,12 @@ export interface IWorkshopManager {
 
   /** The kernel of the environment once it is ready, else undefined. */
   environmentKernel(): string | undefined;
+
+  /**
+   * The environment's directories for a terminal's PATH, once it is
+   * ready and unless the manifest keeps terminals off it.
+   */
+  environmentVenv(): IVenvExports | undefined;
 
   /** List the workshops under a directory relative to the JupyterLab root. */
   installed(directory: string): Promise<IInstalledWorkshop[]>;
@@ -610,7 +619,7 @@ export interface IWorkshopManager {
    * forget its progress and, when it is the open workshop, reopen it from
    * the first page. Without a path the open workshop restarts.
    */
-  restart(path?: string): Promise<IRestartResult>;
+  restart(path?: string): Promise<void>;
 
   /** Whether the current page's requirements allow moving on. */
   gate(pageId?: string): IGateStatus;
@@ -676,10 +685,10 @@ export interface IWorkshopManager {
    * Resolve a path relative to the workshop directory to a path relative
    * to the JupyterLab root, refusing paths that escape the workshop.
    */
-  resolvePath(path: string): string;
+  resolvePath(path: string, base?: PathBase): string;
 
   /** Absolute path of the workshop directory on the server, when known. */
-  absolutePath(path?: string): string;
+  absolutePath(path?: string, base?: PathBase): string;
 }
 
 /** A request to download a workshop. */
@@ -716,6 +725,12 @@ export interface IFetchResult {
   sha256: string;
 }
 
+/**
+ * Where a relative path starts: the learner's workspace, or the
+ * workshop directory itself for shipped files and state.
+ */
+export type PathBase = 'workspace' | 'workshop';
+
 /** What a checkpoint records besides the files. */
 export interface ICheckpointRecord {
   name: string;
@@ -723,6 +738,9 @@ export interface ICheckpointRecord {
 
   /** The learner's variable values at the time, to put back on restore. */
   variables: Record<string, { value: string; source: VariableSource }>;
+
+  /** The workspace the checkpoint covers, when it covers only that. */
+  subdir?: string;
 }
 
 /** What running a verify script produced. */
@@ -779,6 +797,9 @@ export interface IScriptRequest {
   workshop: string;
   script: string;
 
+  /** Working directory for the script, relative to the workshop. */
+  cwd?: string;
+
   /** Seconds to allow. */
   timeout: number;
   environment: Record<string, string>;
@@ -814,7 +835,8 @@ export interface IWorkshopBackend {
   checkpoint(
     workshop: string,
     name: string,
-    variables: ICheckpointRecord['variables']
+    variables: ICheckpointRecord['variables'],
+    subdir?: string
   ): Promise<void>;
 
   /** Put a checkpoint's files back and return its record. */

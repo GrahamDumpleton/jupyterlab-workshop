@@ -950,7 +950,10 @@ test.describe('locked-down browser', () => {
       .click();
     await expect(pageSelect).toHaveValue('1');
 
-    const added = `${WORKSHOPS_DIR}/${WORKSHOP}/added.txt`;
+    // The workshop declares a workspace, so the learner's file goes
+    // there, Restart refills that directory, and no pristine snapshot of
+    // the whole workshop is ever taken.
+    const added = `${WORKSHOPS_DIR}/${WORKSHOP}/work/added.txt`;
 
     await page.contents.uploadContent('added later', 'text', added);
     expect(await page.contents.fileExists(added)).toBe(true);
@@ -964,10 +967,13 @@ test.describe('locked-down browser', () => {
       .poll(() => page.contents.fileExists(added), { timeout: 15000 })
       .toBe(false);
     expect(
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/${WORKSHOP}/work`)
+    ).toBe(true);
+    expect(
       await page.contents.fileExists(
         `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/snapshots/pristine.tar`
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

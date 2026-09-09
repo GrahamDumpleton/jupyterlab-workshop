@@ -67,9 +67,9 @@ Several sources can set the same variable. The one furthest down this
 list wins:
 
 1. **Built-ins** describe the machine and the session: `platform`,
-   `shell`, `path_sep`, `workshop_dir`, `home`, `user`, `host` and
-   `container`. They cannot be changed. [Platforms](platforms.md) says
-   what each holds.
+   `shell`, `path_sep`, `workshop_dir`, `workspace`, `home`, `user`,
+   `host` and `container`. They cannot be changed.
+   [Platforms](platforms.md) says what each holds.
 
 2. **Manifest defaults**, from the `default` of a declaration.
 
@@ -124,6 +124,9 @@ The hidden workshop kernel that runs `execute-capture`, `kernel-execute`
 without a `path`, and kernel checks has the same environment, so a check
 can read `os.environ["REPO_DIR"]`, and its code can equally use
 `{{ repo_dir }}` directly, since bodies are substituted before they run.
+A workshop with an [isolated environment](environment.md) also has
+`VIRTUAL_ENV` set and the environment first on `PATH`, in terminals and
+kernels alike.
 
 ## Conditions
 

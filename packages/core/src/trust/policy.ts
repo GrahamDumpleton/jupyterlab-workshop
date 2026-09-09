@@ -9,6 +9,7 @@
 
 import { Capability } from '../actions/catalog';
 import { effectiveCapability } from './capabilities';
+import { IWriteLayout, writeTargetProblem } from './paths';
 
 /** How far a workshop is trusted. */
 export type TrustLevel = 'trusted' | 'restricted' | 'ask';
@@ -57,6 +58,9 @@ export interface IPolicyInput {
 
   /** Capabilities an administrator has disabled. */
   disabled?: readonly string[];
+
+  /** Where the manifest says writes may go; see `writeTargetProblem`. */
+  layout?: IWriteLayout;
 }
 
 /**
@@ -109,6 +113,21 @@ export function decideAction(input: IPolicyInput): ActionDisposition {
         kind: 'skip',
         reason: `The "${capability}" capability is disabled by policy`
       };
+    }
+  }
+
+  // A write aimed at the workshop's own files, or outside a declared
+  // workspace under the workspace scope, never runs at any level.
+  if (capability === 'write-files') {
+    const problem = writeTargetProblem(
+      input.type,
+      input.options ?? {},
+      input.declared,
+      input.layout ?? {}
+    );
+
+    if (problem) {
+      return { kind: 'reject', reason: problem };
     }
   }
 

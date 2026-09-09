@@ -72,6 +72,34 @@ export async function deleteTree(
 }
 
 /**
+ * Delete everything inside a directory except the entries named, leaving
+ * the directory itself in place. A missing directory is not an error.
+ */
+export async function deleteChildrenExcept(
+  contents: Contents.IManager,
+  path: string,
+  keep: ReadonlySet<string>
+): Promise<void> {
+  const model = await getIfExists(contents, path, true);
+
+  if (!model || model.type !== 'directory' || !Array.isArray(model.content)) {
+    return;
+  }
+
+  for (const child of model.content as Contents.IModel[]) {
+    if (keep.has(child.name)) {
+      continue;
+    }
+
+    if (child.type === 'directory') {
+      await deleteTree(contents, child.path);
+    } else {
+      await contents.delete(child.path);
+    }
+  }
+}
+
+/**
  * Create a directory and any missing parents through the contents API.
  */
 export async function ensureDirectory(
@@ -154,4 +182,49 @@ export async function writeTextFile(
 ): Promise<void> {
   await ensureDirectory(contents, PathExt.dirname(path));
   await contents.save(path, { type: 'file', format: 'text', content });
+}
+
+/**
+ * Copy a directory tree through the contents API, skipping the named
+ * top-level entries. Files are read and written whole, since the server
+ * cannot copy a directory in one request; a large tree takes a while.
+ */
+export async function copyTree(
+  contents: Contents.IManager,
+  from: string,
+  to: string,
+  skip: readonly string[]
+): Promise<void> {
+  const model = await contents.get(from, { content: true });
+
+  await ensureDirectory(contents, to);
+
+  for (const child of childrenOf(model)) {
+    if (skip.includes(child.name)) {
+      continue;
+    }
+
+    const target = PathExt.join(to, child.name);
+
+    if (child.type === 'directory') {
+      await copyTree(contents, child.path, target, []);
+    } else {
+      const file = await contents.get(child.path, { content: true });
+
+      await contents.save(target, {
+        type: file.type,
+        format: file.format,
+        content: file.content
+      });
+    }
+  }
+}
+
+/**
+ * The entries of a directory model, or nothing for a file.
+ */
+export function childrenOf(model: Contents.IModel): Contents.IModel[] {
+  return model.type === 'directory' && Array.isArray(model.content)
+    ? (model.content as Contents.IModel[])
+    : [];
 }

@@ -20,7 +20,15 @@ my-workshop/
   pages/01-welcome.md    one Markdown page per step, listed in the manifest
   pages/02-....md
   requirements.txt       optional, for an isolated Python environment
+  files/                 optional, starter files copied into the workspace
+  work/                  the learner's workspace, generated; never commit it
 ```
+
+The workspace is `work/` unless the manifest's `workspace` field names
+another directory. It is created and filled from `files/` when the
+workshop opens; Restart empties and refills it and leaves the pages
+alone; checkpoints archive it alone; and paths in actions, terminals
+and checks start there, so pages name the learner's files plainly.
 
 The tooling is the `jupyter workshop` command (see the reference files
 for the complete vocabulary). The same tools are available as MCP tools
@@ -106,6 +114,7 @@ capabilities: # what the pages need; lint checks this
 requires:
   tools:
     - { name: git, version: '>=2.30', hint: { linux: apt install git } }
+workspace: work # the default; the learner's directory, filled from files/
 gating: soft # off, soft or strict
 env: { PAGER: cat, GIT_PAGER: cat } # exported to terminals; nothing by default
 variables:
@@ -121,7 +130,8 @@ pages:
 ```
 
 Capabilities: `terminal` (run commands), `write-files` (create and change
-files; scope `workspace` keeps writes inside the workshop directory),
+files; scope `workspace` keeps writes inside the workspace; the pages,
+manifest and `files/` are never writable),
 `kernel-exec` (run code in kernels; also needed by code checks),
 `network`, `install-packages` (needed by `environment`), `auto-run`
 (actions that run without a click: `:auto:` and `:cascade:`),
@@ -131,14 +141,21 @@ missing and unused capabilities.
 Other fields: `layout` and `layouts` (named panel arrangements: `left` and
 `right` take `instructions`, `collapsed`, a sidebar widget id, or a mapping
 of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
-`widgets` such as `terminal:git`, `markdown:README.md`, `file:<path>`,
+`widgets` such as `terminal:git`, `markdown:../README.md` (paths start at
+the workspace, so a shipped README needs the `../`), `file:<path>`,
 `notebook:<path>` or `launcher`, and `size`; built-ins are `default`,
 `terminal-only` and `notebook`), `tracks` (alternative paths chosen with
 `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
-`environment` (`requirements`, `kernel`), `analytics` (`sink`). A
-workshop with an `environment` puts an `environment-create` action on
-its first page, before any notebook: the self-test runs only what pages
-carry, and the action is a no-op once the environment exists.
+`environment` (`requirements`, `kernel`, `terminals`), `analytics`
+(`sink`). A workshop with an `environment` puts an `environment-create`
+action on its first page, before any notebook: the self-test runs only
+what pages carry, and the action is a no-op once the environment
+exists. Once created, the environment is first on `PATH` in workshop
+terminals, captures and checks as well as being the notebook kernel, so
+a terminal workshop that needs packages declares them in the
+requirements file rather than walking the learner through `python -m
+venv`; `terminals: false` keeps terminals on the bare `python` for a
+workshop that teaches venvs.
 
 ## Pages
 
@@ -182,7 +199,7 @@ Inline roles: `{copy}`git status``, `{open}`README.md``, `{var}`repo_dir``.
 Variables: `{{ name }}` with filters `lower`, `upper`, `slug`, `default`,
 `shell`, `path`; `{{ path "src/app.py" }}` renders the platform's
 separator; `\{{` escapes. Built-ins: `platform`, `shell`, `path_sep`,
-`home`, `user`, `workshop_dir`, `host` (`binder`, `jupyterhub`, `local`
+`home`, `user`, `workshop_dir`, `workspace`, `host` (`binder`, `jupyterhub`, `local`
 or `lite`) and `container` (`true` inside a container). Values come from
 the manifest defaults, launch links, forms, captures and the variables
 panel.
@@ -308,10 +325,8 @@ pass, `soft` only shows what is missing.
 - Ids referred to elsewhere (`requires`, `after:`, `cascade`) must exist;
   lint reports `unknown-requirement` and `unknown-action-id`.
 
-- Never name a checkpoint `pristine`: the extension takes a checkpoint
-  under that name when a workshop is first opened and "Restart" restores
-  it (`reserved-checkpoint-name`). Restart only puts back files inside
-  the workshop directory, so keep what a workshop creates inside it.
+- Restart and checkpoints only ever cover the workspace, so keep what a
+  workshop creates inside it.
 
 - A page is done when the learner leaves it forwards with its `requires`
   met; there is no button to mark it. The last page shows Finish, which
@@ -319,8 +334,10 @@ pass, `soft` only shows what is missing.
   where to go next) and what to do now. To checkpoint after a check,
   give the `verify` a `:cascade:` naming a `checkpoint` block.
 
-- Keep `write-files` paths inside the workshop directory unless the
-  scope is wider; lint warns on `..`, `~` and absolute paths.
+- Keep `write-files` paths inside the workspace unless the scope is
+  wider; lint warns on `..`, `~` and absolute paths, and reports as an
+  error a write aimed at the pages, the manifest, `files/` or anywhere
+  else outside the workspace.
 
 - Do not pipe downloads into a shell, use `sudo`, or `rm -rf` outside the
   workshop; lint flags these and the trust dialog shows them.
@@ -351,7 +368,7 @@ pass, `soft` only shows what is missing.
 `SKIP ...`. The message of a failed `verify` is the assertion text or
 predicate that failed; a failed `execute` usually timed out waiting for
 the prompt (a command waiting for input) or ran in the wrong directory
-(`:cwd:` is relative to the workshop). `--json report.json` writes the
+(`:cwd:` is relative to the workspace). `--json report.json` writes the
 full results. Fix, lint, test again.
 
 ## Style

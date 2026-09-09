@@ -48,6 +48,7 @@ htmlcov/
 examples/*/demo/
 examples/*/_workshop/
 examples/*/scratch/
+examples/*/work/
 
 # Workshops downloaded through the extension
 workshops/

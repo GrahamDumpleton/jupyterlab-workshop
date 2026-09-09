@@ -40,6 +40,32 @@ Everything is plain text, so a workshop lives happily in git, and the
 `jupyter workshop` [command line](cli.md) scaffolds, lints, self-tests
 and publishes one from the files alone.
 
+### The workspace
+
+The learner's files are kept apart from the workshop's own in a
+workspace, a directory inside the workshop called `work` unless the
+manifest's `workspace` field names another:
+
+```
+my-workshop/
+  workshop.yaml         the manifest
+  pages/*.md            the instructions
+  files/                what ships for the learner: starter code, data
+  work/                 the learner's directory, generated, not committed
+  _workshop/            state
+```
+
+The workspace is created the first time the workshop opens and filled
+with a copy of `files/`, before the first page shows. From then on the
+learner's work lives there, and the extension treats the two halves
+differently: Restart empties and refills the workspace and leaves the
+pages and the manifest alone, a checkpoint archives and restores the
+workspace alone, so "put the bug back" cannot put an old page back, and
+the `workspace` scope of `write-files` means the workspace, so a page
+can read the shipped files with a `../` path but never write them. The
+`files/` directory is committed; the workspace never is, and `jupyter
+workshop publish` and the self-test leave it out.
+
 ## Actions
 
 An action is a fenced block whose name is in braces, such as
@@ -120,14 +146,13 @@ Everything the extension records about a workshop lives in a
 | `state.json`                   | Page progress, action results, captured variables and the action log.      |
 | `source.json`                  | Where a downloaded workshop came from and its hash.                        |
 | `env.sh`, `env.ps1`, `env.cmd` | The variables as environment variables, loaded by the workshop terminals.  |
-| `snapshots/`                   | Checkpoints, including the `pristine` one taken when first opened.         |
+| `snapshots/`                   | Checkpoints of the workspace.                                              |
 | `events.jsonl`                 | [Progress events](analytics.md), one per line.                             |
 | `environment.json`, `venv/`    | An [isolated environment](environment.md), when the workshop asks for one. |
 | `recordings/`                  | Sessions recorded in author mode.                                          |
 
-Restart restores the pristine snapshot and forgets the progress; Reset
-Progress keeps the files; Remove deletes a downloaded workshop
-altogether. The trust decision is kept in JupyterLab's own state
+Restart refills the workspace and forgets the progress; Reset Progress
+keeps the files; Remove deletes a downloaded workshop altogether. The trust decision is kept in JupyterLab's own state
 database rather than here, so removing the directory does not forget it
 on its own, but Remove does.
 

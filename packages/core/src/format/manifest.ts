@@ -16,6 +16,15 @@ const CAPABILITY_NAMES: readonly string[] = [
 
 const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
 
+/**
+ * Directory of a workshop whose contents are copied into the workspace
+ * when it is first created: starter code, data and templates.
+ */
+export const WORKSHOP_FILES_DIR = 'files';
+
+/** The learner's working directory when the manifest names none. */
+export const DEFAULT_WORKSPACE = 'work';
+
 /** The manifest API version this package understands. */
 export const MANIFEST_API_VERSION = 'jupyterlab-workshop/v1alpha1';
 
@@ -70,6 +79,12 @@ export interface IEnvironment {
 
   /** Kernelspec name to register for the environment. */
   kernel?: string;
+
+  /**
+   * Whether terminals and commands see the environment on their PATH;
+   * true unless the manifest says false.
+   */
+  terminals: boolean;
 }
 
 /** Where a workshop asks to report progress events. */
@@ -137,6 +152,12 @@ export interface IWorkshopManifest {
   platforms: string[];
   capabilities: string[];
   requires: IRequirements;
+
+  /**
+   * The learner's working directory, relative to the workshop; `work`
+   * unless the manifest says otherwise. See `parseWorkspace`.
+   */
+  workspace: string;
   environment?: IEnvironment;
   analytics?: IAnalytics;
   variables: IVariableDefinition[];
@@ -237,6 +258,7 @@ export function parseManifest(
     platforms: optionalStringList(data, 'platforms', path),
     capabilities: parseCapabilities(data.capabilities, path),
     requires: parseRequirements(data.requires, path),
+    workspace: parseWorkspace(data.workspace, path),
     environment: parseEnvironment(data.environment, path),
     analytics: parseAnalytics(data.analytics, path),
     variables: parseVariables(data.variables, path),
@@ -413,6 +435,54 @@ function parseRequirements(value: unknown, path: string): IRequirements {
   return { tools, shell: optionalString(value, 'shell', path) };
 }
 
+/** Names a workspace may not take, since they are the workshop's own. */
+const RESERVED_WORKSPACE_NAMES: ReadonlySet<string> = new Set([
+  '_workshop',
+  'pages',
+  WORKSHOP_FILES_DIR,
+  'workshop.yaml'
+]);
+
+/**
+ * The `workspace` field: a relative directory path inside the workshop,
+ * with trailing slashes dropped, that is not one of the workshop's own
+ * directories. Every workshop has one; it is `work` unless set.
+ */
+function parseWorkspace(value: unknown, path: string): string {
+  if (value === undefined || value === null) {
+    return DEFAULT_WORKSPACE;
+  }
+
+  if (typeof value !== 'string') {
+    throw new WorkshopFormatError('Field "workspace" must be a string', path);
+  }
+
+  const cleaned = value.trim().replace(/\/+$/, '');
+  const parts = cleaned.split('/');
+
+  if (
+    cleaned === '' ||
+    cleaned.startsWith('/') ||
+    cleaned.startsWith('~') ||
+    /^[A-Za-z]:/.test(cleaned) ||
+    parts.some(part => part === '' || part === '.' || part === '..')
+  ) {
+    throw new WorkshopFormatError(
+      `Field "workspace" must be a relative path inside the workshop, not "${value}"`,
+      path
+    );
+  }
+
+  if (RESERVED_WORKSPACE_NAMES.has(parts[0])) {
+    throw new WorkshopFormatError(
+      `Field "workspace" cannot be "${parts[0]}", which the workshop uses itself`,
+      path
+    );
+  }
+
+  return cleaned;
+}
+
 function parseEnvironment(
   value: unknown,
   path: string
@@ -428,9 +498,19 @@ function parseEnvironment(
     );
   }
 
+  const terminals = value.terminals;
+
+  if (terminals !== undefined && typeof terminals !== 'boolean') {
+    throw new WorkshopFormatError(
+      'Field "environment.terminals" must be true or false',
+      path
+    );
+  }
+
   return {
     requirements: optionalString(value, 'requirements', path),
-    kernel: optionalString(value, 'kernel', path)
+    kernel: optionalString(value, 'kernel', path),
+    terminals: terminals !== false
   };
 }
 

@@ -29,14 +29,14 @@ count for gating like any other action.
 
 Where the check runs is chosen by `:substrate:`:
 
-| Substrate        | Body                                         | Runs                                                                                                                                                                                                                                   |
-| ---------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kernel`         | Python code                                  | In the hidden workshop kernel, in the workshop directory, with the variables in the environment. An exception fails the check; an `AssertionError` message is shown as written. Printed text is shown on success. This is the default. |
-| `script`         | None; name the file with `:script:`          | On the server as a subprocess with the workshop directory as its working directory. Exit code 0 passes. Python files run with the server's interpreter; other files must be executable. Not available in JupyterLite.                  |
-| `shell`          | A shell command                              | Without a terminal, in the workshop directory: through the hidden workshop kernel on a server and the terminal's headless shell in JupyterLite. Exit code 0 passes; the output is the message.                                         |
-| `contents`       | Predicates, one per line                     | In the browser against the contents API. Every predicate must hold.                                                                                                                                                                    |
-| `ui`             | Predicates, one per line                     | In the browser against the JupyterLab interface.                                                                                                                                                                                       |
-| `learner-kernel` | Python code; name the notebook with `:path:` | In the kernel of the learner's notebook. The printed text or the value of the last expression decides: empty, `False`, `None` or `0` fails.                                                                                            |
+| Substrate        | Body                                         | Runs                                                                                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kernel`         | Python code                                  | In the hidden workshop kernel, in the workspace, with the variables in the environment. An exception fails the check; an `AssertionError` message is shown as written. Printed text is shown on success. This is the default.                                     |
+| `script`         | None; name the file with `:script:`          | On the server as a subprocess with the workspace as its working directory; the script itself is named relative to the workshop. Exit code 0 passes. Python files run with the server's interpreter; other files must be executable. Not available in JupyterLite. |
+| `shell`          | A shell command                              | Without a terminal, in the workspace: through the hidden workshop kernel on a server and the terminal's headless shell in JupyterLite. Exit code 0 passes; the output is the message.                                                                             |
+| `contents`       | Predicates, one per line                     | In the browser against the contents API. Every predicate must hold.                                                                                                                                                                                               |
+| `ui`             | Predicates, one per line                     | In the browser against the JupyterLab interface.                                                                                                                                                                                                                  |
+| `learner-kernel` | Python code; name the notebook with `:path:` | In the kernel of the learner's notebook. The printed text or the value of the last expression decides: empty, `False`, `None` or `0` fails.                                                                                                                       |
 
 Contents predicates: `exists <path>`, `missing <path>`,
 `contains <path> <text>`, `matches <path> <regex>`, and
@@ -45,7 +45,8 @@ an execution count, read from the open notebook when there is one and
 otherwise from the saved file. Interface predicates:
 `terminal-open <session>`, `file-open <path>`, `notebook-open <path>`,
 `panel-open <widget id>` and `kernel-idle <notebook>`. Paths are relative
-to the workshop directory. The contents API does not show files or
+to the workspace; see [paths](platforms.md#paths). The contents API does
+not show files or
 directories whose names start with a dot unless the server is configured
 to allow hidden files, so a check for `.git` needs the `kernel` or
 `script` substrate.
@@ -209,18 +210,17 @@ finish: |
 ```
 ````
 
-A checkpoint archives everything in the workshop directory except its
-`_workshop` state directory, together with the learner's variables, into
-`_workshop/snapshots/<name>.tar` and `<name>.json` through the server.
+A checkpoint archives the [workspace](concepts.md#the-workspace),
+together with the learner's variables, into
+`_workshop/snapshots/<name>.tar` and `<name>.json` through the server;
+the pages and the workshop's other files are never part of one.
 Without `:name:` the current page id is used. To checkpoint once a check
 passes rather than on a click, give the `verify` a `:cascade:` naming
 the checkpoint block's id, and say in the page what is being saved and
-why. The name `pristine` is reserved: the extension takes a checkpoint under it
-when a workshop is first opened, and "Restart" restores it, so lint
-reports a workshop that uses it (`reserved-checkpoint-name`).
+why.
 
-Restoring deletes the current files (again leaving `_workshop` alone),
-extracts the archive and puts the variables back. Files open in editors
+Restoring empties the workspace, extracts the archive into it and puts
+the variables back. Files open in editors
 are not reloaded automatically; JupyterLab offers to reload them when
 they are next focused. The `restore` action needs the `write-files`
 capability.

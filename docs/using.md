@@ -37,6 +37,12 @@ link](collections.md#launch-links), opens a workshop as soon as JupyterLab
 starts, which is how a course hands one out. A deployment may remove
 some of these routes; see [Deploying workshops](deploying.md).
 
+The workshop that was open when the browser tab closed opens again when
+JupyterLab next starts on the same server, at the page it was on. That
+is remembered per server, since a workshop is named by its path under
+the server's root, and a workshop whose directory has since gone is
+simply forgotten.
+
 ## The trust dialog
 
 Before a workshop runs anything it shows a dialog with where it came
@@ -153,22 +159,24 @@ it, and three commands in the panel header and the command palette
 deal with it:
 
 - **Restart** ("Workshop: Restart…", the restart button in the header,
-  or Restart on the workshop's card in the browser) puts the workshop's
-  files back as they were when it was first opened, deleting anything
-  added since, forgets all progress, closes the documents and terminals
-  it had open, and reopens it at the first page. Every file in the
-  workshop directory is covered, the pages and manifest included, so
-  an edit to a page made after the workshop was first opened is undone
-  too, unless it was saved in [author mode](authoring.md#author-mode),
-  which moves the baseline along. It works offline and in JupyterLite.
-  It only covers files inside the workshop directory, so a workshop
+  or Restart on the workshop's card in the browser) empties the
+  [workspace](concepts.md#the-workspace) and fills it again from the
+  workshop's shipped files, so everything made in it goes and it looks
+  as it did when the workshop was first opened; the pages and the
+  manifest are never touched. It forgets all progress, closes the
+  documents and terminals it had open, and reopens the workshop at the
+  first page. It works offline and in JupyterLite. It only covers the
+  workspace, so a workshop
   that writes elsewhere, such as into the home directory, is not undone
-  there.
+  there. A workshop with an [isolated environment](environment.md)
+  loses that too, kernel registration included, and offers to create it
+  again: a restart is for when something is broken, and an environment
+  that has been installed into is one of the things that can be.
 
 - **Reset Progress** ("Workshop: Reset Progress…") forgets page
   progress, action results, captured variables and the action log,
   restores any JupyterLab settings the workshop changed, and reopens it
-  at the first page, keeping the files as they are.
+  at the first page, keeping the files and the environment as they are.
 
 - **Remove** ("Workshop: Remove…", or Remove on the card in the
   browser) lists what it will do before doing it: delete the workshop

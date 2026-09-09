@@ -148,6 +148,7 @@ export function buildTrustSummary(options: {
   return {
     name: manifest.name,
     title: manifest.title,
+    workspace: manifest.workspace,
     version: manifest.version ?? '',
     source,
     sourceKey: sourceKey(source),

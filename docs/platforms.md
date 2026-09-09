@@ -20,8 +20,9 @@ and how they reach terminals. The built-in variables `platform`
 (`linux`, `macos`, `windows` or `lite`), `shell` (`bash`, `zsh`, `sh`,
 `fish`, `powershell`, `cmd` or `cockle` in JupyterLite), `path_sep`,
 `home` and `user` describe the machine, `workshop_dir` is the workshop
-directory relative to the JupyterLab root, and `when` conditions can
-test them:
+directory relative to the JupyterLab root and `workspace` the learner's
+[workspace](concepts.md#the-workspace) the same way, and `when`
+conditions can test them:
 
 ````markdown
 ```{when} platform == "windows"
@@ -82,8 +83,14 @@ JupyterLite.
 
 ## Paths
 
-Paths in options such as `path` and `cwd` use forward slashes on every
-platform; the extension normalises them. To show a path in prose or a
+Paths in options such as `path` and `cwd` are relative to the learner's
+[workspace](concepts.md#the-workspace); `../` from there reaches the
+workshop's own files, such as a shipped `README.md`. The exception
+is `:from:` on `file-write`, which names a shipped file and so is
+always relative to the workshop directory. Terminals, the hidden
+workshop kernel and script checks start in the same place. Paths use
+forward slashes on every platform; the extension normalises them. To
+show a path in prose or a
 command with the platform's separator use the `path` filter or the
 `path` helper:
 
@@ -105,6 +112,11 @@ with `:wait: prompt`.
 
 In JupyterLite terminals run cockle, a small shell described in
 [JupyterLite](lite.md); variables reach it through `export` commands.
+
+A workshop with an [isolated environment](environment.md) has its
+`bin` directory put first on `PATH` by the same file once the
+environment exists, with `VIRTUAL_ENV` set, unless the manifest turns
+that off with `terminals: false`.
 
 A manifest `env` mapping exports further environment variables through
 the same file, after the variables. The usual reason is a pager: in a

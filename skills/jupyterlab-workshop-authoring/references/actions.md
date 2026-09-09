@@ -4,7 +4,9 @@ Generated from the action catalogue in `packages/core`. Every directive also
 accepts the common options `id`, `title`, `auto`, `cascade`, `delay`, `scroll`, `when`, `substitute`, `on-error`,
 described in [Pages and actions](pages.md#common-options), which also covers
 the page syntax, inline roles, conditions and how the editor actions point at
-text.
+text. Paths in options are relative to the learner's workspace, except `from`,
+which names a shipped file and is relative to the workshop directory; see
+[paths](platforms.md#paths).
 
 ## Terminal
 

@@ -17,6 +17,9 @@ import yaml
 
 PUBLISH_EXCLUDES = {"_workshop", ".git", ".github", "scratch", "dist", "node_modules"}
 
+#: The learner's workspace directory when the manifest names none.
+DEFAULT_WORKSPACE = "work"
+
 
 class PublishError(Exception):
     """The workshop could not be archived."""
@@ -81,9 +84,13 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
 
     archive = out / f"{name}-{version}.tar.gz"
 
+    # The workspace is generated when the workshop opens, so it is no
+    # more part of the archive than the state directory is.
+    workspace = str(manifest.get("workspace") or DEFAULT_WORKSPACE).strip("/")
+
     with tarfile.open(archive, "w:gz") as tar:
         for entry in sorted(directory.iterdir()):
-            if entry.name in PUBLISH_EXCLUDES:
+            if entry.name in PUBLISH_EXCLUDES or entry.name == workspace:
                 continue
 
             tar.add(entry, arcname=f"{name}-{version}/{entry.name}", filter=_clean_tar)

@@ -70,14 +70,14 @@ it. The `size` is the fraction of the main area the region takes, between
 
 Widgets are named by kind and target:
 
-| Reference         | Opens                                                          |
-| ----------------- | -------------------------------------------------------------- |
-| `terminal:<name>` | A workshop terminal with that name, created if needed.         |
-| `file:<path>`     | The file, relative to the workshop directory, in the editor.   |
-| `markdown:<path>` | The Markdown file rendered as a preview rather than as source. |
-| `notebook:<path>` | The notebook.                                                  |
-| `launcher`        | A new launcher.                                                |
-| `editor`          | Whatever widget is current, used to anchor other regions.      |
+| Reference         | Opens                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terminal:<name>` | A workshop terminal with that name, created if needed.                                                                                                  |
+| `file:<path>`     | The file in the editor. Paths follow the [rule for actions](platforms.md#paths): relative to the workspace, so a shipped `README.md` is `../README.md`. |
+| `markdown:<path>` | The Markdown file rendered as a preview rather than as source.                                                                                          |
+| `notebook:<path>` | The notebook.                                                                                                                                           |
+| `launcher`        | A new launcher.                                                                                                                                         |
+| `editor`          | Whatever widget is current, used to anchor other regions.                                                                                               |
 
 Terminals named in a layout are the same terminals that `execute` and
 other terminal actions use, so a layout that opens `terminal:git` and

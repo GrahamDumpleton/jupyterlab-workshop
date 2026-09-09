@@ -18,6 +18,10 @@ interface IExposedApp {
           options: { content: boolean }
         ): Promise<{ content: unknown }>;
       };
+      kernelspecs: {
+        refreshSpecs(): Promise<void>;
+        specs: { kernelspecs: Record<string, unknown> } | null;
+      };
     };
     shell: { widgets(area: string): Iterable<IExposedWidget> };
   };
@@ -63,7 +67,7 @@ test.describe('workshop panel', () => {
 
     // A development session may have left runtime directories in the
     // example; they must not leak into the test.
-    for (const name of ['_workshop', 'scratch', 'demo']) {
+    for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
       const directory = `${tmpPath}/${WORKSHOP}/${name}`;
 
       if (await page.contents.directoryExists(directory)) {
@@ -108,9 +112,9 @@ test.describe('workshop panel', () => {
     // back; give the command time to have run if it were going to, then
     // check that nothing was created.
     await page.waitForTimeout(3000);
-    expect(await page.contents.directoryExists(`${workshopPath}/demo`)).toBe(
-      false
-    );
+    expect(
+      await page.contents.directoryExists(`${workshopPath}/work/demo`)
+    ).toBe(false);
 
     // Writes ask first and can be declined.
     const write = panel.locator('.jp-WorkshopPanel-action.jp-mod-file-write');
@@ -169,6 +173,304 @@ test.describe('workshop panel', () => {
     );
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toHaveCount(0);
+  });
+
+  test('keeps the environment across a reset and drops it on restart', async ({
+    page,
+    tmpPath
+  }) => {
+    // Creating the environment installs ipykernel with pip, which takes
+    // longer than the default test timeout allows.
+    test.setTimeout(300000);
+
+    // A workshop with nothing but an environment to create; the
+    // requirements are empty so only ipykernel is installed.
+    const envy = `${tmpPath}/envy`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: envy',
+        'title: Envy',
+        'capabilities: [install-packages, kernel-exec]',
+        'environment: { requirements: requirements.txt }',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${envy}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# nothing beyond ipykernel\n',
+      'text',
+      `${envy}/requirements.txt`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Only page',
+        '---',
+        '',
+        'Which python does a command see?',
+        '',
+        '```{execute-capture}',
+        ':id: which-python',
+        ':capture: prefix',
+        'python -c "import sys; print(sys.prefix)"',
+        '```',
+        '',
+        '```{verify}',
+        ':id: venv-active',
+        ':label: The environment is active in the kernel',
+        'import os',
+        'assert os.environ.get("VIRTUAL_ENV", "").endswith("venv"), os.environ.get("VIRTUAL_ENV", "unset")',
+        'print(os.environ["VIRTUAL_ENV"])',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${envy}/pages/01.md`
+    );
+    await openWorkshop(page, envy);
+
+    const panel = page.locator(PANEL);
+    const banner = panel.locator('.jp-WorkshopPanel-environment');
+    const dialog = page.locator('.jp-Dialog');
+    const kernels = (): Promise<string[]> =>
+      page.evaluate(async () => {
+        const exposed = window as unknown as IExposedApp;
+        const specs = exposed.jupyterapp.serviceManager.kernelspecs;
+
+        await specs.refreshSpecs();
+
+        return Object.keys(specs.specs?.kernelspecs ?? {});
+      });
+    const hasVenv = (): Promise<boolean> =>
+      page.contents.directoryExists(`${envy}/_workshop/venv`);
+
+    // Create the environment from the banner; pip takes a while.
+    await expect(banner).toBeVisible();
+    await banner.getByRole('button', { name: 'Create environment' }).click();
+    await expect(banner).toHaveCount(0, { timeout: 180000 });
+    expect(await kernels()).toContain('workshop-envy');
+    expect(await hasVenv()).toBe(true);
+
+    // Commands and checks now run with the environment first on PATH:
+    // the capture's python is the venv's, and the kernel check sees
+    // VIRTUAL_ENV through the kernelspec.
+    const capture = panel.locator('[data-action-id="which-python"]');
+
+    await capture.click();
+    await expect(capture).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    await expect(
+      capture.locator('.jp-WorkshopPanel-actionOutput')
+    ).toContainText('_workshop/venv');
+
+    const check = panel.locator('[data-action-id="venv-active"]');
+
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 60000 });
+
+    // Terminals get it through the environment file they source.
+    await expect
+      .poll(async () => {
+        const model = await page.evaluate(async (path: string) => {
+          const exposed = window as unknown as IExposedApp;
+
+          return exposed.jupyterapp.serviceManager.contents.get(path, {
+            content: true
+          });
+        }, `${envy}/_workshop/env.sh`);
+
+        return String(model.content);
+      })
+      .toContain('export VIRTUAL_ENV=');
+
+    // Each command waits for its dialog, and then for the workshop to
+    // reopen, so the command's promise is the signal that it is done.
+    const run = (command: string): Promise<unknown> =>
+      page.evaluate((id: string) => {
+        const exposed = window as unknown as IExposedApp;
+
+        return exposed.jupyterapp.commands.execute(id, {});
+      }, command);
+
+    // Reset Progress keeps it.
+    const reset = run('workshop:reset');
+
+    await dialog.getByRole('button', { name: 'Reset', exact: true }).click();
+    await reset;
+    await expect(dialog).toHaveCount(0);
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText('Envy');
+    await expect(banner).toHaveCount(0);
+    expect(await hasVenv()).toBe(true);
+    expect(await kernels()).toContain('workshop-envy');
+
+    // Restart removes it, kernel included, and offers it again.
+    const restart = run('workshop:restart');
+
+    await expect(dialog.locator('.jp-Dialog-body')).toContainText(
+      'environment'
+    );
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await restart;
+    await expect(dialog).toHaveCount(0);
+    await expect(banner).toBeVisible({ timeout: 60000 });
+    expect(await hasVenv()).toBe(false);
+    expect(await kernels()).not.toContain('workshop-envy');
+  });
+
+  test('fills a declared workspace and refills it on restart', async ({
+    page,
+    tmpPath
+  }) => {
+    const roomy = `${tmpPath}/roomy`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${roomy}/${path}`);
+    const read = (path: string): Promise<string> =>
+      page.evaluate(async (target: string) => {
+        const exposed = window as unknown as IExposedApp;
+        const model = await exposed.jupyterapp.serviceManager.contents.get(
+          target,
+          { content: true }
+        );
+
+        return String(model.content);
+      }, `${roomy}/${path}`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: roomy',
+        'title: Roomy',
+        'workspace: work',
+        'capabilities: [write-files: [workspace], kernel-exec]',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload('hello\n', 'files/hello.txt');
+    await upload('data\n', 'files/data/rows.csv');
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        'Work in work/.',
+        '',
+        '```{file-write}',
+        ':id: write-notes',
+        ':path: notes.txt',
+        'notes',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: copy-hello',
+        ':path: copy.txt',
+        ':from: files/hello.txt',
+        '```',
+        '',
+        '```{execute-capture}',
+        ':id: where',
+        ':capture: here',
+        'python -c "import os; print(os.getcwd())"',
+        '```',
+        '',
+        '```{verify}',
+        ':id: notes-exist',
+        ':label: The notes are in the workspace',
+        ':substrate: contents',
+        'exists notes.txt',
+        'exists ../pages/01.md',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: clobber-page',
+        ':path: ../pages/01.md',
+        'gone',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+    await openWorkshop(page, roomy);
+
+    // Opening filled the workspace from files/.
+    const panel = page.locator(PANEL);
+    const dialog = page.locator('.jp-Dialog');
+
+    expect(await read('work/hello.txt')).toBe('hello\n');
+    expect(await read('work/data/rows.csv')).toBe('data\n');
+    expect(await page.contents.fileExists(`${roomy}/files/hello.txt`)).toBe(
+      true
+    );
+
+    // Action paths start at the workspace; from names a shipped file;
+    // commands and contents checks start there too.
+    const runAction = async (id: string): Promise<void> => {
+      const action = panel.locator(`[data-action-id="${id}"]`);
+
+      await action.click();
+      await expect(action).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    };
+
+    await runAction('write-notes');
+    await runAction('copy-hello');
+    await runAction('where');
+    expect(await read('work/notes.txt')).toBe('notes\n');
+    expect(await read('work/copy.txt')).toBe('hello\n');
+    await expect(
+      panel.locator('[data-action-id="where"] .jp-WorkshopPanel-actionOutput')
+    ).toContainText('/roomy/work');
+
+    const check = panel.locator('[data-action-id="notes-exist"]');
+
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 30000 });
+
+    // A write aimed at a page is refused, badge and all, and the page
+    // is untouched.
+    const clobber = panel.locator('[data-action-id="clobber-page"]');
+
+    await expect(clobber.locator('.jp-WorkshopPanel-badge')).toHaveText(
+      'not allowed'
+    );
+    await clobber.click();
+    await expect(clobber).toHaveClass(/jp-mod-status-error/);
+    expect(await read('pages/01.md')).toContain('Work in work/');
+
+    // The learner works, and the author edits a page meanwhile.
+    await upload('changed\n', 'work/hello.txt');
+    await upload('mine\n', 'work/extra.txt');
+    await upload(
+      '---\ntitle: Edited\n---\n\nStill work in work/.\n',
+      'pages/01.md'
+    );
+
+    // Restart refills the workspace and keeps the edited page. The edit
+    // changed the workshop's hash, so reopening asks about trust again.
+    const restart = page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:restart', {});
+    });
+
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible({
+      timeout: 60000
+    });
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await restart;
+    await expect(panel.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Edited'
+    );
+    expect(await read('work/hello.txt')).toBe('hello\n');
+    expect(await page.contents.fileExists(`${roomy}/work/extra.txt`)).toBe(
+      false
+    );
+    expect(await read('pages/01.md')).toContain('Still work');
   });
 
   test('retries a triggered check while its command finishes', async ({
@@ -278,7 +580,13 @@ test.describe('workshop panel', () => {
       'text',
       `${timed}/pages/01.md`
     );
-    await page.contents.uploadContent('second', 'text', `${timed}/second.txt`);
+    // The check looks in the workspace, which opening creates and leaves
+    // as it finds it.
+    await page.contents.uploadContent(
+      'second',
+      'text',
+      `${timed}/work/second.txt`
+    );
 
     await openWorkshop(page, timed);
     await page.sidebar.openTab('jupyterlab-workshop-panel');
@@ -409,7 +717,7 @@ test.describe('workshop panel', () => {
     await expect(actions.nth(1)).toHaveClass(/jp-mod-status-ok/);
 
     await expect
-      .poll(() => page.contents.directoryExists(`${workshopPath}/demo`), {
+      .poll(() => page.contents.directoryExists(`${workshopPath}/work/demo`), {
         timeout: 20000
       })
       .toBe(true);
@@ -443,7 +751,7 @@ test.describe('workshop panel', () => {
     await expect(writeAction).toHaveClass(/jp-mod-status-ok/);
 
     expect(
-      await page.contents.fileExists(`${workshopPath}/demo/README.md`)
+      await page.contents.fileExists(`${workshopPath}/work/demo/README.md`)
     ).toBe(true);
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
 
@@ -556,7 +864,7 @@ test.describe('workshop panel', () => {
           );
 
           return String(model.content);
-        }, `${workshopPath}/demo/README.md`)
+        }, `${workshopPath}/work/demo/README.md`)
       )
       .toContain('Learned how git diff shows unstaged changes.');
 
@@ -575,5 +883,67 @@ test.describe('workshop panel', () => {
     await expect(
       page.locator(PANEL).locator('.jp-WorkshopPanel-pageTitle')
     ).toHaveText('Edit and diff');
+  });
+});
+
+test.describe('startup restore', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+  });
+
+  test('forgets a workshop whose directory has gone', async ({
+    page,
+    tmpPath
+  }) => {
+    const workshopPath = `${tmpPath}/${WORKSHOP}`;
+
+    await openWorkshop(page, workshopPath);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    // The state database saves after a short debounce; then the
+    // directory goes away under it, as when a server starts elsewhere.
+    await page.waitForTimeout(2000);
+    await page.contents.deleteDirectory(workshopPath);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+
+    await expect(panel).toContainText('No workshop is open.');
+    await expect(panel.locator('.jp-WorkshopPanel-error')).toHaveCount(0);
+  });
+});
+
+test.describe('startup restore from another server', () => {
+  // The state database is per user, not per server, so an entry written
+  // by a server with another root must be left alone rather than opened
+  // relative to this one.
+  test.use({
+    mockState: {
+      '@jupyterlab-workshop/labextension:state': {
+        servers: {
+          '/somewhere/else': { workshopPath: 'examples/git-basics' }
+        }
+      }
+    }
+  });
+
+  test('ignores the workshop another server had open', async ({ page }) => {
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+
+    await expect(panel).toContainText('No workshop is open.');
+    await expect(panel.locator('.jp-WorkshopPanel-error')).toHaveCount(0);
   });
 });

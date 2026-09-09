@@ -6,7 +6,6 @@ export * from './checks';
 export * from './collection';
 export * from './diff';
 export * from './errors';
-export * from './format/checkpoints';
 export * from './format/directives';
 export * from './format/frontmatter';
 export * from './format/layouts';
