@@ -1851,36 +1851,36 @@ export class WorkshopManager implements IWorkshopManager {
     const venv = this.environmentVenv();
     const prompt = { root: this.absolutePath('', 'workspace') };
     const directory = PathExt.join(workshop.path, WORKSHOP_STATE_DIR);
+    const files: Record<string, string> = {
+      'env.sh': renderEnvSh(values, env, venv, prompt),
+      'env.fish': renderEnvFish(values, env, venv, prompt),
+      'env.ps1': renderEnvPs1(values, env, venv, prompt),
+      'env.cmd': renderEnvCmd(values, env, venv, prompt)
+    };
 
     try {
-      await writeTextFile(
-        this._contents,
-        PathExt.join(directory, 'env.sh'),
-        renderEnvSh(values, env, venv, prompt)
-      );
-      await writeTextFile(
-        this._contents,
-        PathExt.join(directory, 'env.fish'),
-        renderEnvFish(values, env, venv, prompt)
-      );
-      await writeTextFile(
-        this._contents,
-        PathExt.join(directory, 'env.ps1'),
-        renderEnvPs1(values, env, venv, prompt)
-      );
-      await writeTextFile(
-        this._contents,
-        PathExt.join(directory, 'env.cmd'),
-        renderEnvCmd(values, env, venv, prompt)
-      );
+      for (const [file, text] of Object.entries(files)) {
+        await writeTextFile(
+          this._contents,
+          PathExt.join(directory, file),
+          text
+        );
+      }
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);
 
       return;
     }
 
-    // Open terminals source the files again to pick up the new values.
-    this._environmentChanged.emit();
+    // Open terminals source the files again to pick up new values, which
+    // draws a prompt in each, so they are only told when something in
+    // the files has changed.
+    const written = Object.values(files).join('\0');
+
+    if (written !== this._envWritten) {
+      this._envWritten = written;
+      this._environmentChanged.emit();
+    }
   }
 
   private async _ensurePlatform(): Promise<IPlatformInfo> {
@@ -2140,6 +2140,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _state: StateStore;
   private _store = new VariableStore();
   private _envWriter: Debouncer;
+  private _envWritten: string | null = null;
   private _reloader: Debouncer;
   private _kernelspecs: KernelSpec.IManager | null;
   private _authoring = false;

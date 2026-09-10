@@ -1,7 +1,6 @@
 import {
   IPromptMarker,
-  PROMPT_MARKER_MAX_LENGTH,
-  findPromptMarker,
+  PromptScanner,
   terminalEnvironment
 } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
@@ -42,6 +41,13 @@ const PROMPT_POLL_MS = 100;
  * environment file, before deciding the marker does not get through.
  */
 const PROMPT_PROBE_MS = 5000;
+
+/**
+ * How long a terminal is given to draw its prompt again after the
+ * environment file is loaded into it a second time. A shell busy with a
+ * command of the learner's reads the line once that is done.
+ */
+const PROMPT_RELOAD_MS = 60000;
 
 /** Shells whose environment file installs the marked prompt. */
 const PROMPT_HOOK_SHELLS: ReadonlySet<string> = new Set([
@@ -233,16 +239,26 @@ export class TerminalSessions {
 
     this._widgets.set(name, widget);
 
-    // Relay what the terminal prints so verifies can react to it, and
-    // note when it last printed anything, to tell when the shell is up.
+    // Relay what the terminal prints so verifies can react to it, note
+    // when it last printed anything, to tell when the shell is up, and
+    // pick out the prompts it draws. The scanner lives as long as the
+    // terminal so that a prompt drawn again, as on a resize, is known
+    // for one already counted whether or not anything was waiting.
     let lastOutputAt = 0;
+    const scanner = new PromptScanner();
     const onMessage = (
       _: TerminalService.ITerminalConnection,
       message: TerminalService.IMessage
     ): void => {
       if (message.type === 'stdout' && message.content) {
+        const text = message.content.map(String).join('');
+
         lastOutputAt = Date.now();
-        this._output.emit({ name, text: message.content.map(String).join('') });
+        this._output.emit({ name, text });
+
+        for (const marker of scanner.feed(text)) {
+          this._prompts.emit({ name, marker });
+        }
       }
     };
 
@@ -268,6 +284,7 @@ export class TerminalSessions {
       if (this._widgets.get(name) === widget) {
         this._widgets.delete(name);
         this._hooked.delete(name);
+        this._queue.delete(name);
       }
 
       if (this._first === widget) {
@@ -397,10 +414,10 @@ export class TerminalSessions {
   }
 
   /**
-   * Resolve with the last of the next `count` prompt markers the
-   * terminal draws, or null when they have not all appeared within the
-   * timeout. Every line sent to the shell draws one prompt, continuation
-   * prompts included, so a command of several lines waits for as many.
+   * Resolve with the last of the next `count` prompts the terminal
+   * draws, or null when they have not all appeared within the timeout.
+   * Every line sent to the shell draws one prompt, continuation prompts
+   * included, so a command of several lines waits for as many.
    */
   waitForPrompts(
     name: string,
@@ -408,50 +425,79 @@ export class TerminalSessions {
     timeoutMs: number
   ): Promise<IPromptMarker | null> {
     return new Promise(resolve => {
-      let pending = '';
       let seen = 0;
-      let last: IPromptMarker | null = null;
-      const onOutput = (
+      const onPrompt = (
         _: this,
-        args: { name: string; text: string }
+        args: { name: string; marker: IPromptMarker }
       ): void => {
         if (args.name !== name) {
           return;
         }
 
-        // Consume every complete marker, keeping a tail long enough to
-        // hold one that arrives split across chunks.
-        pending += args.text;
-
-        for (
-          let marker = findPromptMarker(pending);
-          marker;
-          marker = findPromptMarker(pending)
-        ) {
-          seen += 1;
-          last = marker;
-          pending = pending.slice(marker.end);
-        }
-
-        pending = pending.slice(-PROMPT_MARKER_MAX_LENGTH);
+        seen += 1;
 
         if (seen >= count) {
-          finish(last);
+          finish(args.marker);
         }
       };
       const timer = window.setTimeout(() => finish(null), timeoutMs);
       const finish = (result: IPromptMarker | null): void => {
         window.clearTimeout(timer);
-        this._output.disconnect(onOutput);
+        this._prompts.disconnect(onPrompt);
         resolve(result);
       };
 
-      this._output.connect(onOutput);
+      this._prompts.connect(onPrompt);
     });
   }
 
   /**
-   * Re-source the environment file in every open terminal.
+   * Send lines to a terminal with the marked prompt and resolve with the
+   * marker of the prompt drawn after the last of them, or null when it
+   * has not appeared within the timeout. Exchanges with one terminal run
+   * one after another, so the prompts one draws are never taken for
+   * another's: an environment file loaded again while a command runs
+   * waits its turn, and so does the next command.
+   */
+  exchange(
+    name: string,
+    text: string,
+    timeoutMs: number,
+    options: { cwd?: string; activate?: boolean } = {}
+  ): Promise<IPromptMarker | null> {
+    const previous = this._queue.get(name) ?? Promise.resolve();
+    const run = previous.then(async () => {
+      const widget = await this.get(name, { cwd: options.cwd });
+      const lines = text.split('\n').length - 1;
+      const done = this.waitForPrompts(name, lines, timeoutMs);
+
+      if (options.activate) {
+        this._shell.activateById(widget.id);
+      }
+
+      this._write(widget.content.session, text);
+
+      return done;
+    });
+    const settled = run.then(
+      () => undefined,
+      () => undefined
+    );
+
+    this._queue.set(name, settled);
+    void settled.then(() => {
+      if (this._queue.get(name) === settled) {
+        this._queue.delete(name);
+      }
+    });
+
+    return run;
+  }
+
+  /**
+   * Load the environment file again in every open terminal. A terminal
+   * still starting is left alone, since it loads the file itself once
+   * its shell is up.
    */
   refreshEnvironment(): void {
     const source = envSourceCommand(this._manager);
@@ -460,10 +506,29 @@ export class TerminalSessions {
       return;
     }
 
-    for (const widget of this._widgets.values()) {
-      if (!widget.isDisposed) {
-        this._write(widget.content.session, `${source}\n`);
+    for (const [name, widget] of this._widgets) {
+      if (!widget.isDisposed && this._hooked.has(name)) {
+        void this._reload(name, `${source}\n`);
       }
+    }
+  }
+
+  /**
+   * Load the environment file again in one terminal: as an exchange where
+   * the prompt is marked, so the prompt it draws is not mistaken for the
+   * end of a command, and as plain input otherwise.
+   */
+  private async _reload(name: string, text: string): Promise<void> {
+    if (await this.promptHooked(name)) {
+      await this.exchange(name, text, PROMPT_RELOAD_MS);
+
+      return;
+    }
+
+    const widget = this._widgets.get(name);
+
+    if (widget && !widget.isDisposed) {
+      this._write(widget.content.session, text);
     }
   }
 
@@ -474,6 +539,10 @@ export class TerminalSessions {
   private _pending = new Map<string, Promise<MainAreaWidget<Terminal>>>();
   private _first: MainAreaWidget<Terminal> | null = null;
   private _hooked = new Map<string, Promise<boolean>>();
+  private _queue = new Map<string, Promise<void>>();
+  private _prompts = new Signal<this, { name: string; marker: IPromptMarker }>(
+    this
+  );
   private _output = new Signal<this, { name: string; text: string }>(this);
   private _input = new Signal<this, { name: string; text: string }>(this);
 }
@@ -665,12 +734,10 @@ export class ExecuteAction implements IActionImplementation {
       await this._terminals.get(name, { cwd });
 
       if (await this._terminals.promptHooked(name)) {
-        const lines = text.split('\n').length - 1;
-        const done = this._terminals.waitForPrompts(name, lines, timeout);
-
-        await this._terminals.send(name, text, cwd);
-
-        const marker = await done;
+        const marker = await this._terminals.exchange(name, text, timeout, {
+          cwd,
+          activate: true
+        });
 
         if (!marker) {
           return timedOut;

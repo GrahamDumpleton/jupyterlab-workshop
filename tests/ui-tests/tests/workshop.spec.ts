@@ -44,7 +44,7 @@ interface IExposedWidget {
   node: HTMLElement;
   content?: {
     session?: {
-      send(message: { type: string; content: string[] }): void;
+      send(message: { type: string; content: unknown[] }): void;
       messageReceived?: {
         connect(
           slot: (
@@ -1266,6 +1266,12 @@ test.describe('workshop prompt', () => {
         ':wait: prompt',
         'false',
         '```',
+        '',
+        '```{execute}',
+        ':id: slow',
+        ':wait: prompt',
+        'sleep 2; echo finished',
+        '```',
         ''
       ].join('\n'),
       'text',
@@ -1316,13 +1322,35 @@ test.describe('workshop prompt', () => {
       'The command exited with status 1'
     );
 
-    // The prompts carried the marker and the working directory, and no
-    // marker command was typed.
+    // Resizing the terminal makes the shell draw its prompt again. That
+    // prompt must not pass for the end of the next command, which says
+    // when it is done.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+      const terminal = Array.from(
+        exposed.jupyterapp.shell.widgets('main')
+      ).find(widget => widget.id === 'jupyterlab-workshop-terminal-workshop');
+
+      terminal?.content?.session?.send({
+        type: 'set_size',
+        content: [20, 100, 0, 0]
+      });
+    });
+
+    const slow = panel.locator('[data-action-id="slow"]');
+
+    await slow.click();
+    await expect(slow).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+
     const output = await page.evaluate(() =>
       (window as unknown as ICapturedOutput).__workshopOutput.join('')
     );
 
-    expect(output).toContain('\x1b]7770;workshop;1\x07');
+    expect(output).toContain('finished');
+
+    // The prompts carried the marker with the status and a serial number,
+    // and the working directory, and no marker command was typed.
+    expect(output).toMatch(/\x1b\]7770;workshop;1;\d+\x07/);
     expect(output).toContain('~ $ ');
     expect(output).not.toContain('WORKSHOP_DONE');
   });

@@ -33,18 +33,26 @@ export const PROMPT_MARKER_OSC = 7770;
 
 /**
  * One prompt marker: the OSC introducer, the number, the word `workshop`,
- * the exit status of the last command, and a BEL or ST terminator.
+ * the exit status of the last command, the serial number of the prompt
+ * where the shell can count them, and a BEL or ST terminator.
  */
 // eslint-disable-next-line no-control-regex
-const PROMPT_MARKER = /\x1b\]7770;workshop;(-?\d+)(?:\x07|\x1b\\)/;
+const PROMPT_MARKER = /\x1b\]7770;workshop;(-?\d+)(?:;(\d+))?(?:\x07|\x1b\\)/;
 
 /** How long a marker can be, so a split one can be kept for the next chunk. */
-export const PROMPT_MARKER_MAX_LENGTH = 40;
+export const PROMPT_MARKER_MAX_LENGTH = 60;
 
 /** A prompt marker found in terminal output. */
 export interface IPromptMarker {
   /** The exit status of the command before the prompt. */
   status: number;
+
+  /**
+   * The serial number of the prompt, which the shell increases each time
+   * it draws a primary prompt, or null for a continuation prompt and for
+   * shells that cannot count.
+   */
+  serial: number | null;
 
   /** The offset just past the marker in the searched text. */
   end: number;
@@ -63,8 +71,55 @@ export function findPromptMarker(text: string): IPromptMarker | null {
 
   return {
     status: Number.parseInt(match[1], 10),
+    serial: match[2] === undefined ? null : Number.parseInt(match[2], 10),
     end: match.index + match[0].length
   };
+}
+
+/**
+ * Pick the prompt markers out of a terminal's output as it arrives, in
+ * chunks that may split a marker, and tell a prompt newly drawn from one
+ * drawn again. A shell redraws its prompt, marker included, when the
+ * terminal is resized or the screen is redrawn, so a marker whose serial
+ * number has been seen is dropped; only a marker without a serial number
+ * is passed through every time.
+ */
+export class PromptScanner {
+  /**
+   * Feed the next chunk of output and get the markers of the prompts it
+   * completes, in order, redraws left out.
+   */
+  feed(text: string): IPromptMarker[] {
+    const markers: IPromptMarker[] = [];
+
+    this._pending += text;
+
+    for (
+      let marker = findPromptMarker(this._pending);
+      marker;
+      marker = findPromptMarker(this._pending)
+    ) {
+      this._pending = this._pending.slice(marker.end);
+
+      if (marker.serial !== null) {
+        if (marker.serial <= this._serial) {
+          continue;
+        }
+
+        this._serial = marker.serial;
+      }
+
+      markers.push(marker);
+    }
+
+    // Keep a tail long enough to hold a marker split across chunks.
+    this._pending = this._pending.slice(-PROMPT_MARKER_MAX_LENGTH);
+
+    return markers;
+  }
+
+  private _pending = '';
+  private _serial = -1;
 }
 
 /**
@@ -153,10 +208,13 @@ export function renderEnvSh(
 /**
  * The lines of the POSIX file that install the prompt. The marker bytes
  * are produced by printf so that the file itself holds no control
- * characters. Prompt hooks from the user's rc files are dropped, since
- * tools such as starship rewrite the prompt from them on every command.
- * The zsh array assignment goes through eval because plain sh refuses to
- * parse it even in a branch it does not take. The work directory is
+ * characters. Prompt hooks from the user's rc files are replaced by the
+ * workshop's own, which records the exit status and counts the prompts
+ * drawn, since tools such as starship rewrite the prompt from them on
+ * every command. The count is never reset, so loading the file again
+ * keeps the numbers rising. The zsh array assignment goes through eval
+ * because plain sh refuses to parse it even in a branch it does not
+ * take. The work directory is
  * resolved to its physical path and compared with the physical working
  * directory, so a symbolic link on the way (macOS keeps /var under
  * /private) does not hide that the shell is inside it.
@@ -184,13 +242,14 @@ function promptLinesSh(prompt: IPromptConfig): string[] {
     'if [ -n "$ZSH_VERSION" ]; then',
     '  setopt PROMPT_SUBST',
     "  eval 'precmd_functions=()'",
-    '  unset -f precmd 2>/dev/null',
     '  unset RPS1 RPROMPT',
-    '  PS1="%{${__workshop_osc}%?${__workshop_bel}%}"\'$(__workshop_prompt_dir) %(!.#.$) \'',
+    '  precmd() { __workshop_status=$?; __workshop_serial=$((__workshop_serial+1)); }',
+    '  PS1="%{${__workshop_osc}"\'${__workshop_status};${__workshop_serial}\'"${__workshop_bel}%}"\'$(__workshop_prompt_dir) %(!.#.$) \'',
     '  PS2="%{${__workshop_osc}0${__workshop_bel}%}> "',
     'elif [ -n "$BASH_VERSION" ]; then',
     '  unset PROMPT_COMMAND',
-    '  PS1="\\[${__workshop_osc}"\'$?\'"${__workshop_bel}\\]"\'$(__workshop_prompt_dir) \\$ \'',
+    "  PROMPT_COMMAND='__workshop_status=$?; __workshop_serial=$((__workshop_serial+1))'",
+    '  PS1="\\[${__workshop_osc}"\'${__workshop_status};${__workshop_serial}\'"${__workshop_bel}\\]"\'$(__workshop_prompt_dir) \\$ \'',
     '  PS2="\\[${__workshop_osc}0${__workshop_bel}\\]> "',
     'else',
     '  # Plain sh takes the prompt literally, so it cannot show the directory.',
@@ -242,8 +301,10 @@ export function renderEnvFish(
       '# The workshop prompt: the directory relative to the work directory,',
       '# preceded by the marker the extension listens for.',
       `set -gx WORKSHOP_PROMPT_ROOT (realpath -- ${fishQuote(prompt.root)} 2>/dev/null; or echo ${fishQuote(prompt.root)})`,
+      'set -q __workshop_serial; or set -g __workshop_serial 0',
       'function fish_prompt',
       '    set -l code $status',
+      '    set -g __workshop_serial (math $__workshop_serial + 1)',
       '    set -l here (pwd -P)',
       '    set -l dir $PWD',
       '    if test "$here" = "$WORKSHOP_PROMPT_ROOT"',
@@ -251,7 +312,7 @@ export function renderEnvFish(
       '    else if string match -q -- "$WORKSHOP_PROMPT_ROOT/*" "$here"',
       '        set dir \'~\'(string sub -s (math (string length -- "$WORKSHOP_PROMPT_ROOT") + 1) -- "$here")',
       '    end',
-      `    printf '\\e]${PROMPT_MARKER_OSC};workshop;%s\\a%s $ ' $code $dir`,
+      `    printf '\\e]${PROMPT_MARKER_OSC};workshop;%s;%s\\a%s $ ' $code $__workshop_serial $dir`,
       'end',
       'functions -e fish_right_prompt',
       'if not set -q WORKSHOP_TERMINAL',
@@ -341,8 +402,10 @@ export function renderEnvPs1(
       '# The workshop prompt: the directory relative to the work directory,',
       '# preceded by the marker the extension listens for.',
       `$env:WORKSHOP_PROMPT_ROOT = '${prompt.root.replace(/'/g, "''")}'`,
+      'if ($null -eq $global:WorkshopPromptSerial) { $global:WorkshopPromptSerial = 0 }',
       'function global:prompt {',
       '    $code = if ($?) { 0 } else { 1 }',
+      '    $global:WorkshopPromptSerial += 1',
       '    $root = $env:WORKSHOP_PROMPT_ROOT',
       '    $here = $PWD.ProviderPath',
       '    if ($here -eq $root) {',
@@ -352,7 +415,7 @@ export function renderEnvPs1(
       '    } else {',
       '        $dir = $here',
       '    }',
-      `    "${marker}$code$([char]7)$dir \`$ "`,
+      `    "${marker}$code;$($global:WorkshopPromptSerial)$([char]7)$dir \`$ "`,
       '}',
       `try { Set-PSReadLineOption -ContinuationPrompt "${marker}0$([char]7)>> " } catch {}`,
       'if (-not $env:WORKSHOP_TERMINAL) {',

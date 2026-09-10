@@ -1,5 +1,6 @@
 import {
   environmentVariables,
+  PromptScanner,
   findPromptMarker,
   renderEnvCmd,
   renderEnvFish,
@@ -85,7 +86,12 @@ describe('the workshop prompt', () => {
     expect(text).toContain(
       '__workshop_osc="$(printf \'\\033]7770;workshop;\')"'
     );
-    expect(text).toContain('unset PROMPT_COMMAND');
+    expect(text).toContain(
+      "PROMPT_COMMAND='__workshop_status=$?; __workshop_serial=$((__workshop_serial+1))'"
+    );
+    expect(text).toContain(
+      'precmd() { __workshop_status=$?; __workshop_serial=$((__workshop_serial+1)); }'
+    );
     expect(text).toContain("eval 'precmd_functions=()'");
     expect(text).toContain("printf '\\033[H\\033[2J\\033[3J'");
     expect(text).not.toMatch(/[\x1b\x07]/);
@@ -95,9 +101,11 @@ describe('the workshop prompt', () => {
     const fish = renderEnvFish({ repo_dir: "it's" }, {}, undefined, prompt);
 
     expect(fish).toContain("set -gx REPO_DIR 'it\\'s'");
-    expect(fish).toContain("printf '\\e]7770;workshop;%s\\a%s $ ' $code $dir");
+    expect(fish).toContain(
+      "printf '\\e]7770;workshop;%s;%s\\a%s $ ' $code $__workshop_serial $dir"
+    );
     expect(renderEnvPs1({}, {}, undefined, prompt)).toContain(
-      'function global:prompt {'
+      '$global:WorkshopPromptSerial += 1'
     );
     expect(renderEnvCmd({}, {}, undefined, prompt)).toContain(
       'set "PROMPT=$E]7770;workshop;0$E\\$P$G "'
@@ -119,13 +127,15 @@ describe('the workshop prompt', () => {
 });
 
 describe('prompt markers', () => {
-  it('finds a marker with either terminator and its status', () => {
-    expect(findPromptMarker('abc\x1b]7770;workshop;1\x07~ $ ')).toEqual({
+  it('finds a marker with either terminator, its status and serial', () => {
+    expect(findPromptMarker('abc\x1b]7770;workshop;1;12\x07~ $ ')).toEqual({
       status: 1,
-      end: 21
+      serial: 12,
+      end: 24
     });
     expect(findPromptMarker('\x1b]7770;workshop;0\x1b\\$ ')).toEqual({
       status: 0,
+      serial: null,
       end: 19
     });
   });
@@ -133,5 +143,26 @@ describe('prompt markers', () => {
   it('ignores an incomplete marker', () => {
     expect(findPromptMarker('\x1b]7770;workshop;')).toBeNull();
     expect(findPromptMarker('~ $ ')).toBeNull();
+  });
+
+  it('scans markers split across chunks', () => {
+    const scanner = new PromptScanner();
+
+    expect(scanner.feed('out\x1b]7770;work')).toEqual([]);
+    expect(scanner.feed('shop;0;1\x07~ $ ').map(m => m.serial)).toEqual([1]);
+  });
+
+  it('drops a prompt drawn again but not a continuation prompt', () => {
+    const scanner = new PromptScanner();
+    const prompt = (serial: number): string =>
+      `\x1b]7770;workshop;0;${serial}\x07~ $ `;
+    const continuation = '\x1b]7770;workshop;0\x07> ';
+
+    expect(scanner.feed(prompt(3)).length).toBe(1);
+    expect(scanner.feed(`\r${prompt(3)}`)).toEqual([]);
+    expect(
+      scanner.feed(`${continuation}${continuation}${prompt(4)}`).length
+    ).toBe(3);
+    expect(scanner.feed(prompt(2))).toEqual([]);
   });
 });

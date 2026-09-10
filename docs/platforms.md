@@ -130,16 +130,24 @@ it.
 
 The prompt begins with an escape sequence that terminals do not show and
 the extension listens for, carrying the exit status of the command
-before it. `execute` with `:wait: prompt` counts these prompts as the
-shell draws them, one per line sent, continuation prompts included, and
-is done when the last has appeared; a command that exits with a status
-other than zero says so under the action. The prompt is probed when the
+before it and a serial number that the shell raises each time it draws
+a primary prompt. `execute` with `:wait: prompt` counts these prompts as
+the shell draws them, one per line sent, continuation prompts included,
+and is done when the last has appeared; a command that exits with a
+status other than zero says so under the action. A prompt the shell
+merely draws again, as bash and zsh do when the terminal is resized,
+repeats its serial number and is not counted. Plain sh and cmd cannot
+count, so their markers carry no number. The prompt is probed when the
 terminal starts: where the sequence never arrives, as in cockle, which
 has no prompt to hook, or a Windows console that strips it, the action
 falls back to following the command with an `echo` of a marker and
-waiting for its output. The fish editor keeps an unfinished construct in
-its buffer without drawing a prompt, so on fish a command spanning lines
-that way can time out; put it on one line or join the lines with `;`.
+waiting for its output. When the environment file changes, say after a
+variable is set, each open terminal loads it again, which draws a
+prompt; that and the actions' commands take turns in a terminal, so the
+one is never taken for the other. The fish editor keeps an unfinished
+construct in its buffer without drawing a prompt, so on fish a command
+spanning lines that way can time out; put it on one line or join the
+lines with `;`.
 
 A workshop with an [isolated environment](environment.md) has its
 `bin` directory put first on `PATH` by the same file once the
