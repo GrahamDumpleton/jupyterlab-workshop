@@ -417,6 +417,12 @@ browser when no workshop is named:
 - `catalog=<url>` adds a catalog for the session, so the browser
   offers its collections under "Collections you can subscribe to".
 
+- `welcome=<path>` shows the Markdown file at that path, relative to
+  the JupyterLab root, in a dialog once JupyterLab has started, on its
+  own or over whatever the other parameters open; see
+  [a welcome message](deploying.md#a-welcome-message). Alone, it leaves
+  the start as it would otherwise be.
+
 The parameters are removed from the address bar once handled, so a
 reload does not fetch again. The trust dialog still appears unless the
 administrator's policy settles it, which is the usual arrangement for a

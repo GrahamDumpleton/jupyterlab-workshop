@@ -893,6 +893,7 @@ export namespace CommandIDs {
   export const finish = 'workshop:finish';
   export const variables = 'workshop:variables';
   export const about = 'workshop:about';
+  export const welcome = 'workshop:welcome';
   export const showLog = 'workshop:show-log';
   export const stopChain = 'workshop:stop-chain';
   export const openPath = 'workshop:open-path';

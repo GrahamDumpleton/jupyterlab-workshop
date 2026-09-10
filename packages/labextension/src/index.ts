@@ -122,6 +122,12 @@ import { ActionLogWidget, LOG_ID } from './panel/log';
 import { ISelfTestProgress, runAll } from './selftest';
 import { INextStep, showFinishDialog } from './panel/finish';
 import { showAboutDialog } from './panel/about';
+import {
+  markWelcomeShown,
+  readWelcome,
+  showWelcomeDialog,
+  wasWelcomeShown
+} from './panel/welcome';
 import { showVariablesDialog } from './panel/variables';
 import { PANEL_ID, WorkshopPanel } from './panel/widget';
 import { STATE_FILE, WORKSHOP_STATE_DIR } from './state';
@@ -443,6 +449,10 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       commands: app.commands,
       features
     });
+
+    // The address as JupyterLab started, before the router strips the
+    // launch parameters from it.
+    const initialSearch = window.location.search;
 
     // Disabling a feature greys out its commands everywhere at once.
     features.changed.connect(() => app.commands.notifyCommandChanged());
@@ -843,8 +853,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             : window.location.search;
         const request = parseLaunchLink(search);
         const sources = parseSourceLink(search);
+        const welcome = parseWelcomeLink(search) !== undefined;
 
-        if (!request && !sources.collection && !sources.catalog) {
+        if (!request && !sources.collection && !sources.catalog && !welcome) {
           return;
         }
 
@@ -871,8 +882,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             await store.addForSession('catalog', sources.catalog);
           }
 
+          // A link naming only a welcome message leaves the start as it
+          // would otherwise be; the panel shows the message over it.
           if (!request) {
-            await startBrowsing();
+            if (sources.collection || sources.catalog) {
+              await startBrowsing();
+            }
 
             return;
           }
@@ -957,7 +972,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     if (router) {
       router.register({
         command: CommandIDs.launch,
-        pattern: /(\?|&)(workshop|collection|catalog)=/,
+        pattern: /(\?|&)(workshop|collection|catalog|welcome)=/,
         rank: 20
       });
     }
@@ -1252,6 +1267,36 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       execute: () => showAboutDialog(manager)
     });
 
+    // A welcome message is a Markdown file named by the `welcome` launch
+    // link parameter, which shows it every time the link is used, or by
+    // the setting, which shows it once per browser for this server. The
+    // palette command shows it again on demand.
+    const welcomeLink = parseWelcomeLink(initialSearch);
+    let welcomePath = welcomeLink ?? '';
+
+    const showWelcome = async (): Promise<boolean> => {
+      const message = await readWelcome(
+        docManager.services.contents,
+        welcomePath
+      );
+
+      if (!message) {
+        Notification.error(`There is no welcome file at ${welcomePath}.`);
+
+        return false;
+      }
+
+      await showWelcomeDialog(message);
+
+      return true;
+    };
+
+    app.commands.addCommand(CommandIDs.welcome, {
+      label: 'Workshop: Show Welcome Message…',
+      isEnabled: () => welcomePath !== '',
+      execute: () => showWelcome()
+    });
+
     app.commands.addCommand(CommandIDs.variables, {
       label: 'Workshop: Variables…',
       isEnabled: () => manager.workshop !== null,
@@ -1338,6 +1383,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         CommandIDs.previousPage,
         CommandIDs.finish,
         CommandIDs.about,
+        CommandIDs.welcome,
         CommandIDs.variables,
         CommandIDs.showLog,
         CommandIDs.stopChain,
@@ -1382,6 +1428,26 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
       if (await readFlag(settingRegistry, 'browseOnStart', false)) {
         await startBrowsing();
+      }
+    });
+
+    // Once restored, show the welcome message over whatever opened: a
+    // launch link's every time, the setting's once per browser, and the
+    // setting's is only remembered as shown once its file has been read.
+    void app.restored.then(async () => {
+      if (welcomeLink === undefined) {
+        welcomePath = await readSetting(settingRegistry, 'welcome', '');
+        app.commands.notifyCommandChanged(CommandIDs.welcome);
+
+        if (welcomePath === '' || wasWelcomeShown(welcomePath)) {
+          return;
+        }
+      }
+
+      const shown = await showWelcome();
+
+      if (shown && welcomeLink === undefined) {
+        markWelcomeShown(welcomePath);
       }
     });
   }
@@ -1436,7 +1502,8 @@ const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
   'sha256',
   'collection',
   'catalog',
-  'restart'
+  'restart',
+  'welcome'
 ]);
 
 /** The sources a launch link adds for the session. */
@@ -1458,6 +1525,16 @@ export function parseSourceLink(search: string): ISourceLink {
     collection: collection === '' ? undefined : collection,
     catalog: catalog === '' ? undefined : catalog
   };
+}
+
+/**
+ * The welcome file a launch link names with its `welcome` parameter, a
+ * path relative to the JupyterLab root, or undefined when it names none.
+ */
+export function parseWelcomeLink(search: string): string | undefined {
+  const welcome = URLExt.queryStringToObject(search).welcome?.trim() ?? '';
+
+  return welcome === '' ? undefined : welcome;
 }
 
 /**

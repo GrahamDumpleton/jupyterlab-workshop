@@ -101,6 +101,31 @@ These settings shape the interface rather than secure it: a learner
 with a terminal or the browser console can still reach the files and
 commands. Use the trust policy above to limit what workshops may do.
 
+## A welcome message
+
+A deployment can greet the learner with a message when JupyterLab
+starts, before they pick a workshop: what the workshops are for, and
+whatever the host needs saying, such as how to end a Binder session.
+The `welcome` setting names a Markdown file by its path relative to
+the JupyterLab root, and the file is shown in a dialog once JupyterLab
+has restored, over the browser or the workshop that opened. A
+level-one heading on the file's first line becomes the dialog's title;
+without one the title is "Welcome". The rest is rendered as a workshop
+page is, though actions have nothing to act on there and are best left
+out.
+
+The dialog is shown once per browser for the server, so a reload does
+not repeat it, but a new Binder session, which is a new server, does.
+"Workshop: Show Welcome Message" in the command palette shows it again.
+A launch link can name a file instead, with `welcome=<path>`, which is
+shown every time the link is used and takes the place of the setting
+for that session; see [launch links](collections.md#launch-links).
+
+Nothing is added to the message: what to say about the platform is the
+deployment's to decide, which is why the file belongs with the
+deployment's other files, such as a Binder repository's `binder/`
+directory, rather than in a collection.
+
 ## A Binder repository
 
 A repository holding workshops can serve as a
@@ -116,12 +141,17 @@ JupyterLab with the workshops installed and trusted. It needs:
 - `binder/postBuild`, a script that writes an `overrides.json` into
   `$NB_PYTHON_PREFIX/share/jupyter/lab/settings/`:
 
+- optionally `binder/welcome.md`, a [welcome message](#a-welcome-message)
+  introducing the workshops and saying how to end the session, which
+  the override names in `welcome`:
+
 ```json
 {
   "@jupyterlab-workshop/labextension:panel": {
     "defaultWorkshop": "",
     "browseOnStart": true,
     "workshopsDirectory": "workshops",
+    "welcome": "binder/welcome.md",
     "trustPolicy": { "forcedLevel": "trusted" },
     "disabledFeatures": [
       "open-directory",

@@ -114,6 +114,12 @@
       "items": { "type": "string" },
       "default": []
     },
+    "welcome": {
+      "type": "string",
+      "title": "Welcome message",
+      "description": "Path, relative to the JupyterLab root, of a Markdown file shown in a dialog when JupyterLab starts, once per browser for this server; a level-one heading on its first line is the dialog's title. Typically set through overrides.json by a deployment such as a Binder repository, to say what its workshops are for and how to end the session. A welcome launch link parameter names a file to show for that session instead.",
+      "default": ""
+    },
     "analytics": {
       "type": "object",
       "title": "Analytics",

@@ -376,6 +376,19 @@
   font-size: var(--jp-ui-font-size0);
 }
 
+.jp-WorkshopWelcome {
+  min-width: 360px;
+  max-width: 560px;
+}
+
+.jp-WorkshopWelcome-message > :first-child {
+  margin-top: 0;
+}
+
+.jp-WorkshopWelcome-message > :last-child {
+  margin-bottom: 0;
+}
+
 .jp-WorkshopAbout {
   min-width: 360px;
   max-width: 520px;

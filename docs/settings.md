@@ -42,6 +42,7 @@ setting them.
 | `trustPolicy`      | object  | `{}`    | Administrator trust decisions; the keys are below. See [settling trust](deploying.md#settling-trust).                                                                                                                                          |
 | `disabledFeatures` | list    | `[]`    | Parts of the extension to remove, from `open-directory`, `open-url`, `collections`, `catalogs`, `available`, `install-all`, `remove`, `close`, `browse` and `author`. See [locking down a deployment](deploying.md#locking-down-a-deployment). |
 | `analytics`        | object  | `{}`    | Site-wide reporting of progress events; the keys are below. See [reporting progress](deploying.md#reporting-progress).                                                                                                                         |
+| `welcome`          | string  | `""`    | Path, relative to the JupyterLab root, of a Markdown file shown in a dialog when JupyterLab starts, once per browser for the server. See [a welcome message](deploying.md#a-welcome-message).                                                  |
 
 `trustPolicy` holds:
 

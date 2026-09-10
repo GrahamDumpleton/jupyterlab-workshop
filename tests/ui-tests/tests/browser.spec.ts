@@ -16,6 +16,8 @@ const SECOND_FILE = 'second/collection.json';
 
 const CATALOG_FILE = 'test-catalog.json';
 
+const WELCOME_FILE = 'test-welcome.md';
+
 const ARCHIVE_FILE = 'pandas-intro-2.0.0.tar.gz';
 
 const GIT_ARCHIVE_FILE = 'git-basics-0.2.0.tar.gz';
@@ -223,6 +225,11 @@ async function uploadFixtures(page: Page): Promise<void> {
     CATALOG_FILE
   );
   await page.contents.uploadContent(
+    '# Welcome to the tests\n\nHello **there**, and mind the session.\n',
+    'text',
+    WELCOME_FILE
+  );
+  await page.contents.uploadContent(
     workshopArchive('pandas-intro', 'Pandas for beginners', '2.0.0').toString(
       'base64'
     ),
@@ -263,6 +270,7 @@ async function removeFixtures(page: Page): Promise<void> {
   for (const file of [
     COLLECTION_FILE,
     CATALOG_FILE,
+    WELCOME_FILE,
     ARCHIVE_FILE,
     CLASH_ARCHIVE_FILE,
     GIT_ARCHIVE_FILE
@@ -889,6 +897,59 @@ test.describe('workshop browser', () => {
     await expect(
       dialog.locator('.jp-WorkshopSources-row', { hasText: 'Test catalog' })
     ).toContainText('from this session');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+  });
+});
+
+test.describe('welcome message', () => {
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await removeFixtures(page);
+  });
+
+  test('shows a welcome message from a launch link', async ({ page }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?welcome=${WELCOME_FILE}`)
+      .catch(() => undefined);
+
+    // The file's heading is the dialog's title and the rest its body,
+    // rendered as Markdown.
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
+      'Welcome to the tests',
+      { timeout: 60000 }
+    );
+    await expect(dialog.locator('.jp-WorkshopWelcome')).toContainText(
+      'Hello there, and mind the session.'
+    );
+    await expect(dialog.locator('.jp-WorkshopWelcome strong')).toHaveText(
+      'there'
+    );
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // A link that only names a welcome message leaves the launcher as
+    // it was, and the parameter is gone from the address once handled.
+    await expect(page.locator('#jupyterlab-workshop-browser')).toHaveCount(0);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('welcome'))
+      .toBeNull();
+
+    // The palette command shows the message again.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:welcome', {});
+    });
+    await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
+      'Welcome to the tests'
+    );
     await dialog.getByRole('button', { name: 'Close' }).click();
   });
 });
