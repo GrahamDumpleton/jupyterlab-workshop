@@ -839,8 +839,8 @@ test.describe('workshop browser', () => {
       return (right ?? 0) / (split ?? 1);
     };
 
-    await expect.poll(rightShare).toBeGreaterThan(0.2);
-    expect(await rightShare()).toBeLessThan(0.3);
+    await expect.poll(rightShare).toBeGreaterThan(0.23);
+    expect(await rightShare()).toBeLessThan(0.27);
   });
 
   test('offers the collections of a catalog from a launch link', async ({

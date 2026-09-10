@@ -373,9 +373,14 @@ export class LayoutManager {
    * Give the sidebars the share of the window width the layout asks for.
    *
    * The shell keeps the left area, the main area and the right area in one
-   * split panel. A collapsed area is hidden and takes no width, so the
-   * requested fractions are of the visible width, and a hidden area keeps
-   * its old share for when it is expanded again.
+   * split panel. A collapsed area is hidden and takes no width, but the
+   * size it reports is stale until the panel next updates: an area the
+   * layout collapsed a moment ago still holds the share it had, and the
+   * update hands that share to the main area, the only one that
+   * stretches. So a sidebar's fraction is of the whole width, the main
+   * area is given what is left after the sidebars and the hidden entries,
+   * and a hidden entry is passed back as it is, which keeps the hint that
+   * sizes the area when it is expanded again.
    */
   private _resizeSides(wanted: [number | undefined, number | undefined]): void {
     if (wanted.every(size => size === undefined)) {
@@ -397,19 +402,10 @@ export class LayoutManager {
       current = [1 / 4.5, 2.5 / 4.5, 1 / 4.5];
     }
 
-    const visibleTotal = current.reduce(
-      (sum, size, index) => (hidden[index] ? sum : sum + size),
-      0
-    );
-
-    if (visibleTotal <= 0) {
-      return;
-    }
-
-    // Fractions of the visible width: a requested size, or the share an
+    // Fractions of the whole width: a requested size, or the share an
     // unrequested visible sidebar has now.
-    let left = hidden[0] ? 0 : (wanted[0] ?? current[0] / visibleTotal);
-    let right = hidden[2] ? 0 : (wanted[1] ?? current[2] / visibleTotal);
+    let left = hidden[0] ? 0 : (wanted[0] ?? current[0]);
+    let right = hidden[2] ? 0 : (wanted[1] ?? current[2]);
 
     if (left + right > SIDEBARS_MAX) {
       const scale = SIDEBARS_MAX / (left + right);
@@ -418,12 +414,16 @@ export class LayoutManager {
       right *= scale;
     }
 
-    const main = 1 - left - right;
+    const hiddenTotal = current.reduce(
+      (sum, size, index) => (hidden[index] ? sum + size : sum),
+      0
+    );
+    const main = Math.max(0, 1 - left - right - hiddenTotal);
 
     split.setRelativeSizes([
-      hidden[0] ? current[0] : left * visibleTotal,
-      main * visibleTotal,
-      hidden[2] ? current[2] : right * visibleTotal
+      hidden[0] ? current[0] : left,
+      main,
+      hidden[2] ? current[2] : right
     ]);
   }
 

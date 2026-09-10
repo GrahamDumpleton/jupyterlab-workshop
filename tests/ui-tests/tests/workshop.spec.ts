@@ -785,8 +785,8 @@ test.describe('workshop panel', () => {
 
     expect(rightWidth).toBeDefined();
     expect(splitWidth).toBeDefined();
-    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeGreaterThan(0.2);
-    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeLessThan(0.3);
+    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeGreaterThan(0.23);
+    expect((rightWidth ?? 0) / (splitWidth ?? 1)).toBeLessThan(0.27);
 
     await page.sidebar.openTab('jupyterlab-workshop-panel');
 
