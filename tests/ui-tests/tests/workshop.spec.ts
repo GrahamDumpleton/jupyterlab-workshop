@@ -1013,6 +1013,112 @@ test.describe('workshop panel', () => {
   });
 });
 
+test.describe('revealing grown content', () => {
+  test('scrolls an opened hint into view, no further than the cap', async ({
+    page,
+    tmpPath
+  }) => {
+    const tall = `${tmpPath}/tall`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${tall}/${path}`);
+    const prose = Array.from(
+      { length: 30 },
+      (_, index) =>
+        `Paragraph ${index + 1} of the page, long enough to scroll.\n`
+    );
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: tall',
+        'title: Tall',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        ...prose,
+        '```{hint}',
+        ':id: short',
+        ':title: A short hint',
+        'Two lines of help.',
+        '',
+        'That fit below the fold once revealed.',
+        '```',
+        '',
+        '```{hint}',
+        ':id: long',
+        ':title: A long hint',
+        ...Array.from(
+          { length: 40 },
+          (_, index) => `Help line ${index + 1}.\n`
+        ),
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+    await openWorkshop(page, tall);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const body = page.locator(`${PANEL} .jp-WorkshopPanel-body`);
+    const short = page.locator(`${PANEL} .jp-WorkshopPanel-hint`).nth(0);
+    const long = page.locator(`${PANEL} .jp-WorkshopPanel-hint`).nth(1);
+    const geometry = async (): Promise<{
+      bodyTop: number;
+      bodyBottom: number;
+      shortBottom: number;
+      longTop: number;
+      longBottom: number;
+    }> => {
+      const b = (await body.boundingBox())!;
+      const s = (await short.boundingBox())!;
+      const l = (await long.boundingBox())!;
+
+      return {
+        bodyTop: b.y,
+        bodyBottom: b.y + b.height,
+        shortBottom: s.y + s.height,
+        longTop: l.y,
+        longBottom: l.y + l.height
+      };
+    };
+
+    // Both hints sit at the very bottom of a scrolled page.
+    await body.evaluate(element => {
+      element.scrollTop = element.scrollHeight;
+    });
+
+    // A short hint is revealed in full.
+    await short.locator('summary').click();
+    await expect
+      .poll(async () => {
+        const g = await geometry();
+
+        return g.shortBottom <= g.bodyBottom + 1;
+      })
+      .toBe(true);
+
+    // A long hint is scrolled only until its header reaches the cap, a
+    // third of the way down, with the rest left below.
+    await long.locator('summary').click();
+    await expect
+      .poll(async () => {
+        const g = await geometry();
+        const cap = g.bodyTop + (g.bodyBottom - g.bodyTop) / 3;
+
+        return Math.abs(g.longTop - cap) < 8 && g.longBottom > g.bodyBottom;
+      })
+      .toBe(true);
+  });
+});
+
 test.describe('narrow panel', () => {
   // A window this small leaves the panel too narrow for the title and
   // every header button on one line.

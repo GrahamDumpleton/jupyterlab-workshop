@@ -92,7 +92,11 @@ and clicking runs it in the session beside the panel. A tick or a cross
 on the box shows how it went, and a failure shows its message under the
 box. Clicking again runs it again. Some actions run by themselves when a
 page opens or after another action, which the workshop declares up
-front.
+front. When something grows in place near the bottom of the panel, a
+hint opened, an action's output or a quiz's feedback, the panel scrolls
+just enough to show it, but never so far that the hint or action itself
+rises above the top third of the panel, so what led up to it stays in
+view.
 
 The workshop may arrange the window when it opens: a rendered README, a
 terminal, a notebook. Drag things where you like; the arrangement is

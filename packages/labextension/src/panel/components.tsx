@@ -49,6 +49,7 @@ import {
   IWorkshopManager
 } from '../tokens';
 import { visibleDirectives } from '../util';
+import { revealBelow } from './reveal';
 
 /** Props shared by the panel components. */
 export interface IPanelProps {
@@ -756,6 +757,44 @@ function DirectiveBlock({
   }
 }
 
+/**
+ * Scroll the panel so a block's new message, an action's output or
+ * error, a quiz's feedback, is in view once it appears, leaving the
+ * block's header on screen. The message shown when the block first
+ * renders, restored from saved state, does not count.
+ */
+function useRevealOnMessage(
+  root: React.RefObject<HTMLDivElement | null>,
+  status: IActionStatus
+): void {
+  const seen = useRef<string | null>(null);
+  const key = `${status.status}:${status.message ?? ''}`;
+
+  useEffect(() => {
+    if (seen.current === null) {
+      seen.current = key;
+
+      return;
+    }
+
+    if (key === seen.current) {
+      return;
+    }
+
+    seen.current = key;
+
+    const element = root.current;
+
+    if (element && status.message && status.status !== 'running') {
+      revealBelow(
+        element,
+        element.querySelector<HTMLElement>('.jp-WorkshopPanel-actionHeader') ??
+          element
+      );
+    }
+  }, [key, root, status.message, status.status]);
+}
+
 function HintBlock({
   node,
   manager
@@ -763,13 +802,28 @@ function HintBlock({
   node: IDirectiveNode;
   manager: IWorkshopManager;
 }): JSX.Element {
+  // A hint that starts open fires a toggle as it renders; only a
+  // learner's click should scroll the panel.
+  const initialOpen = useRef(node.options.open === 'true');
+
   return (
     <details
       className="jp-WorkshopPanel-hint"
       open={node.options.open === 'true'}
       onToggle={event => {
-        if ((event.target as HTMLDetailsElement).open) {
-          manager.track('hint-opened', { id: node.id });
+        const details = event.currentTarget;
+        const first = initialOpen.current;
+
+        initialOpen.current = false;
+
+        if (!details.open) {
+          return;
+        }
+
+        manager.track('hint-opened', { id: node.id });
+
+        if (!first) {
+          revealBelow(details, details.querySelector('summary') ?? details);
         }
       }}
     >
@@ -861,6 +915,7 @@ function ActionBlock({
   manager: IWorkshopManager;
 }): JSX.Element {
   const status = effectiveStatus(node, manager);
+  const root = useRef<HTMLDivElement>(null);
   const request: IActionRequest = {
     type: node.name,
     id: node.id,
@@ -874,6 +929,8 @@ function ActionBlock({
   const disposition = manager.disposition(node);
   const trustBadge = dispositionBadge(disposition, node);
   const onRun = (): void => void manager.runAction(node, 'click');
+
+  useRevealOnMessage(root, status);
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -883,6 +940,7 @@ function ActionBlock({
 
   return (
     <div
+      ref={root}
       className={`jp-WorkshopPanel-action jp-mod-${node.name} jp-mod-status-${status.status}`}
       data-action-id={node.id}
       role="button"
@@ -1327,6 +1385,9 @@ function QuizBlock({
   const exhausted =
     quiz.attempts > 0 && status.runs >= quiz.attempts && !passed;
   const locked = passed || exhausted || status.status === 'running';
+  const root = useRef<HTMLDivElement>(null);
+
+  useRevealOnMessage(root, status);
   const remaining = quiz.attempts > 0 ? quiz.attempts - status.runs : null;
 
   const toggle = (index: number): void => {
@@ -1343,6 +1404,7 @@ function QuizBlock({
 
   return (
     <div
+      ref={root}
       className={`jp-WorkshopPanel-action jp-WorkshopPanel-quiz jp-mod-status-${status.status}`}
       data-action-id={node.id}
     >
