@@ -59,6 +59,15 @@ env:
 
 See [terminal shells](platforms.md#terminal-shells).
 
+**Workshop terminals do not show my usual prompt, and the screen was
+cleared when one opened.** The environment file every workshop terminal
+loads replaces the prompt with the workshop's own, which shows the
+directory relative to the work directory and carries the marker that
+`:wait: prompt` relies on, and it clears the screen the first time so
+the terminal opens at that prompt. Prompt hooks from rc files are
+dropped with it. See [the workshop
+prompt](platforms.md#the-workshop-prompt).
+
 **A `verify` triggered by `after:<id>` fails although the command
 worked.** The trigger fires when the command has been typed, not when
 it has finished, and a slow command is still running when the check

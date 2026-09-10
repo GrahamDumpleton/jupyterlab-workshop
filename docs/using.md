@@ -103,6 +103,10 @@ terminal, a notebook. Drag things where you like; the arrangement is
 remembered, and "Workshop: Reset Layout" puts the workshop's own back.
 Commands typed by hand into a workshop terminal work as well as clicked
 ones; the workshop's checks look at results, not at what was clicked.
+A workshop terminal has its own prompt, showing where you are relative
+to the workshop's work directory: `~ $` is the work directory itself,
+`~/demo $` the `demo` directory inside it, and a full path means you
+have left it.
 
 ## About the workshop
 

@@ -106,12 +106,40 @@ Both render `src\app.py` on Windows and `src/app.py` elsewhere.
 Terminals run the shell the server is configured with: the `SHELL`
 environment variable on Linux and macOS, and PowerShell on Windows, unless
 `ServerApp.terminado_settings` names another. The extension detects the
-shell to load the environment file with the right syntax (`env.sh`,
-`env.ps1` or `env.cmd`) and to print the marker that `execute` waits for
-with `:wait: prompt`.
+shell to load the environment file with the right syntax: `env.sh` for
+bash, zsh and plain sh, `env.fish`, `env.ps1` or `env.cmd`.
 
 In JupyterLite terminals run cockle, a small shell described in
 [JupyterLite](lite.md); variables reach it through `export` commands.
+
+### The workshop prompt
+
+The environment file replaces the shell's prompt with the workshop's
+own: the working directory relative to the work directory, shown as `~`
+for the directory itself and `~/demo` inside it, followed by `$`.
+Outside the work directory the full path is shown. Prompt hooks from the
+learner's rc files are dropped, so tools that redraw the prompt on every
+command, such as starship, stay out of the way. Plain sh takes its
+prompt literally and there it is a bare `$`; the cmd prompt shows the
+full path, the only one it can. The work directory's path is exported
+as `WORKSHOP_PROMPT_ROOT`. The first time a terminal loads the file it
+clears the screen, so the terminal opens at the workshop prompt rather
+than on the typed command and a login banner; `WORKSHOP_TERMINAL` is
+set in a terminal where that has happened, and a nested shell inherits
+it.
+
+The prompt begins with an escape sequence that terminals do not show and
+the extension listens for, carrying the exit status of the command
+before it. `execute` with `:wait: prompt` counts these prompts as the
+shell draws them, one per line sent, continuation prompts included, and
+is done when the last has appeared; a command that exits with a status
+other than zero says so under the action. The prompt is probed when the
+terminal starts: where the sequence never arrives, as in cockle, which
+has no prompt to hook, or a Windows console that strips it, the action
+falls back to following the command with an `echo` of a marker and
+waiting for its output. The fish editor keeps an unfinished construct in
+its buffer without drawing a prompt, so on fish a command spanning lines
+that way can time out; put it on one line or join the lines with `;`.
 
 A workshop with an [isolated environment](environment.md) has its
 `bin` directory put first on `PATH` by the same file once the

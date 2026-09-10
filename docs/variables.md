@@ -99,12 +99,14 @@ it a default (`use-before-form`).
 The variables are exported to workshop terminals as environment
 variables: `repo_dir` becomes `REPO_DIR`, and the built-ins get a
 `WORKSHOP_` prefix, so `platform` is `WORKSHOP_PLATFORM`. They are
-written to `_workshop/env.sh`, `env.ps1` and `env.cmd`, one per shell,
-and every workshop terminal loads the file when it starts and again
-whenever a value changes. Under JupyterLite the terminal cannot source a
-file, so the values are sent as `export` commands instead. A manifest
-`env` mapping adds fixed environment variables of its own, such as a
-pager setting; see [terminal shells](platforms.md#terminal-shells).
+written to `_workshop/env.sh`, `env.fish`, `env.ps1` and `env.cmd`, one
+per shell, and every workshop terminal loads the file when it starts and
+again whenever a value changes. The same file sets the [workshop
+prompt](platforms.md#the-workshop-prompt). Under JupyterLite the terminal
+cannot source a file, so the values are sent as `export` commands
+instead. A manifest `env` mapping adds fixed environment variables of
+its own, such as a pager setting; see [terminal
+shells](platforms.md#terminal-shells).
 
 ```{warning}
 Because a declared variable is exported under its own name in upper

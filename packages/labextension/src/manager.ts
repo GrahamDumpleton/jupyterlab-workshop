@@ -26,6 +26,7 @@ import {
   IVenvExports,
   WORKSHOP_FILES_DIR,
   renderEnvCmd,
+  renderEnvFish,
   renderEnvPs1,
   renderEnvSh
 } from '@jupyterlab-workshop/core';
@@ -1848,23 +1849,29 @@ export class WorkshopManager implements IWorkshopManager {
     const values = this._store.values;
     const env = workshop.manifest.env;
     const venv = this.environmentVenv();
+    const prompt = { root: this.absolutePath('', 'workspace') };
     const directory = PathExt.join(workshop.path, WORKSHOP_STATE_DIR);
 
     try {
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.sh'),
-        renderEnvSh(values, env, venv)
+        renderEnvSh(values, env, venv, prompt)
+      );
+      await writeTextFile(
+        this._contents,
+        PathExt.join(directory, 'env.fish'),
+        renderEnvFish(values, env, venv, prompt)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.ps1'),
-        renderEnvPs1(values, env, venv)
+        renderEnvPs1(values, env, venv, prompt)
       );
       await writeTextFile(
         this._contents,
         PathExt.join(directory, 'env.cmd'),
-        renderEnvCmd(values, env, venv)
+        renderEnvCmd(values, env, venv, prompt)
       );
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);

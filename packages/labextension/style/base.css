@@ -235,6 +235,11 @@
   font-size: var(--jp-ui-font-size0);
 }
 
+/* A note under an action that succeeded, such as a command's exit status. */
+.jp-WorkshopPanel-actionMessage.jp-mod-note {
+  color: var(--jp-ui-font-color2);
+}
+
 .jp-WorkshopPanel-footer {
   display: flex;
   align-items: center;

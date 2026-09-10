@@ -43,9 +43,24 @@ interface IExposedWidget {
   id: string;
   node: HTMLElement;
   content?: {
-    session?: { send(message: { type: string; content: string[] }): void };
+    session?: {
+      send(message: { type: string; content: string[] }): void;
+      messageReceived?: {
+        connect(
+          slot: (
+            sender: unknown,
+            message: { type: string; content?: unknown[] }
+          ) => void
+        ): void;
+      };
+    };
     editor?: { getCursorPosition(): { line: number; column: number } };
   };
+}
+
+/** Terminal output collected by a test, kept on the window. */
+interface ICapturedOutput {
+  __workshopOutput: string[];
 }
 
 /** Open a workshop and answer the trust dialog with the given level. */
@@ -1202,5 +1217,113 @@ test.describe('startup restore from another server', () => {
 
     await expect(panel).toContainText('No workshop is open.');
     await expect(panel.locator('.jp-WorkshopPanel-error')).toHaveCount(0);
+  });
+});
+
+test.describe('workshop prompt', () => {
+  test('waits for the marked prompt and reports the exit status', async ({
+    page,
+    tmpPath
+  }) => {
+    // A workshop whose commands span lines, continue a line, and fail.
+    const prompted = `${tmpPath}/prompted`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: prompted',
+        'title: Prompted',
+        'version: 0.1.0',
+        'description: Prompt markers.',
+        'capabilities: [terminal]',
+        'pages:',
+        '  - pages/01-prompt.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${prompted}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '# Prompt',
+        '',
+        '```{execute}',
+        ':id: quick',
+        ':wait: prompt',
+        'echo started',
+        '```',
+        '',
+        '```{execute}',
+        ':id: spanning',
+        ':wait: prompt',
+        'echo one \\',
+        '  two',
+        'echo three',
+        '```',
+        '',
+        '```{execute}',
+        ':id: failing',
+        ':wait: prompt',
+        'false',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${prompted}/pages/01-prompt.md`
+    );
+    await openWorkshop(page, prompted);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const quick = panel.locator('[data-action-id="quick"]');
+
+    // The first action opens the terminal, whose output is collected
+    // from then on.
+    await quick.click();
+    await expect(quick).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+      const terminal = Array.from(
+        exposed.jupyterapp.shell.widgets('main')
+      ).find(widget => widget.id === 'jupyterlab-workshop-terminal-workshop');
+      const captured: string[] = [];
+
+      (window as unknown as ICapturedOutput).__workshopOutput = captured;
+      terminal?.content?.session?.messageReceived?.connect((_, message) => {
+        if (message.type === 'stdout' && message.content) {
+          captured.push(message.content.map(String).join(''));
+        }
+      });
+    });
+
+    // Three lines, one of them a continuation, draw three prompts.
+    const spanning = panel.locator('[data-action-id="spanning"]');
+
+    await spanning.click();
+    await expect(spanning).toHaveClass(/jp-mod-status-ok/, {
+      timeout: 30000
+    });
+    await expect(
+      spanning.locator('.jp-WorkshopPanel-actionMessage')
+    ).toHaveCount(0);
+
+    // A failing command still completes, with its status noted.
+    const failing = panel.locator('[data-action-id="failing"]');
+
+    await failing.click();
+    await expect(failing).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await expect(failing.locator('.jp-WorkshopPanel-actionMessage')).toHaveText(
+      'The command exited with status 1'
+    );
+
+    // The prompts carried the marker and the working directory, and no
+    // marker command was typed.
+    const output = await page.evaluate(() =>
+      (window as unknown as ICapturedOutput).__workshopOutput.join('')
+    );
+
+    expect(output).toContain('\x1b]7770;workshop;1\x07');
+    expect(output).toContain('~ $ ');
+    expect(output).not.toContain('WORKSHOP_DONE');
   });
 });

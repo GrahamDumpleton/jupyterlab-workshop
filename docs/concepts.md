@@ -141,15 +141,16 @@ collections, catalogs, launch links and deployments such as Binder.
 Everything the extension records about a workshop lives in a
 `_workshop` directory inside it, which git ignores:
 
-| Path                           | Holds                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------- |
-| `state.json`                   | Page progress, action results, captured variables and the action log.      |
-| `source.json`                  | Where a downloaded workshop came from and its hash.                        |
-| `env.sh`, `env.ps1`, `env.cmd` | The variables as environment variables, loaded by the workshop terminals.  |
-| `snapshots/`                   | Checkpoints of the workspace.                                              |
-| `events.jsonl`                 | [Progress events](analytics.md), one per line.                             |
-| `environment.json`, `venv/`    | An [isolated environment](environment.md), when the workshop asks for one. |
-| `recordings/`                  | Sessions recorded in author mode.                                          |
+| Path                        | Holds                                                                      |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `state.json`                | Page progress, action results, captured variables and the action log.      |
+| `source.json`               | Where a downloaded workshop came from and its hash.                        |
+| `env.sh` and its siblings   | The variables as environment variables and the prompt, one file per shell, |
+|                             | loaded by the workshop terminals.                                          |
+| `snapshots/`                | Checkpoints of the workspace.                                              |
+| `events.jsonl`              | [Progress events](analytics.md), one per line.                             |
+| `environment.json`, `venv/` | An [isolated environment](environment.md), when the workshop asks for one. |
+| `recordings/`               | Sessions recorded in author mode.                                          |
 
 Restart refills the workspace and forgets the progress; Reset Progress
 keeps the files; Remove deletes a downloaded workshop altogether. The trust decision is kept in JupyterLab's own state

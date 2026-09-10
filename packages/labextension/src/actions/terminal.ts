@@ -1,4 +1,9 @@
-import { terminalEnvironment } from '@jupyterlab-workshop/core';
+import {
+  IPromptMarker,
+  PROMPT_MARKER_MAX_LENGTH,
+  findPromptMarker,
+  terminalEnvironment
+} from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Terminal as TerminalService } from '@jupyterlab/services';
@@ -31,6 +36,22 @@ const PROMPT_WAIT_MS = 15000;
 const PROMPT_QUIET_MS = 500;
 
 const PROMPT_POLL_MS = 100;
+
+/**
+ * Longest wait for the first marked prompt after a terminal loads the
+ * environment file, before deciding the marker does not get through.
+ */
+const PROMPT_PROBE_MS = 5000;
+
+/** Shells whose environment file installs the marked prompt. */
+const PROMPT_HOOK_SHELLS: ReadonlySet<string> = new Set([
+  'bash',
+  'zsh',
+  'sh',
+  'fish',
+  'powershell',
+  'cmd'
+]);
 
 /** Shells that take Enter only as a carriage return, never as a newline. */
 const CARRIAGE_RETURN_SHELLS: ReadonlySet<string> = new Set([
@@ -66,7 +87,8 @@ const KEY_NAMES: Readonly<Record<string, string>> = {
  *
  * The first terminal opens in a split beneath the main area; later ones
  * open beside it. New terminals source the workshop environment file so
- * that variables are available as environment variables.
+ * that variables are available as environment variables and the workshop
+ * prompt, with its marker, is installed.
  */
 export class TerminalSessions {
   constructor(options: TerminalSessions.IOptions) {
@@ -245,6 +267,7 @@ export class TerminalSessions {
 
       if (this._widgets.get(name) === widget) {
         this._widgets.delete(name);
+        this._hooked.delete(name);
       }
 
       if (this._first === widget) {
@@ -268,8 +291,24 @@ export class TerminalSessions {
       }
     }
 
-    // Expose the workshop variables to the shell.
+    // Expose the workshop variables to the shell. Where the file also
+    // installs the marked prompt, the prompt drawn once the file has
+    // loaded shows whether the marker gets through; a shell without the
+    // hook, or a terminal that strips the marker on the way, leaves
+    // `wait: prompt` to its echoed marker instead.
     const source = envSourceCommand(this._manager);
+    const shell = this._manager.platform?.shell ?? '';
+
+    if (source && PROMPT_HOOK_SHELLS.has(shell)) {
+      const probe = this.waitForPrompts(name, 1, PROMPT_PROBE_MS);
+
+      this._hooked.set(
+        name,
+        probe.then(marker => marker !== null)
+      );
+    } else {
+      this._hooked.set(name, Promise.resolve(false));
+    }
 
     if (source) {
       this._write(session, `${source}\n`);
@@ -348,6 +387,70 @@ export class TerminalSessions {
   }
 
   /**
+   * Whether the terminal for a session name draws the marked prompt, so
+   * that `wait: prompt` can watch for it rather than echo a marker. The
+   * answer is settled once the terminal's first prompt after loading the
+   * environment file has been seen, or given up on.
+   */
+  async promptHooked(name: string): Promise<boolean> {
+    return (await this._hooked.get(name)) ?? false;
+  }
+
+  /**
+   * Resolve with the last of the next `count` prompt markers the
+   * terminal draws, or null when they have not all appeared within the
+   * timeout. Every line sent to the shell draws one prompt, continuation
+   * prompts included, so a command of several lines waits for as many.
+   */
+  waitForPrompts(
+    name: string,
+    count: number,
+    timeoutMs: number
+  ): Promise<IPromptMarker | null> {
+    return new Promise(resolve => {
+      let pending = '';
+      let seen = 0;
+      let last: IPromptMarker | null = null;
+      const onOutput = (
+        _: this,
+        args: { name: string; text: string }
+      ): void => {
+        if (args.name !== name) {
+          return;
+        }
+
+        // Consume every complete marker, keeping a tail long enough to
+        // hold one that arrives split across chunks.
+        pending += args.text;
+
+        for (
+          let marker = findPromptMarker(pending);
+          marker;
+          marker = findPromptMarker(pending)
+        ) {
+          seen += 1;
+          last = marker;
+          pending = pending.slice(marker.end);
+        }
+
+        pending = pending.slice(-PROMPT_MARKER_MAX_LENGTH);
+
+        if (seen >= count) {
+          finish(last);
+        }
+      };
+      const timer = window.setTimeout(() => finish(null), timeoutMs);
+      const finish = (result: IPromptMarker | null): void => {
+        window.clearTimeout(timer);
+        this._output.disconnect(onOutput);
+        resolve(result);
+      };
+
+      this._output.connect(onOutput);
+    });
+  }
+
+  /**
    * Re-source the environment file in every open terminal.
    */
   refreshEnvironment(): void {
@@ -370,6 +473,7 @@ export class TerminalSessions {
   private _widgets = new Map<string, MainAreaWidget<Terminal>>();
   private _pending = new Map<string, Promise<MainAreaWidget<Terminal>>>();
   private _first: MainAreaWidget<Terminal> | null = null;
+  private _hooked = new Map<string, Promise<boolean>>();
   private _output = new Signal<this, { name: string; text: string }>(this);
   private _input = new Signal<this, { name: string; text: string }>(this);
 }
@@ -399,6 +503,8 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
     return null;
   }
 
+  // The dot command is the POSIX form; plain sh, dash in particular, has
+  // no `source`.
   switch (platform.shell) {
     case 'bash':
     case 'zsh':
@@ -408,7 +514,15 @@ export function envSourceCommand(manager: IWorkshopManager): string | null {
         'workshop'
       );
 
-      return `source '${path.replace(/'/g, "'\\''")}'`;
+      return `. '${path.replace(/'/g, "'\\''")}'`;
+    }
+    case 'fish': {
+      const path = manager.absolutePath(
+        `${WORKSHOP_STATE_DIR}/env.fish`,
+        'workshop'
+      );
+
+      return `source '${path.replace(/'/g, "\\'")}'`;
     }
     case 'powershell': {
       const path = manager.absolutePath(
@@ -534,10 +648,42 @@ export class ExecuteAction implements IActionImplementation {
     const name = sessionName(request);
     const wait = request.options.wait;
 
-    // `wait: prompt` follows the command with a marker command and waits
-    // for the marker to be printed, which happens once the shell is back
-    // at its prompt. Any other value is a duration to pause for.
+    // `wait: prompt` waits for the shell to be back at its prompt. With
+    // the workshop prompt installed, the prompt itself carries a marker,
+    // one per line sent; otherwise the command is followed by a marker
+    // command whose output is waited for. Any other value is a duration
+    // to pause for.
     if (wait === 'prompt') {
+      const cwd = terminalCwd(request, this._manager);
+      const timeout = parseDuration(request.options.timeout, 120000);
+      const text = `${command.replace(/\n+$/, '')}\n`;
+      const timedOut: IActionResult = {
+        status: 'error',
+        message: `The command did not finish within ${Math.round(timeout / 1000)}s`
+      };
+
+      await this._terminals.get(name, { cwd });
+
+      if (await this._terminals.promptHooked(name)) {
+        const lines = text.split('\n').length - 1;
+        const done = this._terminals.waitForPrompts(name, lines, timeout);
+
+        await this._terminals.send(name, text, cwd);
+
+        const marker = await done;
+
+        if (!marker) {
+          return timedOut;
+        }
+
+        return marker.status === 0
+          ? { status: 'ok' }
+          : {
+              status: 'ok',
+              message: `The command exited with status ${marker.status}`
+            };
+      }
+
       const marker = `__WORKSHOP_DONE_${Date.now().toString(36)}__`;
       const echo = markerCommand(this._manager, marker);
 
@@ -548,20 +694,12 @@ export class ExecuteAction implements IActionImplementation {
         };
       }
 
-      const timeout = parseDuration(request.options.timeout, 120000);
       const seen = this._terminals.waitForOutput(name, marker, timeout);
 
-      await this._terminals.send(
-        name,
-        `${command.replace(/\n+$/, '')}\n${echo}\n`,
-        terminalCwd(request, this._manager)
-      );
+      await this._terminals.send(name, `${text}${echo}\n`, cwd);
 
       if (!(await seen)) {
-        return {
-          status: 'error',
-          message: `The command did not finish within ${Math.round(timeout / 1000)}s`
-        };
+        return timedOut;
       }
 
       return { status: 'ok' };

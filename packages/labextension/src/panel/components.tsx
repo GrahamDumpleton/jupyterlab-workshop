@@ -987,6 +987,11 @@ function ActionBlock({
       {status.status === 'ok' && status.message && showsOutput(node) ? (
         <pre className="jp-WorkshopPanel-actionOutput">{status.message}</pre>
       ) : null}
+      {status.status === 'ok' && status.message && node.name === 'execute' ? (
+        <div className="jp-WorkshopPanel-actionMessage jp-mod-note">
+          {status.message}
+        </div>
+      ) : null}
     </div>
   );
 }

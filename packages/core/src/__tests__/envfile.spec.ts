@@ -1,6 +1,8 @@
 import {
   environmentVariables,
+  findPromptMarker,
   renderEnvCmd,
+  renderEnvFish,
   renderEnvPs1,
   renderEnvSh,
   terminalEnvironment
@@ -68,5 +70,68 @@ describe('workshop environment on PATH', () => {
     expect(renderEnvSh({})).not.toContain('PATH');
     expect(renderEnvPs1({})).not.toContain('PATH');
     expect(renderEnvCmd({})).not.toContain('PATH');
+  });
+});
+
+describe('the workshop prompt', () => {
+  const prompt = { root: '/w/work' };
+
+  it('installs the marked prompt in the POSIX file without control bytes', () => {
+    const text = renderEnvSh({}, {}, undefined, prompt);
+
+    expect(text).toContain(
+      'export WORKSHOP_PROMPT_ROOT="$(cd /w/work 2>/dev/null && pwd -P || printf \'%s\' /w/work)"'
+    );
+    expect(text).toContain(
+      '__workshop_osc="$(printf \'\\033]7770;workshop;\')"'
+    );
+    expect(text).toContain('unset PROMPT_COMMAND');
+    expect(text).toContain("eval 'precmd_functions=()'");
+    expect(text).toContain("printf '\\033[H\\033[2J\\033[3J'");
+    expect(text).not.toMatch(/[\x1b\x07]/);
+  });
+
+  it('renders the fish, PowerShell and batch prompts', () => {
+    const fish = renderEnvFish({ repo_dir: "it's" }, {}, undefined, prompt);
+
+    expect(fish).toContain("set -gx REPO_DIR 'it\\'s'");
+    expect(fish).toContain("printf '\\e]7770;workshop;%s\\a%s $ ' $code $dir");
+    expect(renderEnvPs1({}, {}, undefined, prompt)).toContain(
+      'function global:prompt {'
+    );
+    expect(renderEnvCmd({}, {}, undefined, prompt)).toContain(
+      'set "PROMPT=$E]7770;workshop;0$E\\$P$G "'
+    );
+  });
+
+  it('puts the environment on the fish PATH as a list', () => {
+    expect(
+      renderEnvFish({}, {}, { root: '/w/venv', bin: '/w/venv/bin' })
+    ).toContain("set -gx PATH '/w/venv/bin' $PATH");
+  });
+
+  it('leaves the prompt out when none is asked for', () => {
+    expect(renderEnvSh({})).not.toContain('PS1');
+    expect(renderEnvFish({})).not.toContain('fish_prompt');
+    expect(renderEnvPs1({})).not.toContain('prompt');
+    expect(renderEnvCmd({})).not.toContain('PROMPT');
+  });
+});
+
+describe('prompt markers', () => {
+  it('finds a marker with either terminator and its status', () => {
+    expect(findPromptMarker('abc\x1b]7770;workshop;1\x07~ $ ')).toEqual({
+      status: 1,
+      end: 21
+    });
+    expect(findPromptMarker('\x1b]7770;workshop;0\x1b\\$ ')).toEqual({
+      status: 0,
+      end: 19
+    });
+  });
+
+  it('ignores an incomplete marker', () => {
+    expect(findPromptMarker('\x1b]7770;workshop;')).toBeNull();
+    expect(findPromptMarker('~ $ ')).toBeNull();
   });
 });
