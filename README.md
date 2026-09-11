@@ -28,7 +28,10 @@ runs entirely in the browser.
 
 The package is a prebuilt JupyterLab 4 extension with its server
 extension, installed into a virtual environment alongside JupyterLab
-with `uv add jupyterlab jupyterlab-workshop` or the pip equivalent.
+with `uv add jupyterlab jupyterlab-workshop` or the pip equivalent, or,
+to run workshops without a project of your own, as a tool with
+`uv tool install "jupyterlab-workshop[lab]"` and then
+`jupyter-workshop launch --root ~/learning --collection <url>`.
 [Getting started](https://jupyterlab-workshop.readthedocs.io/en/latest/getting-started.html)
 walks through the setup, runs an example workshop and scaffolds one of
 your own; the `jupyter workshop` command that comes with the package

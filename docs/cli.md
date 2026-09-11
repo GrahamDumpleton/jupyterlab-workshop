@@ -252,6 +252,11 @@ own, as [test](#test) does, so a demo is not shaped by the tabs and
 preferences of other sessions. Anything after `--` is passed to
 `jupyter lab` unchanged, for options such as `--ip`.
 
+Installed as a uv tool with the `lab` extra, `uv tool install
+"jupyterlab-workshop[lab]"`, the command runs as `jupyter-workshop
+launch` from any directory without a project environment; see
+[getting started](getting-started.md#as-a-tool).
+
 For a demo that must always start clean and never ask:
 
 ```

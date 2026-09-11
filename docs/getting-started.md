@@ -46,6 +46,42 @@ On Windows the activation line is `.venv\Scripts\activate`. The rest of
 this page assumes the environment is active; with uv, put `uv run` in
 front of any command typed outside JupyterLab.
 
+### As a tool
+
+For running workshops rather than writing them, there is a shorter
+route that needs no project directory or environment of your own: the
+package installed as a uv tool, with the `lab` extra pulling in
+JupyterLab beside it:
+
+```
+uv tool install "jupyterlab-workshop[lab]"
+```
+
+That puts a `jupyter-workshop` command on your path, the same command
+that the pages below call `jupyter workshop`, with JupyterLab, the
+extension and a Python kernel in a private environment of its own. Its
+[launch](cli.md#launch) command then starts JupyterLab from any
+directory, with `--root` choosing where workshops are installed and
+what the file browser shows:
+
+```
+jupyter-workshop launch --root ~/learning --collection https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop-showcase/main/collection.json
+```
+
+That opens the workshop browser with the showcase collection added for
+the session; workshops installed from it land under
+`~/learning/workshops`, and Subscribe in the Collections dialog keeps
+the collection for later launches. Naming a workshop as well,
+`jupyter-workshop launch why-a-workshop --root ~/learning --collection …`,
+installs and opens it straight away. `uv tool upgrade jupyterlab-workshop`
+moves to a newer release, and `uvx --from "jupyterlab-workshop[lab]"
+jupyter-workshop launch …` runs it without installing anything. Only the
+`jupyter-workshop` command is exposed, not `jupyter` itself, so it is
+`jupyter-workshop launch` rather than `jupyter workshop launch` in this
+setup. Workshops that declare an [environment](environment.md) of their
+own still create it beside themselves, so the tool's environment stays
+as installed.
+
 The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers
 three buttons: Browse workshops, Open a directory and Open from URL.

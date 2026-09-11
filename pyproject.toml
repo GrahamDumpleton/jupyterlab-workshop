@@ -27,6 +27,9 @@ dependencies = [
 dynamic = ["version", "description", "authors", "keywords"]
 
 [project.optional-dependencies]
+lab = [
+    "jupyterlab>=4.4,<5",
+]
 test = [
     "playwright>=1.45",
 ]
