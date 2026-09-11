@@ -89,7 +89,10 @@ GIT_PAGER: cat }`; a workshop that teaches `less` leaves it unset and
 
   ```yaml
   variables:
-    - { name: server_port, type: number, default: 5071, label: Server port }
+    - name: server_port
+      type: number
+      default: 5071
+      description: Port the server listens on
   ```
 
   ```
