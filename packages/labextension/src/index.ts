@@ -373,8 +373,10 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
 
     manager.registry = registry;
 
-    // Keep open terminals in step with the variables.
-    manager.environmentChanged.connect(() => terminals.refreshEnvironment());
+    // Keep open terminals in step with the variables; the manager waits
+    // for the reload before an action that captured a value finishes.
+    (manager as WorkshopManager).environmentRefresher = () =>
+      terminals.refreshEnvironment();
 
     // Verifies re-run on the events they listen for.
     new TriggerBus({ app, manager, terminals });

@@ -497,20 +497,33 @@ export class TerminalSessions {
   /**
    * Load the environment file again in every open terminal. A terminal
    * still starting is left alone, since it loads the file itself once
-   * its shell is up.
+   * its shell is up. Resolves once every terminal has drawn its prompt
+   * again, or given up waiting, so a caller can hold an action until
+   * the values are in place.
    */
-  refreshEnvironment(): void {
+  async refreshEnvironment(): Promise<void> {
     const source = envSourceCommand(this._manager);
 
     if (!source) {
       return;
     }
 
+    const reloads: Promise<void>[] = [];
+
     for (const [name, widget] of this._widgets) {
       if (!widget.isDisposed && this._hooked.has(name)) {
-        void this._reload(name, `${source}\n`);
+        reloads.push(
+          this._reload(name, `${source}\n`).catch(error => {
+            console.warn(
+              `Unable to reload the environment in terminal ${name}`,
+              error
+            );
+          })
+        );
       }
     }
+
+    await Promise.all(reloads);
   }
 
   /**

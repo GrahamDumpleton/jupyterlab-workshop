@@ -170,6 +170,15 @@ export class WorkshopManager implements IWorkshopManager {
     return this._environmentChanged;
   }
 
+  /**
+   * What loads the environment files again in open terminals once they
+   * are rewritten. Writing waits for it, so an action that captured a
+   * value finishes only when the terminals have the value too.
+   */
+  set environmentRefresher(refresher: (() => Promise<void>) | null) {
+    this._envRefresher = refresher;
+  }
+
   get workshop(): ILoadedWorkshop | null {
     return this._workshop;
   }
@@ -1217,6 +1226,21 @@ export class WorkshopManager implements IWorkshopManager {
       for (const [name, value] of Object.entries(result.captured)) {
         this._store.set(name, value, result.captureSource ?? 'capture');
       }
+
+      // The values reach commands through the environment files, which
+      // open terminals load again. The action stays running until that
+      // is done, so the next click never runs against the old values.
+      if (
+        Object.keys(result.captured).length > 0 &&
+        this._workshop &&
+        !this._loading
+      ) {
+        try {
+          await this._envWriter.invoke();
+        } catch (error) {
+          console.warn('Unable to write the workshop environment', error);
+        }
+      }
     }
 
     this._record(request, result, trigger, registry.describe(request));
@@ -1889,6 +1913,17 @@ export class WorkshopManager implements IWorkshopManager {
     if (written !== this._envWritten) {
       this._envWritten = written;
       this._environmentChanged.emit();
+
+      if (this._envRefresher) {
+        try {
+          await this._envRefresher();
+        } catch (error) {
+          console.warn(
+            'Unable to reload the environment in open terminals',
+            error
+          );
+        }
+      }
     }
   }
 
@@ -2151,6 +2186,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _store = new VariableStore();
   private _envWriter: Debouncer;
   private _envWritten: string | null = null;
+  private _envRefresher: (() => Promise<void>) | null = null;
   private _reloader: Debouncer;
   private _kernelspecs: KernelSpec.IManager | null;
   private _authoring = false;

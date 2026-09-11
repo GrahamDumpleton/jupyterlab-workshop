@@ -665,6 +665,86 @@ test.describe('workshop panel', () => {
     ).toBe(false);
   });
 
+  test('keeps a form running until open terminals have its values', async ({
+    page,
+    tmpPath
+  }) => {
+    const greet = `${tmpPath}/greet`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${greet}/${path}`);
+    const read = (): Promise<string> =>
+      page.evaluate(async (target: string) => {
+        const exposed = window as unknown as IExposedApp;
+
+        try {
+          const model = await exposed.jupyterapp.serviceManager.contents.get(
+            target,
+            { content: true }
+          );
+
+          return String(model.content).trim();
+        } catch {
+          return '';
+        }
+      }, `${greet}/work/who.txt`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: greet',
+        'title: Greet',
+        'capabilities: [terminal]',
+        'variables:',
+        '  - name: who',
+        '    type: text',
+        '    default: friend',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload(
+      [
+        '---',
+        'title: Greet',
+        '---',
+        '',
+        '```{form}',
+        ':id: who',
+        '- { name: who, type: text, label: Who, required: true }',
+        '```',
+        '',
+        '```{execute}',
+        ':session: demo',
+        'echo "$WHO" > who.txt',
+        ':windows:',
+        '"$env:WHO" | Set-Content who.txt',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+
+    await openWorkshop(page, greet);
+
+    const panel = page.locator(PANEL);
+    const form = panel.locator('.jp-WorkshopPanel-form');
+    const action = panel.locator('.jp-WorkshopPanel-action.jp-mod-execute');
+
+    // The command sees the default through the environment.
+    await action.click();
+    await expect(action).toHaveClass(/jp-mod-status-ok/);
+    await expect.poll(read).toBe('friend');
+
+    // Saving the form shows it saved only once the terminal has loaded
+    // the new value, so a click that follows at once already sees it.
+    await form.getByLabel('Who').fill('Grumpy');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(form).toHaveClass(/jp-mod-status-ok/);
+    await action.click();
+    await expect.poll(read, { timeout: 15000 }).toBe('Grumpy');
+  });
+
   test('retries a triggered check while its command finishes', async ({
     page,
     tmpPath
