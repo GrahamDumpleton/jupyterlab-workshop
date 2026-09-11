@@ -130,7 +130,21 @@ export async function ensureDirectory(
     path: parent
   });
 
-  await contents.rename(created.path, path);
+  try {
+    await contents.rename(created.path, path);
+  } catch (error) {
+    // Something else, such as the server appending to a file under the
+    // same directory, may have created it between the check above and
+    // the rename. That is fine, but the untitled directory must not be
+    // left behind either way.
+    await contents.delete(created.path).catch(() => undefined);
+
+    const now = await getIfExists(contents, path, false);
+
+    if (!now || now.type !== 'directory') {
+      throw error;
+    }
+  }
 }
 
 /**

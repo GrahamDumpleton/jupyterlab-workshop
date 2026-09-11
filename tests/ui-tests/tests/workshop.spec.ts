@@ -665,6 +665,34 @@ test.describe('workshop panel', () => {
     ).toBe(false);
   });
 
+  test('creates the state directory once and writes the environment files into it', async ({
+    page,
+    tmpPath
+  }) => {
+    const workshopPath = `${tmpPath}/${WORKSHOP}`;
+
+    await openWorkshop(page, workshopPath);
+
+    // The environment file the terminals source is there as soon as the
+    // workshop is open, and creating the state directory left no untitled
+    // directories behind in the workshop.
+    await expect
+      .poll(() => page.contents.fileExists(`${workshopPath}/_workshop/env.sh`))
+      .toBe(true);
+
+    const names = await page.evaluate(async (target: string) => {
+      const exposed = window as unknown as IExposedApp;
+      const model = await exposed.jupyterapp.serviceManager.contents.get(
+        target,
+        { content: true }
+      );
+
+      return (model.content as { name: string }[]).map(entry => entry.name);
+    }, workshopPath);
+
+    expect(names.filter(name => name.startsWith('Untitled'))).toEqual([]);
+  });
+
   test('keeps a form running until open terminals have its values', async ({
     page,
     tmpPath

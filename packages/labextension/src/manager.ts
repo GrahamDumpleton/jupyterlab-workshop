@@ -363,6 +363,15 @@ export class WorkshopManager implements IWorkshopManager {
       // and is left alone.
       await this._populateWorkspace(workshopPath, manifest.workspace);
 
+      // The state directory is created once, here, before the progress
+      // save, the environment files and the server's event log all start
+      // writing into it; left to each of them, they raced to create it
+      // and the losers gave up, leaving untitled directories behind.
+      await ensureDirectory(
+        this._contents,
+        PathExt.join(workshopPath, WORKSHOP_STATE_DIR)
+      );
+
       const state = await this._state.load(
         workshopPath,
         manifest.name,
