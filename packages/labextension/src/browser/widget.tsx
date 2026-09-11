@@ -704,6 +704,11 @@ function AvailableSection({
             onInstall={entry => onInstall(group.collection.url, entry)}
             onInstallAll={onInstallAll ? () => onInstallAll(group) : undefined}
             onRemoveAll={onRemoveAll ? () => onRemoveAll(group) : undefined}
+            onSubscribe={
+              group.collection.origin === 'session' && canSubscribeCollections
+                ? () => onSubscribe(group.collection.url)
+                : undefined
+            }
           />
         ) : null
       )}
@@ -780,7 +785,8 @@ function CollectionGroup({
   busy,
   onInstall,
   onInstallAll,
-  onRemoveAll
+  onRemoveAll,
+  onSubscribe
 }: {
   group: IGroup;
   platform: string;
@@ -788,6 +794,13 @@ function CollectionGroup({
   onInstall: (entry: ICollectionEntry) => void;
   onInstallAll?: () => void;
   onRemoveAll?: () => void;
+
+  /**
+   * Subscribe to the collection, given when a launch link added it for
+   * this session only and the settings may be changed; the heading then
+   * offers Subscribe in place of Install all until it is taken.
+   */
+  onSubscribe?: () => void;
 }): JSX.Element {
   const { collection } = group;
   const [collapsed, setCollapsed] = useState(() =>
@@ -810,8 +823,15 @@ function CollectionGroup({
   // A bulk run holds the whole group: its cards' Install buttons wait
   // for it, so a single install cannot race the run for a directory.
   const groupBusy = busy === `install-all:${normalizeLocation(collection.url)}`;
+  // A collection here for the session only is subscribed to before its
+  // workshops are installed as a set, so that what is installed still
+  // has its collection, and its order, at the next start.
+  const canSubscribe = onSubscribe !== undefined && !collection.error;
   const canInstallAll =
-    onInstallAll !== undefined && !collection.error && count > 1;
+    !canSubscribe &&
+    onInstallAll !== undefined &&
+    !collection.error &&
+    count > 1;
   const canRemoveAll =
     onRemoveAll !== undefined && !collection.error && group.removable > 0;
 
@@ -883,8 +903,18 @@ function CollectionGroup({
             </p>
           ) : null}
         </div>
-        {canInstallAll || canRemoveAll ? (
+        {canSubscribe || canInstallAll || canRemoveAll ? (
           <div className="jp-WorkshopBrowser-groupActions">
+            {canSubscribe ? (
+              <button
+                type="button"
+                className="jp-Button jp-mod-styled jp-mod-accept"
+                title="Remember this collection for future sessions"
+                onClick={onSubscribe}
+              >
+                Subscribe
+              </button>
+            ) : null}
             {canInstallAll ? (
               <button
                 type="button"

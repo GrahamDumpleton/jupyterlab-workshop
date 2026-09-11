@@ -21,7 +21,8 @@ same three as buttons once one is open:
   grouped by collection. Install downloads one into the `workshops`
   directory under the JupyterLab root and lists it under Installed, and
   a collection's heading offers "Install all…" for the rest of a course
-  at once; Open or Resume opens an installed one. "Collections…" subscribes to
+  at once, or Subscribe for a collection a launch link added for the
+  session only; Open or Resume opens an installed one. "Collections…" subscribes to
   and unsubscribes from collections and catalogs; see [Finding and installing workshops](collections.md).
 
 - **Open a directory** opens a workshop directory that is already on

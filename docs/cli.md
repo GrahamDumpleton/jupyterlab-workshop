@@ -236,6 +236,12 @@ is already there over first, asking when it has recorded progress unless
 a file under the root; a directory holding a `collection.json` or
 `catalog.json` may be named in place of the file.
 
+A collection or catalog named this way is added for the session only,
+so a later launch without it lists the workshops installed from it in
+directory order rather than the collection's; Subscribe on the
+collection's heading in the browser keeps it, or give `--collection`
+each time.
+
 The server runs on a free port unless `--port` is given, with the current
 directory as its root unless `--root` names another; everything it opens
 has to sit under that root, and a target outside it is refused with a

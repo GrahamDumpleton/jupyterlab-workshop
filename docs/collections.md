@@ -49,6 +49,8 @@ with two sections:
   under Installed, where Open starts it. When more than one workshop of
   a collection is left to install, its heading offers "Install all…",
   which asks first; see [Installing a whole collection](#installing-a-whole-collection).
+  A collection a [launch link](#launch-links) added for the session
+  shows Subscribe there instead, until it is taken.
   Cards for workshops that do not list the current platform are dimmed
   but can still be installed. A workshop that is already installed
   appears only under Installed, where its card offers an Update button
@@ -406,8 +408,13 @@ Two more parameters add sources for the session, and open the
 browser when no workshop is named:
 
 - `collection=<url>` adds a collection for the session: the browser
-  shows its workshops alongside the subscribed ones, and the
-  Collections dialog offers Subscribe to write it into the settings.
+  shows its workshops alongside the subscribed ones, with Subscribe on
+  its heading in place of "Install all…" until it is taken; single
+  Install buttons work either way, and the Collections dialog offers
+  Subscribe too. The workshops installed from it stay, but their order
+  and their place in the collection are known only while the collection
+  is: subscribe, or give the link again at each start, to see them
+  grouped and numbered rather than listed in directory order.
   With `workshop=<name>` as
   well, where the name is one of the collection's workshops rather than
   a URL or path, that workshop is installed from the collection,

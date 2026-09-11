@@ -794,8 +794,35 @@ test.describe('workshop browser', () => {
     expect(await page.sidebar.isOpen('right')).toBe(false);
     expect(page.url()).not.toContain('collection=');
 
-    // The dialog shows where each came from, and Subscribe moves the
-    // link's collection into the settings.
+    // The link's collection is here for the session only, so its heading
+    // offers Subscribe where a subscribed collection has Install all; the
+    // configured collection's heading has no such button.
+    const second = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'Second collection'
+    });
+    const first = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'Test collection'
+    });
+
+    await expect(
+      second.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(1);
+    await expect(
+      second.getByRole('button', { name: 'Install all…' })
+    ).toHaveCount(0);
+    await expect(
+      first.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(0);
+
+    // Subscribe from the heading moves the collection into the settings,
+    // which the dialog then shows as where it came from.
+    await second
+      .getByRole('button', { name: 'Subscribe', exact: true })
+      .click();
+    await expect(
+      second.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(0);
+
     await browser.getByRole('button', { name: 'Collections…' }).click();
 
     const dialog = page.locator('.jp-Dialog');
@@ -803,8 +830,6 @@ test.describe('workshop browser', () => {
       hasText: 'Second collection'
     });
 
-    await expect(row).toContainText('from this session');
-    await row.getByRole('button', { name: 'Subscribe', exact: true }).click();
     await expect(row).toContainText('from your settings');
     await expect(
       row.getByRole('button', { name: 'Subscribe', exact: true })
