@@ -128,15 +128,35 @@ export function findCell(
 /**
  * The kernel new notebooks use: the workshop's environment once it is
  * ready, else the server's default kernel, if any.
+ *
+ * A workshop that declares an environment never falls back to the
+ * default kernel: a notebook on the server's Python would fail two steps
+ * later with a missing module, so the action fails here, saying why.
  */
 async function defaultKernel(
   context: INotebookActionContext
 ): Promise<string | undefined> {
   const specs = context.app.serviceManager.kernelspecs;
+  const manager = context.manager;
 
   await specs.ready;
 
-  return context.manager.environmentKernel() ?? specs.specs?.default;
+  const kernel = manager.environmentKernel();
+
+  if (kernel) {
+    await manager.ensureKernelListed(kernel);
+
+    return kernel;
+  }
+
+  if (manager.workshop?.manifest.environment?.requirements) {
+    throw new Error(
+      "The workshop's environment is not ready: create it first, from " +
+        'its environment step or the banner in the panel'
+    );
+  }
+
+  return specs.specs?.default;
 }
 
 /**

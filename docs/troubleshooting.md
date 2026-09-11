@@ -125,6 +125,17 @@ open keeps its directory. Run `cd` as a step, or name a new session.
 unsaved changes.** A document with unsaved edits asks before it is
 closed, as closing its tab would. Save or discard it and try again.
 
+**A notebook opens on Python 3 instead of the workshop's kernel, and
+imports fail.** The notebook was created before the environment was
+ready, or on a JupyterLab whose kernel list did not yet have the
+kernel; releases from 0.1.27 refuse both rather than fall back. Change
+the kernel from the notebook's kernel picker to the entry named after
+the workshop, or Restart the workshop once the environment says ready
+and let its notebook step run again. If the picker has no such entry
+although the environment reports ready, reopen the workshop: a missing
+spec is registered again on open. `jupyter workshop kernels` shows what
+is registered.
+
 ## Platforms
 
 **A command with `&&` fails on Windows.** Windows PowerShell 5 has no

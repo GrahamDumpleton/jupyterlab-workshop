@@ -29,6 +29,10 @@ interface IExposedApp {
           options: { content: boolean }
         ): Promise<{ content: unknown }>;
       };
+      sessions: {
+        refreshRunning(): Promise<void>;
+        running(): Iterable<{ path: string; kernel: { name: string } | null }>;
+      };
       kernelspecs: {
         refreshSpecs(): Promise<void>;
         specs: { kernelspecs: Record<string, unknown> } | null;
@@ -280,7 +284,7 @@ test.describe('workshop panel', () => {
         'apiVersion: jupyterlab-workshop/v1alpha1',
         'name: envy',
         'title: Envy',
-        'capabilities: [install-packages, kernel-exec]',
+        'capabilities: [install-packages, kernel-exec, write-files: [workspace]]',
         'environment: { requirements: requirements.txt }',
         'pages: [pages/01.md]',
         ''
@@ -314,6 +318,12 @@ test.describe('workshop panel', () => {
         'assert os.environ.get("VIRTUAL_ENV", "").endswith("venv"), os.environ.get("VIRTUAL_ENV", "unset")',
         'print(os.environ["VIRTUAL_ENV"])',
         '```',
+        '',
+        '```{notebook-create}',
+        ':id: make-notebook',
+        ':path: envy.ipynb',
+        '- code: import sys; print(sys.prefix)',
+        '```',
         ''
       ].join('\n'),
       'text',
@@ -336,12 +346,55 @@ test.describe('workshop panel', () => {
     const hasVenv = (): Promise<boolean> =>
       page.contents.directoryExists(`${envy}/_workshop/venv`);
 
-    // Create the environment from the banner; pip takes a while.
+    // Before the environment exists, a notebook action refuses rather
+    // than opening the notebook on the server's own kernel.
+    const makeNotebook = panel.locator('[data-action-id="make-notebook"]');
+
     await expect(banner).toBeVisible();
+    await makeNotebook.click();
+    await expect(makeNotebook).toHaveClass(/jp-mod-status-error/);
+    await expect(makeNotebook).toContainText('environment is not ready');
+
+    // Create the environment from the banner; pip takes a while. The
+    // kernel is registered under the declared name plus a hash of the
+    // workshop's location.
     await banner.getByRole('button', { name: 'Create environment' }).click();
     await expect(banner).toHaveCount(0, { timeout: 180000 });
-    expect(await kernels()).toContain('workshop-envy');
+
+    const kernelName = (await kernels()).find(name =>
+      /^workshop-envy-[0-9a-f]{8}$/.test(name)
+    );
+
+    expect(kernelName).toBeDefined();
     expect(await hasVenv()).toBe(true);
+
+    // Now the notebook opens on that kernel, and its session runs it.
+    await makeNotebook.click();
+    await expect(makeNotebook).toHaveClass(/jp-mod-status-ok/, {
+      timeout: 60000
+    });
+    await expect
+      .poll(async () => {
+        return page.evaluate(async (path: string) => {
+          const exposed = window as unknown as IExposedApp;
+          const sessions = exposed.jupyterapp.serviceManager.sessions;
+
+          await sessions.refreshRunning();
+
+          for (const session of sessions.running()) {
+            if (session.path.endsWith(path)) {
+              return session.kernel?.name ?? '';
+            }
+          }
+
+          return '';
+        }, 'envy.ipynb');
+      })
+      .toBe(kernelName);
+
+    // Closed again, discarding the kernel start's metadata change, so the
+    // reset and restart below are not held up by a save prompt.
+    await page.notebook.close('envy.ipynb', true);
 
     // Commands and checks now run with the environment first on PATH:
     // the capture's python is the venv's, and the kernel check sees
@@ -392,7 +445,7 @@ test.describe('workshop panel', () => {
     await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText('Envy');
     await expect(banner).toHaveCount(0);
     expect(await hasVenv()).toBe(true);
-    expect(await kernels()).toContain('workshop-envy');
+    expect(await kernels()).toContain(kernelName);
 
     // Restart removes it, kernel included, and offers it again.
     const restart = run('workshop:restart');
@@ -405,7 +458,7 @@ test.describe('workshop panel', () => {
     await expect(dialog).toHaveCount(0);
     await expect(banner).toBeVisible({ timeout: 60000 });
     expect(await hasVenv()).toBe(false);
-    expect(await kernels()).not.toContain('workshop-envy');
+    expect(await kernels()).not.toContain(kernelName);
   });
 
   test('fills a declared workspace and refills it on restart', async ({

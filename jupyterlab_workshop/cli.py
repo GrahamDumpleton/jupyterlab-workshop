@@ -293,6 +293,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     install.set_defaults(func=command_install)
 
+    kernels = commands.add_parser(
+        "kernels",
+        help="list the kernels registered for workshop environments",
+        description=(
+            "List the kernelspecs registered for workshop environments, "
+            "which are the ones whose Python lives under a workshop's "
+            "_workshop/venv directory; every other kernel is left alone. "
+            "A stale one is a kernel whose environment no longer exists."
+        ),
+    )
+    kernels.add_argument(
+        "--prune", action="store_true", help="unregister the stale ones"
+    )
+    kernels.set_defaults(func=command_kernels)
+
     publish = commands.add_parser(
         "publish", help="build an archive, its sha256 and a collection entry"
     )
@@ -888,6 +903,54 @@ def command_install(args: argparse.Namespace) -> int:
     )
 
     return 1 if counts["failed"] else 0
+
+
+def command_kernels(args: argparse.Namespace) -> int:
+    """List the workshop kernels, pruning the stale ones when asked."""
+
+    from .environment import (
+        EnvironmentSetupError,
+        list_workshop_kernels,
+        prune_workshop_kernels,
+    )
+
+    try:
+        kernels = list_workshop_kernels()
+    except EnvironmentSetupError as error:
+        raise CliError(str(error)) from error
+
+    if not kernels:
+        print("No workshop kernels are registered.")
+
+        return 0
+
+    width = max(len(kernel.name) for kernel in kernels)
+
+    for kernel in kernels:
+        state = "ok" if kernel.exists else "stale"
+
+        print(f"{kernel.name:<{width}}  {state:<5}  {kernel.python}")
+
+    if not args.prune:
+        stale = sum(1 for kernel in kernels if not kernel.exists)
+
+        if stale:
+            print(f"\n{stale} stale; run with --prune to unregister them")
+
+        return 0
+
+    try:
+        pruned = prune_workshop_kernels()
+    except EnvironmentSetupError as error:
+        raise CliError(str(error)) from error
+
+    for kernel in pruned:
+        print(f"unregistered {kernel.name}")
+
+    if not pruned:
+        print("\nNothing to prune.")
+
+    return 0
 
 
 def command_publish(args: argparse.Namespace) -> int:

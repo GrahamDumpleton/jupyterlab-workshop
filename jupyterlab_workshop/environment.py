@@ -6,6 +6,14 @@ workshop directory, install the requirements and ``ipykernel`` into it,
 and register a kernelspec for it so notebooks and the workshop kernel can
 use it. Everything is tracked in ``_workshop/environment.json`` so it can
 be reported and removed again.
+
+Kernelspecs are registered for the user, so they are shared by every
+JupyterLab the user runs and outlive any one server. The name registered
+is the declared name with a short hash of the workshop's location, so
+two copies of a workshop in different directories never share, and
+clobber, one spec. Nothing here removes a spec unless its Python lives
+inside a workshop's ``_workshop/venv`` directory: the server's own
+kernel and any other kernel the user registered are never touched.
 """
 
 from __future__ import annotations
@@ -89,11 +97,12 @@ def environment_status(
         stale = current != str(record.get("sha256") or "")
 
     venv = workshop / STATE_DIR / VENV_DIR
+    name = str(record.get("kernel") or registered_kernel_name(workshop, kernel))
 
     return EnvironmentStatus(
-        kernel=str(record.get("kernel") or kernel),
+        kernel=name,
         ready=ready,
-        registered=ready and _kernelspec_exists(str(record.get("kernel") or kernel)),
+        registered=ready and _spec_owned_by(name, venv),
         python=str(python) if ready else "",
         venv=str(venv) if ready else "",
         bin=str(venv_bin_dir(venv)) if ready else "",
@@ -102,6 +111,21 @@ def environment_status(
         created_at=str(record.get("createdAt") or ""),
         log=_tail(workshop / STATE_DIR / LOG_FILE),
     )
+
+
+def registered_kernel_name(workshop: Path, base: str) -> str:
+    """The kernelspec name registered for a workshop: the declared name
+    followed by eight hex digits of a hash of the workshop's location.
+
+    Kernelspecs are per user, so the same workshop installed in two
+    directories would otherwise register one spec between them, each
+    creation pointing it at its own venv and each removal deleting it
+    for both.
+    """
+
+    digest = hashlib.sha256(str(workshop.resolve()).encode("utf-8")).hexdigest()
+
+    return f"{base}-{digest[:8]}"
 
 
 def create_environment(
@@ -140,22 +164,39 @@ def create_environment(
     if not kernel:
         raise EnvironmentSetupError("The environment needs a kernel name")
 
-    # Nothing to do when the environment already matches: same
-    # requirements, a venv with its python, and the kernel registered
-    # when registration is wanted.
-    if not force:
-        existing = environment_status(root_dir, workshop_path, kernel)
-
-        if (
-            existing.ready
-            and not existing.stale
-            and (existing.registered or not register)
-        ):
-            return existing
-
     state_dir = workshop / STATE_DIR
     venv = state_dir / VENV_DIR
     log = state_dir / LOG_FILE
+    name = registered_kernel_name(workshop, kernel)
+
+    # Nothing to do when the environment already matches: same
+    # requirements, a venv with its python, and the kernel registered
+    # when registration is wanted. A venv whose spec has gone, or been
+    # pointed elsewhere by another copy of the workshop, only needs its
+    # spec back, not a rebuild.
+    if not force:
+        existing = environment_status(root_dir, workshop_path, kernel)
+
+        if existing.ready and not existing.stale:
+            if existing.registered or not register:
+                return existing
+
+            # Under the per-copy name, whatever the record held: a record
+            # from a release that shared names between copies would
+            # otherwise take the shared spec back from the other copy.
+            _register_kernel(
+                workshop, _venv_python(workshop), name, display_name, log, timeout
+            )
+            _update_record(workshop, {"registered": True, "kernel": name})
+
+            return environment_status(root_dir, workshop_path, kernel)
+
+    # A rebuild under a new name leaves the old name's spec behind,
+    # pointing at the venv about to be replaced; drop it when it is ours.
+    previous = str(_read_record(workshop).get("kernel") or "")
+
+    if previous and previous != name and _spec_owned_by(previous, venv):
+        _remove_kernelspec(previous)
 
     state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -196,26 +237,10 @@ def create_environment(
     )
 
     if register:
-        _run(
-            [
-                str(venv_python),
-                "-m",
-                "ipykernel",
-                "install",
-                "--user",
-                "--name",
-                kernel,
-                "--display-name",
-                display_name or kernel,
-            ],
-            workshop,
-            log,
-            timeout,
-        )
-        _write_kernel_env(kernel, kernel_env(venv))
+        _register_kernel(workshop, venv_python, name, display_name, log, timeout)
 
     record = {
-        "kernel": kernel,
+        "kernel": name,
         "python": str(venv_python),
         "requirements": requirements,
         "sha256": _digest(requirements_path),
@@ -237,12 +262,13 @@ def remove_environment(
 
     workshop = _workshop(root_dir, workshop_path)
     record = _read_record(workshop)
-    name = str(record.get("kernel") or kernel)
-
-    if name and _kernelspec_exists(name):
-        _remove_kernelspec(name)
-
     venv = workshop / STATE_DIR / VENV_DIR
+    name = str(record.get("kernel") or registered_kernel_name(workshop, kernel))
+
+    # A spec of that name that points at another venv belongs to another
+    # copy of the workshop, or to something else entirely, and stays.
+    if name and _spec_owned_by(name, venv):
+        _remove_kernelspec(name)
 
     if venv.exists():
         shutil.rmtree(venv)
@@ -284,6 +310,143 @@ def kernel_env(venv: Path) -> dict[str, str]:
         "VIRTUAL_ENV": str(venv),
         "PATH": f"{venv_bin_dir(venv)}{os.pathsep}${{PATH}}",
     }
+
+
+def _register_kernel(
+    workshop: Path,
+    venv_python: Path,
+    name: str,
+    display_name: str,
+    log: Path,
+    timeout: float,
+) -> None:
+    """Register the venv's kernelspec under ``name`` for the user, with
+    the environment on its PATH."""
+
+    _run(
+        [
+            str(venv_python),
+            "-m",
+            "ipykernel",
+            "install",
+            "--user",
+            "--name",
+            name,
+            "--display-name",
+            display_name or name,
+        ],
+        workshop,
+        log,
+        timeout,
+    )
+    _write_kernel_env(name, kernel_env(workshop / STATE_DIR / VENV_DIR))
+
+
+def _update_record(workshop: Path, changes: dict[str, Any]) -> None:
+    path = workshop / STATE_DIR / RECORD_FILE
+    record = {**_read_record(workshop), **changes}
+
+    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class WorkshopKernel:
+    """A registered kernelspec whose Python is a workshop environment's."""
+
+    name: str
+    display_name: str
+    python: str
+
+    #: Whether that Python still exists; a stale spec is one whose venv
+    #: has gone, with the workshop removed or moved.
+    exists: bool
+
+
+def list_workshop_kernels() -> list[WorkshopKernel]:
+    """Every registered kernelspec that belongs to a workshop environment,
+    told by its Python living under a ``_workshop/venv`` directory."""
+
+    from jupyter_client.kernelspec import KernelSpecManager
+
+    kernels: list[WorkshopKernel] = []
+
+    for name, entry in sorted(KernelSpecManager().get_all_specs().items()):
+        spec: dict[str, Any] = (
+            entry.get("spec") if isinstance(entry, dict) else None
+        ) or {}
+        argv = spec.get("argv")
+        python = str(argv[0]) if isinstance(argv, list) and argv else ""
+
+        if not _is_workshop_venv_python(python):
+            continue
+
+        kernels.append(
+            WorkshopKernel(
+                name=name,
+                display_name=str(spec.get("display_name") or name),
+                python=python,
+                exists=Path(python).exists(),
+            )
+        )
+
+    return kernels
+
+
+def prune_workshop_kernels() -> list[WorkshopKernel]:
+    """Unregister the workshop kernelspecs whose environment no longer
+    exists, and return them. Specs of any other kind are never touched."""
+
+    stale = [kernel for kernel in list_workshop_kernels() if not kernel.exists]
+
+    for kernel in stale:
+        _remove_kernelspec(kernel.name)
+
+    return stale
+
+
+def _is_workshop_venv_python(python: str) -> bool:
+    parts = Path(python).parts
+
+    return any(
+        parts[index] == STATE_DIR and parts[index + 1] == VENV_DIR
+        for index in range(len(parts) - 1)
+    )
+
+
+def _spec_python(name: str) -> Path | None:
+    """The Python a registered kernelspec starts, or None when there is
+    no such spec or it names none."""
+
+    from jupyter_client.kernelspec import KernelSpecManager
+
+    try:
+        spec = KernelSpecManager().get_kernel_spec(name)
+    except Exception:
+        return None
+
+    argv = list(spec.argv or [])
+
+    return Path(argv[0]) if argv else None
+
+
+def _spec_owned_by(name: str, venv: Path) -> bool:
+    """Whether the kernelspec ``name`` starts a Python inside ``venv``."""
+
+    python = _spec_python(name)
+
+    if python is None:
+        return False
+
+    # The venv's python is usually a symlink to the interpreter it was
+    # made from, so the file itself is not resolved, only its directory.
+    try:
+        located = python.parent.resolve() / python.name
+
+        located.relative_to(venv.resolve())
+    except (ValueError, OSError):
+        return False
+
+    return True
 
 
 def _write_kernel_env(name: str, env: dict[str, str]) -> None:
@@ -358,19 +521,6 @@ def _tail(path: Path, limit: int = 4000) -> str:
         return ""
 
     return path.read_text(encoding="utf-8", errors="replace")[-limit:]
-
-
-def _kernelspec_exists(name: str) -> bool:
-    from jupyter_client.kernelspec import KernelSpecManager, NoSuchKernel
-
-    try:
-        KernelSpecManager().get_kernel_spec(name)
-    except NoSuchKernel:
-        return False
-    except Exception:
-        return False
-
-    return True
 
 
 def _remove_kernelspec(name: str) -> None:

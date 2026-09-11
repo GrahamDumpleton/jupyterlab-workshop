@@ -109,7 +109,7 @@
         },
         "kernel": {
           "type": "string",
-          "description": "Name of the kernelspec registered for the environment; defaults to workshop-<name>."
+          "description": "Base name of the kernelspec registered for the environment; defaults to workshop-<name>. The registered name adds a short hash of the workshop's location, so copies of the workshop in different directories keep separate kernels."
         },
         "terminals": {
           "type": "boolean",

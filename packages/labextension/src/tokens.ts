@@ -567,6 +567,14 @@ export interface IWorkshopManager {
   environmentKernel(): string | undefined;
 
   /**
+   * Make sure JupyterLab's cached kernel list has a kernel the server
+   * registered, refreshing the list once, and fail with a message naming
+   * it when it is still missing. Opening a notebook on a kernel the
+   * list lacks would silently start the default kernel instead.
+   */
+  ensureKernelListed(name: string): Promise<void>;
+
+  /**
    * The environment's directories for a terminal's PATH, once it is
    * ready and unless the manifest keeps terminals off it.
    */

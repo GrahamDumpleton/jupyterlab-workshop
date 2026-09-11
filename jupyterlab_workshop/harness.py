@@ -284,7 +284,7 @@ def forget_environment(root: Path, name: str) -> str | None:
     kernel = str(declared.get("kernel") or f"workshop-{environment.get('name')}")
 
     try:
-        registered = environment_status(root, name, kernel).registered
+        status = environment_status(root, name, kernel)
 
         remove_environment(root, name, kernel)
     except EnvironmentSetupError as error:
@@ -292,10 +292,10 @@ def forget_environment(root: Path, name: str) -> str | None:
 
         return None
 
-    if registered:
-        _say(f"unregistered the kernel {kernel} the test created")
+    if status.registered:
+        _say(f"unregistered the kernel {status.kernel} the test created")
 
-    return kernel if registered else None
+    return status.kernel if status.registered else None
 
 
 def _dump_server_log(log: Path) -> None:

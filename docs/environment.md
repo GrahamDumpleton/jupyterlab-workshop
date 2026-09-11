@@ -12,9 +12,13 @@ environment:
 ```
 
 `requirements` is a pip requirements file in the workshop directory.
-`kernel` names the kernelspec to register and defaults to
-`workshop-<name>`. The `install-packages` capability must be declared;
-the linter reports an error otherwise.
+`kernel` is the base name of the kernelspec to register and defaults to
+`workshop-<name>`; the name actually registered adds a short hash of
+the workshop's location, `workshop-pandas-3f9c1a72` say, so the same
+workshop installed in two directories keeps two kernels rather than
+sharing one. The kernel picker shows the workshop's title, not the
+name. The `install-packages` capability must be declared; the linter
+reports an error otherwise.
 
 ## What happens
 
@@ -40,7 +44,13 @@ and the action's `:force: true` option rebuild it regardless.
 Once the kernel is registered, notebooks created by `notebook-create`
 without an explicit `kernel` use it, and so does the hidden workshop
 kernel behind `execute-capture`, `kernel-execute` without a `path`, and
-kernel checks. The kernelspec sets `VIRTUAL_ENV` and puts the
+kernel checks. Before the environment is ready, a notebook action in
+such a workshop fails, saying the environment must be created first,
+rather than silently opening the notebook on the server's own Python,
+which would only fail later with a missing module; and the action checks
+that JupyterLab's kernel list has the kernel before opening a notebook
+on it, since JupyterLab would otherwise fall back to its default kernel
+without a word. The kernelspec sets `VIRTUAL_ENV` and puts the
 environment's programs first on `PATH` for every kernel started from
 it, as activating the environment would, so `!pip` in a notebook and a
 `subprocess` in a check reach the environment rather than the server's
@@ -103,6 +113,31 @@ runs only what the pages carry, so without it the test's notebooks
 would run on the server's kernel. The command "Workshop: Create
 Environment" does the same from the palette.
 
+## Kernels across sessions
+
+A kernelspec is registered for the user, under the Jupyter data
+directory, not for one server or one JupyterLab root, so every
+JupyterLab the user starts lists every workshop kernel registered and
+not yet removed, in the launcher and the kernel picker. Remove and
+Restart unregister a workshop's own kernel, and a workshop whose venv
+is still there but whose spec has gone, deleted by hand or by an older
+release that shared names between copies, gets it registered again
+when it is next opened, with no rebuild.
+
+Only a spec whose Python lives under a workshop's `_workshop/venv`
+directory is ever unregistered, and only by the workshop that venv
+belongs to; the server's kernel and any kernel registered for other
+purposes are never touched. Kernels whose environment has gone, because
+the workshop directory was deleted or moved, stay registered until
+pruned:
+
+```
+jupyter workshop kernels --prune
+```
+
+lists the workshop kernels with `ok` or `stale` beside each and, with
+`--prune`, unregisters the stale ones; see [kernels](cli.md#kernels).
+
 ## Limits
 
 - Only pip requirements files and virtual environments are supported;
@@ -113,4 +148,6 @@ Environment" does the same from the palette.
   meanwhile and the log on failure.
 
 - The kernelspec is registered for the user running the server, which
-  is the right scope on a personal machine and under JupyterHub.
+  is the right scope on a personal machine and under JupyterHub; see
+  [kernels across sessions](#kernels-across-sessions) for what that
+  means over time.

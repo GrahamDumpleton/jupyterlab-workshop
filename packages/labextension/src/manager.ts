@@ -591,6 +591,15 @@ export class WorkshopManager implements IWorkshopManager {
         this._environment = { ...status, creating: false };
         this._changed.emit();
         void this._envWriter.invoke();
+
+        // A venv whose kernelspec has gone, removed by another copy of
+        // the workshop or by hand, only needs the spec registered again,
+        // which the server does without a rebuild.
+        if (status.ready && !status.stale && !status.registered) {
+          void this.createEnvironment().catch(error => {
+            console.warn('Unable to register the workshop kernel', error);
+          });
+        }
       }
     } catch (error) {
       console.warn('Unable to read the workshop environment', error);
@@ -659,6 +668,29 @@ export class WorkshopManager implements IWorkshopManager {
     const status = this._environment;
 
     return status?.ready && status.registered ? status.kernel : undefined;
+  }
+
+  async ensureKernelListed(name: string): Promise<void> {
+    const specs = this._kernelspecs;
+
+    if (!specs) {
+      return;
+    }
+
+    await specs.ready;
+
+    if (specs.specs?.kernelspecs[name]) {
+      return;
+    }
+
+    await specs.refreshSpecs();
+
+    if (!specs.specs?.kernelspecs[name]) {
+      throw new Error(
+        `The workshop kernel "${name}" is registered but JupyterLab does ` +
+          'not list it yet; reload the page and try again'
+      );
+    }
   }
 
   environmentVenv(): IVenvExports | undefined {

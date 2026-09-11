@@ -180,6 +180,20 @@ platform. One line is printed per workshop and a count at the end, and
 the exit status is 1 when any download failed, so a build stops on a
 missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
 
+## kernels
+
+```
+jupyter workshop kernels [--prune]
+```
+
+Lists the kernels registered for workshop [environments](environment.md):
+the kernelspecs whose Python lives under a workshop's `_workshop/venv`
+directory. Each line gives the name, `ok` or `stale`, and the Python it
+starts; stale means that Python no longer exists, because the workshop
+was removed or moved without its environment being removed first.
+`--prune` unregisters the stale ones. Every other kernel, the server's
+own included, is left alone whatever its state.
+
 ## record
 
 ```
