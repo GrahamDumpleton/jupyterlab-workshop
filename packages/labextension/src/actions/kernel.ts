@@ -150,13 +150,55 @@ export class WorkshopKernel {
    * Run code in the workshop kernel, starting it if needed.
    *
    * A reply that does not arrive within the limit, because the kernel
-   * never started or its reply was lost, becomes an error rather than a
-   * hang, and the kernel is interrupted so the next action can use it.
+   * never connected or has stopped answering, is not waited for again on
+   * that kernel: an interrupt does not bring a reply back, and every
+   * later request would time out the same way. The session is shut down
+   * and a fresh one asked once more, so a single hang costs one wait
+   * rather than every check after it. Python state kept in the kernel
+   * goes with the restart, which checks are not meant to rely on; the
+   * kernel is also replaced when the workshop environment appears.
    */
   async execute(
     code: string,
     timeoutMs: number = DEFAULT_EXECUTE_TIMEOUT_MS
   ): Promise<IKernelOutput> {
+    const seconds = Math.round(timeoutMs / 1000);
+    const first = await this._attempt(code, timeoutMs);
+
+    if (first) {
+      return first;
+    }
+
+    console.warn(
+      `The workshop kernel gave no reply within ${seconds}s; restarting it`
+    );
+    await this.shutdown();
+
+    const second = await this._attempt(code, timeoutMs);
+
+    if (second) {
+      return second;
+    }
+
+    // Two kernels in a row gave nothing; the next request starts afresh
+    // rather than queueing behind this one.
+    await this.shutdown();
+
+    return {
+      text: '',
+      stderr: '',
+      error: `The workshop kernel gave no reply within ${seconds}s, nor within another ${seconds}s after being restarted`
+    };
+  }
+
+  /**
+   * One try at running the code: the output, or null when no reply came
+   * within the limit. A failure to start the kernel at all is thrown.
+   */
+  private async _attempt(
+    code: string,
+    timeoutMs: number
+  ): Promise<IKernelOutput | null> {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const expired = new Promise<null>(resolve => {
@@ -164,34 +206,21 @@ export class WorkshopKernel {
     });
 
     try {
-      const output = await Promise.race([this._run(code), expired]);
-
-      if (output) {
-        return output;
-      }
+      return await Promise.race([this._run(code), expired]);
     } finally {
       clearTimeout(timer);
     }
-
-    const kernel = this._session?.kernel;
-
-    if (kernel) {
-      try {
-        await kernel.interrupt();
-      } catch (error) {
-        console.warn('Unable to interrupt the workshop kernel', error);
-      }
-    }
-
-    return {
-      text: '',
-      stderr: '',
-      error: `The workshop kernel gave no reply within ${Math.round(timeoutMs / 1000)}s`
-    };
   }
 
   private async _run(code: string): Promise<IKernelOutput> {
-    return executeInKernel(await this.kernel(), code);
+    const kernel = await this.kernel();
+
+    // A session just started may not have its connection up yet, and a
+    // request sent before it is can go unanswered. The kernel info reply
+    // confirms the connection is live; a connected kernel has it already.
+    await kernel.info;
+
+    return executeInKernel(kernel, code);
   }
 
   /**

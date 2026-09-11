@@ -51,6 +51,16 @@ directories whose names start with a dot unless the server is configured
 to allow hidden files, so a check for `.git` needs the `kernel` or
 `script` substrate.
 
+The hidden workshop kernel is started on first use and kept for the
+`kernel` and `shell` checks and `execute-capture` actions that follow,
+but a check must not rely on it: each `kernel` check should read the
+learner's work from disk and keep nothing in Python variables for a
+later check, since the kernel is replaced when the workshop's own
+environment appears, on Restart, and after a hang. A request the kernel
+does not answer within the time limit is not waited for again on that
+kernel; the kernel is restarted and the request made once more, and
+only when that too gets no reply does the check fail, saying so.
+
 Clicking Check always runs a verify. `:trigger:` lists further events,
 separated by semicolons, that run it while its page is showing:
 
