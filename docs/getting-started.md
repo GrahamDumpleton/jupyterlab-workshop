@@ -75,6 +75,17 @@ started in. [Finding and installing workshops](collections.md) covers
 the browser, collections and the launch links that hand a workshop to
 learners.
 
+The same can be done from the shell in one line, which starts JupyterLab
+with the showcase added for the session and the browser open:
+
+```
+jupyter workshop launch --collection https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop-showcase/main/collection.json
+```
+
+Naming a workshop as well, `jupyter workshop launch why-a-workshop
+--collection …`, installs and opens it straight away; see
+[launch](cli.md#launch) for the options.
+
 ```{figure} _static/trust-dialog.png
 :alt: The trust dialog for the Why a workshop? workshop
 :width: 100%

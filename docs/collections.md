@@ -423,6 +423,10 @@ browser when no workshop is named:
   [a welcome message](deploying.md#a-welcome-message). Alone, it leaves
   the start as it would otherwise be.
 
+`jupyter workshop launch` builds such a link from command line options
+and starts a local JupyterLab on it, for trying a workshop or a
+collection out; see [launch](cli.md#launch).
+
 The parameters are removed from the address bar once handled, so a
 reload does not fetch again. The trust dialog still appears unless the
 administrator's policy settles it, which is the usual arrangement for a

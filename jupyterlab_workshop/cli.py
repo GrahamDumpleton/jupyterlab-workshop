@@ -78,7 +78,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line tool and return its exit code."""
 
     parser = build_parser()
-    args = parser.parse_args(argv)
+    arguments, passthrough = split_passthrough(
+        list(sys.argv[1:] if argv is None else argv)
+    )
+    args = parser.parse_args(arguments)
+    args.passthrough = passthrough
 
     try:
         result: int = args.func(args)
@@ -90,6 +94,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 130
 
     return result
+
+
+def split_passthrough(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Split a command line at its first ``--``: what follows is handed
+    on untouched to the program a command runs, ``jupyter lab`` for
+    ``launch``, rather than parsed here."""
+
+    if "--" not in argv:
+        return argv, []
+
+    index = argv.index("--")
+
+    return argv[:index], argv[index + 1 :]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -345,6 +362,75 @@ def build_parser() -> argparse.ArgumentParser:
         "data directory)",
     )
     test.set_defaults(func=command_test)
+
+    launch = commands.add_parser(
+        "launch",
+        help="start JupyterLab with a workshop, collection or catalog open",
+        description=(
+            "Start JupyterLab on a launch link built from the options: a "
+            "workshop directory, a workshop URL, or a name in a collection, "
+            "or with nothing named, the workshop browser. Arguments after "
+            "-- are passed to jupyter lab."
+        ),
+    )
+    launch.add_argument(
+        "target",
+        nargs="?",
+        help="workshop directory, repository, forge tree or archive URL, or "
+        "a workshop name when --collection is given",
+    )
+    launch.add_argument("--ref", help="git ref to fetch, for a repository URL")
+    launch.add_argument(
+        "--subdir", help="directory holding the workshop, for a repository URL"
+    )
+    launch.add_argument("--sha256", help="expected hash, for an archive URL")
+    launch.add_argument(
+        "--collection", help="collection URL or collection.json to add for the session"
+    )
+    launch.add_argument(
+        "--catalog", help="catalog URL or catalog.json to add for the session"
+    )
+    launch.add_argument(
+        "--var",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="set a workshop variable (repeatable)",
+    )
+    launch.add_argument(
+        "--restart",
+        nargs="?",
+        const="ask",
+        choices=["force"],
+        help="start the workshop over first, asking when it has progress; "
+        "--restart=force never asks",
+    )
+    launch.add_argument(
+        "--welcome", help="Markdown file to show in a dialog once started"
+    )
+    launch.add_argument(
+        "--trust",
+        choices=["trusted", "restricted", "ask"],
+        help="force the trust level for the session instead of asking",
+    )
+    launch.add_argument(
+        "--root",
+        type=Path,
+        default=Path.cwd(),
+        help="JupyterLab root directory (default: the current directory)",
+    )
+    launch.add_argument(
+        "--port", type=int, help="port to serve on (default: a free one)"
+    )
+    launch.add_argument(
+        "--no-browser", action="store_true", help="print the link without opening it"
+    )
+    launch.add_argument(
+        "--fresh",
+        action="store_true",
+        help="use private JupyterLab workspaces and user settings, as test does",
+    )
+    launch.set_defaults(func=command_launch)
 
     lite = commands.add_parser(
         "lite", help="build a static JupyterLite site carrying workshops"
@@ -839,6 +925,36 @@ def command_test(args: argparse.Namespace) -> int:
     )
 
     return run_self_test(options)
+
+
+def command_launch(args: argparse.Namespace) -> int:
+    """Start JupyterLab on a launch link."""
+
+    from .launch import LaunchError, LaunchOptions, parse_variable, run_launch
+
+    try:
+        variables = dict(parse_variable(text) for text in args.var)
+        options = LaunchOptions(
+            target=args.target,
+            root=args.root,
+            ref=args.ref,
+            subdir=args.subdir,
+            sha256=args.sha256,
+            collection=args.collection,
+            catalog=args.catalog,
+            variables=variables,
+            restart=args.restart,
+            welcome=args.welcome,
+            trust=args.trust,
+            port=args.port,
+            open_browser=not args.no_browser,
+            fresh=args.fresh,
+            lab_args=tuple(args.passthrough),
+        )
+
+        return run_launch(options)
+    except LaunchError as error:
+        raise CliError(str(error)) from error
 
 
 def command_lite(args: argparse.Namespace) -> int:

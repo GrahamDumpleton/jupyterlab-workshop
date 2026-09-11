@@ -91,7 +91,10 @@ So, before running any of them:
    per action. Fix failures and run again until it is green. It runs the
    workshop's commands on the user's machine for real, so apply the rule
    above first: run it yourself only when everything stays inside the
-   workshop directory, and otherwise ask.
+   workshop directory, and otherwise ask. To let the user try the
+   workshop in a browser, `jupyter workshop launch my-workshop` starts
+   JupyterLab with it open (`--trust trusted` skips the trust dialog,
+   `--restart=force` starts it over).
 
 6. Publish when asked: `jupyter workshop publish my-workshop` writes an
    archive, its hash and a collection entry. For a repository holding

@@ -211,6 +211,53 @@ to that server's root. See [Tools for AI
 agents](authoring.md#tools-for-ai-agents) for how the tools work and
 where to start the client and JupyterLab.
 
+## launch
+
+```
+jupyter workshop launch [TARGET] [--ref REF] [--subdir DIR] [--sha256 HASH]
+                        [--collection URL] [--catalog URL]
+                        [--var NAME=VALUE]... [--restart[=force]]
+                        [--welcome FILE] [--trust trusted|restricted|ask]
+                        [--root DIR] [--port PORT] [--no-browser] [--fresh]
+                        [-- jupyter lab options]
+```
+
+Starts JupyterLab with a workshop, collection or catalog open, so the
+[launch link](collections.md#launch-links) that a learner would be
+handed does not have to be typed by hand. `TARGET` is a workshop
+directory under the root, a repository, forge tree or archive URL, or,
+with `--collection`, the name of one of that collection's workshops;
+left out, JupyterLab starts in the workshop browser. `--ref`, `--subdir`
+and `--sha256` select within a URL as the link parameters of the same
+names do, `--collection` and `--catalog` add sources for the session,
+`--var` sets workshop variables and `--restart` starts a workshop that
+is already there over first, asking when it has recorded progress unless
+`=force` is given. A collection, catalog or welcome file can be a URL or
+a file under the root; a directory holding a `collection.json` or
+`catalog.json` may be named in place of the file.
+
+The server runs on a free port unless `--port` is given, with the current
+directory as its root unless `--root` names another; everything it opens
+has to sit under that root, and a target outside it is refused with a
+message saying so. Once the server answers, the link is printed and
+opened in the browser, or only printed with `--no-browser`. JupyterLab's
+log and its Ctrl-C handling are as for `jupyter lab`.
+
+Two options settle the session rather than the link. `--trust` forces
+the trust level, skipping the dialog, the way a deployment's
+`trustPolicy` does; it is merged into the installed `overrides.json` for
+the session only, so a Binder image's other settings still apply.
+`--fresh` gives the server JupyterLab workspaces and user settings of its
+own, as [test](#test) does, so a demo is not shaped by the tabs and
+preferences of other sessions. Anything after `--` is passed to
+`jupyter lab` unchanged, for options such as `--ip`.
+
+For a demo that must always start clean and never ask:
+
+```
+jupyter workshop launch workshops/git-basics --restart=force --trust trusted --fresh
+```
+
 ## lite
 
 ```
