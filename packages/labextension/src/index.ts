@@ -160,12 +160,13 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
   autoStart: true,
   provides: IWorkshopManager,
   requires: [IFeaturePolicy],
-  optional: [IStateDB, ISettingRegistry],
+  optional: [IStateDB, ISettingRegistry, IDefaultFileBrowser],
   activate: (
     app: JupyterFrontEnd,
     features: IFeaturePolicy,
     stateDB: IStateDB | null,
-    settingRegistry: ISettingRegistry | null
+    settingRegistry: ISettingRegistry | null,
+    fileBrowser: FileBrowser | null
   ): IWorkshopManager => {
     const trustStore = new TrustStore(stateDB);
 
@@ -203,7 +204,8 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       prompts: trustPrompts,
       settings: settingRegistry,
       features,
-      kernelspecs: app.serviceManager.kernelspecs
+      kernelspecs: app.serviceManager.kernelspecs,
+      fileBrowser
     });
 
     // Progress events go to the workshop's events file and any sink.

@@ -1,5 +1,6 @@
 import { ILabShell } from '@jupyterlab/application';
 import { IDocumentManager } from '@jupyterlab/docmanager';
+import { FileBrowser } from '@jupyterlab/filebrowser';
 
 import { TerminalSessions } from './actions/terminal';
 
@@ -41,6 +42,38 @@ export async function closeWorkshopWidgets(
 
   for (const name of context.terminals.names()) {
     await context.terminals.close(name);
+  }
+}
+
+/**
+ * Move a file browser out of a directory that is about to be deleted.
+ * A browser left inside would find its own directory gone on its next
+ * refresh and report "Directory not found" before falling back to the
+ * root. A browser at the destination already, or outside the directory,
+ * is left alone; a failure to move is only logged, since the deletion
+ * is what the learner asked for.
+ */
+export async function leaveDirectory(
+  fileBrowser: FileBrowser | null | undefined,
+  directory: string,
+  destination: string
+): Promise<void> {
+  if (!fileBrowser) {
+    return;
+  }
+
+  const current = fileBrowser.model.path;
+
+  if (current === destination || !isUnder(current, directory)) {
+    return;
+  }
+
+  // The model resolves a path against its current one, so the
+  // destination is given from the root.
+  try {
+    await fileBrowser.model.cd(`/${destination}`);
+  } catch (error) {
+    console.warn(`Unable to move the file browser out of ${directory}`, error);
   }
 }
 

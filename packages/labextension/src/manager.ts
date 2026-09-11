@@ -31,6 +31,7 @@ import {
   renderEnvSh
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
+import { FileBrowser } from '@jupyterlab/filebrowser';
 import { Contents, KernelSpec } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
@@ -48,6 +49,7 @@ import {
   readTextFile,
   writeTextFile
 } from './actions/contents';
+import { leaveDirectory } from './cleanup';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
@@ -126,6 +128,7 @@ interface IQueued {
 export class WorkshopManager implements IWorkshopManager {
   constructor(options: WorkshopManager.IOptions) {
     this._contents = options.contents;
+    this._fileBrowser = options.fileBrowser ?? null;
     this._backend = options.backend;
     this._stateDB = options.stateDB;
     this._trustStore = options.trustStore;
@@ -664,6 +667,7 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
+    await leaveDirectory(this._fileBrowser, target, PathExt.dirname(target));
     await this._backend.removeInstalled(target);
   }
 
@@ -837,8 +841,10 @@ export class WorkshopManager implements IWorkshopManager {
     this._changed.emit();
 
     if (plan.removesDirectory) {
+      await leaveDirectory(this._fileBrowser, path, PathExt.dirname(path));
       await this._backend.removeInstalled(path);
     } else {
+      await leaveDirectory(this._fileBrowser, stateDir, path);
       await deleteTree(this._contents, stateDir);
     }
 
@@ -907,6 +913,9 @@ export class WorkshopManager implements IWorkshopManager {
       : await this._readManifest(target);
     const workspace = manifest?.workspace ?? DEFAULT_WORKSPACE;
 
+    // The file browser leaves the workshop's contents before they go, or
+    // JupyterLab would report its own directory missing.
+    await leaveDirectory(this._fileBrowser, target, target);
     await deleteTree(this._contents, PathExt.join(target, workspace));
     await this._populateWorkspace(target, workspace);
 
@@ -2126,6 +2135,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _actionFocused = new Signal<this, string>(this);
   private _environmentChanged = new Signal<this, void>(this);
   private _contents: Contents.IManager;
+  private _fileBrowser: FileBrowser | null;
   private _backend: IWorkshopBackend;
   private _stateDB: IStateDB | null;
   private _trustStore: ITrustStore;
@@ -2173,6 +2183,12 @@ export namespace WorkshopManager {
 
     /** Setting registry, used to restore settings on uninstall. */
     settings?: ISettingRegistry | null;
+
+    /**
+     * The default file browser, moved out of a directory before it is
+     * deleted so it never finds its own directory gone.
+     */
+    fileBrowser?: FileBrowser | null;
 
     /** Which features the settings disable; author mode may be one. */
     features?: IFeaturePolicy | null;

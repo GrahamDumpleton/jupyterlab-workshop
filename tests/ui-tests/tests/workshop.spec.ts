@@ -615,6 +615,56 @@ test.describe('workshop panel', () => {
     expect(await read('pages/01.md')).toContain('Still work');
   });
 
+  test('moves the file browser out of the workspace before a restart empties it', async ({
+    page,
+    tmpPath
+  }) => {
+    const workshopPath = `${tmpPath}/${WORKSHOP}`;
+    const run = (id: string, args: object = {}): Promise<unknown> =>
+      page.evaluate(
+        ([command, options]: [string, object]) => {
+          const exposed = window as unknown as IExposedApp;
+
+          return exposed.jupyterapp.commands.execute(command, options);
+        },
+        [id, args] as [string, object]
+      );
+
+    await openWorkshop(page, workshopPath);
+
+    // The file browser is deep in the workspace, as a file-browser-reveal
+    // action leaves it.
+    await page.contents.createDirectory(`${workshopPath}/work/deeper`);
+    await run('filebrowser:go-to-path', {
+      path: `${workshopPath}/work/deeper`,
+      dontShowBrowser: true
+    });
+    await expect
+      .poll(() => page.filebrowser.getCurrentDirectory())
+      .toBe(`${workshopPath}/work/deeper`);
+
+    // Restart deletes that directory. The browser is moved to the
+    // workshop directory first, so refreshing it finds nothing missing.
+    const restart = run('workshop:restart');
+    const dialog = page.locator('.jp-Dialog');
+
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await restart;
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('Git from the command line');
+    await run('filebrowser:refresh');
+    await expect
+      .poll(() => page.filebrowser.getCurrentDirectory())
+      .toBe(workshopPath);
+    await expect(dialog.filter({ hasText: 'Directory not found' })).toHaveCount(
+      0
+    );
+    expect(
+      await page.contents.directoryExists(`${workshopPath}/work/deeper`)
+    ).toBe(false);
+  });
+
   test('retries a triggered check while its command finishes', async ({
     page,
     tmpPath
