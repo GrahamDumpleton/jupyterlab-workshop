@@ -1,6 +1,7 @@
+import { environmentVariables } from '@jupyterlab-workshop/core';
 import { CommandRegistry } from '@lumino/commands';
 
-import { IShellResult } from '../tokens';
+import { IShellResult, IWorkshopManager } from '../tokens';
 import { REPLY_GRACE_MS, WorkshopKernel } from './kernel';
 
 /** The JupyterLite terminal command that runs a command headlessly. */
@@ -13,9 +14,31 @@ export const LITE_EXECUTE_SHELL = '@jupyterlite/terminal:execute-shell';
 export interface IShellRunner {
   /**
    * Run a command in a directory, given as an absolute path on the
-   * platform, and stop waiting after the timeout.
+   * platform, and stop waiting after the timeout. The environment
+   * variables are added to the command's environment where the runner
+   * can set one.
    */
-  run(command: string, cwd: string, timeoutMs: number): Promise<IShellResult>;
+  run(
+    command: string,
+    cwd: string,
+    timeoutMs: number,
+    environment?: Readonly<Record<string, string>>
+  ): Promise<IShellResult>;
+}
+
+/**
+ * The environment variables a command run for the workshop sees beyond
+ * the server's own: the workshop variables under their exported names,
+ * then the manifest's `env` mapping, the same as a workshop terminal
+ * loads from its environment file.
+ */
+export function commandEnvironment(
+  manager: IWorkshopManager
+): Record<string, string> {
+  return {
+    ...environmentVariables(manager.variables.values),
+    ...(manager.workshop?.manifest.env ?? {})
+  };
 }
 
 /**
@@ -30,11 +53,12 @@ export class KernelShell implements IShellRunner {
   async run(
     command: string,
     cwd: string,
-    timeoutMs: number
+    timeoutMs: number,
+    environment: Readonly<Record<string, string>> = {}
   ): Promise<IShellResult> {
     const code = [
-      'import json, subprocess',
-      `_r = subprocess.run(${JSON.stringify(command)}, shell=True, capture_output=True, text=True, cwd=${JSON.stringify(cwd)}, timeout=${timeoutMs / 1000})`,
+      'import json, os, subprocess',
+      `_r = subprocess.run(${JSON.stringify(command)}, shell=True, capture_output=True, text=True, cwd=${JSON.stringify(cwd)}, timeout=${timeoutMs / 1000}, env={**os.environ, **${JSON.stringify(environment)}})`,
       'print(json.dumps({"code": _r.returncode, "out": _r.stdout, "err": _r.stderr}))'
     ].join('\n');
     const output = await this._kernel.execute(code, timeoutMs + REPLY_GRACE_MS);
@@ -69,7 +93,8 @@ interface ILiteShellOutput {
 
 /**
  * Runs commands in a headless cockle shell through the JupyterLite
- * terminal extension, inside the browser.
+ * terminal extension, inside the browser. The shell has no environment
+ * of its own to extend, so the environment passed to `run` is ignored.
  */
 export class LiteShell implements IShellRunner {
   constructor(commands: CommandRegistry) {

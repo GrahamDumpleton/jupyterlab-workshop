@@ -2,7 +2,6 @@ import {
   CONTENTS_PREDICATES,
   IPredicate,
   UI_PREDICATES,
-  environmentVariables,
   gradeQuiz,
   parseForm,
   parsePredicates,
@@ -25,7 +24,7 @@ import { parseDuration } from '../util';
 import { getIfExists, readTextFile } from './contents';
 import { WorkshopKernel, executeInKernel } from './kernel';
 import { INotebookActionContext, openNotebook } from './notebook';
-import { IShellRunner } from './shell';
+import { IShellRunner, commandEnvironment } from './shell';
 import { TerminalSessions } from './terminal';
 
 /** Services the check actions need. */
@@ -85,15 +84,14 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: 'The check has no code' };
     }
 
-    // Run inside the workshop directory with the variables in the
-    // environment, so checks can use subprocess and os.environ freely.
+    // Run inside the workshop directory with the variables and the
+    // manifest's env in the environment, so checks can use subprocess
+    // and os.environ freely.
     const manager = this._context.manager;
     const preamble = [
       'import os as _os',
       `_os.chdir(${JSON.stringify(manager.absolutePath())})`,
-      `_os.environ.update(${JSON.stringify(
-        environmentVariables(manager.variables.values)
-      )})`
+      `_os.environ.update(${JSON.stringify(commandEnvironment(manager))})`
     ].join('\n');
     const output = await this._context.kernel.execute(
       `${preamble}\n${request.body}`
@@ -123,7 +121,7 @@ export class VerifyAction implements IActionImplementation {
       cwd: manager.workshop?.manifest.workspace,
       timeout: parseDuration(request.options.timeout, 60000) / 1000,
       environment: {
-        ...environmentVariables(manager.variables.values),
+        ...commandEnvironment(manager),
         ...(venv ? { VIRTUAL_ENV: venv.root } : {})
       }
     });
@@ -142,12 +140,14 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: 'The check has no command' };
     }
 
-    // The command runs in the workshop directory; exit code 0 passes.
+    // The command runs in the workshop directory with the workshop's
+    // environment; exit code 0 passes.
     const manager = this._context.manager;
     const result = await this._context.shell.run(
       command,
       manager.absolutePath(),
-      parseDuration(request.options.timeout, 60000)
+      parseDuration(request.options.timeout, 60000),
+      commandEnvironment(manager)
     );
     const text = result.output.trim();
 

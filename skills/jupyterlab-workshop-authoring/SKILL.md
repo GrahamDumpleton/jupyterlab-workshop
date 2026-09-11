@@ -76,7 +76,11 @@ So, before running any of them:
    schema (`jupyter workshop schema`).
 
 3. Write pages: prose that says why, then an action that does it, then a
-   `verify` that checks it. Keep one idea per action.
+   `verify` that checks it. Keep one idea per action. First read the
+   sections of `references/gotchas.md` that match what the workshop
+   does (Python code that is edited and re-run, packages, git, servers,
+   notebooks): each names a trap that only shows up in that kind of
+   workshop and what the manifest or page does about it.
 
 4. Lint after every edit: `jupyter workshop lint my-workshop`. Fix every
    error; read the warnings. `--platform windows` checks the Windows
@@ -116,7 +120,7 @@ requires:
     - { name: git, version: '>=2.30', hint: { linux: apt install git } }
 workspace: work # the default; the learner's directory, filled from files/
 gating: soft # off, soft or strict
-env: { PAGER: cat, GIT_PAGER: cat } # exported to terminals; nothing by default
+env: { PAGER: cat, PYTHONDONTWRITEBYTECODE: '1' } # for terminals, checks and captures; nothing by default. Which values a workshop needs: references/gotchas.md
 variables:
   - {
       name: repo_dir, # exported to terminals as REPO_DIR; never reuse a shell name such as path
@@ -335,6 +339,13 @@ pass, `soft` only shows what is missing.
   `git log` or `man` sets `env: { PAGER: cat, GIT_PAGER: cat }` in the
   manifest, or the self-test reports the command as never finishing.
 
+- Traps that come with the subject rather than the format, such as
+  Python's bytecode cache hiding an edit, git having no identity on the
+  self-test machine, or a server never giving the prompt back, are in
+  `references/gotchas.md` with the `env` value or page pattern that
+  avoids each. Read the matching sections before the self-test, not
+  after it fails.
+
 - Give forms defaults so the self-test can submit them; give quizzes at
   least one `correct` option.
 
@@ -408,7 +419,8 @@ action per paragraph, the action's `:title:` or its command saying what
 it does, a `hint` for background rather than a wall of text. Headings:
 one `#` per page matching the front matter title, `##` sparingly. Use
 present tense and second person. Do not use emdashes. See
-`references/style-guide.md` and `references/page-template.md`.
+`references/style-guide.md` and `references/page-template.md`;
+`references/gotchas.md` lists the traps that come with a subject.
 
 ## Several workshops in one repository
 

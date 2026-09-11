@@ -68,6 +68,17 @@ the terminal opens at that prompt. Prompt hooks from rc files are
 dropped with it. See [the workshop
 prompt](platforms.md#the-workshop-prompt).
 
+**A test still fails after an `editor-replace` or `editor-insert`
+fixed the file, in a terminal or in a `shell` check, and running it
+again by hand passes.** The file was saved, but Python ran cached
+bytecode: it accepts a `.pyc` whenever the source's size and its
+modification time in whole seconds match, and an edit that swaps text
+for text of the same length within a second of the previous run leaves
+both unchanged. Set `PYTHONDONTWRITEBYTECODE: "1"` in the manifest's
+`env` mapping, which every terminal, check and captured command then
+carries, so no bytecode is cached. See [terminal
+shells](platforms.md#terminal-shells).
+
 **A `verify` triggered by `after:<id>` fails although the command
 worked.** The trigger fires when the command has been typed, not when
 it has finished, and a slow command is still running when the check

@@ -693,6 +693,94 @@ test.describe('workshop panel', () => {
     expect(names.filter(name => name.startsWith('Untitled'))).toEqual([]);
   });
 
+  test('puts the manifest env into checks and captured commands', async ({
+    page,
+    tmpPath
+  }) => {
+    // A workshop whose manifest sets a variable, checked on every code
+    // substrate and by a captured command.
+    const flavoured = `${tmpPath}/flavoured`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: flavoured',
+        'title: Flavoured',
+        'capabilities: [kernel-exec]',
+        'env: { CHECK_FLAVOUR: plum }',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${flavoured}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        'import os, sys',
+        '',
+        'print(os.environ.get("CHECK_FLAVOUR", "unset"))',
+        'sys.exit(0 if os.environ.get("CHECK_FLAVOUR") == "plum" else 1)',
+        ''
+      ].join('\n'),
+      'text',
+      `${flavoured}/flavour.py`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Only page',
+        '---',
+        '',
+        '```{execute-capture}',
+        ':id: capture-flavour',
+        ':capture: flavour',
+        'echo "$CHECK_FLAVOUR"',
+        '```',
+        '',
+        '```{verify}',
+        ':id: kernel-flavour',
+        ':label: The kernel check sees it',
+        'import os',
+        'assert os.environ.get("CHECK_FLAVOUR") == "plum", os.environ.get("CHECK_FLAVOUR", "unset")',
+        '```',
+        '',
+        '```{verify}',
+        ':id: shell-flavour',
+        ':label: The shell check sees it',
+        ':substrate: shell',
+        'test "$CHECK_FLAVOUR" = plum',
+        '```',
+        '',
+        '```{verify}',
+        ':id: script-flavour',
+        ':label: The script check sees it',
+        ':substrate: script',
+        ':script: flavour.py',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${flavoured}/pages/01.md`
+    );
+    await openWorkshop(page, flavoured);
+
+    const panel = page.locator(PANEL);
+    const capture = panel.locator('[data-action-id="capture-flavour"]');
+
+    await capture.click();
+    await expect(capture).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    await expect(
+      capture.locator('.jp-WorkshopPanel-actionOutput')
+    ).toContainText('plum');
+
+    for (const id of ['kernel-flavour', 'shell-flavour', 'script-flavour']) {
+      const check = panel.locator(`[data-action-id="${id}"]`);
+
+      await check.getByRole('button', { name: 'Check' }).click();
+      await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 60000 });
+    }
+  });
+
   test('keeps a form running until open terminals have its values', async ({
     page,
     tmpPath

@@ -20,7 +20,7 @@ import {
 } from '../tokens';
 import { parseDuration, sleep } from '../util';
 import { requireBody, requireOption } from './registry';
-import { IShellRunner } from './shell';
+import { IShellRunner, commandEnvironment } from './shell';
 
 /** Name of the terminal used when an action does not name one. */
 export const DEFAULT_SESSION = 'workshop';
@@ -826,7 +826,12 @@ export class ExecuteCaptureAction implements IActionImplementation {
     const command = requireBody(request, 'a command');
     const cwd = this._manager.absolutePath(request.options.cwd ?? '');
     const timeout = parseDuration(request.options.timeout, 60000);
-    const result = await this._shell.run(command, cwd, timeout);
+    const result = await this._shell.run(
+      command,
+      cwd,
+      timeout,
+      commandEnvironment(this._manager)
+    );
 
     if (result.code !== 0) {
       return {

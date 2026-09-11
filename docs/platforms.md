@@ -167,8 +167,19 @@ env:
 ```
 
 Nothing is set unless the manifest asks for it, so a workshop that
-teaches `less` keeps it. The self-test runs with the same environment,
-and a command that pages there is reported as one that did not finish.
+teaches `less` keeps it. The same mapping is in the environment of
+`kernel`, `shell` and `script` checks and of `execute-capture`
+commands, so a value set for the terminals holds wherever the workshop
+runs a command. The self-test runs with the same environment, and a
+command that pages there is reported as one that did not finish.
+
+A Python workshop whose pages edit a module and then run it again
+should also set `PYTHONDONTWRITEBYTECODE: "1"`. Python and pytest
+accept cached bytecode when the source file's size and its modification
+time, in whole seconds, are unchanged, so an `editor-replace` that
+swaps text for text of the same length within a second of the previous
+run leaves the next run executing the old code. The self-test, which
+runs actions back to back, hits this more often than a learner does.
 
 A manifest may require a shell:
 
