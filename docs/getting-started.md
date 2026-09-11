@@ -65,14 +65,14 @@ directory, with `--root` choosing where workshops are installed and
 what the file browser shows:
 
 ```
-jupyter-workshop launch --root ~/learning --collection https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop-showcase/main/collection.json
+jupyter-workshop launch --root ~/training --collection https://raw.githubusercontent.com/GrahamDumpleton/jupyterlab-workshop-showcase/main/collection.json
 ```
 
 That opens the workshop browser with the showcase collection added for
 the session; workshops installed from it land under
-`~/learning/workshops`, and Subscribe in the Collections dialog keeps
+`~/training/workshops`, and Subscribe in the Collections dialog keeps
 the collection for later launches. Naming a workshop as well,
-`jupyter-workshop launch why-a-workshop --root ~/learning --collection …`,
+`jupyter-workshop launch why-a-workshop --root ~/training --collection …`,
 installs and opens it straight away. `uv tool upgrade jupyterlab-workshop`
 moves to a newer release, and `uvx --from "jupyterlab-workshop[lab]"
 jupyter-workshop launch …` runs it without installing anything. Only the
