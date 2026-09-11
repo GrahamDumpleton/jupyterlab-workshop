@@ -5,4 +5,4 @@
 # checkout corresponds to, since mybinder caches the image it builds for
 # a commit and would otherwise keep whatever PyPI had at the first launch.
 jupyterlab>=4.6,<5
-jupyterlab-workshop==0.1.26
+jupyterlab-workshop==0.1.27
