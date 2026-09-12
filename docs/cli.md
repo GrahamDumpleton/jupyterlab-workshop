@@ -317,7 +317,19 @@ That command walks every page, runs every action in order, waits for
 each terminal command to finish, answers quizzes correctly, submits forms
 with their defaults, and runs every check. Each action is reported as
 pass, fail or skip, and the exit code is 1 when anything failed. `--junit`
-writes a JUnit XML report for CI, `--json` the full results.
+writes a JUnit XML report for CI, `--json` the full results. Colour codes
+and other control characters in a check's message, such as the ones
+Python puts in a traceback on a terminal, are removed from every report.
+
+A check runs under test the way it runs for a learner. A verify that
+declares a [trigger](checks.md#verify) is given the same time to settle
+that the trigger would give it: when it fails, it is tried again over
+the next few seconds before the failure stands, so a check that reads
+what an earlier command is still writing passes under test as it does
+on the page. Where the trigger has already fired, as `after:` does the
+moment the action before it completes, the self-test reports that run's
+outcome rather than starting another. A verify with no trigger gets the
+single attempt that clicking Check gives it.
 
 ```{warning}
 The temporary copy protects the workshop's own files and nothing else.

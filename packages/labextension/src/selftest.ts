@@ -194,10 +194,7 @@ export async function runCurrentPage(
       }
     });
 
-    const result = await withLimit(
-      manager.runAction(prepared(node), 'click', argumentFor(node, manager)),
-      limit
-    );
+    const result = await withLimit(runStep(manager, node), limit);
 
     if (result === null || 'dialog' in result) {
       results.push({
@@ -234,9 +231,69 @@ export async function runCurrentPage(
 }
 
 /**
- * Resolve with the action's result, or with null once the limit passes
- * first. The action itself keeps running; the caller decides what to do.
+ * Run one directive as the self-test does, or, for a verify that a trigger
+ * has already started, wait for that run instead of starting a second.
+ *
+ * A verify with `after:<action>` is fired by the trigger bus the moment
+ * the action before it completes, so by the time the self-test reaches it
+ * the check is usually already running, and settling. Taking that run's
+ * outcome is what the learner sees, and it keeps two runs of the same
+ * check from racing each other. A verify whose trigger has not fired is
+ * run with the settle time a trigger would give it, while a verify with
+ * no trigger gets the single attempt a click gives it.
  */
+function runStep(
+  manager: IWorkshopManager,
+  node: IDirectiveNode
+): Promise<IActionResult> {
+  const triggered = node.name === 'verify' && Boolean(node.options.trigger);
+
+  if (triggered && manager.actionStatus(node.id).status === 'running') {
+    return outcomeOf(manager, node.id);
+  }
+
+  return manager.runAction(
+    prepared(node),
+    'click',
+    argumentFor(node, manager),
+    {
+      settle: triggered
+    }
+  );
+}
+
+/**
+ * Resolve with a running action's outcome once it stops running.
+ */
+function outcomeOf(
+  manager: IWorkshopManager,
+  id: string
+): Promise<IActionResult> {
+  return new Promise(resolve => {
+    const onChanged = (_: IWorkshopManager, changed: string): void => {
+      if (changed !== id) {
+        return;
+      }
+
+      const status = manager.actionStatus(id);
+
+      if (status.status === 'running') {
+        return;
+      }
+
+      manager.actionChanged.disconnect(onChanged);
+
+      resolve(
+        status.status === 'idle'
+          ? { status: 'error', message: 'No outcome was recorded for the run' }
+          : { status: status.status, message: status.message }
+      );
+    };
+
+    manager.actionChanged.connect(onChanged);
+  });
+}
+
 /** How long a dialog may stay open under a running action. */
 const DIALOG_GRACE_MS = 10000;
 

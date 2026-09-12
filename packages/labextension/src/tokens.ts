@@ -299,6 +299,17 @@ export const IActionRegistry = new Token<IActionRegistry>(
 export type ActionTrigger =
   'click' | 'cascade' | 'auto' | 'role' | 'layout' | 'trigger';
 
+/** Choices about one run of an action beyond how it was started. */
+export interface IRunOptions {
+  /**
+   * Give a failing verify the time to settle that a trigger would, trying
+   * it again over the next few seconds before the failure stands. The
+   * self-test uses this for verifies that declare a trigger, so the run
+   * matches what a learner sees.
+   */
+  settle?: boolean;
+}
+
 /** Recorded run state of an action. */
 export interface IActionStatus {
   status: 'idle' | 'running' | 'ok' | 'error' | 'skipped';
@@ -674,13 +685,16 @@ export interface IWorkshopManager {
   runAction(
     node: IDirectiveNode,
     trigger: ActionTrigger,
-    argument?: string
+    argument?: string,
+    options?: IRunOptions
   ): Promise<IActionResult>;
 
   /** Run an ad hoc request, such as from an inline role, recording it. */
   runRequest(
     request: IActionRequest,
-    trigger: ActionTrigger
+    trigger: ActionTrigger,
+    node?: IDirectiveNode,
+    options?: IRunOptions
   ): Promise<IActionResult>;
 
   /** Cancel any pending cascade or auto-run. */

@@ -1,12 +1,13 @@
 import json
 import shutil
 import tarfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
 from jupyterlab_workshop import cli
-from jupyterlab_workshop.harness import SelfTestReport, _junit
+from jupyterlab_workshop.harness import SelfTestReport, _junit, _to_report
 from jupyterlab_workshop.scaffold import slug
 
 needs_node = pytest.mark.skipif(
@@ -183,6 +184,57 @@ def test_junit_report_marks_failures_and_skips() -> None:
     assert '<testcase classname="p1" name="check (verify)"' in xml
     assert '<failure message="No commits &lt;yet&gt; &quot;run&quot; git">' in xml
     assert '<skipped message=""/>' in xml
+
+
+def test_junit_report_drops_colour_codes_and_stays_well_formed() -> None:
+    # Python colours a traceback on a terminal, and a shell verify captures
+    # that text as its message; XML cannot hold the escape character at all.
+    report = SelfTestReport(
+        workshop="demo",
+        results=[
+            {
+                "page": "p1",
+                "id": "check",
+                "type": "verify",
+                "status": "error",
+                "message": "\x1b[1;35mAssertionError\x1b[0m: \x1b[35mboom\x1b[0m\x07",
+                "seconds": 0.5,
+            }
+        ],
+        passed=0,
+        failed=1,
+        skipped=0,
+    )
+
+    xml = _junit(report)
+    failure = ET.fromstring(xml).find("testcase/failure")
+
+    assert failure is not None
+    assert failure.get("message") == "AssertionError: boom"
+
+
+def test_report_from_the_page_cleans_messages_for_every_output() -> None:
+    report = _to_report(
+        {
+            "workshop": "demo",
+            "results": [
+                {
+                    "page": "p1",
+                    "id": "check",
+                    "type": "verify",
+                    "status": "error",
+                    "message": "\x1b[31mNo commits yet\x1b[0m\nrun git commit",
+                    "seconds": 0.5,
+                }
+            ],
+            "passed": 0,
+            "failed": 1,
+            "skipped": 0,
+        }
+    )
+
+    assert report.results[0]["message"] == "No commits yet\nrun git commit"
+    assert report.failed == 1
 
 
 def test_collection_command_builds_an_index_from_entries(

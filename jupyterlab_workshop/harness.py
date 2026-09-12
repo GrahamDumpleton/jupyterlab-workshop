@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import select
 import shutil
@@ -51,6 +52,28 @@ RESULT_SLOT = "__jupyterlabWorkshopSelfTest"
 
 #: How often the harness polls the page for progress, in milliseconds.
 POLL_MS = 2000
+
+#: ANSI control sequences: the colour codes Python puts in a traceback on
+#: a terminal, cursor movements and the like.
+_ANSI_SEQUENCE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+
+#: Control characters XML 1.0 cannot carry, even as character references,
+#: leaving tab, newline and carriage return.
+_ILLEGAL_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _plain(text: str) -> str:
+    """Return ``text`` with terminal colour codes and other control
+    characters removed.
+
+    A ``shell`` verify captures what its command prints, and on a
+    terminal Python colours a traceback with ANSI escapes, so a failing
+    check's message can carry them. They are noise in a log and illegal
+    in XML, where no escaping can represent them, so the report drops
+    them where a message enters it.
+    """
+
+    return _ILLEGAL_XML.sub("", _ANSI_SEQUENCE.sub("", text))
 
 
 def _emit(text: str, *, error: bool = False) -> None:
@@ -787,9 +810,19 @@ def _to_report(raw: object) -> SelfTestReport:
 
     results = raw.get("results")
 
+    # Messages come from whatever a check printed, so clean them once here
+    # and every output (terminal, JSON, JUnit) reads the same text.
+    cleaned: list[dict[str, Any]] = []
+
+    for item in results if isinstance(results, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("message"), str):
+            item = {**item, "message": _plain(item["message"])}
+
+        cleaned.append(item)
+
     return SelfTestReport(
         workshop=str(raw.get("workshop", "")),
-        results=list(results) if isinstance(results, list) else [],
+        results=cleaned,
         passed=int(raw.get("passed", 0)),
         failed=int(raw.get("failed", 0)),
         skipped=int(raw.get("skipped", 0)),
@@ -813,8 +846,9 @@ def _print_report(report: SelfTestReport) -> None:
 
 
 def _attr(text: str) -> str:
-    # Attribute values need quotes escaped as well as the usual characters.
-    return escape(text, {'"': "&quot;"})
+    # Attribute values need quotes escaped as well as the usual characters,
+    # and control characters dropped, since XML has no way to hold them.
+    return escape(_plain(text), {'"': "&quot;"})
 
 
 def _junit(report: SelfTestReport) -> str:

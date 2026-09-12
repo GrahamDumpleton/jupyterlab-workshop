@@ -69,6 +69,7 @@ import {
   IPreflightResult,
   IPageProgress,
   IPlatformInfo,
+  IRunOptions,
   ITrustDecision,
   ITrustPrompts,
   ITrustStore,
@@ -1224,15 +1225,22 @@ export class WorkshopManager implements IWorkshopManager {
   async runAction(
     node: IDirectiveNode,
     trigger: ActionTrigger,
-    argument?: string
+    argument?: string,
+    options?: IRunOptions
   ): Promise<IActionResult> {
-    return this.runRequest(this._toRequest(node, argument), trigger, node);
+    return this.runRequest(
+      this._toRequest(node, argument),
+      trigger,
+      node,
+      options
+    );
   }
 
   async runRequest(
     request: IActionRequest,
     trigger: ActionTrigger,
-    node?: IDirectiveNode
+    node?: IDirectiveNode,
+    options?: IRunOptions
   ): Promise<IActionResult> {
     const registry = this.registry;
 
@@ -1261,7 +1269,7 @@ export class WorkshopManager implements IWorkshopManager {
             status: 'skipped' as const,
             message: `Nothing to do on ${this._platform?.os ?? 'this platform'}`
           }
-        : await this._runSettled(registry, request, trigger);
+        : await this._runSettled(registry, request, trigger, options);
 
     if (result.captured) {
       for (const [name, value] of Object.entries(result.captured)) {
@@ -1319,16 +1327,22 @@ export class WorkshopManager implements IWorkshopManager {
    * typed, so a check of the command's results can run too early. A
    * failing triggered verify is tried again over the next few seconds,
    * staying in the running state, before the failure stands. Clicking
-   * Check runs once, as before.
+   * Check runs once, as before, unless the caller asks for the settle
+   * time explicitly, as the self-test does for a verify with a trigger.
    */
   private async _runSettled(
     registry: IActionRegistry,
     request: IActionRequest,
-    trigger: ActionTrigger
+    trigger: ActionTrigger,
+    options?: IRunOptions
   ): Promise<IActionResult> {
     let result = await this._runGated(registry, request, trigger);
 
-    if (request.type !== 'verify' || trigger !== 'trigger') {
+    if (request.type !== 'verify') {
+      return result;
+    }
+
+    if (trigger !== 'trigger' && !options?.settle) {
       return result;
     }
 

@@ -87,10 +87,14 @@ that fails is therefore given time to settle: it is tried again over the
 next few seconds, showing as still checking, before the failure stands.
 A command that takes longer than that, such as a build, is better given
 `:wait: prompt` on its `execute` action so the trigger fires when the
-shell is back at its prompt. Clicking Check runs the verify once. Every
-trigger reads the page afresh when it fires, so a check whose body
-names a variable with `{{ }}` uses the value a form on the same page
-has just set, from its next run on.
+shell is back at its prompt. Clicking Check runs the verify once. The
+self-test, and Run checks in author mode, give a verify that declares a
+trigger the same settle time a trigger would, and a verify without one
+the single attempt a click gives it, so a check passes under test when
+it passes for a learner; see [test](cli.md#test). Every trigger reads
+the page afresh when it fires, so a check whose body names a variable
+with `{{ }}` uses the value a form on the same page has just set, from
+its next run on.
 
 `:timeout:` bounds script and shell runs. Code substrates, `shell`
 included, need the `kernel-exec` capability; the `contents` and `ui`
