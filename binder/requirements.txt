@@ -4,5 +4,10 @@
 # straight from the checkout. The extension is pinned to the release the
 # checkout corresponds to, since mybinder caches the image it builds for
 # a commit and would otherwise keep whatever PyPI had at the first launch.
+# tornado is held below 6.5.9, whose static file handler reads an
+# attribute the Jupyter server's handler never sets and so fails every
+# request for JupyterLab's own assets (tornadoweb/tornado#3724); drop
+# the bound once a fixed tornado ships.
 jupyterlab>=4.6,<5
 jupyterlab-workshop==0.2.0
+tornado<6.5.9
