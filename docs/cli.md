@@ -11,8 +11,8 @@ other commands are pure Python.
 ```
 jupyter workshop init my-workshop [--name NAME] [--title TITLE] [--ci]
                                   [--template starter|blank|notebook]
-                                  [--platform NAME]... [--capability NAME]...
-                                  [--gating off|soft|strict]
+                                  [--platform NAME]... [--frontend NAME]...
+                                  [--capability NAME]... [--gating off|soft|strict]
 ```
 
 Creates a directory with a `workshop.yaml`, starter pages, an empty
@@ -22,9 +22,10 @@ README and a `.gitignore`. The `starter` template's pages show commands,
 a check,
 a file write and a quiz; `blank` is one page of prose; `notebook`
 creates a notebook, runs its cells and checks a value in its kernel. The
-name defaults to a slug of the directory name. `--platform` and
-`--capability` may be repeated and set the manifest lists (the defaults
-are `linux` and `macos`, and the template's capabilities); `--gating`
+name defaults to a slug of the directory name. `--platform`,
+`--frontend` and `--capability` may be repeated and set the manifest
+lists (the defaults are `linux` and `macos`, JupyterLab only, which
+needs no `frontends` list, and the template's capabilities); `--gating`
 sets the page gating. With `--ci` it also writes a GitHub Actions
 workflow that lints and self-tests the workshop on Linux, macOS and
 Windows. Each job runs on a fresh runner, which is also the safest place
@@ -34,7 +35,7 @@ see the warning under [test](#test).
 ## lint
 
 ```
-jupyter workshop lint my-workshop [--json] [--platform linux|macos|windows|lite]
+jupyter workshop lint my-workshop [--json] [--platform linux|macos|windows] [--frontend jupyterlab|jupyterlite]
 jupyter workshop lint collection.json [--json]
 jupyter workshop lint catalog.json [--json]
 ```
@@ -45,11 +46,14 @@ directives and options, missing bodies, capabilities used but not
 declared (or declared but unused), invalid checks, quizzes and forms,
 requirements that name nothing, variables used before the form that sets
 them, danger heuristics such as piping a download into a shell, hosts
-not in the declared `network` list, and platform variants missing for a
-listed platform. Exits with 1 when there are errors. `--json` prints the
-report as JSON for other tools. `--platform` renders the pages as that
-platform sees them, selecting its command variants and built-in
-variables, so a Linux CI job can check the Windows version of a workshop.
+not in the declared `network` list, variants missing for a listed
+platform or frontend, and actions a listed frontend cannot run. Exits
+with 1 when there are errors. `--json` prints the report as JSON for
+other tools. `--platform` renders the pages as that platform sees them,
+selecting its command variants and built-in variables, so a Linux CI
+job can check the Windows version of a workshop; `--frontend
+jupyterlite` does the same for JupyterLite, whose platform is always
+`emscripten`, and switches on the JupyterLite rules.
 
 Given a `collection.json` or `catalog.json` file, checks that it parses
 as one, and for a catalog that every collection it names can be read
@@ -60,13 +64,14 @@ workshops a CI check.
 ## render
 
 ```
-jupyter workshop render my-workshop [PAGE] [--out FILE] [--platform NAME]
+jupyter workshop render my-workshop [PAGE] [--out FILE] [--platform NAME] [--frontend NAME]
 ```
 
 Renders the pages to a standalone HTML document for previewing or for
 static hosting. Action blocks are shown as boxes with their type and
-body. Give a page id or path to render one page, and `--platform` to
-render another platform's command variants.
+body. Give a page id or path to render one page, and `--platform` or
+`--frontend` to render another platform's or frontend's command
+variants.
 
 ## pages
 
@@ -79,12 +84,14 @@ Lists page ids, titles, paths and requirements.
 ## schema
 
 ```
-jupyter workshop schema [--collection | --catalog]
+jupyter workshop schema [--collection | --catalog | --events]
 ```
 
 Prints the JSON schema of `workshop.yaml`, for editors and validators,
-or with `--collection` the schema of a collection index file, or with
-`--catalog` the schema of a catalog.
+or with `--collection` the schema of a collection index file, with
+`--catalog` the schema of a catalog, or with `--events` the schema of
+the [progress events](analytics.md) a workshop reports, for a service
+that receives them.
 
 ## publish
 
@@ -133,7 +140,10 @@ SSH remote is rewritten as the https URL. The index is written to
 `collection.json` under the root, or `--out`, and an existing index is
 updated: entries already listed keep their position and other versions,
 new ones are appended in the order found. The metadata options are those
-of `collection`. Hidden directories, `node_modules`, build outputs and
+of `collection`. A `collection.yaml` in the root supplies what the
+manifests cannot, the collection's `analytics` block, which is checked
+and copied into the index; an existing index's block is kept when the
+file is absent. Hidden directories, `node_modules`, build outputs and
 `_workshop` state are not searched, nor are the contents of a workshop.
 See [Several workshops in one repository](collections.md#several-workshops-in-one-repository).
 
@@ -157,7 +167,7 @@ The metadata options set the catalog's own fields: `--title`,
 ## install
 
 ```
-jupyter workshop install COLLECTION [--root ROOT] [--directory DIR] [--only NAME...] [--platform PLATFORM]
+jupyter workshop install COLLECTION [--root ROOT] [--directory DIR] [--only NAME...] [--platform PLATFORM] [--frontend FRONTEND]
 ```
 
 Installs every workshop of a collection that is not installed yet, the
@@ -174,9 +184,10 @@ the same directory naming as the browser, so a name another
 collection's workshop already occupies gets the collection's hash
 appended. Workshops already installed are skipped. `--only` names one
 workshop to install and may be repeated; `--platform` skips entries
-whose platforms do not include the one given, where by default every
-entry is installed since the person building an image knows its
-platform. One line is printed per workshop and a count at the end, and
+whose platforms do not include the one given, and `--frontend` those
+not written for the frontend given, where an entry listing no frontends
+is for JupyterLab only; by default every entry is installed, since the
+person building an image knows its platform. One line is printed per workshop and a count at the end, and
 the exit status is 1 when any download failed, so a build stops on a
 missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
 
@@ -306,7 +317,7 @@ jupyter workshop test my-workshop [--junit FILE] [--json FILE] [--in-place]
                                   [--headed] [--timeout SECONDS]
                                   [--action-timeout SECONDS]
                                   [--trust trusted|restricted|ask]
-                                  [--lite] [--lite-dir DIR]
+                                  [--lite | --frontend jupyterlite] [--lite-dir DIR]
 ```
 
 Runs the workshop in a real JupyterLab: it copies the workshop to a
@@ -387,7 +398,8 @@ is the point: the self-test is what a workshop's CI runs.
 
 The self-test runs on Windows as well, where terminals are PowerShell
 and `:windows:` command variants are selected; the workflow written by
-`init --ci` covers Linux, macOS and Windows. `--lite` builds a JupyterLite
-site with the workshop instead of starting a server, serves it from a
-static file server and drives that, with `:lite:` variants selected; see
-[JupyterLite](lite.md) for what it needs.
+`init --ci` covers Linux, macOS and Windows. `--lite`, or `--frontend
+jupyterlite`, builds a JupyterLite site with the workshop instead of
+starting a server, serves it from a static file server and drives that,
+with `:jupyterlite:` variants selected; see [JupyterLite](lite.md) for
+what it needs.

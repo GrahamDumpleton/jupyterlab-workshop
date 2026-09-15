@@ -12,7 +12,8 @@ import {
   IVariableDefinition,
   IWorkshopManifest,
   TrustLevel,
-  Variables
+  Variables,
+  IAnalyticsBlock
 } from '@jupyterlab-workshop/core';
 import { Token } from '@lumino/coreutils';
 import { ISignal } from '@lumino/signaling';
@@ -29,11 +30,26 @@ export interface IPlatformInfo {
   /** The JupyterHub user name when running under a hub, else empty. */
   hub_user: string;
 
-  /** The service hosting the session: binder, jupyterhub, local or lite. */
+  /**
+   * The service hosting the session: local, binder, codespaces or
+   * jupyterhub from a server, and static for a JupyterLite site.
+   */
   host: string;
 
   /** Whether the server runs inside a container. */
   container: boolean;
+
+  /** The frontend in use: jupyterlab from a server, jupyterlite in the browser. */
+  frontend: string;
+
+  /** Version of the extension serving the frontend, or empty when unknown. */
+  frontend_version: string;
+
+  /**
+   * Id of the running frontend: one run of the server, or one page load
+   * of a JupyterLite site. Every workshop opened under it shares the id.
+   */
+  instance_id: string;
 }
 
 /** Where a workshop came from. */
@@ -83,15 +99,30 @@ export interface ITrustSummary {
 
   lint: ILintMessage[];
 
-  /** URL the workshop asks to report progress to, if any. */
-  analyticsSink?: string;
+  /**
+   * The sink the workshop's or its collection's analytics block asks to
+   * report progress to, which the dialog offers an opt-in for; absent
+   * when there is none or when the administrator's setting decides.
+   */
+  analytics?: IAnalyticsOffer;
+}
+
+/** A sink offered for opt-in in the trust dialog, and whose it is. */
+export interface IAnalyticsOffer {
+  sink: string;
+
+  /** Which level declared the block: the collection listing the workshop, or its manifest. */
+  level: 'collection' | 'workshop';
+
+  /** The collection's title or location, for the collection level. */
+  collection?: string;
 }
 
 /** What the learner chose in the trust dialog. */
 export interface ITrustChoice {
   level: TrustLevel;
 
-  /** Whether progress may be reported to the workshop's analytics sink. */
+  /** Whether progress may be reported to the offered analytics sink. */
   analytics: boolean;
 }
 
@@ -125,8 +156,12 @@ export interface ITrustPolicy {
   /** Capabilities that never run regardless of trust. */
   disabledCapabilities: string[];
 
-  /** Sink every workshop's events are reported to, when set by an administrator. */
-  analyticsSink: string;
+  /**
+   * The administrator's analytics block, applied to every workshop
+   * without asking and ahead of any collection or manifest block; null
+   * when the settings name no sink.
+   */
+  analytics: IAnalyticsBlock | null;
 
   /** Whether events carry the JupyterHub user name. */
   analyticsIdentity: 'none' | 'hub';
@@ -174,7 +209,18 @@ export interface IConfirmRequest {
   offerAlways: boolean;
 }
 
-/** User interface hooks the manager needs for trust decisions. */
+/** What the reopen dialog says about the workshop. */
+export interface IReopenRequest {
+  title: string;
+}
+
+/**
+ * The learner's answer when a workshop is reopened under a new
+ * JupyterLab: start over, carry on, or neither.
+ */
+export type ReopenChoice = 'restart' | 'continue' | null;
+
+/** User interface hooks the manager needs for trust and reopen decisions. */
 export interface ITrustPrompts {
   /** Ask which level to apply; null means do not open the workshop. */
   decide(
@@ -184,6 +230,12 @@ export interface ITrustPrompts {
 
   /** Ask whether one action may run. */
   confirm(request: IConfirmRequest): Promise<ConfirmAnswer>;
+
+  /**
+   * Ask whether to restart or continue a workshop whose progress was made
+   * under a JupyterLab that has since restarted.
+   */
+  reopen(request: IReopenRequest): Promise<ReopenChoice>;
 }
 
 /** Persists trust decisions and exposes the administrator policy. */
@@ -365,7 +417,10 @@ export interface IPreflightResult {
   hint?: string;
 }
 
-/** A progress event, as recorded in `_workshop/events.jsonl`. */
+/**
+ * A progress event, as recorded in `_workshop/events.jsonl` and posted to
+ * a sink. The field set is published as `events.schema.json` in core.
+ */
 export interface IWorkshopEvent {
   kind: string;
 
@@ -374,8 +429,31 @@ export interface IWorkshopEvent {
 
   /** Random id of this open of the workshop. */
   session_id: string;
+
+  /** Id of the running frontend the session ran under. */
+  instance_id: string;
+
+  /** Directory of the workshop relative to the JupyterLab root. */
   workshop: string;
+
+  /** The manifest name. */
+  name: string;
   version: string;
+
+  /** The trust source key: where the workshop came from. */
+  source: string;
+
+  /** The subscribed collection that lists the workshop, or empty. */
+  collection: string;
+
+  /** Sequence number within the session, from 1. */
+  seq: number;
+
+  /** Labels from the analytics block that supplied the sink. */
+  labels: Record<string, string>;
+  frontend: string;
+  frontend_version: string;
+  host: string;
   platform: string;
   trust: string;
 
@@ -428,6 +506,18 @@ export interface IInstalledWorkshop {
 
   /** Whether a state file exists, that is, the learner has opened it. */
   started: boolean;
+
+  /** Frontends the manifest lists; none means JupyterLab only. */
+  frontends: string[];
+
+  /** Whether the manifest says the workshop can be continued after a restart. */
+  resumable: boolean;
+
+  /**
+   * Id of the running frontend the recorded progress was made under, or
+   * empty when unknown; differs from the current one after a restart.
+   */
+  instanceId: string;
 }
 
 /** Features an administrator can remove for a locked-down deployment. */
@@ -479,6 +569,19 @@ export interface IOpenOptions {
    * before.
    */
   launch?: boolean;
+
+  /**
+   * Continue a workshop whose progress was made under a JupyterLab that
+   * has since restarted without asking, as the browser card's Continue
+   * button does once the learner has seen the choice.
+   */
+  continue?: boolean;
+
+  /**
+   * The session id of the open the learner chose to restart rather than
+   * continue, carried onto the start event so the journey chains.
+   */
+  restartedFrom?: string;
 }
 
 /** Loads workshops, tracks progress and runs actions. */
@@ -517,8 +620,16 @@ export interface IWorkshopManager {
   /** State of the isolated environment, when the manifest declares one. */
   readonly environment: IEnvironmentStatus | null;
 
-  /** Where events of the open workshop are reported, or an empty string. */
-  readonly analyticsSink: string;
+  /**
+   * The analytics block that applies to the open workshop, from the
+   * highest level that declares one: the administrator's setting, then
+   * the subscribed collection that lists the workshop, then its
+   * manifest; null when none applies or the learner has not opted in.
+   */
+  readonly analytics: IAnalyticsBlock | null;
+
+  /** The frontend in use, `jupyterlab` or `jupyterlite`. */
+  readonly frontend: string;
 
   /** Whether the open workshop is being edited rather than followed. */
   readonly authoring: boolean;
@@ -791,6 +902,9 @@ export interface IEventsBatch {
 
   /** URL to forward the events to, or an empty string. */
   sink: string;
+
+  /** Bearer token sent with the forwarded batch, or an empty string. */
+  token: string;
 
   /** Whether the JupyterHub user name is attached to each event. */
   identity: 'none' | 'hub';

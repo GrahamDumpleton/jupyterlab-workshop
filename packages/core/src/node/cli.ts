@@ -10,7 +10,12 @@ import { parseCatalog } from '../catalog';
 import { parseCollectionIndex } from '../collection';
 import { lintWorkshop } from '../lint/rules';
 import { ILintMessage, formatLintMessage } from '../lint/types';
-import { CATALOG_SCHEMA, COLLECTION_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
+import {
+  CATALOG_SCHEMA,
+  COLLECTION_SCHEMA,
+  EVENTS_SCHEMA,
+  WORKSHOP_SCHEMA
+} from '../schema';
 import { draftToDirectory } from './draft';
 import { renderWorkshopHtml } from './render';
 import { ILoadOptions, loadWorkshopFiles } from './workshop';
@@ -19,6 +24,7 @@ import { ILoadOptions, loadWorkshopFiles } from './workshop';
 export interface ILintReport {
   directory: string;
   platform: string;
+  frontend: string;
   messages: ILintMessage[];
   errors: number;
   warnings: number;
@@ -40,6 +46,7 @@ export function lintDirectory(
   return {
     directory,
     platform: workshop.platform,
+    frontend: workshop.frontend,
     messages,
     errors: messages.filter(message => message.level === 'error').length,
     warnings: messages.filter(message => message.level === 'warning').length
@@ -98,12 +105,12 @@ function usage(): string {
   return [
     'Usage: workshop-cli <command> [arguments]',
     '',
-    '  lint <dir> [--json] [--platform <name>]',
+    '  lint <dir> [--json] [--platform <name>] [--frontend <name>]',
     '                             Report problems in a workshop',
-    '  render <dir> [page] [--out <file>] [--platform <name>]',
+    '  render <dir> [page] [--out <file>] [--platform <name>] [--frontend <name>]',
     '                             Render pages to standalone HTML',
-    '  schema [--collection|--catalog]',
-    '                             Print the manifest, collection or catalog JSON schema',
+    '  schema [--collection|--catalog|--events]',
+    '                             Print the manifest, collection, catalog or events JSON schema',
     '  check <file.json>          Validate a collection or catalog file, as JSON',
     '  pages <dir>                List page ids and titles as JSON',
     '  draft <recording> <dir> [--name <name>] [--title <title>] [--json]',
@@ -119,11 +126,12 @@ export function main(argv: string[]): number {
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
   const out = valueOf(rest, '--out');
   const platform = valueOf(rest, '--platform');
-  const valued = ['--out', '--platform', '--name', '--title'];
+  const frontend = valueOf(rest, '--frontend');
+  const valued = ['--out', '--platform', '--frontend', '--name', '--title'];
   const positional = rest.filter(
     (arg, index) => !arg.startsWith('--') && !valued.includes(rest[index - 1])
   );
-  const options: ILoadOptions = { platform };
+  const options: ILoadOptions = { platform, frontend };
 
   try {
     switch (command) {
@@ -173,7 +181,9 @@ export function main(argv: string[]): number {
           ? COLLECTION_SCHEMA
           : flags.has('--catalog')
             ? CATALOG_SCHEMA
-            : WORKSHOP_SCHEMA;
+            : flags.has('--events')
+              ? EVENTS_SCHEMA
+              : WORKSHOP_SCHEMA;
 
         process.stdout.write(`${JSON.stringify(schema, null, 2)}\n`);
 

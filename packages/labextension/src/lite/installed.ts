@@ -83,6 +83,7 @@ export async function describeInstalled(
     visiblePages?: string[];
     currentPage?: string;
     trust?: string;
+    session?: { id?: string; instance?: string };
   } = {};
 
   if (stateText !== null) {
@@ -108,6 +109,8 @@ export async function describeInstalled(
     description: manifest.description ?? '',
     tags: manifest.tags,
     platforms: manifest.platforms,
+    frontends: manifest.frontends,
+    resumable: manifest.resumable,
     source: source?.source ?? null,
     sha256: source?.sha256 ?? '',
     collection: source?.collection ?? null,
@@ -115,7 +118,8 @@ export async function describeInstalled(
     done,
     currentPage: state.currentPage ?? '',
     trust: state.trust ?? '',
-    started: stateText !== null
+    started: stateText !== null,
+    instanceId: state.session?.instance ?? ''
   };
 }
 

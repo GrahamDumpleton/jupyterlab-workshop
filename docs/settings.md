@@ -41,7 +41,7 @@ setting them.
 | `browseOnStart`    | boolean | `false` | Open the workshop browser in place of the launcher, with both sidebars collapsed, when JupyterLab starts with no workshop to open or restore. See [starting in the browser](deploying.md#starting-in-the-browser).                             |
 | `trustPolicy`      | object  | `{}`    | Administrator trust decisions; the keys are below. See [settling trust](deploying.md#settling-trust).                                                                                                                                          |
 | `disabledFeatures` | list    | `[]`    | Parts of the extension to remove, from `open-directory`, `open-url`, `collections`, `catalogs`, `available`, `install-all`, `remove`, `close`, `browse` and `author`. See [locking down a deployment](deploying.md#locking-down-a-deployment). |
-| `analytics`        | object  | `{}`    | Site-wide reporting of progress events; the keys are below. See [reporting progress](deploying.md#reporting-progress).                                                                                                                         |
+| `analytics`        | object  | `{}`    | Deployment-wide reporting of progress events, ahead of anything a collection or workshop declares; the keys are below. See [reporting progress](deploying.md#reporting-progress).                                                              |
 | `welcome`          | string  | `""`    | Path, relative to the JupyterLab root, of a Markdown file shown in a dialog when JupyterLab starts, once per browser for the server. See [a welcome message](deploying.md#a-welcome-message).                                                  |
 
 `trustPolicy` holds:
@@ -52,12 +52,18 @@ setting them.
 | `trustedSources`       | list           | `[]`    | Source key prefixes that open as trusted without asking, such as `git:https://github.com/example-org/` or `local:workshops/`. |
 | `disabledCapabilities` | list           | `[]`    | Capabilities that never run regardless of the trust level.                                                                    |
 
-`analytics` holds:
+`analytics` holds the same block a collection index or a manifest may
+declare, plus `identity`, which only a deployment may set:
 
-| Key        | Type   | Default | Meaning                                                                                                                                          |
-| ---------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sink`     | string | `""`    | URL that receives every workshop's events as JSON lines by POST, without asking the learner. Empty reports only to sinks the learner opts in to. |
-| `identity` | string | `none`  | Whether events carry the JupyterHub user name (`hub`) or no identity (`none`).                                                                   |
+| Key        | Type   | Default | Meaning                                                                                                                                                                                             |
+| ---------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sink`     | string | `""`    | URL that receives every workshop's events as JSON lines by POST, without asking the learner. Empty reports only to sinks the learner opts in to.                                                    |
+| `token`    | string | `""`    | Token sent as a bearer credential in the `Authorization` header of every batch, issued by the sink's operator.                                                                                      |
+| `labels`   | object | `{}`    | Key and value pairs stamped on every event for slicing reports, such as a course or a term. At most 16; keys of lower case letters, digits, `_`, `.` and `-` up to 63 characters, values up to 128. |
+| `identity` | string | `none`  | Whether events carry the JupyterHub user name (`hub`) or no identity (`none`).                                                                                                                      |
 
+When `sink` is set here it applies to every workshop, without asking,
+and ahead of any `analytics` block a subscribed collection or a workshop
+manifest declares; those are used only when this setting names no sink.
 Events are always written to `_workshop/events.jsonl` in the workshop
 directory whatever these say; see [Progress events](analytics.md).

@@ -367,6 +367,59 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
         index_repository(tmp_path / "sub", [tmp_path], "https://x", "main")
 
 
+def test_index_repository_carries_the_analytics_block(tmp_path: Path) -> None:
+    workshop = tmp_path / "workshops" / "one"
+    workshop.mkdir(parents=True)
+    workshop.joinpath("workshop.yaml").write_text(
+        "name: one\ntitle: One\nversion: 1.0.0\n"
+        "frontends: [jupyterlab, jupyterlite]\npages: [pages/01.md]\n"
+    )
+
+    # Without collection.yaml there is no block; the entry carries the
+    # manifest's frontends either way.
+    index = index_repository(tmp_path, [tmp_path], "https://x/y", "main")
+
+    assert "analytics" not in index
+    assert index["workshops"][0]["frontends"] == ["jupyterlab", "jupyterlite"]
+
+    (tmp_path / "collection.yaml").write_text(
+        "analytics:\n  sink: https://a.example.org/events\n  token: t.o.k\n"
+        "  labels:\n    course: intro\n    year: 2026\n"
+    )
+
+    index = index_repository(tmp_path, [tmp_path], "https://x/y", "main")
+
+    assert list(index) == ["version", "analytics", "workshops"]
+    assert index["analytics"] == {
+        "sink": "https://a.example.org/events",
+        "token": "t.o.k",
+        "labels": {"course": "intro", "year": "2026"},
+    }
+
+    # Regenerating without the file keeps the block the index already had.
+    (tmp_path / "collection.yaml").unlink()
+
+    again = index_repository(tmp_path, [tmp_path], "https://x/y", "main", index)
+
+    assert again["analytics"] == index["analytics"]
+
+    # Mistakes are refused rather than published: unknown keys, a bad
+    # sink, and labels outside the rules.
+    for text in [
+        "analytic:\n  sink: https://a\n",
+        "analytics:\n  sink: ftp://a\n",
+        "analytics:\n  colour: red\n",
+        "analytics:\n  labels:\n    Course: x\n",
+        "analytics:\n  labels:\n    a: " + "x" * 129 + "\n",
+        "analytics:\n  labels:\n" + "".join(f"    k{i}: v\n" for i in range(17)),
+        "- a list\n",
+    ]:
+        (tmp_path / "collection.yaml").write_text(text)
+
+        with pytest.raises(CollectionError):
+            index_repository(tmp_path, [tmp_path], "https://x/y", "main")
+
+
 def test_https_remote_rewrites_ssh_forms() -> None:
     assert https_remote("git@github.com:org/repo.git") == "https://github.com/org/repo"
     assert (

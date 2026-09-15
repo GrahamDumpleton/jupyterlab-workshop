@@ -136,14 +136,17 @@ def install_collection(
     directory: str = DEFAULT_DIRECTORY,
     only: Sequence[str] = (),
     platform: str = "",
+    frontend: str = "",
     downloader: Downloader | None = None,
     report: Reporter | None = None,
 ) -> list[InstallOutcome]:
     """Install the workshops of a collection that are not installed yet.
 
     Entries are taken in the collection's order. ``only`` restricts the
-    run to the named workshops and ``platform`` skips entries that list
-    platforms without it. Each outcome is reported as it happens through
+    run to the named workshops, ``platform`` skips entries that list
+    platforms without it, and ``frontend`` skips entries that do not
+    support it, where an entry listing no frontends supports JupyterLab
+    only. Each outcome is reported as it happens through
     ``report`` when given, and the list of outcomes is returned; the
     caller decides what a failure means.
     """
@@ -187,6 +190,15 @@ def install_collection(
 
         if platform and platforms and platform not in platforms:
             note(InstallOutcome(name, title, "skipped", f"not for {platform}"))
+
+            continue
+
+        frontends = [str(item) for item in entry.get("frontends") or []] or [
+            "jupyterlab"
+        ]
+
+        if frontend and frontend not in frontends:
+            note(InstallOutcome(name, title, "skipped", f"not for {frontend}"))
 
             continue
 

@@ -6,6 +6,7 @@ import {
   normalizeLocation,
   resolveLocation,
   searchCollection,
+  supportsFrontend,
   supportsPlatform
 } from '@jupyterlab-workshop/core';
 import { Dialog, showDialog, showErrorMessage } from '@jupyterlab/apputils';
@@ -180,6 +181,8 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [tags, setTags] = useState<string[]>([]);
   const [version, setVersion] = useState(0);
   const [platform, setPlatform] = useState(manager.platform?.os ?? '');
+  const [frontend, setFrontend] = useState(manager.frontend);
+  const [instance, setInstance] = useState(manager.platform?.instance_id ?? '');
 
   // Reload when asked, when a workshop is opened or closed, when the
   // subscribed sources change, or at first.
@@ -224,12 +227,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
       // The manager learns the platform when a workshop opens; before
       // that the browser asks the backend itself, so cards for other
-      // platforms are dimmed and Install all leaves them unticked.
-      let os = manager.platform?.os ?? '';
+      // platforms and frontends are dimmed, Install all leaves them
+      // unticked, and a card knows whether its progress was made under
+      // this running JupyterLab.
+      let info = manager.platform;
 
-      if (os === '') {
+      if (!info) {
         try {
-          os = (await manager.backend.platform()).os;
+          info = await manager.backend.platform();
         } catch (error) {
           console.warn('Unable to read the platform', error);
         }
@@ -240,7 +245,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
         setCatalogs(loadedCatalogs);
         setInstalled(orderInstalled(list, loadedCollections));
         setDirectory(settings.workshopsDirectory);
-        setPlatform(os);
+        setPlatform(info?.os ?? '');
+        setFrontend(info?.frontend ?? manager.frontend);
+        setInstance(info?.instance_id ?? '');
         setLoading(false);
       }
     };
@@ -368,7 +375,8 @@ function BrowserContent(props: IContentProps): JSX.Element {
           entries: group.collection.index?.workshops ?? [],
           installed,
           directory,
-          platform
+          platform,
+          frontend
         })
     ).then(() => setVersion(value => value + 1));
   };
@@ -386,11 +394,20 @@ function BrowserContent(props: IContentProps): JSX.Element {
     ).then(() => setVersion(value => value + 1));
   };
 
-  const open = (path: string): void => {
+  const open = (path: string, carryOn = false): void => {
     void whileBusy(`open:${path}`, () =>
-      commands.execute(CommandIDs.open, { path })
+      commands.execute(CommandIDs.open, { path, continue: carryOn })
     );
   };
+
+  // Progress made under a JupyterLab that has since restarted needs a
+  // restart unless the workshop says it can be continued; progress with
+  // no recorded instance predates the record and counts the same way.
+  const isStale = (item: IInstalledWorkshop): boolean =>
+    item.started &&
+    !item.resumable &&
+    instance !== '' &&
+    item.instanceId !== instance;
 
   const restart = async (item: IInstalledWorkshop): Promise<void> => {
     await commands.execute(CommandIDs.restart, {
@@ -544,7 +561,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
                 upNext={found?.entry !== undefined && next === found.entry}
                 open={manager.workshop?.path === item.path}
                 busy={busy === `open:${item.path}`}
+                stale={isStale(item)}
                 onOpen={() => open(item.path)}
+                onContinue={() => open(item.path, true)}
                 onRestart={() => void restart(item)}
                 onRemove={
                   features.enabled('remove')
@@ -567,6 +586,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           canSubscribeCollections={store.canChange('collection')}
           canSubscribeCatalogs={store.canChange('catalog')}
           platform={platform}
+          frontend={frontend}
           busy={busy}
           onInstall={install}
           onInstallAll={
@@ -617,6 +637,7 @@ function AvailableSection({
   canSubscribeCollections,
   canSubscribeCatalogs,
   platform,
+  frontend,
   busy,
   onInstall,
   onInstallAll,
@@ -636,6 +657,7 @@ function AvailableSection({
   canSubscribeCollections: boolean;
   canSubscribeCatalogs: boolean;
   platform: string;
+  frontend: string;
 
   /** The busy key of the card being installed, if any. */
   busy: string | null;
@@ -700,6 +722,7 @@ function AvailableSection({
             key={group.collection.url}
             group={group}
             platform={platform}
+            frontend={frontend}
             busy={busy}
             onInstall={entry => onInstall(group.collection.url, entry)}
             onInstallAll={onInstallAll ? () => onInstallAll(group) : undefined}
@@ -782,6 +805,7 @@ function AvailableSection({
 function CollectionGroup({
   group,
   platform,
+  frontend,
   busy,
   onInstall,
   onInstallAll,
@@ -790,6 +814,7 @@ function CollectionGroup({
 }: {
   group: IGroup;
   platform: string;
+  frontend: string;
   busy: string | null;
   onInstall: (entry: ICollectionEntry) => void;
   onInstallAll?: () => void;
@@ -956,6 +981,7 @@ function CollectionGroup({
               step={sequenceStep({ collection, entry })}
               upNext={group.upNext === entry}
               platform={platform}
+              frontend={frontend}
               busy={
                 busy ===
                 `install:${normalizeLocation(collection.url)}:${entry.name}`
@@ -1088,6 +1114,7 @@ function CollectionCard({
   step,
   upNext,
   platform,
+  frontend,
   busy,
   disabled,
   onInstall
@@ -1099,6 +1126,7 @@ function CollectionCard({
   step?: ISequenceStep;
   upNext: boolean;
   platform: string;
+  frontend: string;
 
   /** Whether this workshop is being installed right now. */
   busy: boolean;
@@ -1108,7 +1136,9 @@ function CollectionCard({
   onInstall: () => void;
 }): JSX.Element {
   const version = latestVersion(entry);
-  const supported = platform === '' || supportsPlatform(entry, platform);
+  const onPlatform = platform === '' || supportsPlatform(entry, platform);
+  const onFrontend = frontend === '' || supportsFrontend(entry, frontend);
+  const supported = onPlatform && onFrontend;
 
   return (
     <div
@@ -1153,6 +1183,14 @@ function CollectionCard({
             {name}
           </span>
         ))}
+        {entry.frontends.map(name => (
+          <span
+            key={name}
+            className={`jp-WorkshopBrowser-chip jp-mod-platform${name === frontend ? ' jp-mod-current' : ''}`}
+          >
+            {name}
+          </span>
+        ))}
         {entry.capabilities.map(name => (
           <span key={name} className="jp-WorkshopBrowser-chip">
             {name}
@@ -1167,7 +1205,7 @@ function CollectionCard({
       <div className="jp-WorkshopBrowser-cardActions">
         {!supported ? (
           <span className="jp-WorkshopBrowser-note">
-            Not written for {platform}
+            Not written for {onPlatform ? frontend : platform}
           </span>
         ) : null}
         <button
@@ -1190,7 +1228,9 @@ function InstalledCard({
   upNext,
   open,
   busy,
+  stale,
   onOpen,
+  onContinue,
   onRestart,
   onRemove,
   update
@@ -1207,7 +1247,17 @@ function InstalledCard({
 
   /** Whether this workshop is being opened right now. */
   busy: boolean;
+
+  /**
+   * Whether the progress was made under a JupyterLab that has since
+   * restarted and the workshop is not resumable, so Restart comes first
+   * and Continue is the override.
+   */
+  stale: boolean;
   onOpen: () => void;
+
+  /** Carry on with stale progress, knowing what was lost. */
+  onContinue: () => void;
 
   /** Put the files back as first opened and forget the progress. */
   onRestart: () => void;
@@ -1268,27 +1318,60 @@ function InstalledCard({
         ) : (
           <span className="jp-WorkshopBrowser-chip">not started</span>
         )}
+        {stale && !open ? (
+          <span
+            className="jp-WorkshopBrowser-chip jp-mod-stale"
+            title="The JupyterLab this progress was made under has restarted"
+          >
+            needs restart
+          </span>
+        ) : null}
       </div>
       <div className="jp-WorkshopBrowser-cardActions">
-        <button
-          type="button"
-          className="jp-Button jp-mod-styled jp-mod-accept"
-          disabled={open || busy}
-          title={open ? 'This workshop is open' : undefined}
-          onClick={onOpen}
-        >
-          {busy ? 'Opening…' : item.started && !open ? 'Resume' : 'Open'}
-        </button>
-        {item.started ? (
-          <button
-            type="button"
-            className="jp-Button jp-mod-styled"
-            title="Put the files back as they were when first opened and forget the progress"
-            onClick={onRestart}
-          >
-            Restart
-          </button>
-        ) : null}
+        {stale && !open ? (
+          <>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled jp-mod-accept"
+              disabled={busy}
+              title="Put the files back as they were when first opened and forget the progress"
+              onClick={onRestart}
+            >
+              Restart
+            </button>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled"
+              disabled={busy}
+              title="Carry on where you left off; terminals, running programs and notebook kernels from earlier pages are gone"
+              onClick={onContinue}
+            >
+              {busy ? 'Opening…' : 'Continue'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled jp-mod-accept"
+              disabled={open || busy}
+              title={open ? 'This workshop is open' : undefined}
+              onClick={onOpen}
+            >
+              {busy ? 'Opening…' : item.started && !open ? 'Resume' : 'Open'}
+            </button>
+            {item.started ? (
+              <button
+                type="button"
+                className="jp-Button jp-mod-styled"
+                title="Put the files back as they were when first opened and forget the progress"
+                onClick={onRestart}
+              >
+                Restart
+              </button>
+            ) : null}
+          </>
+        )}
         {update ? (
           <button
             type="button"

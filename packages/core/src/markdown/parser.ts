@@ -40,6 +40,9 @@ export interface IRenderEnv {
   /** Platform whose body variants are selected, when known. */
   platform?: string;
 
+  /** Frontend whose body variants are selected, when known. */
+  frontend?: string;
+
   /** Problems found while parsing, in page order. */
   warnings: string[];
 
@@ -55,10 +58,10 @@ export interface IDirectiveMeta {
   options: Record<string, string>;
   body: string;
 
-  /** Every platform alternative of the body, when it has any. */
+  /** Every platform and frontend alternative of the body, when it has any. */
   variants?: Record<string, string>;
 
-  /** Which alternative `body` holds: a platform name or `default`. */
+  /** Which alternative `body` holds: a marker name or `default`. */
   variant?: string;
 }
 
@@ -101,7 +104,8 @@ export function createRenderEnv(
   variables: Variables,
   pathSep = '/',
   declared: ReadonlySet<string> = new Set(),
-  platform?: string
+  platform?: string,
+  frontend?: string
 ): IRenderEnv {
   return {
     pageId,
@@ -109,6 +113,7 @@ export function createRenderEnv(
     pathSep,
     declared,
     platform,
+    frontend,
     warnings: [],
     directiveCount: 0
   };
@@ -148,9 +153,9 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       body
     };
 
-    // Command and text bodies may carry platform variants; the one for
-    // the rendering platform becomes the body and the rest are kept for
-    // lint and for showing which was chosen.
+    // Command and text bodies may carry platform and frontend variants;
+    // the one for the rendering frontend or platform becomes the body and
+    // the rest are kept for lint and for showing which was chosen.
     const bodyKind = ACTION_TYPES[info.name]?.body;
 
     if (
@@ -158,7 +163,7 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       hasVariants(body)
     ) {
       const split = splitVariants(body);
-      const chosen = selectVariant(split, env.platform);
+      const chosen = selectVariant(split, env.platform, env.frontend);
 
       meta.body = chosen.body;
       meta.variant = chosen.variant;

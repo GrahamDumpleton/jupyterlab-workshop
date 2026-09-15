@@ -7,7 +7,9 @@ from pathlib import Path
 
 TEMPLATES = ("starter", "blank", "notebook")
 
-PLATFORMS = ("linux", "macos", "windows", "lite")
+PLATFORMS = ("linux", "macos", "windows")
+
+FRONTENDS = ("jupyterlab", "jupyterlite")
 
 GATING = ("off", "soft", "strict")
 
@@ -53,15 +55,21 @@ def manifest(
     title: str,
     *,
     platforms: list[str] | None = None,
+    frontends: list[str] | None = None,
     capabilities: list[str] | None = None,
     gating: str = "soft",
     variables: str = "",
     pages: list[str] | None = None,
     requires: str = "  tools: []\n",
 ) -> str:
-    """The starting ``workshop.yaml``."""
+    """The starting ``workshop.yaml``.
+
+    ``frontends`` is written only when given: a manifest without the
+    list supports JupyterLab alone, which is what a new workshop does.
+    """
 
     listed = platforms or DEFAULT_PLATFORMS
+    frontend_text = f"frontends: [{', '.join(frontends)}]\n" if frontends else ""
     capability_block = capability_lines(capabilities or [])
     capability_text = (
         "capabilities:\n" + "\n".join(capability_block) + "\n"
@@ -79,7 +87,7 @@ authors: []
 tags: []
 duration: 30m
 platforms: [{", ".join(listed)}]
-{capability_text}requires:
+{frontend_text}{capability_text}requires:
 {requires}layout: default
 gating: {gating}
 {variables}pages:
@@ -407,6 +415,7 @@ def scaffold_files(
     platforms: list[str] | None = None,
     capabilities: list[str] | None = None,
     gating: str = "soft",
+    frontends: list[str] | None = None,
 ) -> dict[Path, str]:
     """The files a template writes, keyed by path."""
 
@@ -418,7 +427,13 @@ def scaffold_files(
 
     for platform in platforms or []:
         if platform not in PLATFORMS:
-            raise ValueError(f'Unknown platform "{platform}"')
+            hint = "; JupyterLite is a frontend" if platform == "lite" else ""
+
+            raise ValueError(f'Unknown platform "{platform}"{hint}')
+
+    for frontend in frontends or []:
+        if frontend not in FRONTENDS:
+            raise ValueError(f'Unknown frontend "{frontend}"')
 
     listed = DEFAULT_CAPABILITIES[template] if capabilities is None else capabilities
 
@@ -445,6 +460,7 @@ def scaffold_files(
             name,
             title,
             platforms=platforms,
+            frontends=frontends,
             capabilities=listed,
             gating=gating,
             variables=variables,
@@ -477,6 +493,7 @@ def write_scaffold(
     platforms: list[str] | None = None,
     capabilities: list[str] | None = None,
     gating: str = "soft",
+    frontends: list[str] | None = None,
 ) -> list[Path]:
     """Write the starting files, refusing to overwrite any that exist."""
 
@@ -489,6 +506,7 @@ def write_scaffold(
         platforms=platforms,
         capabilities=capabilities,
         gating=gating,
+        frontends=frontends,
     )
     existing = [path for path in files if path.exists()]
 

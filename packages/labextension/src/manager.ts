@@ -1,6 +1,7 @@
 import {
   ActionDisposition,
   Capability,
+  IAnalyticsBlock,
   IDirectiveNode,
   ILintMessage,
   IPage,
@@ -9,6 +10,7 @@ import {
   IWorkshopManifest,
   TrustLevel,
   Variables,
+  normalizeLocation,
   parseCatalog,
   parseCollectionIndex,
   resolveCatalog,
@@ -50,6 +52,7 @@ import {
   writeTextFile
 } from './actions/contents';
 import { leaveDirectory } from './cleanup';
+import { readSettingList } from './settings';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
   ActionTrigger,
@@ -58,6 +61,7 @@ import {
   IActionRequest,
   IActionResult,
   IActionStatus,
+  IAnalyticsOffer,
   IEnvironmentStatus,
   IFetchRequest,
   IFeaturePolicy,
@@ -114,6 +118,13 @@ const ENVIRONMENT_ENTRIES: ReadonlySet<string> = new Set([
 
 interface IStoredState {
   workshopPath: string;
+}
+
+/** The subscribed collection that lists the open workshop. */
+interface ICollectionMembership {
+  /** The collection's location as subscribed, normalised. */
+  location: string;
+  index: ICollectionIndex;
 }
 
 interface IQueued {
@@ -180,6 +191,15 @@ export class WorkshopManager implements IWorkshopManager {
     this._envRefresher = refresher;
   }
 
+  /**
+   * Where the subscribed collection locations come from. The browser
+   * supplies its source store, which also knows the collections a launch
+   * link added for the session; without it the settings list is read.
+   */
+  set collectionSources(sources: (() => Promise<string[]>) | null) {
+    this._collectionSources = sources;
+  }
+
   get workshop(): ILoadedWorkshop | null {
     return this._workshop;
   }
@@ -220,16 +240,27 @@ export class WorkshopManager implements IWorkshopManager {
     return this._environment;
   }
 
-  get analyticsSink(): string {
-    // The workshop's own sink needs the learner's opt-in; an administrator's
-    // sink applies to every workshop.
-    const own = this._workshop?.manifest.analytics?.sink ?? '';
+  get analytics(): IAnalyticsBlock | null {
+    // The administrator's block applies to every workshop without asking;
+    // a collection's or the manifest's needs the learner's opt-in.
+    const policy = this._trustStore.policy.analytics;
 
-    if (own && this._decision?.analytics) {
-      return own;
+    if (policy) {
+      return policy;
     }
 
-    return this._trustStore.policy.analyticsSink;
+    if (this._offered && this._decision?.analytics) {
+      return this._offered;
+    }
+
+    return null;
+  }
+
+  get frontend(): string {
+    return (
+      this._platform?.frontend ??
+      (this._backend.kind === 'lite' ? 'jupyterlite' : 'jupyterlab')
+    );
   }
 
   get authoring(): boolean {
@@ -311,6 +342,24 @@ export class WorkshopManager implements IWorkshopManager {
         kind: 'local',
         url: workshopPath
       };
+
+      // The collection that lists the workshop is what its events name
+      // and what may supply its analytics block. The manifest's own block
+      // counts only when no collection declares one, and neither is
+      // offered when the administrator's setting decides.
+      const membership = await this._findCollection(
+        manifest.name,
+        record?.collection
+      );
+      const offered = membership?.index.analytics ?? manifest.analytics ?? null;
+      const offer: IAnalyticsOffer | undefined =
+        offered?.sink && !this._trustStore.policy.analytics
+          ? {
+              sink: offered.sink,
+              level: membership?.index.analytics ? 'collection' : 'workshop',
+              collection: membership?.index.title ?? membership?.location
+            }
+          : undefined;
       // The preview used for the trust summary and lint renders with the
       // built-ins and manifest defaults, as the learner will first see it.
       const pathSep = platform.path_sep;
@@ -331,7 +380,8 @@ export class WorkshopManager implements IWorkshopManager {
           variables: defaults,
           pathSep,
           declared,
-          platform: platform.os
+          platform: platform.os,
+          frontend: platform.frontend
         })
       );
       const trust = buildTrustSummary({
@@ -340,7 +390,8 @@ export class WorkshopManager implements IWorkshopManager {
         pages: preview,
         sources,
         source,
-        hash: record?.sha256
+        hash: record?.sha256,
+        analytics: offer
       });
       const decision = await this._resolveTrust(trust);
 
@@ -379,11 +430,64 @@ export class WorkshopManager implements IWorkshopManager {
         manifest.version ?? ''
       );
 
+      // Progress made under a JupyterLab that has since restarted was made
+      // with terminals, programs and kernels that are gone. Unless the
+      // workshop says it can be continued, or the learner already chose
+      // to, ask whether to restart or carry on before anything happens.
+      // Progress recorded before sessions were, with no instance to
+      // compare, was made under some earlier process and counts as stale.
+      const previous = state.session;
+      const resumed = Object.values(state.pages).some(
+        page => page.enteredAt !== undefined
+      );
+      const stale =
+        resumed &&
+        (previous?.instance ?? '') !== platform.instance_id &&
+        !manifest.resumable &&
+        !options.continue &&
+        options.restartedFrom === undefined;
+
+      if (stale) {
+        const choice = await this._prompts.reopen({ title: manifest.title });
+
+        if (choice === null) {
+          await this._state.unload();
+          this._workshop = null;
+          this._currentPageId = '';
+          this._decision = null;
+          this._authoring = false;
+          this._loading = false;
+          await this._saveStateDB();
+          this._changed.emit();
+
+          return;
+        }
+
+        if (choice === 'restart') {
+          await this._state.unload();
+          this._workshop = null;
+          this._currentPageId = '';
+          this._decision = null;
+          this._store.load({}, []);
+          this._loading = false;
+          await this.restart(workshopPath);
+          await this.open(workshopPath, {
+            ...options,
+            launch: true,
+            restartedFrom: previous?.id ?? ''
+          });
+
+          return;
+        }
+      }
+
       state.trust = decision.level;
       state.workshop.hash = trust.hash;
       state.workshop.source = source;
 
       this._decision = decision;
+      this._collection = membership?.location ?? '';
+      this._offered = offered;
       this._workshop = {
         path: workshopPath,
         manifest,
@@ -411,15 +515,40 @@ export class WorkshopManager implements IWorkshopManager {
       const visible = this.visiblePages;
       const saved = visible.find(page => page.id === state.currentPage);
       const first = saved ?? visible[0];
-      const resumed = Object.values(state.pages).some(
-        page => page.enteredAt !== undefined
-      );
 
+      // A session is one open of the workshop. Its events count from one,
+      // and the state remembers it so the next open can name it and can
+      // tell whether the same JupyterLab is still running.
       this._sessionId = randomId();
+      this._seq = 0;
       this._finished = this.finished;
-      this._emit(resumed ? 'workshop-resume' : 'workshop-start', {
-        page: first?.id ?? ''
-      });
+      state.session = {
+        id: this._sessionId,
+        instance: platform.instance_id
+      };
+      this._state.save();
+
+      const pages = visible.map(page => ({
+        id: page.id,
+        path: page.path,
+        title: page.title
+      }));
+
+      if (resumed) {
+        this._emit('workshop-resume', {
+          page: first?.id ?? '',
+          pages,
+          ...(previous ? { resumed_from: previous.id } : {})
+        });
+      } else {
+        this._emit('workshop-start', {
+          page: first?.id ?? '',
+          pages,
+          ...(options.restartedFrom !== undefined
+            ? { restarted_from: options.restartedFrom }
+            : {})
+        });
+      }
 
       if (first) {
         this._enterPage(
@@ -515,7 +644,8 @@ export class WorkshopManager implements IWorkshopManager {
           variables: defaults,
           pathSep: platform.path_sep,
           declared,
-          platform: platform.os
+          platform: platform.os,
+          frontend: platform.frontend
         })
       );
 
@@ -745,6 +875,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._environment = null;
     this._error = null;
     this._authoring = false;
+    this._collection = '';
+    this._offered = null;
     this._store.load({}, []);
 
     await this._saveStateDB();
@@ -886,6 +1018,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._environment = null;
     this._error = null;
     this._authoring = false;
+    this._collection = '';
+    this._offered = null;
     this._store.load({}, []);
 
     await this._saveStateDB();
@@ -1267,7 +1401,7 @@ export class WorkshopManager implements IWorkshopManager {
       node?.variants && request.body.trim() === ''
         ? {
             status: 'skipped' as const,
-            message: `Nothing to do on ${this._platform?.os ?? 'this platform'}`
+            message: `Nothing to do on ${node.variant && node.variant !== 'default' ? node.variant : (this._platform?.os ?? 'this platform')}`
           }
         : await this._runSettled(registry, request, trigger, options);
 
@@ -1594,16 +1728,98 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
+    // The base fields identify the workshop, the session, the running
+    // frontend and where it is hosted; they are what a sink reports by.
+    // The labels come from the block that supplies the sink, so the
+    // local file is self-describing. See events.schema.json in core.
+    this._seq += 1;
+
     this._events.emit({
       ...data,
       kind,
       ts: new Date().toISOString(),
       session_id: this._sessionId,
+      instance_id: this._platform?.instance_id ?? '',
       workshop: workshop.path,
+      name: workshop.manifest.name,
       version: workshop.manifest.version ?? '',
+      source: workshop.trust.sourceKey,
+      collection: this._collection,
+      seq: this._seq,
+      labels: { ...(this.analytics?.labels ?? {}) },
+      frontend: this.frontend,
+      frontend_version: this._platform?.frontend_version ?? '',
+      host: this._platform?.host ?? '',
       platform: this._platform?.os ?? '',
       trust: this._decision?.level ?? ''
     });
+  }
+
+  /**
+   * The subscribed collection that lists a workshop: the one an install
+   * recorded, or else the one subscribed collection whose index lists
+   * the name, the way the browser groups its cards. Indexes are read
+   * once per collection and kept for the life of the page.
+   */
+  private async _findCollection(
+    name: string,
+    recorded: string | undefined
+  ): Promise<ICollectionMembership | null> {
+    let locations: string[];
+
+    try {
+      locations = this._collectionSources
+        ? await this._collectionSources()
+        : await readSettingList(this._settings, 'collections');
+    } catch (error) {
+      console.warn('Unable to list the subscribed collections', error);
+
+      return null;
+    }
+
+    const candidates = recorded
+      ? locations.filter(
+          location =>
+            normalizeLocation(location) === normalizeLocation(recorded)
+        )
+      : locations;
+    const matches: ICollectionMembership[] = [];
+
+    for (const location of candidates) {
+      const index = await this._collectionIndex(location);
+
+      if (
+        index &&
+        (recorded || index.workshops.some(entry => entry.name === name))
+      ) {
+        matches.push({ location: normalizeLocation(location), index });
+      }
+    }
+
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  private async _collectionIndex(
+    location: string
+  ): Promise<ICollectionIndex | null> {
+    const key = normalizeLocation(location);
+    const cached = this._indexes.get(key);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let index: ICollectionIndex | null = null;
+
+    try {
+      index = await this.fetchCollection(location);
+    } catch (error) {
+      console.warn(`Unable to read the collection ${location}`, error);
+    }
+
+    this._indexes.set(key, index);
+
+    return index;
   }
 
   private _emitActionEvent(
@@ -1803,7 +2019,8 @@ export class WorkshopManager implements IWorkshopManager {
         variables,
         pathSep,
         declared: this._declared,
-        platform: this._platform?.os
+        platform: this._platform?.os,
+        frontend: this._platform?.frontend
       })
     );
 
@@ -2005,7 +2222,10 @@ export class WorkshopManager implements IWorkshopManager {
         root_dir: '',
         hub_user: '',
         host: 'local',
-        container: false
+        container: false,
+        frontend: 'jupyterlab',
+        frontend_version: '',
+        instance_id: randomId()
       };
     }
 
@@ -2235,6 +2455,11 @@ export class WorkshopManager implements IWorkshopManager {
   private _preflight: IPreflightResult[] | null = null;
   private _environment: IEnvironmentStatus | null = null;
   private _sessionId = '';
+  private _seq = 0;
+  private _collection = '';
+  private _offered: IAnalyticsBlock | null = null;
+  private _collectionSources: (() => Promise<string[]>) | null = null;
+  private _indexes = new Map<string, ICollectionIndex | null>();
   private _finished = false;
   private _pageEnteredAt = 0;
   private _state: StateStore;
@@ -2330,7 +2555,8 @@ function buildBuiltins(
     home: platform.home,
     user: platform.user,
     host: platform.host,
-    container: platform.container ? 'true' : 'false'
+    container: platform.container ? 'true' : 'false',
+    frontend: platform.frontend
   };
 }
 

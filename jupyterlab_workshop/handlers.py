@@ -328,6 +328,7 @@ class EventsHandler(WorkshopHandler):
         workshop = str(body.get("workshop") or "")
         events = body.get("events")
         sink = str(body.get("sink") or "")
+        token = str(body.get("token") or "")
 
         if not isinstance(events, list):
             raise tornado.web.HTTPError(400, "events must be a list")
@@ -352,7 +353,7 @@ class EventsHandler(WorkshopHandler):
         if sink and written:
             try:
                 await IOLoop.current().run_in_executor(
-                    None, lambda: forward_events(sink, events)
+                    None, lambda: forward_events(sink, events, token=token)
                 )
                 forwarded = True
             except AnalyticsError as error:
@@ -433,6 +434,7 @@ class InitHandler(WorkshopHandler):
             raise tornado.web.HTTPError(400, f'Unknown template "{template}"')
 
         platforms = _string_list(body.get("platforms"), "platforms")
+        frontends = _string_list(body.get("frontends"), "frontends")
         capabilities = _string_list(body.get("capabilities"), "capabilities")
 
         try:
@@ -445,6 +447,7 @@ class InitHandler(WorkshopHandler):
                 platforms=platforms,
                 capabilities=capabilities,
                 gating=str(body.get("gating") or "soft"),
+                frontends=frontends,
             )
         except FileExistsError as error:
             raise tornado.web.HTTPError(409, str(error)) from error

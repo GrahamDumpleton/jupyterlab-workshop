@@ -52,6 +52,6 @@ instead.
 echo "$GREETING for $LEARNER on $WORKSHOP_PLATFORM"
 :windows:
 echo "$env:GREETING for $env:LEARNER on $env:WORKSHOP_PLATFORM"
-:lite:
+:jupyterlite:
 env | grep -E "^(GREETING|LEARNER|WORKSHOP_PLATFORM)="
 ```

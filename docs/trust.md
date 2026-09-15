@@ -62,7 +62,7 @@ capabilities:
 | `install-packages` | Creating the workshop's isolated environment (`environment-create`). |
 | `kernel-exec`      | Running code in kernels, including background captures.              |
 | `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
-| `ui-settings`      | Changing JupyterLab settings.                                        |
+| `ui-settings`      | Changing settings of the editor the workshop runs in.                |
 
 The `write-files` scopes are `workspace` (the default), `home` and `any`
 (paths may reach anywhere under the JupyterLab root; the contents API
@@ -104,9 +104,13 @@ The learner picks a level:
 | Restricted    | `execute` types the command into the terminal without pressing Enter. File writes, editor changes, notebook changes, kernel execution, key presses and settings changes show what they will do and ask for confirmation. Automatic runs are skipped and logged as skipped. Everything else runs. |
 | Ask each time | Actions with a capability other than `none` ask for confirmation, with an option to allow that capability for the rest of the workshop.                                                                                                                                                          |
 
-A workshop that names an analytics sink in its manifest adds a checkbox,
-off by default, asking whether progress may be reported to it; see
-[Progress events](analytics.md).
+A workshop whose manifest names an analytics sink, or one listed by a
+subscribed collection whose index names one, adds a checkbox, off by
+default, asking whether progress may be reported to it, naming the
+collection when the sink is the collection's. No checkbox appears when
+the deployment's own `analytics` setting names a sink, since that
+applies to every workshop without asking; see [Progress
+events](analytics.md).
 
 Cancelling leaves the workshop closed. The decision is stored in the
 JupyterLab state database keyed by source and hash, so the same content

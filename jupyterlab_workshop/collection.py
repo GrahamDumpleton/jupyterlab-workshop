@@ -38,6 +38,24 @@ COLLECTION_VERSION = 1
 #: The file name a collection index is published under by convention.
 COLLECTION_FILE = "collection.json"
 
+#: The file beside the workshop directories that carries what the index
+#: command cannot derive from the manifests: the analytics block.
+COLLECTION_SOURCE_FILE = "collection.yaml"
+
+#: The keys ``collection.yaml`` may carry.
+COLLECTION_SOURCE_KEYS = ("analytics",)
+
+#: The keys an ``analytics`` block may carry.
+ANALYTICS_KEYS = ("sink", "token", "labels")
+
+LABEL_KEY = re.compile(r"^[a-z0-9_.-]+$")
+
+MAX_LABEL_KEY = 63
+
+MAX_LABEL_VALUE = 128
+
+MAX_LABELS = 16
+
 #: Descriptive fields of a collection, in the order they are written.
 METADATA_KEYS = ("title", "description", "publisher", "homepage", "icon", "tags")
 
@@ -291,6 +309,7 @@ def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, 
         "description": manifest.get("description", ""),
         "tags": manifest.get("tags", []),
         "platforms": manifest.get("platforms", []),
+        "frontends": manifest.get("frontends", []),
         "capabilities": flatten_capabilities(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),
@@ -299,6 +318,129 @@ def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, 
             {"version": str(manifest.get("version") or "0.0.0"), "source": source}
         ],
     }
+
+
+def validate_analytics(block: Any, location: str) -> dict[str, Any]:
+    """Check an ``analytics`` block and return it with labels as strings.
+
+    The rules match the extension's: a sink is an http(s) URL, a token
+    is a non-empty string, and labels are at most sixteen pairs with keys
+    of lower case letters, digits, underscore, dot and hyphen up to 63
+    characters and values up to 128.
+    """
+
+    if not isinstance(block, dict):
+        raise CollectionError(f"{location}: analytics must be a mapping")
+
+    unknown = sorted(set(block) - set(ANALYTICS_KEYS))
+
+    if unknown:
+        raise CollectionError(
+            f"{location}: analytics has unknown keys {', '.join(unknown)}; "
+            f"expected {', '.join(ANALYTICS_KEYS)}"
+        )
+
+    checked: dict[str, Any] = {}
+    sink = block.get("sink")
+
+    if sink is not None:
+        if not isinstance(sink, str) or urlsplit(sink).scheme not in {"http", "https"}:
+            raise CollectionError(f"{location}: analytics.sink must be an http(s) URL")
+
+        checked["sink"] = sink
+
+    token = block.get("token")
+
+    if token is not None:
+        if not isinstance(token, str) or not token:
+            raise CollectionError(
+                f"{location}: analytics.token must be a non-empty string"
+            )
+
+        checked["token"] = token
+
+    labels = block.get("labels")
+
+    if labels is not None:
+        if not isinstance(labels, dict):
+            raise CollectionError(f"{location}: analytics.labels must be a mapping")
+
+        if len(labels) > MAX_LABELS:
+            raise CollectionError(
+                f"{location}: analytics.labels has more than {MAX_LABELS} labels"
+            )
+
+        checked["labels"] = {}
+
+        for key, value in labels.items():
+            key_ok = (
+                isinstance(key, str)
+                and LABEL_KEY.match(key) is not None
+                and len(key) <= MAX_LABEL_KEY
+            )
+
+            if not key_ok:
+                raise CollectionError(
+                    f"{location}: label key {key!r} must be lower case letters, "
+                    f"digits, underscore, dot or hyphen, up to {MAX_LABEL_KEY} "
+                    "characters"
+                )
+
+            value_ok = (
+                isinstance(value, (str, int, float, bool))
+                and len(str(value)) <= MAX_LABEL_VALUE
+            )
+
+            if not value_ok:
+                raise CollectionError(
+                    f"{location}: label {key!r} must have a string value up to "
+                    f"{MAX_LABEL_VALUE} characters"
+                )
+
+            checked["labels"][key] = str(value)
+
+    return checked
+
+
+def read_collection_source(root: Path) -> dict[str, Any]:
+    """Read ``collection.yaml`` under ``root``, or an empty mapping.
+
+    The file carries what an index cannot be built from the manifests
+    alone. Today that is the ``analytics`` block: where the events of
+    every workshop the collection lists are reported, with the learner's
+    opt-in. Unknown keys are refused so a typo is not silently ignored.
+    """
+
+    path = root / COLLECTION_SOURCE_FILE
+
+    if not path.is_file():
+        return {}
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise CollectionError(f"Unable to read {path}: {error}") from error
+
+    if data is None:
+        return {}
+
+    if not isinstance(data, dict):
+        raise CollectionError(f"{path} must contain a mapping")
+
+    unknown = sorted(set(data) - set(COLLECTION_SOURCE_KEYS))
+
+    if unknown:
+        raise CollectionError(
+            f"{path} has unknown keys {', '.join(unknown)}; "
+            f"expected {', '.join(COLLECTION_SOURCE_KEYS)}"
+        )
+
+    source: dict[str, Any] = {}
+
+    if "analytics" in data:
+        source["analytics"] = validate_analytics(data["analytics"], str(path))
+
+    return source
 
 
 def index_repository(
@@ -339,8 +481,21 @@ def index_repository(
         index_entry(directory, directory.relative_to(root).as_posix(), repo, ref)
         for directory in found
     ]
+    index = build_collection(existing, entries, metadata)
 
-    return build_collection(existing, entries, metadata)
+    # The analytics block comes from collection.yaml when there is one and
+    # otherwise stays as the existing index had it, so regenerating never
+    # drops it; it sits before the workshops, as the schema orders things.
+    analytics = read_collection_source(root).get("analytics") or (existing or {}).get(
+        "analytics"
+    )
+
+    if analytics:
+        workshops = index.pop("workshops")
+        index["analytics"] = analytics
+        index["workshops"] = workshops
+
+    return index
 
 
 def checkout_root(path: Path) -> Path | None:
@@ -449,6 +604,11 @@ def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:
     raw_progress = state.get("pages")
     progress: dict[str, Any] = raw_progress if isinstance(raw_progress, dict) else {}
 
+    # The session the progress was made under, so the browser can tell
+    # whether the JupyterLab it ran in is still the running one.
+    raw_session = state.get("session")
+    session: dict[str, Any] = raw_session if isinstance(raw_session, dict) else {}
+
     # The frontend records which pages its `when` conditions leave
     # visible; progress counts those, or every page for older state.
     visible = state.get("visiblePages")
@@ -480,6 +640,8 @@ def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:
         "description": str(manifest.get("description") or ""),
         "tags": [str(tag) for tag in manifest.get("tags") or []],
         "platforms": [str(item) for item in manifest.get("platforms") or []],
+        "frontends": [str(item) for item in manifest.get("frontends") or []],
+        "resumable": manifest.get("resumable") is True,
         "source": source.get("source")
         if isinstance(source.get("source"), dict)
         else None,
@@ -490,6 +652,7 @@ def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:
         "currentPage": str(state.get("currentPage") or ""),
         "trust": str(state.get("trust") or ""),
         "started": bool(state),
+        "instanceId": str(session.get("instance") or ""),
     }
 
 

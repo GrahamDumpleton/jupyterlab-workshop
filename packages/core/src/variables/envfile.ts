@@ -21,7 +21,8 @@ export const BUILTIN_VARIABLES: readonly string[] = [
   'home',
   'user',
   'host',
-  'container'
+  'container',
+  'frontend'
 ];
 
 /**

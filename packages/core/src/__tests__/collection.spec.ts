@@ -16,6 +16,7 @@ import {
   planInstallAll,
   resolveLocation,
   searchCollection,
+  supportsFrontend,
   supportsPlatform
 } from '../collection';
 import { COLLECTION_SCHEMA } from '../schema';
@@ -34,6 +35,11 @@ const SAMPLE = {
   icon: 'icon.svg',
   tags: ['sample'],
   ordered: true,
+  analytics: {
+    sink: 'https://analytics.example.org/events',
+    token: 'abc.def.ghi',
+    labels: { course: 'intro-git', term: '2026-s2' }
+  },
   workshops: [
     {
       name: 'git-basics',
@@ -41,6 +47,7 @@ const SAMPLE = {
       description: 'Learn git.',
       tags: ['git', 'cli'],
       platforms: ['linux', 'macos'],
+      frontends: ['jupyterlab', 'jupyterlite'],
       capabilities: ['terminal', 'write-files:workspace'],
       versions: [
         {
@@ -196,6 +203,47 @@ describe('searching and tags', () => {
   it('treats no platforms as every platform', () => {
     expect(supportsPlatform(entries[0], 'windows')).toBe(false);
     expect(supportsPlatform(entries[1], 'windows')).toBe(true);
+  });
+
+  it('treats no frontends as JupyterLab only', () => {
+    expect(supportsFrontend(entries[0], 'jupyterlite')).toBe(true);
+    expect(supportsFrontend(entries[1], 'jupyterlite')).toBe(false);
+    expect(supportsFrontend(entries[1], 'jupyterlab')).toBe(true);
+  });
+
+  it('leaves entries not written for the frontend unticked', () => {
+    const plan = planInstallAll(entries, '', () => false, 'jupyterlite');
+
+    expect(plan.map(item => item.supported)).toEqual([true, false]);
+    expect(plan.map(item => item.selected)).toEqual([true, false]);
+  });
+
+  it('parses and checks the analytics block', () => {
+    const index = parseCollectionIndex(SAMPLE);
+
+    expect(index.analytics).toEqual({
+      sink: 'https://analytics.example.org/events',
+      token: 'abc.def.ghi',
+      labels: { course: 'intro-git', term: '2026-s2' }
+    });
+    expect(
+      parseCollectionIndex({ ...SAMPLE, analytics: undefined }).analytics
+    ).toBeUndefined();
+    expect(() =>
+      parseCollectionIndex({ ...SAMPLE, analytics: { sink: 'ftp://x' } })
+    ).toThrow(/http or https/);
+    expect(() =>
+      parseCollectionIndex({
+        ...SAMPLE,
+        analytics: { sink: 'https://x', labels: { Course: 'a' } }
+      })
+    ).toThrow(/label key "Course"/);
+    expect(() =>
+      parseCollectionIndex({
+        ...SAMPLE,
+        analytics: { sink: 'https://x', labels: { a: 'x'.repeat(129) } }
+      })
+    ).toThrow(/longer than 128/);
   });
 
   it('plans an install of everything not installed for the platform', () => {

@@ -105,6 +105,7 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
         "description": manifest.get("description", ""),
         "tags": manifest.get("tags", []),
         "platforms": manifest.get("platforms", []),
+        "frontends": manifest.get("frontends", []),
         "capabilities": flatten_capabilities(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),

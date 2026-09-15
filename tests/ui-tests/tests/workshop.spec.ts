@@ -93,19 +93,30 @@ async function openWorkshop(
   ).toBeAttached();
 }
 
+/**
+ * Upload the example workshop to a test directory. A development session
+ * may have left runtime directories in the example, and recorded
+ * progress would make a fresh open look like a resume after a restart,
+ * so they must not leak into the test.
+ */
+async function uploadExample(
+  page: import('@playwright/test').Page,
+  target: string
+): Promise<void> {
+  await page.contents.uploadDirectory(EXAMPLE_DIR, target);
+
+  for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
+    const directory = `${target}/${name}`;
+
+    if (await page.contents.directoryExists(directory)) {
+      await page.contents.deleteDirectory(directory);
+    }
+  }
+}
+
 test.describe('workshop panel', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
-    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
-
-    // A development session may have left runtime directories in the
-    // example; they must not leak into the test.
-    for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
-      const directory = `${tmpPath}/${WORKSHOP}/${name}`;
-
-      if (await page.contents.directoryExists(directory)) {
-        await page.contents.deleteDirectory(directory);
-      }
-    }
+    await uploadExample(page, `${tmpPath}/${WORKSHOP}`);
   });
 
   test('degrades actions when the workshop is restricted', async ({
@@ -1439,7 +1450,7 @@ test.describe('narrow panel', () => {
   test.use({ viewport: { width: 800, height: 600 } });
 
   test.beforeEach(async ({ page, tmpPath }) => {
-    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+    await uploadExample(page, `${tmpPath}/${WORKSHOP}`);
   });
 
   test('keeps the title in view beside the header tools', async ({
@@ -1459,7 +1470,7 @@ test.describe('narrow panel', () => {
 
 test.describe('startup restore', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
-    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+    await uploadExample(page, `${tmpPath}/${WORKSHOP}`);
   });
 
   test('forgets a workshop whose directory has gone', async ({

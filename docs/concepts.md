@@ -28,9 +28,10 @@ Palette, under the prefix "Workshop:", which is how the docs name them.
 
 A workshop is a directory holding two kinds of file:
 
-- `workshop.yaml`, the manifest: the name and title, the platforms it
-  was written for, the capabilities its pages need, its variables, its
-  layouts, and the ordered list of pages. The
+- `workshop.yaml`, the manifest: the name and title, the platforms and
+  frontends it was written for, the capabilities its pages need, its
+  variables, its layouts, whether it can be resumed after JupyterLab
+  restarts, and the ordered list of pages. The
   [manifest reference](reference/manifest.md) lists every field.
 
 - `pages/*.md`, one MyST Markdown page per step, with a title in front

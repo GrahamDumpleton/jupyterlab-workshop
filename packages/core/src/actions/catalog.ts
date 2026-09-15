@@ -49,6 +49,14 @@ export interface IActionTypeSpec {
 
   /** Option names the directive accepts in addition to the common ones. */
   options: readonly string[];
+
+  /**
+   * The frontends that implement the action, when not all of them do.
+   * Absent means every frontend; the linter warns when a manifest lists
+   * a frontend that cannot run the action, and the extension reports
+   * "nothing to do" rather than failing there.
+   */
+  frontends?: readonly string[];
 }
 
 /** Description of an inline role such as `{copy}`. */
@@ -77,9 +85,37 @@ function spec(
   description: string,
   capability: Capability,
   body: BodyKind,
-  options: readonly string[] = []
+  options: readonly string[] = [],
+  frontends?: readonly string[]
 ): IActionTypeSpec {
-  return { name, group, description, capability, body, options };
+  const entry: IActionTypeSpec = {
+    name,
+    group,
+    description,
+    capability,
+    body,
+    options
+  };
+
+  if (frontends) {
+    entry.frontends = frontends;
+  }
+
+  return entry;
+}
+
+/**
+ * Whether an action type runs on a frontend: every action does unless
+ * its spec lists the frontends that implement it. An unknown type is
+ * reported as supported, since lint reports unknown directives itself.
+ */
+export function actionSupportsFrontend(
+  type: string,
+  frontend: string
+): boolean {
+  const frontends = ACTION_TYPES[type]?.frontends;
+
+  return frontends === undefined || frontends.includes(frontend);
 }
 
 /** Block action directives, keyed by directive name. */
@@ -417,7 +453,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       spec(
         'settings-set',
         'ui',
-        'Change a JupyterLab setting, with the JSON value in the body.',
+        'Change a setting of the editor, with the JSON value in the body.',
         'ui-settings',
         'required',
         ['plugin', 'key']
@@ -550,7 +586,8 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Create the isolated environment declared in the manifest and register its kernel.',
         'install-packages',
         'none',
-        ['force']
+        ['force'],
+        ['jupyterlab']
       )
     ].map(item => [item.name, item])
   );

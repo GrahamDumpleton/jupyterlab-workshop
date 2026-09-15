@@ -32,7 +32,7 @@ export const CAPABILITY_DESCRIPTIONS: Readonly<Record<Capability, string>> = {
   'install-packages': 'Install packages.',
   'kernel-exec': 'Run code in kernels, including in the background.',
   'auto-run': 'Run actions automatically without a click.',
-  'ui-settings': 'Change JupyterLab settings.'
+  'ui-settings': 'Change settings of the editor the workshop runs in.'
 };
 
 /** A capability the pages use, with how often. */

@@ -42,10 +42,10 @@ export interface IDirectiveNode {
   /** Rendered HTML of the body for directives whose body is Markdown. */
   html?: string;
 
-  /** Every platform alternative of the body, when the body has variants. */
+  /** Every platform and frontend alternative of the body, when the body has variants. */
   variants?: Record<string, string>;
 
-  /** Which alternative `body` holds: a platform name or `default`. */
+  /** Which alternative `body` holds: a platform or frontend name, or `default`. */
   variant?: string;
 
   /** One-based line of the directive within the page source. */
@@ -94,8 +94,11 @@ export interface IParsePageOptions {
   /** Names the workshop can set later, which do not warn when unset. */
   declared?: Iterable<string>;
 
-  /** Platform whose body variants are selected: linux, macos, windows or lite. */
+  /** Platform whose body variants are selected: linux, macos or windows. */
   platform?: string;
+
+  /** Frontend whose body variants are selected: jupyterlab or jupyterlite. */
+  frontend?: string;
 }
 
 /**
@@ -112,7 +115,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     options.variables ?? {},
     options.pathSep,
     new Set(options.declared ?? []),
-    options.platform
+    options.platform,
+    options.frontend
   );
   const tokens = md.parse(body, env);
   const nodes = tokensToNodes(tokens, md, env, bodyLine);

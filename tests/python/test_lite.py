@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from jupyterlab_workshop import cli
+from jupyterlab_workshop import __version__, cli
 from jupyterlab_workshop.lite import (
     PANEL_PLUGIN,
     LiteBuildOptions,
@@ -179,6 +179,7 @@ def test_patch_site_config_applies_the_settings(tmp_path: Path) -> None:
     assert root["jupyter-config-data"] == {
         "appName": "JupyterLite",
         "exposeAppInBrowser": True,
+        "jupyterlabWorkshopVersion": __version__,
         "terminalsAvailable": True,
     }
     assert lab["jupyter-config-data"]["exposeAppInBrowser"] is True
@@ -193,7 +194,10 @@ def test_patch_site_config_without_terminal_leaves_terminals_off(
 
     root = json.loads((tmp_path / "jupyter-lite.json").read_text())
 
-    assert root["jupyter-config-data"] == {"exposeAppInBrowser": True}
+    assert root["jupyter-config-data"] == {
+        "exposeAppInBrowser": True,
+        "jupyterlabWorkshopVersion": __version__,
+    }
 
 
 def test_serve_directory_serves_files(tmp_path: Path) -> None:

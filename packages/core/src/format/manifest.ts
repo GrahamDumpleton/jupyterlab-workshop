@@ -2,6 +2,8 @@ import { load } from 'js-yaml';
 
 import { WorkshopFormatError } from '../errors';
 import { isRecord, isStringArray } from '../util';
+import { IAnalyticsBlock, parseAnalyticsBlock } from './analytics';
+import { FRONTEND_NAMES, PLATFORM_NAMES } from './variants';
 
 /** Capability names and write scopes a manifest may declare. */
 const CAPABILITY_NAMES: readonly string[] = [
@@ -87,11 +89,8 @@ export interface IEnvironment {
   terminals: boolean;
 }
 
-/** Where a workshop asks to report progress events. */
-export interface IAnalytics {
-  /** URL that receives batches of events as JSON lines, after opt-in. */
-  sink?: string;
-}
+/** Where a workshop asks to report progress events; see `IAnalyticsBlock`. */
+export type IAnalytics = IAnalyticsBlock;
 
 /** One region of a named layout. */
 export interface ILayoutArea {
@@ -149,7 +148,15 @@ export interface IWorkshopManifest {
   /** Where to report a problem with the workshop. */
   issues?: string;
   tags: string[];
+
+  /** Operating systems the workshop is written for: linux, macos, windows. */
   platforms: string[];
+
+  /**
+   * Frontends the workshop is written for: `jupyterlab` and
+   * `jupyterlite`. A manifest that lists none supports JupyterLab only.
+   */
+  frontends: string[];
   capabilities: string[];
   requires: IRequirements;
 
@@ -160,6 +167,14 @@ export interface IWorkshopManifest {
   workspace: string;
   environment?: IEnvironment;
   analytics?: IAnalytics;
+
+  /**
+   * Whether the workshop can be continued after the JupyterLab it ran
+   * under has restarted, losing terminals, running programs and kernel
+   * state; false unless the manifest says so, in which case a reopen
+   * under a new instance asks whether to restart or continue.
+   */
+  resumable: boolean;
   variables: IVariableDefinition[];
   layout?: string;
   layouts: Record<string, ILayoutSpec>;
@@ -255,12 +270,14 @@ export function parseManifest(
     homepage: optionalString(data, 'homepage', path),
     issues: optionalString(data, 'issues', path),
     tags: optionalStringList(data, 'tags', path),
-    platforms: optionalStringList(data, 'platforms', path),
+    platforms: parseNames(data, 'platforms', PLATFORM_NAMES, path),
+    frontends: parseNames(data, 'frontends', FRONTEND_NAMES, path),
     capabilities: parseCapabilities(data.capabilities, path),
     requires: parseRequirements(data.requires, path),
     workspace: parseWorkspace(data.workspace, path),
     environment: parseEnvironment(data.environment, path),
     analytics: parseAnalytics(data.analytics, path),
+    resumable: parseFlag(data, 'resumable', path),
     variables: parseVariables(data.variables, path),
     layout: optionalString(data, 'layout', path),
     layouts: parseLayouts(data.layouts, path),
@@ -321,6 +338,57 @@ function optionalStringList(
   if (!isStringArray(value)) {
     throw new WorkshopFormatError(
       `Field "${field}" must be a list of strings`,
+      path
+    );
+  }
+
+  return value;
+}
+
+/**
+ * A list of names drawn from a known set, such as `platforms` or
+ * `frontends`. The old `lite` platform is named in its error so a
+ * manifest written before the frontend axis existed says what to change.
+ */
+function parseNames(
+  data: Record<string, unknown>,
+  field: string,
+  known: readonly string[],
+  path: string
+): string[] {
+  const names = optionalStringList(data, field, path);
+
+  for (const name of names) {
+    if (!known.includes(name)) {
+      const hint =
+        field === 'platforms' && name === 'lite'
+          ? '; JupyterLite is declared with "frontends: [jupyterlab, jupyterlite]"'
+          : '';
+
+      throw new WorkshopFormatError(
+        `Unknown ${field.replace(/s$/, '')} "${name}" in "${field}"; expected one of ${known.join(', ')}${hint}`,
+        path
+      );
+    }
+  }
+
+  return names;
+}
+
+function parseFlag(
+  data: Record<string, unknown>,
+  field: string,
+  path: string
+): boolean {
+  const value = data[field];
+
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value !== 'boolean') {
+    throw new WorkshopFormatError(
+      `Field "${field}" must be true or false`,
       path
     );
   }
@@ -515,24 +583,14 @@ function parseEnvironment(
 }
 
 function parseAnalytics(value: unknown, path: string): IAnalytics | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  if (!isRecord(value)) {
-    throw new WorkshopFormatError('Field "analytics" must be a mapping', path);
-  }
-
-  const sink = optionalString(value, 'sink', path);
-
-  if (sink !== undefined && !/^https?:\/\//.test(sink)) {
+  try {
+    return parseAnalyticsBlock(value);
+  } catch (error) {
     throw new WorkshopFormatError(
-      'Field "analytics.sink" must be an http or https URL',
+      error instanceof Error ? error.message : String(error),
       path
     );
   }
-
-  return { sink };
 }
 
 function parseVariables(value: unknown, path: string): IVariableDefinition[] {

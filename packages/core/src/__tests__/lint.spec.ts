@@ -369,44 +369,85 @@ echo {{ user_name }}
   it('checks platform variants against the declared platforms', () => {
     const manifest = MANIFEST.replace(
       'pages:',
-      'platforms: [linux, windows, lite]\npages:'
+      'platforms: [linux, windows]\nfrontends: [jupyterlab, jupyterlite]\npages:'
     );
     const page = (body: string) => `\`\`\`{execute}\n${body}\n\`\`\`\n`;
 
     expect(rules(page('ls\n:windows:\ndir'), manifest)).toEqual([
       'unused-capability'
     ]);
-    expect(rules(page(':windows:\ndir\n:lite:'), manifest)).toEqual([
+    expect(rules(page(':windows:\ndir\n:jupyterlite:'), manifest)).toEqual([
       'missing-variant',
       'unused-capability'
     ]);
     expect(rules(page(':windows:\ndir'), MANIFEST)).toEqual([
       'unused-capability'
     ]);
+
+    // A frontend variant covers its frontend on every platform, so a
+    // body with one for each listed frontend needs no platform variant.
+    expect(
+      rules(page(':jupyterlab:\nls\n:jupyterlite:\nls -1'), manifest)
+    ).toEqual(['unused-capability']);
+
+    // Without platforms listed, the listed frontends must each be covered.
+    const frontendsOnly = MANIFEST.replace(
+      'pages:',
+      'frontends: [jupyterlab, jupyterlite]\npages:'
+    );
+
+    expect(rules(page(':jupyterlab:\nls'), frontendsOnly)).toEqual([
+      'missing-variant',
+      'unused-capability'
+    ]);
+  });
+
+  it('refuses the old lite platform with a pointer to frontends', () => {
+    expect(() =>
+      parseManifest(
+        MANIFEST.replace('pages:', 'platforms: [linux, lite]\npages:')
+      )
+    ).toThrow(/frontends: \[jupyterlab, jupyterlite\]/);
   });
 
   it('warns about what JupyterLite cannot run', () => {
     const manifest = MANIFEST.replace(
       'pages:',
-      'platforms: [linux, lite]\npages:'
+      'platforms: [linux]\nfrontends: [jupyterlab, jupyterlite]\npages:'
     ).replace('  - terminal\n', '  - terminal\n  - kernel-exec\n');
     const execute = (body: string) => `\`\`\`{execute}\n${body}\n\`\`\`\n`;
     const verify = (options: string, body: string) =>
       `\`\`\`{verify}\n${options}\n${body}\n\`\`\`\n`;
 
-    // Syntax cockle lacks is reported unless a lite variant replaces it.
+    // Syntax cockle lacks is reported unless a Lite variant replaces it.
     expect(rules(execute('mkdir x && cd x'), manifest)).toContain(
       'lite-shell-syntax'
     );
     expect(
-      rules(execute('mkdir x && cd x\n:lite:\nmkdir x'), manifest)
+      rules(execute('mkdir x && cd x\n:jupyterlite:\nmkdir x'), manifest)
     ).not.toContain('lite-shell-syntax');
-    expect(rules(execute('mkdir x && cd x\n:lite:'), manifest)).not.toContain(
-      'lite-shell-syntax'
-    );
     expect(
-      rules(execute(':when: platform != "lite"\nmkdir x && cd x'), manifest)
+      rules(execute('mkdir x && cd x\n:jupyterlite:'), manifest)
     ).not.toContain('lite-shell-syntax');
+
+    // A condition that excludes the frontend is evaluated, not pattern
+    // matched, so any spelling of the exclusion counts and a condition
+    // about something else does not.
+    expect(
+      rules(
+        execute(':when: frontend != "jupyterlite"\nmkdir x && cd x'),
+        manifest
+      )
+    ).not.toContain('lite-shell-syntax');
+    expect(
+      rules(
+        execute(':when: not (frontend == "jupyterlite")\nmkdir x && cd x'),
+        manifest
+      )
+    ).not.toContain('lite-shell-syntax');
+    expect(
+      rules(execute(':when: track == "pip"\nmkdir x && cd x'), manifest)
+    ).toContain('lite-shell-syntax');
 
     // Server-only substrates and processes are flagged too.
     expect(rules(verify(':script: check.py', ''), manifest)).toContain(
@@ -421,6 +462,26 @@ echo {{ user_name }}
     expect(rules(verify('', 'assert True'), manifest)).not.toContain(
       'lite-unsupported'
     );
+
+    // Nothing is checked for JupyterLite when the manifest does not list it.
+    expect(rules(execute('mkdir x && cd x'), MANIFEST)).not.toContain(
+      'lite-shell-syntax'
+    );
+  });
+
+  it('warns about actions a listed frontend cannot run', () => {
+    const manifest = MANIFEST.replace(
+      'pages:',
+      'frontends: [jupyterlab, jupyterlite]\nenvironment: { requirements: requirements.txt }\npages:'
+    ).replace('  - terminal\n', '  - terminal\n  - install-packages\n');
+    const create = (options = '') =>
+      `\`\`\`{environment-create}\n${options}\n\`\`\`\n`;
+
+    expect(rules(create(), manifest)).toContain('unsupported-frontend');
+    expect(
+      rules(create(':when: frontend == "jupyterlab"'), manifest)
+    ).not.toContain('unsupported-frontend');
+    expect(rules(create(), MANIFEST)).not.toContain('unsupported-frontend');
   });
 
   it('requires install-packages for an environment', () => {

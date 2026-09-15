@@ -202,6 +202,63 @@ describe('parseManifest', () => {
     expect(manifest.layouts).toEqual({});
     expect(manifest.requires).toEqual({ tools: [] });
     expect(manifest.environment).toBeUndefined();
+    expect(manifest.frontends).toEqual([]);
+    expect(manifest.resumable).toBe(false);
+    expect(manifest.analytics).toBeUndefined();
+  });
+
+  it('parses platforms, frontends and the resumable flag', () => {
+    const base =
+      'apiVersion: jupyterlab-workshop/v1alpha1\nname: x\ntitle: X\npages: [a.md]\n';
+    const manifest = parseManifest(
+      `${base}platforms: [linux, windows]\nfrontends: [jupyterlab, jupyterlite]\nresumable: true\n`
+    );
+
+    expect(manifest.platforms).toEqual(['linux', 'windows']);
+    expect(manifest.frontends).toEqual(['jupyterlab', 'jupyterlite']);
+    expect(manifest.resumable).toBe(true);
+    expect(() => parseManifest(`${base}platforms: [linux, lite]\n`)).toThrow(
+      /Unknown platform "lite".*frontends/
+    );
+    expect(() => parseManifest(`${base}frontends: [vscode]\n`)).toThrow(
+      /Unknown frontend "vscode"/
+    );
+    expect(() => parseManifest(`${base}resumable: yes\n`)).toThrow(
+      /true or false/
+    );
+  });
+
+  it('parses the analytics block and checks its labels', () => {
+    const base =
+      'apiVersion: jupyterlab-workshop/v1alpha1\nname: x\ntitle: X\npages: [a.md]\n';
+    const manifest = parseManifest(
+      `${base}analytics:\n  sink: https://a.example.org/events\n  token: t.o.k\n  labels:\n    course: intro\n    year: 2026\n`
+    );
+
+    expect(manifest.analytics).toEqual({
+      sink: 'https://a.example.org/events',
+      token: 't.o.k',
+      labels: { course: 'intro', year: '2026' }
+    });
+    expect(
+      parseManifest(`${base}analytics:\n  labels: {}\n`).analytics
+    ).toEqual({
+      labels: {}
+    });
+    expect(() => parseManifest(`${base}analytics:\n  sink: ftp://a\n`)).toThrow(
+      /http or https/
+    );
+    expect(() => parseManifest(`${base}analytics:\n  token: ''\n`)).toThrow(
+      /non-empty/
+    );
+    expect(() =>
+      parseManifest(`${base}analytics:\n  labels:\n    'Bad Key': x\n`)
+    ).toThrow(/label key/);
+    expect(() =>
+      parseManifest(
+        `${base}analytics:\n  labels:\n${Array.from({ length: 17 }, (_, i) => `    k${i}: v\n`).join('')}`
+      )
+    ).toThrow(/at most 16/);
   });
 
   it('rejects missing or invalid fields', () => {

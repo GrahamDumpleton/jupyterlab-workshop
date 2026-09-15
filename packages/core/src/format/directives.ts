@@ -22,7 +22,7 @@ export interface IDirectiveContent {
   body: string;
 }
 
-import { PLATFORM_NAMES } from './variants';
+import { MARKER_NAMES } from './variants';
 
 const INFO = /^\{([a-z][a-z0-9-]*)\}(?:[ \t]+(.*?))?[ \t]*$/;
 
@@ -51,12 +51,10 @@ export function parseDirectiveContent(content: string): IDirectiveContent {
   while (index < lines.length) {
     const match = OPTION_LINE.exec(lines[index]);
 
-    // A platform marker such as `:windows:` starts the body, even when it
-    // is the first line, so it is never read as a flag option.
-    if (
-      !match ||
-      (match[2] === undefined && PLATFORM_NAMES.includes(match[1]))
-    ) {
+    // A variant marker such as `:windows:` or `:jupyterlite:` starts the
+    // body, even when it is the first line, so it is never read as a
+    // flag option.
+    if (!match || (match[2] === undefined && MARKER_NAMES.includes(match[1]))) {
       break;
     }
 

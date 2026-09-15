@@ -25,9 +25,19 @@ async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_roo
         "hub_user",
         "host",
         "container",
+        "frontend",
+        "frontend_version",
+        "instance_id",
     }
     assert payload["os"] in {"linux", "macos", "windows"}
     assert payload["root_dir"] == str(jp_root_dir)
+    assert payload["frontend"] == "jupyterlab"
+    assert payload["instance_id"]
+
+    # The instance id is the same for every request to this server.
+    again = json.loads((await jp_fetch("jupyterlab-workshop", "platform")).body)
+
+    assert again["instance_id"] == payload["instance_id"]
 
 
 MANIFEST = (

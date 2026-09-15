@@ -139,5 +139,5 @@ trace.jsonl && ...`) when the page's check should see only what the
 
 Both are covered by the rules in `SKILL.md`: add `:windows:` variants
 for commands using `&&`, `export`, `ls`, `cat` or `/` paths, and
-`:lite:` variants where there is no server, `python` or `git`, then
-lint with `--platform windows` or `--platform lite`.
+`:jupyterlite:` variants where there is no server, `python` or `git`,
+then lint with `--platform windows` or `--frontend jupyterlite`.

@@ -262,6 +262,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
             title: String(args.title ?? ''),
             template: String(args.template ?? 'starter'),
             platforms: stringList(args.platforms) ?? ['linux', 'macos'],
+            frontends: stringList(args.frontends) ?? ['jupyterlab'],
             capabilities: stringList(args.capabilities) ?? undefined,
             gating: String(args.gating ?? 'soft'),
             ci: args.ci === true

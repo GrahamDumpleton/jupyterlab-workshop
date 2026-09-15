@@ -55,7 +55,9 @@
           "type": "array",
           "title": "Trusted sources",
           "description": "Source key prefixes that open as trusted without asking, such as \"git:https://github.com/GrahamDumpleton/\" or \"local:examples/\".",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         },
         "disabledCapabilities": {
@@ -104,14 +106,18 @@
       "type": "array",
       "title": "Collections",
       "description": "Subscribed collections: published lists of workshops that can be installed, as http(s) URLs of their collection.json files or paths relative to the JupyterLab root. The workshop browser offers every subscribed collection's workshops, and its Collections dialog edits this list.",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "default": []
     },
     "catalogs": {
       "type": "array",
       "title": "Catalogs",
       "description": "Subscribed catalogs: published lists of collections, as http(s) URLs of their catalog.json files or paths relative to the JupyterLab root. The browser offers their collections to subscribe to.",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "default": []
     },
     "welcome": {
@@ -123,14 +129,35 @@
     "analytics": {
       "type": "object",
       "title": "Analytics",
-      "description": "Administrator reporting of progress events, typically set through overrides.json. Events are always written to _workshop/events.jsonl in the workshop directory.",
+      "description": "Administrator reporting of progress events, typically set through overrides.json. When a sink is set here it applies to every workshop without asking, ahead of any analytics block a subscribed collection or a workshop manifest declares. Events are always written to _workshop/events.jsonl in the workshop directory.",
       "additionalProperties": false,
       "properties": {
         "sink": {
           "type": "string",
           "title": "Sink URL",
-          "description": "URL that receives every workshop's events as JSON lines by POST, without asking the learner. Leave empty to report only to sinks the learner opts in to.",
+          "description": "URL that receives batches of events as JSON lines by POST. Leave empty to report only to sinks the learner opts in to.",
           "default": ""
+        },
+        "token": {
+          "type": "string",
+          "title": "Token",
+          "description": "Token sent as a bearer credential in the Authorization header of every batch, issued by the sink's operator. Public wherever the block is public. Leave empty for a sink that needs none.",
+          "default": ""
+        },
+        "labels": {
+          "type": "object",
+          "title": "Labels",
+          "description": "Key and value pairs stamped on every event so reports can slice by them: a course, a cohort, a term. Labels are for slicing, never for identity; the workshop's name, source, collection, host and frontend are fields every event already carries. At most 16 labels.",
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z0-9_.-]+$",
+            "maxLength": 63
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "default": {}
         },
         "identity": {
           "type": "string",

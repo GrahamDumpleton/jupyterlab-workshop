@@ -90,15 +90,15 @@ the paths follow the `write-files` scope like any write.
 
 ## Interface and layout
 
-| Directive       | Capability  | Body     | Options         | Description                                                   |
-| --------------- | ----------- | -------- | --------------- | ------------------------------------------------------------- |
-| `command`       | none        | optional | `command`       | Run a JupyterLab command, with JSON arguments in the body.    |
-| `layout`        | none        | none     | `name`          | Arrange the JupyterLab panels using a named layout.           |
-| `panel-open`    | none        | none     | `id`            | Show a JupyterLab panel or widget by id.                      |
-| `panel-close`   | none        | none     | `id`, `side`    | Hide a JupyterLab sidebar panel.                              |
-| `focus`         | none        | none     | `id`            | Give a widget focus.                                          |
-| `settings-set`  | ui-settings | required | `plugin`, `key` | Change a JupyterLab setting, with the JSON value in the body. |
-| `launcher-open` | none        | none     | (none)          | Open the launcher, or show the open one.                      |
+| Directive       | Capability  | Body     | Options         | Description                                                      |
+| --------------- | ----------- | -------- | --------------- | ---------------------------------------------------------------- |
+| `command`       | none        | optional | `command`       | Run a JupyterLab command, with JSON arguments in the body.       |
+| `layout`        | none        | none     | `name`          | Arrange the JupyterLab panels using a named layout.              |
+| `panel-open`    | none        | none     | `id`            | Show a JupyterLab panel or widget by id.                         |
+| `panel-close`   | none        | none     | `id`, `side`    | Hide a JupyterLab sidebar panel.                                 |
+| `focus`         | none        | none     | `id`            | Give a widget focus.                                             |
+| `settings-set`  | ui-settings | required | `plugin`, `key` | Change a setting of the editor, with the JSON value in the body. |
+| `launcher-open` | none        | none     | (none)          | Open the launcher, or show the open one.                         |
 
 ## Guidance
 
@@ -131,10 +131,10 @@ the paths follow the `write-files` scope like any write.
 
 ## External
 
-| Directive            | Capability       | Body     | Options | Description                                                                                                                     |
-| -------------------- | ---------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `copy`               | none             | required | (none)  | Copy the body to the clipboard.                                                                                                 |
-| `environment-create` | install-packages | none     | `force` | Create the isolated environment declared in the manifest and register its kernel; a no-op once it exists unless `:force: true`. |
+| Directive            | Capability       | Body     | Options | Description                                                                                                                                                                                            |
+| -------------------- | ---------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `copy`               | none             | required | (none)  | Copy the body to the clipboard.                                                                                                                                                                        |
+| `environment-create` | install-packages | none     | `force` | Create the isolated environment declared in the manifest and register its kernel; a no-op once it exists unless `:force: true`. JupyterLab only: the linter warns when a manifest lists `jupyterlite`. |
 
 ## Inline roles
 

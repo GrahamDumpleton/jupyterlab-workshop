@@ -435,6 +435,169 @@ test.describe('workshop browser', () => {
       .toBeLessThan(0.45);
   });
 
+  test('puts Restart first for progress made under another JupyterLab and chains the sessions', async ({
+    page
+  }) => {
+    // Progress recorded under a session of some other JupyterLab: the
+    // instance differs from this server's, and the manifest does not
+    // say the workshop is resumable.
+    const stateFile = `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/state.json`;
+    const eventsFile = `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/events.jsonl`;
+    const staleState = JSON.stringify({
+      version: 1,
+      workshop: { name: WORKSHOP, version: '0.1.0' },
+      installed: { settings: [] },
+      currentPage: '02-first-commit',
+      pages: {
+        '01-create-a-repository': {
+          done: true,
+          enteredAt: '2026-09-15T09:00:00.000Z'
+        },
+        '02-first-commit': {
+          done: false,
+          enteredAt: '2026-09-15T09:05:00.000Z'
+        }
+      },
+      session: { id: 'old-session', instance: 'another-jupyterlab' },
+      actions: {},
+      variables: {},
+      checkpoints: [],
+      log: []
+    });
+
+    await page.contents.uploadContent(staleState, 'text', stateFile);
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const installed = browser
+      .locator('.jp-WorkshopBrowser-card')
+      .filter({ hasText: WORKSHOPS_DIR });
+
+    // The card says so and puts Restart first, with Continue beside it
+    // as the override and no Resume.
+    await expect(installed.locator('.jp-mod-stale')).toHaveText(
+      'needs restart'
+    );
+    await expect(
+      installed.getByRole('button', { name: 'Restart' })
+    ).toHaveClass(/jp-mod-accept/);
+    await expect(
+      installed.getByRole('button', { name: 'Continue' })
+    ).toHaveCount(1);
+    await expect(installed.getByRole('button', { name: 'Resume' })).toHaveCount(
+      0
+    );
+
+    // Continue opens without the reopen dialog, only the trust dialog,
+    // at the saved page.
+    await installed.getByRole('button', { name: 'Continue' }).click();
+    await trustWorkshop(page, 'Git from the command line');
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+
+    await expect(panel.locator('.jp-WorkshopPanel-pageSelect')).toHaveValue(
+      '1'
+    );
+
+    // The resume event names the old session, carries the page list and
+    // the identity fields, and starts the sequence again from one.
+    const events = async (): Promise<Record<string, unknown>[]> => {
+      const response = await page.request.get(
+        `api/contents/${eventsFile}?content=1`
+      );
+
+      if (!response.ok()) {
+        return [];
+      }
+
+      return String((await response.json()).content)
+        .split('\n')
+        .filter(line => line.trim() !== '')
+        .map(line => JSON.parse(line) as Record<string, unknown>);
+    };
+
+    await expect
+      .poll(async () => (await events()).map(event => event.kind), {
+        timeout: 30000
+      })
+      .toContain('page-enter');
+
+    const recorded = await events();
+    const resume = recorded.find(event => event.kind === 'workshop-resume');
+
+    expect(resume).toMatchObject({
+      seq: 1,
+      name: WORKSHOP,
+      workshop: `${WORKSHOPS_DIR}/${WORKSHOP}`,
+      source: `local:${WORKSHOPS_DIR}/${WORKSHOP}`,
+      collection: COLLECTION_FILE,
+      frontend: 'jupyterlab',
+      host: 'local',
+      trust: 'trusted',
+      labels: {},
+      resumed_from: 'old-session',
+      page: '02-first-commit'
+    });
+    expect(String(resume?.instance_id)).not.toBe('');
+    expect(String(resume?.instance_id)).not.toBe('another-jupyterlab');
+    expect(
+      (resume?.pages as { id: string; path: string; title: string }[]).map(
+        page => page.id
+      )
+    ).toEqual([
+      '01-create-a-repository',
+      '02-first-commit',
+      '03-edit-and-diff',
+      '04-branch-and-merge',
+      '05-resolve-a-conflict'
+    ]);
+    expect(recorded.map(event => event.seq)).toEqual(
+      recorded.map((_event, index) => index + 1)
+    );
+    expect(new Set(recorded.map(event => event.session_id)).size).toBe(1);
+
+    // Opened by command with the progress stale again, the dialog asks,
+    // and Restart starts over in a session that names the old one.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:close', {});
+    });
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveCount(0);
+    await page.contents.uploadContent(staleState, 'text', stateFile);
+    await page.evaluate((path: string) => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:open', { path });
+    }, `${WORKSHOPS_DIR}/${WORKSHOP}`);
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText(
+      'Restart workshop "Git from the command line"?'
+    );
+    await expect(dialog).toContainText('has since restarted');
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
+      'Git from the command line'
+    );
+    await expect(panel.locator('.jp-WorkshopPanel-pageSelect')).toHaveValue(
+      '0'
+    );
+
+    await expect
+      .poll(async () => (await events()).map(event => event.kind), {
+        timeout: 30000
+      })
+      .toContain('workshop-start');
+
+    const start = (await events()).find(
+      event => event.kind === 'workshop-start'
+    );
+
+    expect(start).toMatchObject({ seq: 1, restarted_from: 'old-session' });
+  });
+
   test('installs from a collection, recording it, and suffixes a clash', async ({
     page
   }) => {
@@ -1137,7 +1300,7 @@ const BULK = {
     {
       name: 'lite-only',
       title: 'Only on Lite',
-      platforms: ['lite'],
+      frontends: ['jupyterlite'],
       versions: [
         { version: '1.0.0', source: { archive: `<archive:${ARCHIVE_FILE}>` } }
       ]
@@ -1198,7 +1361,7 @@ test.describe('install all', () => {
     await expect(boxes).toHaveCount(4);
     await expect(boxes.nth(3)).not.toBeChecked();
     await expect(dialog.locator('.jp-WorkshopBulk-count')).toHaveText(
-      '3 workshops to install, 1 not for this platform.'
+      '3 workshops to install, 1 not for this platform or frontend.'
     );
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);

@@ -1,52 +1,59 @@
 /**
- * Platform variants of a directive body.
+ * Platform and frontend variants of a directive body.
  *
- * A body may carry alternatives for particular platforms, introduced by a
- * marker line naming the platform:
+ * A body may carry alternatives for particular platforms or frontends,
+ * introduced by a marker line naming one of them:
  *
  * ```
  * python3 -m venv .venv && source .venv/bin/activate
  * :windows:
  * py -m venv .venv; .\.venv\Scripts\Activate.ps1
- * :lite:
+ * :jupyterlite:
  * ```
  *
- * The text before the first marker is the default, used on any platform
- * without a variant of its own. A variant may be empty, which means there
- * is nothing to do on that platform.
+ * The text before the first marker is the default, used wherever no
+ * variant of its own applies. A variant may be empty, which means there
+ * is nothing to do there. A frontend variant is the more specific of the
+ * two, so it is chosen before a platform variant; a body that needs to
+ * say "this frontend on that platform" uses a `when` condition instead,
+ * since markers do not nest.
  */
 
-/** The platforms a manifest may list and a body may have variants for. */
-export const PLATFORM_NAMES: readonly string[] = [
-  'linux',
-  'macos',
-  'windows',
-  'lite'
+/** The operating systems a manifest may list and a body may have variants for. */
+export const PLATFORM_NAMES: readonly string[] = ['linux', 'macos', 'windows'];
+
+/** The frontends a manifest may list and a body may have variants for. */
+export const FRONTEND_NAMES: readonly string[] = ['jupyterlab', 'jupyterlite'];
+
+/** Every name a marker line may carry: the frontends and the platforms. */
+export const MARKER_NAMES: readonly string[] = [
+  ...FRONTEND_NAMES,
+  ...PLATFORM_NAMES
 ];
 
 /** Key under which the text before the first marker is kept. */
 export const DEFAULT_VARIANT = 'default';
 
-/** A body split into its default text and platform variants. */
+/** A body split into its default text and variants. */
 export interface ISplitBody {
   /** The text before the first marker, or null when the body starts with a marker. */
   defaultText: string | null;
 
-  /** Variant text keyed by platform name, in the order they appeared. */
+  /** Variant text keyed by marker name, in the order they appeared. */
   variants: Record<string, string>;
 }
 
 const MARKER = /^:([a-z]+):[ \t]*$/;
 
 /**
- * Whether a body contains any platform marker line.
+ * Whether a body contains any marker line.
  */
 export function hasVariants(body: string): boolean {
   return body.split('\n').some(line => isMarker(line));
 }
 
 /**
- * Split a body at its platform marker lines.
+ * Split a body at its marker lines.
  */
 export function splitVariants(body: string): ISplitBody {
   const variants: Record<string, string> = {};
@@ -90,13 +97,19 @@ export function splitVariants(body: string): ISplitBody {
 }
 
 /**
- * Pick the text for a platform: its variant, else the default, else an
- * empty string. Returns which variant was chosen alongside.
+ * Pick the text for a frontend and platform: the frontend's variant,
+ * else the platform's, else the default, else an empty string. Returns
+ * which variant was chosen alongside.
  */
 export function selectVariant(
   split: ISplitBody,
-  platform: string | undefined
+  platform: string | undefined,
+  frontend?: string
 ): { body: string; variant: string } {
+  if (frontend !== undefined && frontend in split.variants) {
+    return { body: split.variants[frontend], variant: frontend };
+  }
+
   if (platform !== undefined && platform in split.variants) {
     return { body: split.variants[platform], variant: platform };
   }
@@ -105,7 +118,7 @@ export function selectVariant(
 }
 
 /**
- * The full set of alternatives of a split body keyed by platform, with
+ * The full set of alternatives of a split body keyed by marker name, with
  * the default under `default` when there is one.
  */
 export function allVariants(split: ISplitBody): Record<string, string> {
@@ -121,5 +134,5 @@ export function allVariants(split: ISplitBody): Record<string, string> {
 function isMarker(line: string): string | null {
   const match = MARKER.exec(line);
 
-  return match && PLATFORM_NAMES.includes(match[1]) ? match[1] : null;
+  return match && MARKER_NAMES.includes(match[1]) ? match[1] : null;
 }

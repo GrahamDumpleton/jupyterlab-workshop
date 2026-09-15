@@ -88,7 +88,7 @@ pages *args:
     mkdir -p site/schemas/v1alpha1
     cp github-pages/index.html site/index.html
     touch site/.nojekyll
-    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json site/schemas/v1alpha1/
+    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json packages/core/src/schema/events.schema.json site/schemas/v1alpha1/
     uv run jupyter workshop lite examples/hello-jupyterlab --out site/demo "$@"
 
 # Self-test a workshop directory in a real JupyterLab (default: every example).

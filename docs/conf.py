@@ -15,9 +15,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import generate_events_reference  # noqa: E402
 import generate_manifest_reference  # noqa: E402
 
 generate_manifest_reference.main()
+generate_events_reference.main()
 
 project = "jupyterlab-workshop"
 author = "Graham Dumpleton"

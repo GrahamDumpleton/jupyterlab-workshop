@@ -232,13 +232,19 @@ tells its host that the learner is there, as does the icon it names.
   "icon": "icon.svg",
   "tags": ["python", "beginner"],
   "ordered": true,
+  "analytics": {
+    "sink": "https://analytics.example.org/events",
+    "token": "eyJhbGciOi...",
+    "labels": { "course": "python-basics" }
+  },
   "workshops": [
     {
       "name": "python-first-steps",
       "title": "First steps in Python",
       "description": "Values, names and the notebook.",
       "tags": ["python", "beginner"],
-      "platforms": ["linux", "macos", "windows", "lite"],
+      "platforms": ["linux", "macos", "windows"],
+      "frontends": ["jupyterlab", "jupyterlite"],
       "capabilities": ["kernel-exec"],
       "duration": "45m",
       "versions": [
@@ -260,7 +266,19 @@ tells its host that the learner is there, as does the icon it names.
 Everything above `workshops` describes the collection itself and is
 optional: `title`, `description`, `publisher` (a name, or an object with
 a `name` and a `url`), `homepage`, `icon` and `tags`. The browser shows
-them on the group heading and in the Collections dialog.
+them on the group heading and in the Collections dialog. An `analytics`
+block asks that the progress events of every workshop the collection
+lists be reported to its `sink`, with the learner's opt-in from the
+trust dialog, sent with its `token` and stamped with its `labels`; it is
+the same block a manifest may carry, and a deployment's own setting
+takes precedence over both. See [Progress events](analytics.md) for
+the block, its rules and where events go.
+
+Each entry's `platforms` and `frontends` are the manifest's lists: the
+operating systems and the frontends (`jupyterlab`, `jupyterlite`) the
+workshop was written for. An entry that lists no frontends supports
+JupyterLab only, and the browser dims and the install commands skip
+entries not written for the frontend or platform in use.
 
 The `workshops` list is shown in the order written. A course lists its
 workshops in sequence and says so with `ordered: true`, which numbers
@@ -298,8 +316,20 @@ updating entries in place and appending new ones, so an author orders
 the file once and the tools respect it; both take `--title`,
 `--description`, `--publisher`, `--publisher-url`, `--homepage`,
 `--icon` and `--tag` for the collection's own fields, keeping an
-existing index's values when not given. See
-[Publishing workshops](publishing.md).
+existing index's values when not given. What the manifests cannot
+supply, the `analytics` block, `index` reads from a `collection.yaml`
+beside `collection.json` in the repository root, so it lives in git
+next to what it describes and is carried into every regenerated index:
+
+```yaml
+analytics:
+  sink: https://analytics.example.org/events
+  token: eyJhbGciOi...
+  labels:
+    course: python-basics
+```
+
+See [Publishing workshops](publishing.md).
 
 ## Catalogs
 

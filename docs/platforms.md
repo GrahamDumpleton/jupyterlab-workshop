@@ -1,25 +1,35 @@
-# Platforms
+# Platforms and frontends
 
-A workshop runs wherever JupyterLab runs: Linux, macOS, Windows and
-[JupyterLite](lite.md) in the browser. The manifest lists the platforms a
-workshop has been written for:
+A workshop runs wherever JupyterLab runs: on Linux, macOS and Windows,
+and in [JupyterLite](lite.md) in the browser. Those are two different
+things. The platform is the operating system the commands run on; the
+frontend is the editor the workshop drives, JupyterLab served by a
+Jupyter server or JupyterLite running on Pyodide. The manifest lists
+both:
 
 ```yaml
-platforms: [linux, macos, windows, lite]
+platforms: [linux, macos, windows]
+frontends: [jupyterlab, jupyterlite]
 ```
 
-The list is advisory: the browser dims workshops that do not list the
-current platform, the panel shows a banner when a workshop is opened on
-a platform it does not list, and the linter uses it to check that every
-command has a version for each listed platform.
+A manifest that lists no `frontends` is written for JupyterLab alone.
+Supporting JupyterLite has always needed explicit work, so it is an
+explicit declaration. Both lists are advisory: the browser dims
+workshops that do not list the current platform or frontend, the panel
+shows a banner when a workshop is opened where it was not written for,
+and the linter uses the lists to check that every command has a version
+for each listed platform and frontend and that no listed frontend lacks
+an action the pages use.
 
 ## Built-in variables
 
 [Variables](variables.md) describes the syntax, where values come from
 and how they reach terminals. The built-in variables `platform`
-(`linux`, `macos`, `windows` or `lite`), `shell` (`bash`, `zsh`, `sh`,
-`fish`, `powershell`, `cmd` or `cockle` in JupyterLite), `path_sep`,
-`home` and `user` describe the machine, `workshop_dir` is the workshop
+(`linux`, `macos`, `windows`, or `emscripten` in JupyterLite, which
+runs on Pyodide whatever the browser's operating system), `frontend`
+(`jupyterlab` or `jupyterlite`), `shell` (`bash`, `zsh`, `sh`, `fish`,
+`powershell`, `cmd` or `cockle` in JupyterLite), `path_sep`, `home`
+and `user` describe the machine, `workshop_dir` is the workshop
 directory relative to the JupyterLab root and `workspace` the learner's
 [workspace](concepts.md#the-workspace) the same way, and `when`
 conditions can test them:
@@ -28,16 +38,22 @@ conditions can test them:
 ```{when} platform == "windows"
 Windows users: run the commands in PowerShell.
 ```
+
+```{when} frontend == "jupyterlite"
+There is no git here; the repository is shown already cloned.
+```
 ````
 
 Two more describe where the session is hosted rather than what it runs
-on. `host` is `binder` under BinderHub, `jupyterhub` under any other
-JupyterHub, `lite` in JupyterLite and `local` otherwise; Binder is
-recognised by the `BINDER_*` environment variables it sets, and
-JupyterHub by `JUPYTERHUB_USER` or `JUPYTERHUB_API_URL`. `container` is
-`true` when the server runs inside a container, found from the Docker and
-Podman marker files, the Kubernetes service variable or the cgroup of
-process 1, and is what to test for advice about disposable filesystems or
+on. `host` is `binder` under BinderHub, `codespaces` in a GitHub
+codespace, `jupyterhub` under any other JupyterHub, `static` for a
+JupyterLite site, which has no service behind it, and `local`
+otherwise; Binder is recognised by the `BINDER_*` environment variables
+it sets, Codespaces by `CODESPACES` and `CODESPACE_NAME`, and JupyterHub
+by `JUPYTERHUB_USER` or `JUPYTERHUB_API_URL`. `container` is `true` when
+the server runs inside a container, found from the Docker and Podman
+marker files, the Kubernetes service variable or the cgroup of process
+1, and is what to test for advice about disposable filesystems or
 installing tools, since that holds on a Kubernetes hub as much as on
 Binder:
 
@@ -53,33 +69,40 @@ You can install packages freely; nothing here outlives the session.
 
 ## Command variants
 
-A directive body may hold alternatives for particular platforms. A line
-holding only `:<platform>:` starts the variant for that platform; the
-text before the first marker is the default:
+A directive body may hold alternatives for particular platforms or
+frontends. A line holding only `:<platform>:` or `:<frontend>:` starts
+the variant for it; the text before the first marker is the default:
 
 ````markdown
 ```{execute}
 python3 -m venv .venv && source .venv/bin/activate
 :windows:
 py -m venv .venv; .\.venv\Scripts\Activate.ps1
-:lite:
+:jupyterlite:
 ```
 ````
 
-The panel shows only the version for the current platform, with a badge
-naming the platform when a variant was chosen. An empty variant, as for
-`lite` above, means there is nothing to do on that platform: the action
+A frontend variant is the more specific of the two and is chosen first:
+in JupyterLite the `:jupyterlite:` version wins whatever the platform,
+and elsewhere the platform's version wins over the default. Markers do
+not nest, so a body that needs to say "this frontend on that platform"
+uses a `when` condition instead, where `frontend == "jupyterlite" and
+platform == "windows"` reads as it should. The panel shows only the
+chosen version, with a badge naming the variant. An empty variant, as
+for `jupyterlite` above, means there is nothing to do there: the action
 is shown but reports "nothing to do" when run. Variants apply to
 directives with command or text bodies (`execute`, `file-write`,
 `kernel-execute` and so on), not to YAML or Markdown bodies.
 
 The linter reports `missing-variant` when a body has variants but no
-default and misses a platform the manifest lists. For a manifest listing
-`lite` it also reports `lite-shell-syntax` and `lite-unsupported`, which
-[JupyterLite](lite.md) describes. `jupyter workshop lint --platform
-windows` renders the pages as Windows would see them, which is how CI on
-Linux checks the Windows variants; `--platform lite` does the same for
-JupyterLite.
+default and misses a platform the manifest lists, or a listed frontend
+when no platforms are listed; a frontend variant covers its frontend on
+every platform. For a manifest listing `jupyterlite` it also reports
+`lite-shell-syntax`, `lite-unsupported` and `unsupported-frontend`,
+which [JupyterLite](lite.md) describes. `jupyter workshop lint
+--platform windows` renders the pages as Windows would see them, which
+is how CI on Linux checks the Windows variants; `--frontend
+jupyterlite` does the same for JupyterLite.
 
 ## Paths
 

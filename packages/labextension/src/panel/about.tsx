@@ -33,6 +33,7 @@ interface IAboutDetails {
   authors: string[];
   tags: string[];
   platforms: string[];
+  frontends: string[];
   homepage?: string;
   issues?: string;
 }
@@ -103,6 +104,13 @@ class AboutBody extends Widget {
       addRow(
         'Platforms',
         manifest.platforms.map(name => PLATFORM_LABELS[name] ?? name).join(', ')
+      );
+    }
+
+    if (manifest.frontends.length > 0) {
+      addRow(
+        'Frontends',
+        manifest.frontends.map(name => PLATFORM_LABELS[name] ?? name).join(', ')
       );
     }
 

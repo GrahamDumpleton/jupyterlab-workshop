@@ -59,7 +59,8 @@ FIXTURE_COLLECTIONS: dict[str, dict[str, Any]] = {
                 "title": "First steps in Python",
                 "description": "Values, names and the notebook.",
                 "tags": ["python", "beginner"],
-                "platforms": ["linux", "macos", "windows", "lite"],
+                "platforms": ["linux", "macos", "windows"],
+                "frontends": ["jupyterlab", "jupyterlite"],
                 "capabilities": ["kernel-exec"],
                 "duration": "45m",
                 "versions": [
@@ -78,7 +79,8 @@ FIXTURE_COLLECTIONS: dict[str, dict[str, Any]] = {
                 "title": "Loops and conditions",
                 "description": "Making decisions and repeating work.",
                 "tags": ["python", "beginner"],
-                "platforms": ["linux", "macos", "windows", "lite"],
+                "platforms": ["linux", "macos", "windows"],
+                "frontends": ["jupyterlab", "jupyterlite"],
                 "capabilities": ["kernel-exec"],
                 "duration": "40m",
                 "versions": [

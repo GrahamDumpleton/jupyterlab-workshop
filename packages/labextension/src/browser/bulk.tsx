@@ -59,6 +59,9 @@ export interface IInstallAllOptions {
   installed: readonly IInstalledWorkshop[];
   directory: string;
   platform: string;
+
+  /** The frontend in use, so entries not written for it start unticked. */
+  frontend?: string;
 }
 
 /**
@@ -70,8 +73,12 @@ export interface IInstallAllOptions {
  */
 export async function installAll(options: IInstallAllOptions): Promise<void> {
   const { collection, entries, installed, platform } = options;
-  const plan = planInstallAll(entries, platform, entry =>
-    installed.some(item => isInstalledFrom(item, collection, entry.name))
+  const plan = planInstallAll(
+    entries,
+    platform,
+    entry =>
+      installed.some(item => isInstalledFrom(item, collection, entry.name)),
+    options.frontend ?? ''
   );
   let chosen = await showInstallAllDialog(options.title, plan);
 
@@ -369,7 +376,7 @@ function InstallAllBody({
                   ? 'installed'
                   : item.supported
                     ? (item.entry.versions[0]?.version ?? '')
-                    : 'not written for this platform'}
+                    : 'not written for this platform or frontend'}
               </span>
             </label>
           </li>
@@ -378,7 +385,10 @@ function InstallAllBody({
       <p className="jp-WorkshopBulk-text jp-WorkshopBulk-count">
         {count(chosen, 'workshop')} to install
         {already > 0 ? `, ${already} installed already` : ''}
-        {unsupported > 0 ? `, ${unsupported} not for this platform` : ''}.
+        {unsupported > 0
+          ? `, ${unsupported} not for this platform or frontend`
+          : ''}
+        .
       </p>
     </div>
   );
@@ -603,6 +613,8 @@ function installedRecord(
     description: entry.description,
     tags: entry.tags,
     platforms: entry.platforms,
+    frontends: entry.frontends,
+    resumable: false,
     source: null,
     sha256,
     collection,
@@ -610,7 +622,8 @@ function installedRecord(
     done: 0,
     currentPage: '',
     trust: '',
-    started: false
+    started: false,
+    instanceId: ''
   };
 }
 
@@ -621,6 +634,7 @@ function entryFor(item: IInstalledWorkshop): ICollectionEntry {
     description: item.description,
     tags: item.tags,
     platforms: item.platforms,
+    frontends: item.frontends,
     capabilities: [],
     authors: [],
     versions: []

@@ -196,12 +196,24 @@ def site_config(terminal: bool = True) -> dict[str, Any]:
     data: dict[str, Any] = {
         # The self-test drives the site through window.jupyterapp.
         "exposeAppInBrowser": True,
+        # The extension reads this back as the frontend version on its
+        # progress events, since a site has no server to ask.
+        "jupyterlabWorkshopVersion": _package_version(),
     }
 
     if terminal:
         data["terminalsAvailable"] = True
 
     return {"jupyter-lite-schema-version": 0, "jupyter-config-data": data}
+
+
+def _package_version() -> str:
+    try:
+        from ._version import __version__
+    except ImportError:
+        return ""
+
+    return str(__version__)
 
 
 def settings_overrides(

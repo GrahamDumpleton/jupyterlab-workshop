@@ -7,6 +7,7 @@ import {
   ACTION_TYPES,
   STRUCTURE_DIRECTIVES,
   allowedOptions,
+  actionSupportsFrontend,
   isActionType
 } from '../actions/catalog';
 import { EDITOR_ACTIONS, editorTargetProblems } from '../actions/editor';
@@ -29,6 +30,7 @@ import {
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage } from '../format/page';
 import { liteShellProblems, usesSubprocess } from '../lite';
+import { evaluateExpression, expressionNames } from '../variables/expressions';
 import {
   actionCapability,
   allDirectives,
@@ -345,7 +347,13 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
       lintBody(node, where, messages);
       lintPaths(node, workspaceOnly, input.manifest, where, messages);
       lintHosts(node, declared.has('network'), networkScopes, where, messages);
-      lintVariants(node, input.manifest.platforms, where, messages);
+      lintVariants(
+        node,
+        input.manifest.platforms,
+        input.manifest.frontends,
+        where,
+        messages
+      );
     }
   }
 
@@ -366,13 +374,8 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
   }
 }
 
-/**
- * The checkpoint the extension takes on first open is reserved: a
- * workshop that named its own checkpoint the same way would overwrite
- * the files "Restart" puts back.
- */
-/** Action types that need the server and so cannot run in JupyterLite. */
-const LITE_UNSUPPORTED: ReadonlySet<string> = new Set(['environment-create']);
+/** The frontend a manifest supports when it lists none. */
+const DEFAULT_FRONTENDS: readonly string[] = ['jupyterlab'];
 
 /** Action types whose body the JupyterLite terminal runs as a command. */
 const LITE_SHELL_BODIES: ReadonlySet<string> = new Set([
@@ -390,28 +393,106 @@ const LITE_PYTHON_BODIES: ReadonlySet<string> = new Set([
 function lintVariants(
   node: IDirectiveNode,
   platforms: readonly string[],
+  frontends: readonly string[],
   where: { path: string; line: number },
   messages: ILintMessage[]
 ): void {
   const variants = node.variants;
+  const listed = frontends.length > 0 ? frontends : DEFAULT_FRONTENDS;
 
   // A body with variants but no default must cover every declared
-  // platform, or the action has nothing to run on the ones it misses.
+  // platform, or the action has nothing to run on the ones it misses. A
+  // frontend variant covers its frontend on every platform, so the
+  // platforms only matter for the frontends that have no variant.
   if (variants && !('default' in variants)) {
-    for (const platform of platforms) {
-      if (!(platform in variants)) {
-        messages.push({
-          level: 'error',
-          rule: 'missing-variant',
-          message: `${node.name} "${node.id}" has no body for ${platform}, which the manifest lists, and no default`,
-          ...where
-        });
+    const uncovered = listed.filter(frontend => !(frontend in variants));
+
+    if (uncovered.length > 0) {
+      for (const platform of platforms) {
+        if (!(platform in variants)) {
+          messages.push({
+            level: 'error',
+            rule: 'missing-variant',
+            message: `${node.name} "${node.id}" has no body for ${platform}, which the manifest lists, and no default`,
+            ...where
+          });
+        }
+      }
+
+      if (platforms.length === 0 && frontends.length > 0) {
+        for (const frontend of uncovered) {
+          messages.push({
+            level: 'error',
+            rule: 'missing-variant',
+            message: `${node.name} "${node.id}" has no body for ${frontend}, which the manifest lists, and no default`,
+            ...where
+          });
+        }
       }
     }
   }
 
-  if (platforms.includes('lite')) {
+  // An action a frontend cannot run is reported for every listed frontend
+  // that lacks it, unless the author already excluded it there.
+  for (const frontend of listed) {
+    if (
+      !actionSupportsFrontend(node.name, frontend) &&
+      !excludedOn(node, frontend, 'emscripten')
+    ) {
+      messages.push({
+        level: 'warning',
+        rule: 'unsupported-frontend',
+        message: `${node.name} "${node.id}" is not available in ${frontend}, which the manifest lists; add a when condition or an empty :${frontend}: variant`,
+        ...where
+      });
+    }
+  }
+
+  if (listed.includes('jupyterlite')) {
     lintLite(node, where, messages);
+  }
+}
+
+/**
+ * Whether the author has already said an action does not apply on a
+ * frontend: its `when` condition tests the frontend or the platform and
+ * is false there, or it has an empty variant for that frontend. The
+ * condition is evaluated with the frontend and its platform bound and
+ * every other name unknown, so `frontend != "jupyterlite"` and
+ * `not (frontend == "jupyterlite")` both count; a condition that never
+ * mentions either axis is about something else and does not.
+ */
+function excludedOn(
+  node: IDirectiveNode,
+  frontend: string,
+  platform: string
+): boolean {
+  const variants = node.variants;
+
+  if (
+    variants !== undefined &&
+    frontend in variants &&
+    variants[frontend].trim() === ''
+  ) {
+    return true;
+  }
+
+  const condition = node.options.when;
+
+  if (!condition || condition.trim() === '') {
+    return false;
+  }
+
+  try {
+    const names = expressionNames(condition);
+
+    if (!names.includes('frontend') && !names.includes('platform')) {
+      return false;
+    }
+
+    return !evaluateExpression(condition, { frontend, platform }).value;
+  } catch {
+    return false;
   }
 }
 
@@ -422,30 +503,21 @@ function lintLite(
 ): void {
   const variants = node.variants;
   const liteBody = variants
-    ? (variants.lite ?? variants.default ?? '')
+    ? (variants.jupyterlite ?? variants.default ?? '')
     : node.body;
 
-  // An action a when condition hides on Lite, or an empty :lite: variant,
-  // is the author saying it does not apply there.
-  const skipped =
-    /\blite\b/.test(node.options.when ?? '') ||
-    (variants !== undefined && 'lite' in variants && liteBody.trim() === '');
-
-  if (skipped) {
+  if (excludedOn(node, 'jupyterlite', 'emscripten')) {
     return;
   }
 
   const substrate =
     node.name === 'verify' ? verifySubstrate(node.options) : null;
 
-  if (LITE_UNSUPPORTED.has(node.name) || substrate === 'script') {
+  if (substrate === 'script') {
     messages.push({
       level: 'warning',
       rule: 'lite-unsupported',
-      message:
-        substrate === 'script'
-          ? `verify "${node.id}" uses the script substrate, which needs the server; in JupyterLite use kernel, shell, contents or ui, or add a when condition`
-          : `${node.name} "${node.id}" needs the server, which JupyterLite lacks; add a when condition`,
+      message: `verify "${node.id}" uses the script substrate, which needs the server; in JupyterLite use kernel, shell, contents or ui, or add a when condition`,
       ...where
     });
   }
@@ -457,7 +529,7 @@ function lintLite(
       messages.push({
         level: 'warning',
         rule: 'lite-shell-syntax',
-        message: `${node.name} "${node.id}" uses ${problems.join(', ')}, which the JupyterLite terminal does not support; add a :lite: variant`,
+        message: `${node.name} "${node.id}" uses ${problems.join(', ')}, which the JupyterLite terminal does not support; add a :jupyterlite: variant`,
         ...where
       });
     }
@@ -470,7 +542,7 @@ function lintLite(
     messages.push({
       level: 'warning',
       rule: 'lite-unsupported',
-      message: `${node.name} "${node.id}" starts a process, which Pyodide cannot do in JupyterLite; add a :lite: variant or a when condition`,
+      message: `${node.name} "${node.id}" starts a process, which Pyodide cannot do in JupyterLite; add a :jupyterlite: variant or a when condition`,
       ...where
     });
   }
@@ -497,8 +569,8 @@ function lintOptions(
 
   const spec = ACTION_TYPES[node.name];
 
-  // An empty body chosen from platform variants means there is nothing to
-  // do on this platform, which is deliberate; see lintVariants.
+  // An empty body chosen from variants means there is nothing to do on
+  // this platform or frontend, which is deliberate; see lintVariants.
   if (spec.body === 'required' && node.body.trim() === '' && !node.variants) {
     messages.push({
       level: 'error',

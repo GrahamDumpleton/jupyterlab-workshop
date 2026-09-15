@@ -59,8 +59,9 @@ refers to: a `requires` entry, a verify `trigger`, a `cascade`, an
 `auto: after:`. Short descriptive ids read best: `create-repo`,
 `first-commit`, `staging-quiz`.
 
-A body may hold alternatives for particular platforms, marked by a line
-holding only `:windows:`, `:linux:`, `:macos:` or `:lite:`; see
+A body may hold alternatives for particular platforms or frontends,
+marked by a line holding only `:windows:`, `:linux:`, `:macos:`,
+`:jupyterlab:` or `:jupyterlite:`; see
 [command variants](platforms.md#command-variants).
 
 A directive whose body holds a fenced code block, such as a `hint` that

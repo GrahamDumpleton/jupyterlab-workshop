@@ -5,6 +5,7 @@
  * through this module.
  */
 
+import { IAnalyticsBlock, parseAnalyticsBlock } from '../format/analytics';
 import { isRecord, isStringArray, isWebLink } from '../util';
 
 /** Who publishes a collection or a catalog. */
@@ -39,7 +40,12 @@ export interface ICollectionEntry {
   title: string;
   description: string;
   tags: string[];
+
+  /** Operating systems the workshop lists, as its manifest gives them. */
   platforms: string[];
+
+  /** Frontends the workshop lists; none means JupyterLab only. */
+  frontends: string[];
   capabilities: string[];
   duration?: string;
   authors: string[];
@@ -78,6 +84,12 @@ export interface ICollectionIndex extends ICollectionInfo {
 
   /** The workshops, in the order the collection lists them. */
   workshops: ICollectionEntry[];
+
+  /**
+   * Where progress events of every workshop the collection lists are
+   * reported, with the learner's opt-in; see `IAnalyticsBlock`.
+   */
+  analytics?: IAnalyticsBlock;
 }
 
 /** The collection index format version this package understands. */
@@ -106,7 +118,7 @@ export function parseCollectionIndex(data: unknown): ICollectionIndex {
     throw new Error('A collection index needs a "workshops" list');
   }
 
-  return {
+  const index: ICollectionIndex = {
     version: COLLECTION_VERSION,
     ...parseCollectionInfo(data),
     ordered: data.ordered === true,
@@ -114,6 +126,16 @@ export function parseCollectionIndex(data: unknown): ICollectionIndex {
       parseEntry(item, index)
     )
   };
+
+  // The analytics block is checked in full, since a malformed one would
+  // otherwise silently report nothing or stamp bad labels.
+  const analytics = parseAnalyticsBlock(data.analytics);
+
+  if (analytics) {
+    index.analytics = analytics;
+  }
+
+  return index;
 }
 
 /**
@@ -229,6 +251,19 @@ export function supportsPlatform(
   return entry.platforms.length === 0 || entry.platforms.includes(platform);
 }
 
+/**
+ * Whether an entry lists a frontend. An entry that lists none supports
+ * JupyterLab only, as a manifest without `frontends` does.
+ */
+export function supportsFrontend(
+  entry: ICollectionEntry,
+  frontend: string
+): boolean {
+  return entry.frontends.length === 0
+    ? frontend === 'jupyterlab'
+    : entry.frontends.includes(frontend);
+}
+
 /** One entry of a collection as the Install all dialog presents it. */
 export interface IInstallPlanItem {
   entry: ICollectionEntry;
@@ -236,7 +271,7 @@ export interface IInstallPlanItem {
   /** Whether the workshop is installed already, so cannot be chosen. */
   installed: boolean;
 
-  /** Whether the entry lists the current platform, or lists none. */
+  /** Whether the entry lists the current platform and frontend. */
   supported: boolean;
 
   /** Whether the dialog starts with the entry ticked. */
@@ -246,17 +281,21 @@ export interface IInstallPlanItem {
 /**
  * What Install all offers for a collection: every entry in the
  * collection's order, with those already installed greyed out and the
- * rest ticked unless they do not list the current platform. An empty
- * platform, as when it is not known yet, leaves every entry supported.
+ * rest ticked unless they do not list the current platform or frontend.
+ * An empty platform or frontend, as when it is not known yet, leaves
+ * every entry supported on that axis.
  */
 export function planInstallAll(
   entries: readonly ICollectionEntry[],
   platform: string,
-  isInstalled: (entry: ICollectionEntry) => boolean
+  isInstalled: (entry: ICollectionEntry) => boolean,
+  frontend = ''
 ): IInstallPlanItem[] {
   return entries.map(entry => {
     const installed = isInstalled(entry);
-    const supported = platform === '' || supportsPlatform(entry, platform);
+    const supported =
+      (platform === '' || supportsPlatform(entry, platform)) &&
+      (frontend === '' || supportsFrontend(entry, frontend));
 
     return { entry, installed, supported, selected: !installed && supported };
   });
@@ -437,6 +476,7 @@ function parseEntry(item: unknown, index: number): ICollectionEntry {
     description: typeof item.description === 'string' ? item.description : '',
     tags: stringList(item.tags),
     platforms: stringList(item.platforms),
+    frontends: stringList(item.frontends),
     capabilities: stringList(item.capabilities),
     duration: typeof item.duration === 'string' ? item.duration : undefined,
     authors: stringList(item.authors),

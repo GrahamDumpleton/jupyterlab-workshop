@@ -12,6 +12,7 @@ from __future__ import annotations
 import getpass
 import os
 import platform as platform_module
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -23,6 +24,19 @@ BINDER_VARIABLES = ("BINDER_REPO_URL", "BINDER_LAUNCH_HOST", "BINDER_REF_URL")
 
 #: Environment variables JupyterHub sets in every single-user server.
 JUPYTERHUB_VARIABLES = ("JUPYTERHUB_USER", "JUPYTERHUB_API_URL")
+
+#: The variable GitHub Codespaces sets to "true" in every codespace, and
+#: the one naming the codespace, both of which must be present.
+CODESPACES_VARIABLES = ("CODESPACES", "CODESPACE_NAME")
+
+#: The frontend this server extension serves.
+FRONTEND = "jupyterlab"
+
+try:
+    from ._version import __version__ as FRONTEND_VERSION
+except ImportError:
+    # The version file is generated when the package is built or installed.
+    FRONTEND_VERSION = ""
 
 #: Files whose presence marks a container runtime.
 CONTAINER_FILES = (".dockerenv", "run/.containerenv")
@@ -45,11 +59,23 @@ class PlatformInfo:
     #: The JupyterHub user name, when running under a hub; else empty.
     hub_user: str = ""
 
-    #: The service hosting the session: binder, jupyterhub or local.
+    #: The service hosting the session: binder, codespaces, jupyterhub or
+    #: local. A JupyterLite site reports static, from the browser.
     host: str = "local"
 
     #: Whether the server runs inside a container.
     container: bool = False
+
+    #: The frontend served: jupyterlab here; JupyterLite reports its own.
+    frontend: str = FRONTEND
+
+    #: The version of this package, which built the extension the
+    #: frontend runs, so events say which code produced them.
+    frontend_version: str = FRONTEND_VERSION
+
+    #: Id of this run of the server, the same for every workshop opened
+    #: under it, so progress events of one JupyterLab can be grouped.
+    instance_id: str = ""
 
     def to_dict(self) -> dict[str, object]:
         """Return the fields as a JSON-serialisable mapping."""
@@ -66,6 +92,7 @@ def detect_platform(
     user: str,
     root_dir: str,
     container: bool = False,
+    instance_id: str = "",
 ) -> PlatformInfo:
     """Derive platform information from explicit inputs.
 
@@ -74,7 +101,8 @@ def detect_platform(
     otherwise the ``SHELL`` environment variable is consulted, and failing
     that a platform default is assumed. ``container`` is the result of
     :func:`detect_container`. The hosting service is read from the
-    environment variables Binder and JupyterHub set.
+    environment variables Binder, Codespaces and JupyterHub set.
+    ``instance_id`` identifies the running server; see :func:`instance_id`.
     """
 
     os_name = _os_name(system)
@@ -91,6 +119,7 @@ def detect_platform(
         hub_user=environ.get("JUPYTERHUB_USER", ""),
         host=_host_name(environ),
         container=container,
+        instance_id=instance_id,
     )
 
 
@@ -133,14 +162,41 @@ def current_platform(
         user=_current_user(),
         root_dir=root_dir,
         container=detect_container(os.environ, Path("/")),
+        instance_id=instance_id(),
     )
+
+
+_INSTANCE_ID = ""
+
+
+def instance_id() -> str:
+    """The id of this run of the server, minted once per process.
+
+    Every workshop opened under the server carries it on its progress
+    events, so a learner working through a collection on one JupyterLab
+    appears as one instance rather than unrelated sessions. A restarted
+    server is a new instance, which is what tells the frontend that the
+    terminals and kernels a workshop was using are gone.
+    """
+
+    global _INSTANCE_ID
+
+    if not _INSTANCE_ID:
+        _INSTANCE_ID = uuid.uuid4().hex
+
+    return _INSTANCE_ID
 
 
 def _host_name(environ: Mapping[str, str]) -> str:
     # A Binder container also carries the JupyterHub variables, so Binder
-    # is checked first.
+    # is checked first; a codespace carries neither.
     if any(name in environ for name in BINDER_VARIABLES):
         return "binder"
+
+    if environ.get("CODESPACES") == "true" and all(
+        name in environ for name in CODESPACES_VARIABLES
+    ):
+        return "codespaces"
 
     if any(name in environ for name in JUPYTERHUB_VARIABLES):
         return "jupyterhub"

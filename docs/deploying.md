@@ -215,7 +215,9 @@ setting:
 {
   "@jupyterlab-workshop/labextension:panel": {
     "analytics": {
-      "sink": "https://workshops.example.org/events",
+      "sink": "https://analytics.example.org/events",
+      "token": "eyJhbGciOi...",
+      "labels": { "deployment": "spring-cohort" },
       "identity": "hub"
     }
   }
@@ -223,13 +225,45 @@ setting:
 ```
 
 `sink` is a URL that receives batches of events as JSON lines by POST.
-`identity` is `none` (the default) or `hub`, which adds the
-`JUPYTERHUB_USER` name to every event as `user`. Batches are posted by
-the server, so the sink needs no CORS headers, and a few lines of any
-web framework that appends the body to a file is enough; in JupyterLite
-the browser posts them and the sink must allow the site's origin.
-Delivery is best effort. [Progress events](analytics.md) lists the
-events and what they never contain.
+`token` is sent with every batch as a bearer credential in the
+`Authorization` header, and `labels` are stamped on every event so a
+service can slice by deployment, course or term. `identity` is `none`
+(the default) or `hub`, which adds the `JUPYTERHUB_USER` name to every
+event as `user`. A sink set here applies to every workshop and takes
+precedence over any `analytics` block a subscribed collection or a
+workshop manifest declares. Delivery is best effort. [Progress
+events](analytics.md) lists the events, the block's rules and what
+events never contain.
+
+Where the setting goes, and what identity it can carry, depends on the
+host:
+
+- **JupyterHub.** Put the setting in the singleuser image's
+  `overrides.json` or a shared settings directory. `identity: hub`
+  names each learner, and the sink may sit inside the cluster, reached
+  over the cluster network, since the user's server posts the batches.
+  The token is private to the operator and is a real credential.
+
+- **Binder.** Write the setting into `overrides.json` from
+  `binder/postBuild`, the way the showcase repository writes its other
+  settings. Sessions are anonymous, so there is no identity to carry,
+  and the token sits in a public repository, so a sink treats it as
+  routing rather than a secret.
+
+- **GitHub Codespaces.** Put the setting in the devcontainer image.
+  The codespace's server posts the batches; events report `host` as
+  `codespaces`, and a stopped and resumed codespace is a new instance,
+  so a workshop in progress asks whether to restart or continue.
+
+- **JupyterLite.** Bake the setting into the site at build time. There
+  is no server, so the browser posts the batches and the sink must
+  allow cross-origin requests from the site's origin, including the
+  `Authorization` header; the token is public with the site.
+
+- **A standalone JupyterLab.** The setting lives in the user's own
+  settings or an install's `overrides.json`, with whatever secrecy the
+  user gives it. Without the setting, a collection's or a workshop's own
+  block applies once the learner opts in from the trust dialog.
 
 ## A static site
 

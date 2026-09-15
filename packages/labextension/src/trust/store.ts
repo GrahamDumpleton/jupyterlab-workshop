@@ -1,4 +1,9 @@
-import { TRUST_LEVELS, TrustLevel } from '@jupyterlab-workshop/core';
+import {
+  IAnalyticsBlock,
+  TRUST_LEVELS,
+  TrustLevel,
+  parseAnalyticsBlock
+} from '@jupyterlab-workshop/core';
 import { IStateDB } from '@jupyterlab/statedb';
 import { ReadonlyPartialJSONValue } from '@lumino/coreutils';
 
@@ -15,7 +20,7 @@ export const DEFAULT_POLICY: ITrustPolicy = {
   forcedLevel: null,
   trustedSources: [],
   disabledCapabilities: [],
-  analyticsSink: '',
+  analytics: null,
   analyticsIdentity: 'none'
 };
 
@@ -224,10 +229,30 @@ export function policyFromSettings(values: {
     forcedLevel: asTrustLevel(raw.forcedLevel),
     trustedSources: strings(raw.trustedSources),
     disabledCapabilities: strings(raw.disabledCapabilities),
-    analyticsSink:
-      typeof analytics.sink === 'string' && /^https?:\/\//.test(analytics.sink)
-        ? analytics.sink
-        : '',
+    analytics: analyticsFromSettings(analytics),
     analyticsIdentity: analytics.identity === 'hub' ? 'hub' : 'none'
   };
+}
+
+/**
+ * The administrator's analytics block, or null when the settings name no
+ * sink. The block is checked by the same rules as a manifest's; a
+ * malformed one is reported and ignored rather than half applied.
+ */
+function analyticsFromSettings(
+  analytics: Record<string, unknown>
+): IAnalyticsBlock | null {
+  const { sink, token, labels } = analytics;
+
+  if (typeof sink !== 'string' || sink === '') {
+    return null;
+  }
+
+  try {
+    return parseAnalyticsBlock({ sink, token, labels }) ?? null;
+  } catch (error) {
+    console.warn('Ignoring the analytics setting', error);
+
+    return null;
+  }
 }

@@ -390,10 +390,32 @@ def test_init_templates_and_options(tmp_path: Path) -> None:
     manifest = (target / "workshop.yaml").read_text()
 
     assert "platforms: [linux, windows]" in manifest
+    assert "frontends:" not in manifest
     assert "capabilities:\n  - kernel-exec\n" in manifest
     assert "gating: strict" in manifest
     assert "name: notebook" in manifest
     assert (target / "pages" / "02-explore.md").exists()
+
+    # Frontends are written only when asked for, since a manifest without
+    # the list supports JupyterLab alone.
+    lite = tmp_path / "lite-too"
+
+    assert (
+        cli.main(
+            [
+                "init",
+                str(lite),
+                "--frontend",
+                "jupyterlab",
+                "--frontend",
+                "jupyterlite",
+            ]
+        )
+        == 0
+    )
+    assert (
+        "frontends: [jupyterlab, jupyterlite]" in (lite / "workshop.yaml").read_text()
+    )
 
     blank = tmp_path / "blank"
 

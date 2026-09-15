@@ -9,7 +9,7 @@ import * as path from 'path';
 import { IWorkshopManifest, parseManifest } from '../format/manifest';
 import { IPage, parsePage } from '../format/page';
 import { declaredVariables } from '../format/page';
-import { PLATFORM_NAMES } from '../format/variants';
+import { FRONTEND_NAMES, PLATFORM_NAMES } from '../format/variants';
 import { Variables } from '../variables/substitute';
 
 /** A workshop read from disk. */
@@ -21,12 +21,22 @@ export interface ILoadedWorkshopFiles {
 
   /** The platform the pages were rendered for. */
   platform: string;
+
+  /** The frontend the pages were rendered for. */
+  frontend: string;
 }
 
 /** Options for loading a workshop. */
 export interface ILoadOptions {
   /** Platform to render body variants for; `linux` by default. */
   platform?: string;
+
+  /**
+   * Frontend to render body variants for; `jupyterlab` by default.
+   * JupyterLite implies the `emscripten` platform whatever `platform`
+   * says, since Pyodide reports that and nothing else runs there.
+   */
+  frontend?: string;
 }
 
 /** Built-in variables as the linter assumes them, per platform. */
@@ -39,8 +49,9 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     workspace: '.',
     home: '/home/learner',
     user: 'learner',
-    lite: 'false',
-    hub: 'false'
+    host: 'local',
+    container: 'false',
+    frontend: 'jupyterlab'
   },
   macos: {
     platform: 'macos',
@@ -50,8 +61,9 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     workspace: '.',
     home: '/Users/learner',
     user: 'learner',
-    lite: 'false',
-    hub: 'false'
+    host: 'local',
+    container: 'false',
+    frontend: 'jupyterlab'
   },
   windows: {
     platform: 'windows',
@@ -61,19 +73,21 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     workspace: '.',
     home: 'C:\\Users\\learner',
     user: 'learner',
-    lite: 'false',
-    hub: 'false'
+    host: 'local',
+    container: 'false',
+    frontend: 'jupyterlab'
   },
-  lite: {
-    platform: 'lite',
-    shell: '',
+  emscripten: {
+    platform: 'emscripten',
+    shell: 'cockle',
     path_sep: '/',
     workshop_dir: '.',
     workspace: '.',
-    home: '/home/learner',
-    user: 'learner',
-    lite: 'true',
-    hub: 'false'
+    home: '/home/web_user',
+    user: 'web_user',
+    host: 'static',
+    container: 'false',
+    frontend: 'jupyterlite'
   }
 };
 
@@ -85,13 +99,27 @@ export function loadWorkshopFiles(
   directory: string,
   options: ILoadOptions = {}
 ): ILoadedWorkshopFiles {
-  const platform = options.platform ?? 'linux';
+  const frontend = options.frontend ?? 'jupyterlab';
 
-  if (!PLATFORM_NAMES.includes(platform)) {
+  if (!FRONTEND_NAMES.includes(frontend)) {
     throw new Error(
-      `Unknown platform "${platform}"; expected one of ${PLATFORM_NAMES.join(', ')}`
+      `Unknown frontend "${frontend}"; expected one of ${FRONTEND_NAMES.join(', ')}`
     );
   }
+
+  const requested = options.platform ?? 'linux';
+
+  if (!PLATFORM_NAMES.includes(requested)) {
+    const hint =
+      requested === 'lite' ? '; JupyterLite is "--frontend jupyterlite"' : '';
+
+    throw new Error(
+      `Unknown platform "${requested}"; expected one of ${PLATFORM_NAMES.join(', ')}${hint}`
+    );
+  }
+
+  // JupyterLite runs on Pyodide whatever the browser's operating system.
+  const platform = frontend === 'jupyterlite' ? 'emscripten' : requested;
 
   const manifestPath = path.join(directory, 'workshop.yaml');
 
@@ -146,9 +174,10 @@ export function loadWorkshopFiles(
       variables,
       pathSep: builtins.path_sep,
       declared,
-      platform
+      platform,
+      frontend
     })
   );
 
-  return { directory, manifest, manifestSource, pages, platform };
+  return { directory, manifest, manifestSource, pages, platform, frontend };
 }

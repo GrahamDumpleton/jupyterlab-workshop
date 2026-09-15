@@ -90,7 +90,7 @@ jobs:
       - name: Install browsers
         run: uv run playwright install --with-deps chromium
       - name: Lint the examples for JupyterLite
-        run: uv run jupyter workshop lint examples/hello-jupyterlab --platform lite
+        run: uv run jupyter workshop lint examples/hello-jupyterlab --frontend jupyterlite
       - name: Workshop self-test in JupyterLite
         run: uv run jupyter workshop test examples/hello-jupyterlab --lite --junit results-lite.xml
       - uses: actions/upload-artifact@v7

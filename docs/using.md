@@ -25,6 +25,15 @@ same three as buttons once one is open:
   session only; Open or Resume opens an installed one. "Collections…" subscribes to
   and unsubscribes from collections and catalogs; see [Finding and installing workshops](collections.md).
 
+  A card whose progress was made under a JupyterLab that has since
+  restarted says "needs restart" and puts Restart first, with Continue
+  beside it: the files and the progress are still there, but the
+  terminals, running programs and notebook kernels that earlier pages
+  set up are gone, so what they set up may need doing again. Continue
+  is the learner's call; a workshop whose steps leave nothing live
+  behind says so in its manifest with `resumable: true` and resumes
+  without the fuss.
+
 - **Open a directory** opens a workshop directory that is already on
   disk, by path relative to the JupyterLab root. Right-clicking a
   directory in the file browser and choosing "Open as Workshop" does the
@@ -42,7 +51,11 @@ The workshop that was open when the browser tab closed opens again when
 JupyterLab next starts on the same server, at the page it was on. That
 is remembered per server, since a workshop is named by its path under
 the server's root, and a workshop whose directory has since gone is
-simply forgotten.
+simply forgotten. When the server itself has restarted in between, and
+the workshop is not marked resumable, a dialog asks whether to Restart
+or Continue before the workshop opens, for the reason the browser card
+gives; the same dialog appears when such a workshop is opened by
+command or launch link.
 
 ## The trust dialog
 

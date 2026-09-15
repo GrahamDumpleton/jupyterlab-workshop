@@ -22,7 +22,9 @@ const GROUP_LABELS: Readonly<Record<ActionGroup, string>> = {
   external: 'Other'
 };
 
-const PLATFORMS: readonly string[] = ['linux', 'macos', 'windows', 'lite'];
+const PLATFORMS: readonly string[] = ['linux', 'macos', 'windows'];
+
+const FRONTENDS: readonly string[] = ['jupyterlab', 'jupyterlite'];
 
 const CAPABILITIES: readonly string[] = [
   'terminal',
@@ -93,6 +95,9 @@ export interface INewWorkshopRequest {
   title: string;
   template: string;
   platforms: string[];
+
+  /** Frontends to list; JupyterLab alone means no list is written. */
+  frontends: string[];
   capabilities: string[];
   gating: string;
   ci: boolean;
@@ -110,6 +115,7 @@ export async function showNewWorkshopDialog(
     title: '',
     template: 'starter',
     platforms: ['linux', 'macos'],
+    frontends: ['jupyterlab'],
     capabilities: ['terminal', 'write-files:workspace'],
     gating: 'soft',
     ci: false
@@ -121,7 +127,7 @@ export async function showNewWorkshopDialog(
   };
   const body = new ValueBody<INewWorkshopRequest>(initial, (value, update) => {
     const toggle = (
-      key: 'platforms' | 'capabilities',
+      key: 'platforms' | 'frontends' | 'capabilities',
       item: string,
       on: boolean
     ): void =>
@@ -204,6 +210,22 @@ export async function showNewWorkshopDialog(
                   }
                 />{' '}
                 {platform}
+              </label>
+            ))}
+          </span>
+        </Field>
+        <Field label="Frontends">
+          <span className="jp-WorkshopAuthor-checks">
+            {FRONTENDS.map(frontend => (
+              <label key={frontend}>
+                <input
+                  type="checkbox"
+                  checked={value.frontends.includes(frontend)}
+                  onChange={event =>
+                    toggle('frontends', frontend, event.target.checked)
+                  }
+                />{' '}
+                {frontend}
               </label>
             ))}
           </span>

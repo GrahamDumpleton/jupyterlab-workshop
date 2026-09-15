@@ -7,15 +7,24 @@
   "required": ["apiVersion", "name", "title", "pages"],
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "jupyterlab-workshop/v1alpha1" },
+    "apiVersion": {
+      "const": "jupyterlab-workshop/v1alpha1"
+    },
     "name": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "Identifier used for directories and state; lower case letters, digits and hyphens."
     },
-    "title": { "type": "string", "minLength": 1 },
-    "version": { "type": ["string", "number"] },
-    "description": { "type": "string" },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": ["string", "number"]
+    },
+    "description": {
+      "type": "string"
+    },
     "finish": {
       "type": "string",
       "description": "Markdown shown in the dialog when the learner presses Finish on the last page, such as where to go next."
@@ -24,7 +33,12 @@
       "type": "string",
       "description": "Expected duration such as 45m or 2h."
     },
-    "authors": { "type": "array", "items": { "type": "string" } },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "homepage": {
       "type": "string",
       "pattern": "^https?://",
@@ -35,12 +49,26 @@
       "pattern": "^https?://",
       "description": "Where to report a problem with the workshop, such as the repository's issue tracker; shown in the About dialog and when the workshop is finished."
     },
-    "tags": { "type": "array", "items": { "type": "string" } },
-    "platforms": {
+    "tags": {
       "type": "array",
       "items": {
+        "type": "string"
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "description": "Operating systems the workshop is written for. Advisory: the browser dims workshops that do not list the current one, the panel shows a banner, and the linter checks body variants against the list.",
+      "items": {
         "type": "string",
-        "enum": ["linux", "macos", "windows", "lite"]
+        "enum": ["linux", "macos", "windows"]
+      }
+    },
+    "frontends": {
+      "type": "array",
+      "description": "Frontends the workshop is written for. A manifest that lists none supports JupyterLab only; supporting JupyterLite is an explicit declaration, since it needs explicit work.",
+      "items": {
+        "type": "string",
+        "enum": ["jupyterlab", "jupyterlite"]
       }
     },
     "capabilities": {
@@ -48,16 +76,27 @@
       "description": "What the workshop needs permission for. Each entry is a capability name, or a mapping of one name to its scopes.",
       "items": {
         "oneOf": [
-          { "$ref": "#/definitions/capabilityName" },
+          {
+            "$ref": "#/definitions/capabilityName"
+          },
           {
             "type": "object",
             "minProperties": 1,
             "maxProperties": 1,
-            "propertyNames": { "$ref": "#/definitions/capabilityName" },
+            "propertyNames": {
+              "$ref": "#/definitions/capabilityName"
+            },
             "additionalProperties": {
               "oneOf": [
-                { "type": "string" },
-                { "type": "array", "items": { "type": "string" } }
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               ]
             }
           }
@@ -75,22 +114,34 @@
             "required": ["name"],
             "additionalProperties": false,
             "properties": {
-              "name": { "type": "string" },
-              "version": { "type": "string" },
-              "optional": { "type": "boolean" },
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "optional": {
+                "type": "boolean"
+              },
               "hint": {
                 "oneOf": [
-                  { "type": "string" },
+                  {
+                    "type": "string"
+                  },
                   {
                     "type": "object",
-                    "additionalProperties": { "type": "string" }
+                    "additionalProperties": {
+                      "type": "string"
+                    }
                   }
                 ]
               }
             }
           }
         },
-        "shell": { "type": "string" }
+        "shell": {
+          "type": "string"
+        }
       }
     },
     "workspace": {
@@ -118,16 +169,13 @@
       }
     },
     "analytics": {
-      "type": "object",
-      "description": "Where progress events are reported, once the learner opts in from the trust dialog.",
-      "additionalProperties": false,
-      "properties": {
-        "sink": {
-          "type": "string",
-          "pattern": "^https?://",
-          "description": "URL that receives batches of events as JSON lines by POST."
-        }
-      }
+      "$ref": "#/definitions/analytics",
+      "description": "Where progress events are reported, once the learner opts in from the trust dialog. A deployment's own analytics setting takes precedence over this block, as does the block of a subscribed collection that lists the workshop."
+    },
+    "resumable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the workshop can be continued after the JupyterLab it ran under has restarted. Terminals, running programs and notebook kernel state do not survive a restart, so unless this is true a workshop reopened under a new JupyterLab asks whether to restart or continue. Set it for a workshop whose steps leave nothing live behind, such as one that only edits files."
     },
     "variables": {
       "type": "array",
@@ -155,14 +203,26 @@
               "email"
             ]
           },
-          "description": { "type": "string" },
-          "default": { "type": ["string", "number", "boolean"] },
-          "required": { "type": "boolean" },
-          "readonly": { "type": "boolean" },
-          "secret": { "type": "boolean" },
+          "description": {
+            "type": "string"
+          },
+          "default": {
+            "type": ["string", "number", "boolean"]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "readonly": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
           "options": {
             "type": "array",
-            "items": { "type": ["string", "number"] }
+            "items": {
+              "type": ["string", "number"]
+            }
           }
         }
       }
@@ -201,7 +261,9 @@
                 },
                 "widgets": {
                   "type": "array",
-                  "items": { "type": "string" },
+                  "items": {
+                    "type": "string"
+                  },
                   "description": "Widget references: terminal:<name>, file:<path>, markdown:<path>, notebook:<path>, launcher or editor."
                 },
                 "size": {
@@ -216,7 +278,10 @@
         }
       }
     },
-    "gating": { "type": "string", "enum": ["off", "soft", "strict"] },
+    "gating": {
+      "type": "string",
+      "enum": ["off", "soft", "strict"]
+    },
     "tracks": {
       "type": "array",
       "items": {
@@ -224,16 +289,24 @@
         "required": ["id"],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string" },
-          "label": { "type": "string" }
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
         }
       }
     },
     "env": {
       "type": "object",
       "description": "Environment variables exported to the workshop terminals alongside the variables, such as PAGER: cat so that git and man do not wait for a key press in a small terminal.",
-      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-      "additionalProperties": { "type": ["string", "number", "boolean"] }
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      }
     },
     "defaults": {
       "type": "object",
@@ -242,14 +315,18 @@
         "actions": {
           "type": "object",
           "description": "Default option values for every action directive, keyed by option name.",
-          "additionalProperties": { "type": ["string", "number", "boolean"] }
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          }
         }
       }
     },
     "pages": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Page files in order, relative to the workshop directory."
     }
   },
@@ -293,6 +370,36 @@
         "auto-run",
         "ui-settings"
       ]
+    },
+    "analytics": {
+      "type": "object",
+      "description": "Where progress events are reported: the sink they are posted to, the token they are posted with, and labels stamped on every event. The same block appears in a workshop manifest, in a collection index and in a deployment's settings, and the highest of those levels that has one applies whole.",
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "URL that receives batches of events as JSON lines by POST."
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Token sent as a bearer credential in the Authorization header of every batch, issued by the sink's operator. Public wherever the block is public."
+        },
+        "labels": {
+          "type": "object",
+          "description": "Key and value pairs stamped on every event so reports can slice by them: a course, a cohort, a term. Labels are for slicing, never for identity; the workshop's name, source, collection, host and frontend are fields every event already carries. At most 16 labels.",
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z0-9_.-]+$",
+            "maxLength": 63
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      }
     }
   }
 }

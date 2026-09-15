@@ -100,7 +100,7 @@ import {
   PanelCloseAction,
   SettingsSetAction
 } from './actions/ui';
-import { AnalyticsRecorder } from './analytics';
+import { AnalyticsRecorder, HeartbeatTimer } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
 import { closeWorkshopWidgets } from './cleanup';
@@ -208,8 +208,10 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       fileBrowser
     });
 
-    // Progress events go to the workshop's events file and any sink.
+    // Progress events go to the workshop's events file and any sink; the
+    // heartbeat keeps a sink told that an open workshop is still open.
     new AnalyticsRecorder({ manager, trustStore });
+    new HeartbeatTimer({ manager });
 
     return manager;
   }
@@ -505,7 +507,10 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       return installed.some(item => item.path === target);
     };
 
-    const openWorkshopAt = async (path: string): Promise<void> => {
+    const openWorkshopAt = async (
+      path: string,
+      carryOn = false
+    ): Promise<void> => {
       if (!(await mayOpenDirectory(path))) {
         await showErrorMessage(
           'Not available',
@@ -531,7 +536,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         return;
       }
 
-      await manager.open(path);
+      await manager.open(path, { continue: carryOn });
       shell.activateById(panel.id);
     };
 
@@ -541,6 +546,11 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => features.enabled('open-directory'),
       execute: async (args): Promise<void> => {
         let path = typeof args.path === 'string' ? args.path : '';
+
+        // The browser card's Continue has shown the learner that the
+        // progress predates this JupyterLab, so the reopen dialog is
+        // not shown again.
+        const carryOn = args.continue === true;
 
         if (!path && !features.enabled('open-directory')) {
           return;
@@ -562,7 +572,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           path = chosen.path;
         }
 
-        await openWorkshopAt(path);
+        await openWorkshopAt(path, carryOn);
       }
     });
 
@@ -703,6 +713,12 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     const readBrowserSettings = async (): Promise<IBrowserSettings> => ({
       workshopsDirectory: await workshopsDirectory()
     });
+
+    // The manager works out which subscribed collection lists the open
+    // workshop, for its events and its analytics block, from the same
+    // list the browser groups its cards by.
+    (manager as WorkshopManager).collectionSources = async () =>
+      (await store.list('collection')).map(item => item.url);
 
     // Whether a source is one a subscribed collection lists.
     const sourceListed = async (

@@ -156,7 +156,10 @@ editors above it, while on `left` and `right` it is that sidebar's share
 of the window; built-ins are `default`, `terminal-only` and `notebook`),
 `tracks` (alternative paths chosen with `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
 `environment` (`requirements`, `kernel`, `terminals`), `analytics`
-(`sink`). A workshop with an `environment` puts an `environment-create`
+(`sink`, `token`, `labels`), `frontends` (`jupyterlab`, `jupyterlite`;
+none means JupyterLab only), `resumable` (`true` when the workshop can
+be continued after JupyterLab restarts, since it keeps nothing live
+between pages). A workshop with an `environment` puts an `environment-create`
 action on its first page, before any notebook: the self-test runs only
 what pages carry, and the action is a no-op once the environment
 exists. Once created, the environment is first on `PATH` in workshop
@@ -218,20 +221,24 @@ Inline roles: `{copy}`git status``, `{open}`README.md``, `{var}`repo_dir``.
 
 Variables: `{{ name }}` with filters `lower`, `upper`, `slug`, `default`,
 `shell`, `path`; `{{ path "src/app.py" }}` renders the platform's
-separator; `\{{` escapes. Built-ins: `platform`, `shell`, `path_sep`,
-`home`, `user`, `workshop_dir`, `workspace`, `host` (`binder`, `jupyterhub`, `local`
-or `lite`) and `container` (`true` inside a container). Values come from
-the manifest defaults, launch links, forms, captures and the variables
-panel.
+separator; `\{{` escapes. Built-ins: `platform` (`linux`, `macos`,
+`windows` or `emscripten` in JupyterLite), `frontend` (`jupyterlab` or
+`jupyterlite`), `shell`, `path_sep`, `home`, `user`, `workshop_dir`,
+`workspace`, `host` (`binder`, `codespaces`, `jupyterhub`, `local` or
+`static` for a JupyterLite site) and `container` (`true` inside a
+container). Values come from the manifest defaults, launch links,
+forms, captures and the variables panel.
 
 Conditional content: `{when}` blocks (` ```{when} track == "pip" `) and
 the `:when:` option on any directive. Conditions use `==`, `!=`, `in`,
 `not in`, `and`, `or`, `not`.
 
-Platform variants: inside a command body, a line `:windows:` (or
-`:linux:`, `:macos:`, `:lite:`) starts that platform's version; the text
-before the first marker is the default. Windows terminals are PowerShell
-5, which has no `&&`: use `;`.
+Platform and frontend variants: inside a command body, a line
+`:windows:` (or `:linux:`, `:macos:`, `:jupyterlab:`, `:jupyterlite:`)
+starts that platform's or frontend's version; the text before the
+first marker is the default, and a frontend variant wins over a
+platform one. Windows terminals are PowerShell 5, which has no `&&`:
+use `;`.
 
 ## Actions you will use most
 
@@ -392,13 +399,14 @@ pass, `soft` only shows what is missing.
   `ls`, `cat` or `/` paths, and list `windows` in `platforms` only when
   they are covered. `jupyter workshop lint --platform windows` checks.
 
-- JupyterLite (`lite` in `platforms`): there is no server, `python` or
+- JupyterLite (`jupyterlite` in `frontends`; a manifest without
+  `frontends` is JupyterLab only): there is no server, `python` or
   `git` in the terminal, and its shell has no `&&`, `$VAR` or `$(...)`.
-  Add `:lite:` variants (an empty one means nothing to do), avoid
-  `subprocess` in kernel checks and `script` verifies, and keep
+  Add `:jupyterlite:` variants (an empty one means nothing to do),
+  avoid `subprocess` in kernel checks and `script` verifies, and keep
   `execute-capture` bodies to shell commands. `jupyter workshop lint
---platform lite` checks; `jupyter workshop test --lite` runs the
-  workshop in a JupyterLite build.
+--frontend jupyterlite` checks; `jupyter workshop test --frontend
+jupyterlite` runs the workshop in a JupyterLite build.
 
 ## Reading test output
 

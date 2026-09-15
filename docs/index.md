@@ -174,6 +174,7 @@ analytics
 :caption: Reference
 
 reference/manifest
+reference/events
 settings
 cli
 ```

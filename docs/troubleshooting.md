@@ -146,9 +146,9 @@ is registered.
 **In JupyterLite a command using `$VAR`, `&&` or `$(...)` fails, or
 `python` and `git` are not found.** The JupyterLite terminal is cockle,
 a small shell without those, and without Python or git as commands.
-Give the action a `:lite:` variant or hide it with
-`:when: platform != "lite"`; `jupyter workshop lint --platform lite`
-reports the cases. See [JupyterLite](lite.md).
+Give the action a `:jupyterlite:` variant or hide it with
+`:when: frontend != "jupyterlite"`; `jupyter workshop lint --frontend
+jupyterlite` reports the cases. See [JupyterLite](lite.md).
 
 **The self-test passes locally and fails in CI on one action, with a
 timeout.** Actions that wait for terminal output can be slow on a

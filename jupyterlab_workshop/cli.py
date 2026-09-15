@@ -55,7 +55,11 @@ COLLECTION_SCHEMA_FILE = PACKAGE_DIR / "schema" / "collection.schema.json"
 
 CATALOG_SCHEMA_FILE = PACKAGE_DIR / "schema" / "catalog.schema.json"
 
-PLATFORMS = ["linux", "macos", "windows", "lite"]
+EVENTS_SCHEMA_FILE = PACKAGE_DIR / "schema" / "events.schema.json"
+
+PLATFORMS = ["linux", "macos", "windows"]
+
+FRONTENDS = ["jupyterlab", "jupyterlite"]
 
 CAPABILITIES = [
     "terminal",
@@ -142,6 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
         "(default linux, macos)",
     )
     init.add_argument(
+        "--frontend",
+        action="append",
+        dest="frontends",
+        choices=FRONTENDS,
+        help="frontend the workshop supports; repeat for several "
+        "(default: jupyterlab only, which needs no list)",
+    )
+    init.add_argument(
         "--capability",
         action="append",
         dest="capabilities",
@@ -167,6 +179,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=PLATFORMS,
         help="platform to select body variants for (default linux)",
     )
+    lint.add_argument(
+        "--frontend",
+        choices=FRONTENDS,
+        help="frontend to select body variants for (default jupyterlab); "
+        "jupyterlite implies the emscripten platform",
+    )
     lint.set_defaults(func=command_lint)
 
     render = commands.add_parser("render", help="render pages to standalone HTML")
@@ -177,6 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--platform",
         choices=PLATFORMS,
         help="platform to select body variants for (default linux)",
+    )
+    render.add_argument(
+        "--frontend",
+        choices=FRONTENDS,
+        help="frontend to select body variants for (default jupyterlab)",
     )
     render.set_defaults(func=command_render)
 
@@ -193,6 +216,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     kind.add_argument(
         "--catalog", action="store_true", help="print the catalog schema instead"
+    )
+    kind.add_argument(
+        "--events",
+        action="store_true",
+        help="print the progress events schema instead",
     )
     schema.set_defaults(func=command_schema)
 
@@ -291,6 +319,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip workshops that list platforms without this one "
         "(default: install every workshop)",
     )
+    install.add_argument(
+        "--frontend",
+        choices=FRONTENDS,
+        default="",
+        help="skip workshops that do not support this frontend; a workshop "
+        "listing none supports jupyterlab only (default: install every workshop)",
+    )
     install.set_defaults(func=command_install)
 
     kernels = commands.add_parser(
@@ -369,6 +404,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--lite",
         action="store_true",
         help="run in a static JupyterLite build instead of a JupyterLab server",
+    )
+    test.add_argument(
+        "--frontend",
+        choices=FRONTENDS,
+        help="frontend to run in: jupyterlab (the default) or jupyterlite, "
+        "the same as --lite",
     )
     test.add_argument(
         "--lite-dir",
@@ -543,6 +584,7 @@ def command_init(args: argparse.Namespace) -> int:
             ci=args.ci,
             template=args.template,
             platforms=args.platforms,
+            frontends=args.frontends,
             capabilities=args.capabilities,
             gating=args.gating,
         )
@@ -568,6 +610,9 @@ def command_lint(args: argparse.Namespace) -> int:
     if args.platform:
         extra += ["--platform", args.platform]
 
+    if args.frontend:
+        extra += ["--frontend", args.frontend]
+
     completed = run_node(["lint", str(_workshop_dir(args.directory)), *extra])
 
     sys.stdout.write(completed.stdout)
@@ -589,6 +634,9 @@ def command_render(args: argparse.Namespace) -> int:
 
     if args.platform:
         command += ["--platform", args.platform]
+
+    if args.frontend:
+        command += ["--frontend", args.frontend]
 
     completed = run_node(command)
 
@@ -674,13 +722,15 @@ def _check_index_file(file: Path, as_json: bool) -> int:
 
 
 def command_schema(args: argparse.Namespace) -> int:
-    """Print the manifest, collection or catalog schema."""
+    """Print the manifest, collection, catalog or events schema."""
 
     schema = (
         COLLECTION_SCHEMA_FILE
         if args.collection
         else CATALOG_SCHEMA_FILE
         if args.catalog
+        else EVENTS_SCHEMA_FILE
+        if args.events
         else SCHEMA_FILE
     )
 
@@ -887,6 +937,7 @@ def command_install(args: argparse.Namespace) -> int:
             args.directory,
             only=list(args.only),
             platform=args.platform,
+            frontend=args.frontend,
             report=print,
         )
     except FetchError as error:
@@ -983,7 +1034,7 @@ def command_test(args: argparse.Namespace) -> int:
         trust=args.trust,
         junit=args.junit,
         json_out=args.json_out,
-        lite=args.lite,
+        lite=args.lite or args.frontend == "jupyterlite",
         lite_dir=args.lite_dir,
     )
 

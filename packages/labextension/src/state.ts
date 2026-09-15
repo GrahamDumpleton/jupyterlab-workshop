@@ -31,6 +31,18 @@ export interface IInstalled {
   settings: ISettingChange[];
 }
 
+/** The session the recorded progress was last made under. */
+export interface ISessionRecord {
+  /** The session id, which the next open names in resumed_from. */
+  id: string;
+
+  /**
+   * The running frontend the session ran under. A different one on
+   * reopen means terminals, programs and kernels from before are gone.
+   */
+  instance: string;
+}
+
 /** Persisted learner progress for a workshop. */
 export interface IWorkshopState {
   version: 1;
@@ -41,6 +53,9 @@ export interface IWorkshopState {
     source?: IWorkshopSource;
   };
   trust?: TrustLevel;
+
+  /** The last session, recorded whenever a session starts. */
+  session?: ISessionRecord;
   installed: IInstalled;
   currentPage: string;
   pages: Record<string, IPageProgress>;

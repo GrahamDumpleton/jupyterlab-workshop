@@ -1071,12 +1071,14 @@ function effectiveStatus(
   return status;
 }
 
-/** How the platforms are named to learners. */
+/** How the platforms and frontends are named to learners. */
 export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
   linux: 'Linux',
   macos: 'macOS',
   windows: 'Windows',
-  lite: 'JupyterLite'
+  emscripten: 'Pyodide',
+  jupyterlab: 'JupyterLab',
+  jupyterlite: 'JupyterLite'
 };
 
 function PlatformBanner({
@@ -1084,26 +1086,54 @@ function PlatformBanner({
 }: {
   manager: IWorkshopManager;
 }): JSX.Element | null {
-  const platforms = manager.workshop?.manifest.platforms ?? [];
+  const manifest = manager.workshop?.manifest;
   const os = manager.platform?.os;
+  const frontend = manager.frontend;
 
-  // The list is advisory: the workshop still opens, with a warning.
-  if (!os || platforms.length === 0 || platforms.includes(os)) {
+  if (!manifest || !os) {
     return null;
   }
 
-  const listed = platforms.map(name => PLATFORM_LABELS[name] ?? name);
+  // Both lists are advisory: the workshop still opens, with a warning. A
+  // manifest that lists no frontends is written for JupyterLab alone,
+  // and JupyterLite is a frontend rather than an operating system, so
+  // the platforms list is not held against it there.
+  const frontends =
+    manifest.frontends.length > 0 ? manifest.frontends : ['jupyterlab'];
+  const label = (name: string): string => PLATFORM_LABELS[name] ?? name;
+
+  if (!frontends.includes(frontend)) {
+    return (
+      <div className="jp-WorkshopPanel-preflight">
+        <div className="jp-WorkshopPanel-preflightTitle">
+          This workshop was written for {frontends.map(label).join(', ')}, not{' '}
+          {label(frontend)}.
+        </div>
+        <div className="jp-WorkshopPanel-preflightHint">
+          {frontend === 'jupyterlite'
+            ? 'JupyterLite has no server and its terminal runs a small shell, so some actions may not work.'
+            : 'Some actions may not work.'}
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    frontend === 'jupyterlite' ||
+    manifest.platforms.length === 0 ||
+    manifest.platforms.includes(os)
+  ) {
+    return null;
+  }
 
   return (
     <div className="jp-WorkshopPanel-preflight">
       <div className="jp-WorkshopPanel-preflightTitle">
-        This workshop was written for {listed.join(', ')}, not{' '}
-        {PLATFORM_LABELS[os] ?? os}.
+        This workshop was written for {manifest.platforms.map(label).join(', ')}
+        , not {label(os)}.
       </div>
       <div className="jp-WorkshopPanel-preflightHint">
-        {os === 'lite'
-          ? 'JupyterLite has no server and its terminal runs a small shell, so some actions may not work.'
-          : 'Some commands may need adjusting.'}
+        Some commands may need adjusting.
       </div>
     </div>
   );
@@ -1138,7 +1168,7 @@ function ShellBanner({
   }
 
   // JupyterLite terminals always run cockle; there is nothing to configure.
-  if (platform.os === 'lite') {
+  if (platform.frontend === 'jupyterlite') {
     return (
       <div className="jp-WorkshopPanel-preflight">
         <div className="jp-WorkshopPanel-preflightTitle">

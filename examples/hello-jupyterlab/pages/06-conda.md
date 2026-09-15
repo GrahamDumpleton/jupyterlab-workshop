@@ -12,5 +12,5 @@ conda in JupyterLite, so the action has nothing to do there.
 ```{execute}
 :session: shell
 conda --version
-:lite:
+:jupyterlite:
 ```

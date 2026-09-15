@@ -59,6 +59,10 @@
       "type": "boolean",
       "description": "Whether the workshops form a sequence meant to be taken in the order listed, as a course does. The browser then numbers them and points at the next one to take."
     },
+    "analytics": {
+      "$ref": "#/definitions/analytics",
+      "description": "Where progress events of every workshop the collection lists are reported, once the learner opts in from the trust dialog. A deployment's own analytics setting takes precedence; a workshop's own block is used only when no collection that lists it declares one."
+    },
     "workshops": {
       "type": "array",
       "items": {
@@ -87,7 +91,15 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["linux", "macos", "windows", "lite"]
+              "enum": ["linux", "macos", "windows"]
+            }
+          },
+          "frontends": {
+            "type": "array",
+            "description": "Frontends the workshop lists in its manifest; none means JupyterLab only.",
+            "items": {
+              "type": "string",
+              "enum": ["jupyterlab", "jupyterlite"]
             }
           },
           "capabilities": {
@@ -159,6 +171,38 @@
         }
       },
       "description": "The workshops, in the order they are shown; a course lists them in sequence."
+    }
+  },
+  "definitions": {
+    "analytics": {
+      "type": "object",
+      "description": "Where progress events are reported: the sink they are posted to, the token they are posted with, and labels stamped on every event. The same block appears in a workshop manifest, in a collection index and in a deployment's settings, and the highest of those levels that has one applies whole.",
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "URL that receives batches of events as JSON lines by POST."
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Token sent as a bearer credential in the Authorization header of every batch, issued by the sink's operator. Public wherever the block is public."
+        },
+        "labels": {
+          "type": "object",
+          "description": "Key and value pairs stamped on every event so reports can slice by them: a course, a cohort, a term. Labels are for slicing, never for identity; the workshop's name, source, collection, host and frontend are fields every event already carries. At most 16 labels.",
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z0-9_.-]+$",
+            "maxLength": 63
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      }
     }
   }
 }

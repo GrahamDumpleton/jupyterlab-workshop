@@ -1,9 +1,12 @@
 from pathlib import Path
 
 from jupyterlab_workshop.platform import (
+    FRONTEND_VERSION,
     PlatformInfo,
+    current_platform,
     detect_container,
     detect_platform,
+    instance_id,
 )
 
 
@@ -80,6 +83,9 @@ def test_to_dict_round_trips_all_fields() -> None:
         "hub_user": "",
         "host": "local",
         "container": False,
+        "frontend": "jupyterlab",
+        "frontend_version": FRONTEND_VERSION,
+        "instance_id": "",
     }
 
 
@@ -92,6 +98,26 @@ def test_host_is_read_from_the_environment() -> None:
 
     assert detect(environ=binder).host == "binder"
     assert detect(environ=binder).hub_user == "jovyan"
+
+    # A codespace sets both variables; one alone, or a false value, is not
+    # one, and a hub inside a codespace is still a codespace.
+    codespace = {"CODESPACES": "true", "CODESPACE_NAME": "fuzzy-space"}
+
+    assert detect(environ=codespace).host == "codespaces"
+    assert detect(environ={"CODESPACES": "true"}).host == "local"
+    assert (
+        detect(environ={"CODESPACES": "false", "CODESPACE_NAME": "x"}).host == "local"
+    )
+    assert detect(environ={**codespace, "JUPYTERHUB_USER": "ada"}).host == "codespaces"
+
+
+def test_instance_id_is_minted_once_per_process() -> None:
+    first = instance_id()
+
+    assert len(first) == 32
+    assert instance_id() == first
+    assert current_platform(shell_command=None, root_dir="/x").instance_id == first
+    assert detect(instance_id="abc").instance_id == "abc"
 
 
 def test_container_flag_is_passed_through() -> None:

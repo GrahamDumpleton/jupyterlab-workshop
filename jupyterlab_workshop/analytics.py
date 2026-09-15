@@ -87,8 +87,14 @@ def read_events(root_dir: Path, workshop_path: str) -> list[dict[str, Any]]:
     return events
 
 
-def forward_events(sink: str, events: list[Any], timeout: float = 15.0) -> int:
-    """POST events to a sink as JSON lines; return the HTTP status."""
+def forward_events(
+    sink: str, events: list[Any], timeout: float = 15.0, token: str = ""
+) -> int:
+    """POST events to a sink as JSON lines; return the HTTP status.
+
+    ``token`` is sent as a bearer credential in the Authorization header,
+    never in the URL, so the sink URL is safe to log anywhere.
+    """
 
     scheme = urlsplit(sink).scheme.lower()
 
@@ -103,15 +109,15 @@ def forward_events(sink: str, events: list[Any], timeout: float = 15.0) -> int:
         if isinstance(event, dict)
     ).encode("utf-8")
 
-    request = Request(
-        sink,
-        data=body,
-        method="POST",
-        headers={
-            "User-Agent": USER_AGENT,
-            "Content-Type": "application/x-ndjson",
-        },
-    )
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/x-ndjson",
+    }
+
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = Request(sink, data=body, method="POST", headers=headers)
 
     try:
         with urlopen(request, timeout=timeout) as response:

@@ -13,7 +13,12 @@ import { Contents } from '@jupyterlab/services';
 
 import { readIfExists } from '../actions/contents';
 import { WORKSHOP_STATE_DIR } from '../state';
-import { ICapabilitySummary, ITrustSummary, IWorkshopSource } from '../tokens';
+import {
+  IAnalyticsOffer,
+  ICapabilitySummary,
+  ITrustSummary,
+  IWorkshopSource
+} from '../tokens';
 
 /** Name of the record the server writes when it downloads a workshop. */
 export const SOURCE_FILE = 'source.json';
@@ -116,6 +121,9 @@ export function buildTrustSummary(options: {
   sources: Record<string, string>;
   source: IWorkshopSource;
   hash?: string;
+
+  /** The sink to offer an opt-in for, when a collection or the manifest names one. */
+  analytics?: IAnalyticsOffer;
 }): ITrustSummary {
   const { manifest, pages, source } = options;
   const declared = declaredCapabilities(manifest);
@@ -156,6 +164,6 @@ export function buildTrustSummary(options: {
     capabilities,
     automatic: countAutomatic(pages),
     lint: lintWorkshop({ manifest, pages }),
-    analyticsSink: manifest.analytics?.sink
+    analytics: options.analytics
   };
 }

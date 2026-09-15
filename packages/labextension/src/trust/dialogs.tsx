@@ -12,9 +12,11 @@ import {
   ConfirmAnswer,
   IConfirmRequest,
   ICapabilitySummary,
+  IReopenRequest,
   ITrustChoice,
   ITrustPrompts,
-  ITrustSummary
+  ITrustSummary,
+  ReopenChoice
 } from '../tokens';
 import { describeSource } from './summary';
 
@@ -113,7 +115,7 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
             </ul>
           </details>
         ) : null}
-        {summary.analyticsSink ? (
+        {summary.analytics ? (
           <label className="jp-WorkshopTrust-analytics">
             <input
               type="checkbox"
@@ -123,7 +125,10 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
               }}
             />{' '}
             Report my progress (pages, actions and check results, no file
-            contents) to <code>{sinkHost(summary.analyticsSink)}</code>
+            contents) to <code>{sinkHost(summary.analytics.sink)}</code>
+            {summary.analytics.level === 'collection'
+              ? `, which the collection ${summary.analytics.collection ?? ''} asks for on behalf of every workshop it lists`
+              : ''}
           </label>
         ) : null}
         <p className="jp-WorkshopTrust-heading">Levels</p>
@@ -291,8 +296,37 @@ export async function showConfirmDialog(
   return result.value ? 'always' : 'yes';
 }
 
+/**
+ * Ask whether to restart or continue a workshop whose progress was made
+ * under a JupyterLab that has since restarted. Restart is the default,
+ * since terminals, running programs and notebook kernels from earlier
+ * pages are gone; Continue is the learner's override.
+ */
+export async function showReopenDialog(
+  request: IReopenRequest
+): Promise<ReopenChoice> {
+  const result = await showDialog({
+    title: `Restart workshop "${request.title}"?`,
+    body: 'This workshop was in progress under a JupyterLab that has since restarted. Terminals, running programs and notebook kernels from earlier pages are gone, so what those pages set up may need doing again. Restart puts the files back as they were when the workshop was first opened, deletes anything added since and forgets the progress; Continue keeps the files and the progress and carries on where you left off.',
+    buttons: [
+      Dialog.cancelButton(),
+      Dialog.okButton({ label: 'Continue' }),
+      Dialog.warnButton({ label: 'Restart' })
+    ],
+    defaultButton: 2,
+    hasClose: true
+  });
+
+  if (!result.button.accept) {
+    return null;
+  }
+
+  return result.button.label === 'Restart' ? 'restart' : 'continue';
+}
+
 /** The dialogs, packaged for the manager. */
 export const trustPrompts: ITrustPrompts = {
   decide: showTrustDialog,
-  confirm: showConfirmDialog
+  confirm: showConfirmDialog,
+  reopen: showReopenDialog
 };

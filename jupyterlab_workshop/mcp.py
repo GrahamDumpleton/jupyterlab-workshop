@@ -180,17 +180,26 @@ def create_server(
             return {"error": str(error)}
 
     @server.tool()
-    def lint(directory: str, platform: str = "linux") -> Any:
+    def lint(
+        directory: str, platform: str = "linux", frontend: str = "jupyterlab"
+    ) -> Any:
         """Lint a workshop directory and return the findings with fix hints.
 
-        Rendering for a platform (linux, macos, windows or lite) selects
-        that platform's command variants.
+        Rendering for a platform (linux, macos or windows) and a frontend
+        (jupyterlab or jupyterlite) selects those command variants.
         """
 
-        return node_json(["lint", directory, "--platform", platform])
+        return node_json(
+            ["lint", directory, "--platform", platform, "--frontend", frontend]
+        )
 
     @server.tool()
-    def render(directory: str, page: str = "", platform: str = "linux") -> str:
+    def render(
+        directory: str,
+        page: str = "",
+        platform: str = "linux",
+        frontend: str = "jupyterlab",
+    ) -> str:
         """Render the pages, or one page by id, to standalone HTML."""
 
         arguments = ["render", directory]
@@ -198,7 +207,9 @@ def create_server(
         if page:
             arguments.append(page)
 
-        completed = run_node([*arguments, "--platform", platform])
+        completed = run_node(
+            [*arguments, "--platform", platform, "--frontend", frontend]
+        )
 
         return completed.stdout if completed.returncode == 0 else completed.stderr
 
@@ -297,12 +308,16 @@ def create_server(
         capabilities: list[str] | None = None,
         gating: str = "soft",
         ci: bool = False,
+        frontends: list[str] | None = None,
     ) -> Any:
         """Scaffold a new workshop directory.
 
         Templates: starter (terminal, file write, check and quiz), blank,
         or notebook (notebook-create, cell-run-all and a kernel check).
         Capabilities are names such as terminal or write-files:workspace.
+        Platforms are linux, macos and windows; frontends are jupyterlab
+        and jupyterlite, and a workshop that lists none supports
+        JupyterLab only.
         """
 
         target = Path(directory)
@@ -318,6 +333,7 @@ def create_server(
                 platforms=platforms,
                 capabilities=capabilities,
                 gating=gating,
+                frontends=frontends,
             )
         except (FileExistsError, ValueError) as error:
             return {"error": str(error)}

@@ -20,13 +20,13 @@ change.
 
 Commands can also run in the background, through a hidden workshop kernel
 on a server or the terminal's shell in JupyterLite, with their output
-captured. JupyterLite has no `python3` command, so that platform gets a
+captured. JupyterLite has no `python3` command, so that frontend gets a
 variant of its own.
 
 ```{execute-capture}
 :capture: answer
 python3 -c "print(6 * 7)"
-:lite:
+:jupyterlite:
 echo 42
 ```
 

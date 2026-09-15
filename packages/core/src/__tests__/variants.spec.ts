@@ -10,12 +10,12 @@ const BODY = [
   'python3 -m venv .venv && source .venv/bin/activate',
   ':windows:',
   'py -m venv .venv; .\\.venv\\Scripts\\Activate.ps1',
-  ':lite:',
+  ':jupyterlite:',
   ''
 ].join('\n');
 
 describe('splitVariants', () => {
-  it('splits the default from the platform variants', () => {
+  it('splits the default from the platform and frontend variants', () => {
     const split = splitVariants(BODY);
 
     expect(split.defaultText).toBe(
@@ -23,7 +23,7 @@ describe('splitVariants', () => {
     );
     expect(split.variants).toEqual({
       windows: 'py -m venv .venv; .\\.venv\\Scripts\\Activate.ps1',
-      lite: ''
+      jupyterlite: ''
     });
     expect(allVariants(split)).toHaveProperty('default');
   });
@@ -41,7 +41,9 @@ describe('splitVariants', () => {
   it('ignores marker-like lines naming unknown platforms', () => {
     expect(hasVariants('echo :root:')).toBe(false);
     expect(hasVariants(':solaris:\nls')).toBe(false);
+    expect(hasVariants(':lite:\nls')).toBe(false);
     expect(hasVariants('ls\n:windows:\ndir')).toBe(true);
+    expect(hasVariants('ls\n:jupyterlab:\ndir')).toBe(true);
   });
 });
 
@@ -53,7 +55,22 @@ describe('selectVariant', () => {
       body: 'py -m venv .venv; .\\.venv\\Scripts\\Activate.ps1',
       variant: 'windows'
     });
-    expect(selectVariant(split, 'lite')).toEqual({ body: '', variant: 'lite' });
+    expect(selectVariant(split, 'emscripten', 'jupyterlite')).toEqual({
+      body: '',
+      variant: 'jupyterlite'
+    });
+  });
+
+  it('prefers the frontend variant to the platform variant', () => {
+    const both = splitVariants('ls\n:windows:\ndir\n:jupyterlite:\nls -1');
+
+    expect(selectVariant(both, 'windows', 'jupyterlite').variant).toBe(
+      'jupyterlite'
+    );
+    expect(selectVariant(both, 'windows', 'jupyterlab').variant).toBe(
+      'windows'
+    );
+    expect(selectVariant(both, 'linux', 'jupyterlab').variant).toBe('default');
   });
 
   it('falls back to the default otherwise', () => {
@@ -95,6 +112,26 @@ describe('parsePage with a platform', () => {
       expect(node.body).toBe('dir x');
       expect(node.variant).toBe('windows');
       expect(node.variants).toEqual({ default: 'ls x', windows: 'dir x' });
+    }
+  });
+
+  it('renders the frontend variant when asked for one', () => {
+    const page = parsePage(
+      '```{execute}\nls\n:windows:\ndir\n:jupyterlite:\nls -1\n```',
+      {
+        path: 'p.md',
+        variables: {},
+        platform: 'windows',
+        frontend: 'jupyterlite'
+      }
+    );
+    const node = page.nodes[0];
+
+    if (node.kind === 'directive') {
+      expect(node.body).toBe('ls -1');
+      expect(node.variant).toBe('jupyterlite');
+    } else {
+      throw new Error('expected a directive');
     }
   });
 
