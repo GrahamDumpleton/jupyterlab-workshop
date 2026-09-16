@@ -20,6 +20,91 @@ import { TerminalSessions } from './terminal';
 /** Widget factory name of the notebook editor. */
 const NOTEBOOK_FACTORY = 'Notebook';
 
+/**
+ * The action in progress on each notebook, by server path.
+ *
+ * A clicked action runs at once rather than queueing, so on a slow
+ * server a learner clicking through a page can start a second insert
+ * or run on a notebook whose first is still running its cell. The
+ * second then waits here for the first to finish, cell run and save
+ * included, so the cells go in and run in the order clicked.
+ */
+const notebookLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `work` on a notebook once no other action is working on it.
+ */
+export async function withNotebookLock<T>(
+  serverPath: string,
+  work: () => Promise<T>
+): Promise<T> {
+  const previous = notebookLocks.get(serverPath) ?? Promise.resolve();
+  const turn = previous.catch(() => undefined).then(work);
+
+  notebookLocks.set(serverPath, turn);
+
+  try {
+    return await turn;
+  } finally {
+    if (notebookLocks.get(serverPath) === turn) {
+      notebookLocks.delete(serverPath);
+    }
+  }
+}
+
+/** Contexts with a save in flight, and who is waiting for it to end. */
+const savesInFlight = new WeakMap<
+  NotebookPanel['context'],
+  { busy: boolean; waiters: Array<() => void> }
+>();
+
+/**
+ * Save a notebook without racing another save of the same file.
+ *
+ * JupyterLab's save reads the file's hash, compares it with the one it
+ * recorded last time, writes, then records the new hash. Two saves in
+ * flight on one context, an action's and the autosave's say, interleave
+ * so that the second reads the first's write before the first records
+ * it, and the learner is shown "File Changed" for a file nobody else
+ * touched. This waits for any save the context has started, then saves
+ * only if there is something to save.
+ */
+export async function saveNotebook(panel: NotebookPanel): Promise<void> {
+  const context = panel.context;
+  let tracker = savesInFlight.get(context);
+
+  if (!tracker) {
+    const state = { busy: false, waiters: [] as Array<() => void> };
+
+    context.saveState.connect((_, status) => {
+      if (status === 'started') {
+        state.busy = true;
+      } else if (status === 'completed' || status === 'failed') {
+        state.busy = false;
+
+        const waiters = state.waiters.splice(0);
+
+        waiters.forEach(resolve => resolve());
+      }
+    });
+
+    savesInFlight.set(context, state);
+    tracker = state;
+  }
+
+  while (tracker.busy) {
+    const idle = tracker;
+
+    await new Promise<void>(resolve => idle.waiters.push(resolve));
+  }
+
+  if (context.isDisposed || !context.model.dirty) {
+    return;
+  }
+
+  await context.save();
+}
+
 /** Services the notebook actions need. */
 export interface INotebookActionContext {
   app: JupyterFrontEnd;
@@ -350,10 +435,18 @@ export class CellInsertAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
-    const panel = await openNotebook(
-      this._context,
-      notebookPath(this._context, request)
+    const serverPath = notebookPath(this._context, request);
+
+    return withNotebookLock(serverPath, () =>
+      this._insert(request, serverPath)
     );
+  }
+
+  private async _insert(
+    request: IActionRequest,
+    serverPath: string
+  ): Promise<IActionResult> {
+    const panel = await openNotebook(this._context, serverPath);
     const model = panel.content.model;
 
     if (!model) {
@@ -411,7 +504,7 @@ export class CellInsertAction implements IActionImplementation {
 
     // Saved after the run, so the file holds the cell's output as well as
     // the cell.
-    await panel.context.save();
+    await saveNotebook(panel);
 
     return { status: 'ok' };
   }
@@ -450,10 +543,16 @@ export class CellRunAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
-    const panel = await openNotebook(
-      this._context,
-      notebookPath(this._context, request)
-    );
+    const serverPath = notebookPath(this._context, request);
+
+    return withNotebookLock(serverPath, () => this._run(request, serverPath));
+  }
+
+  private async _run(
+    request: IActionRequest,
+    serverPath: string
+  ): Promise<IActionResult> {
+    const panel = await openNotebook(this._context, serverPath);
     const notebook = panel.content;
 
     await panel.sessionContext.ready;
@@ -485,7 +584,7 @@ export class CellRunAction implements IActionImplementation {
 
     // The file should show what the learner saw, so the outputs are
     // saved rather than left to autosave.
-    await panel.context.save();
+    await saveNotebook(panel);
 
     return ok
       ? { status: 'ok' }
