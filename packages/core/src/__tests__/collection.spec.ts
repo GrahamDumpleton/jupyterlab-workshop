@@ -365,3 +365,23 @@ describe('locations', () => {
     );
   });
 });
+
+describe('collection id', () => {
+  it('keeps a declared id and drops one with whitespace', () => {
+    const declared = parseCollectionIndex({
+      version: 1,
+      id: 'example.org/python-basics',
+      workshops: []
+    });
+    const blank = parseCollectionIndex({
+      version: 1,
+      id: 'not an id',
+      workshops: []
+    });
+    const none = parseCollectionIndex({ version: 1, workshops: [] });
+
+    expect(declared.id).toBe('example.org/python-basics');
+    expect(blank.id).toBeUndefined();
+    expect(none.id).toBeUndefined();
+  });
+});

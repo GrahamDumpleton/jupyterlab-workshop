@@ -713,6 +713,9 @@ def _check_index_file(file: Path, as_json: bool) -> int:
             f"{count} {what}{'' if count == 1 else 's'}"
         )
 
+        for warning in report.get("warnings", []):
+            print(f"warning: {warning}")
+
         for problem in problems:
             print(f"error: {problem}")
 
@@ -750,6 +753,13 @@ def _add_metadata_arguments(
 ) -> None:
     """Add the options that set a collection's or catalog's own fields."""
 
+    if what == "collection":
+        parser.add_argument(
+            "--id",
+            help="the collection's identity, the same wherever it runs, "
+            "such as example.org/python-basics; analytics know it by this",
+        )
+
     parser.add_argument("--title", help=f"title of the {what}")
     parser.add_argument("--description", help=f"a sentence or two about the {what}")
     parser.add_argument("--publisher", help="who publishes it")
@@ -782,6 +792,7 @@ def _add_metadata_arguments(
 
 def _collection_metadata(args: argparse.Namespace) -> CollectionMetadata:
     return CollectionMetadata(
+        id=args.id or "",
         title=args.title or "",
         description=args.description or "",
         publisher=args.publisher or "",

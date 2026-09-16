@@ -12,7 +12,9 @@ field.
 
 Every event carries the same base fields: what happened (`kind`) and
 when (`ts`); which open of which workshop it belongs to (`session_id`,
-`workshop`, `name`, `version`, `source`, `collection`); which running
+`workshop`, `name`, `version`, `source`, `collection`, and
+`collection_id` and `collection_title` when the collection's index
+declares them); which running
 JupyterLab it happened under (`instance_id`); its place in the session
 (`seq`); where it ran (`frontend`, `frontend_version`, `host`,
 `platform`, `trust`); the `labels` of the analytics block that supplied
@@ -40,6 +42,14 @@ one. The kinds and their extra fields:
 
 Events never include file contents, command output, variable values or
 form answers.
+
+A workshop is identified across deployments by its `name` and its
+collection. `collection` is where the collection was subscribed from,
+a URL or a path, which differs between deployments of the same
+collection, so an index that declares an [`id`](collections.md#index-format)
+has it sent as `collection_id`, and a service keys on that when it is
+present and on `collection` otherwise. `collection_title` is the
+index's title, for display.
 
 ### Sessions, instances and sequence numbers
 

@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "id": "github.com/GrahamDumpleton/jupyterlab-workshop/examples",
   "title": "Example workshops",
   "description": "The example workshops from the jupyterlab-workshop repository: a tour of what actions can do, git from the command line, and writing a workshop of your own.",
   "publisher": {

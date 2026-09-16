@@ -62,6 +62,11 @@ export interface ICollectionEntry {
 
 /** Metadata describing a collection, as its index or a catalog gives it. */
 export interface ICollectionInfo {
+  /**
+   * The collection's declared identity, the same wherever it runs, by
+   * which analytics know it. Absent when the index declares none.
+   */
+  id?: string;
   title?: string;
   description?: string;
   publisher?: IPublisher;
@@ -146,6 +151,10 @@ export function parseCollectionInfo(
   data: Record<string, unknown>
 ): ICollectionInfo {
   const info: ICollectionInfo = { tags: stringList(data.tags) };
+
+  if (typeof data.id === 'string' && /^\S+$/.test(data.id)) {
+    info.id = data.id;
+  }
 
   if (typeof data.title === 'string' && data.title !== '') {
     info.title = data.title;

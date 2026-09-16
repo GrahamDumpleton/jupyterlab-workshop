@@ -225,6 +225,7 @@ tells its host that the learner is there, as does the icon it names.
 ```json
 {
   "version": 1,
+  "id": "example.org/python-basics",
   "title": "Python basics",
   "description": "The language from the first print to a small program.",
   "publisher": { "name": "Example Academy", "url": "https://example.org" },
@@ -264,9 +265,23 @@ tells its host that the learner is there, as does the icon it names.
 ```
 
 Everything above `workshops` describes the collection itself and is
-optional: `title`, `description`, `publisher` (a name, or an object with
-a `name` and a `url`), `homepage`, `icon` and `tags`. The browser shows
-them on the group heading and in the Collections dialog. An `analytics`
+optional: `id`, `title`, `description`, `publisher` (a name, or an
+object with a `name` and a `url`), `homepage`, `icon` and `tags`. The
+browser shows them on the group heading and in the Collections dialog.
+
+The `id` is the collection's identity: an opaque string with no
+whitespace that is the same wherever the collection runs, so a copy
+shipped in a Binder image, one in a codespace and one subscribed to by
+URL all report to an [analytics service](analytics.md) as one
+collection. Choose it under a prefix you control, then the collection,
+as in `example.org/python-basics`; the scheme is yours, the service
+only compares strings. Set it before any analytics are collected and
+never change it, since a change starts a new collection in the data,
+and give a fork an id of its own. A collection without one is
+identified by where it was subscribed from, which is fine for a
+collection only ever subscribed to by URL and wrong for one shipped in
+an image, where every deployment subscribes to the same file path;
+`jupyter workshop lint` warns about it. An `analytics`
 block asks that the progress events of every workshop the collection
 lists be reported to its `sink`, with the learner's opt-in from the
 trust dialog, sent with its `token` and stamped with its `labels`; it is

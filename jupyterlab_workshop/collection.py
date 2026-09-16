@@ -57,7 +57,7 @@ MAX_LABEL_VALUE = 128
 MAX_LABELS = 16
 
 #: Descriptive fields of a collection, in the order they are written.
-METADATA_KEYS = ("title", "description", "publisher", "homepage", "icon", "tags")
+METADATA_KEYS = ("id", "title", "description", "publisher", "homepage", "icon", "tags")
 
 MANIFEST_FILE = "workshop.yaml"
 
@@ -85,6 +85,7 @@ class CollectionMetadata:
     a sequence, with ``None`` keeping what the index says.
     """
 
+    id: str = ""
     title: str = ""
     description: str = ""
     publisher: str = ""
@@ -99,7 +100,7 @@ class CollectionMetadata:
 
         previous = existing or {}
 
-        for key in ("title", "description", "homepage", "icon"):
+        for key in ("id", "title", "description", "homepage", "icon"):
             value = getattr(self, key) or previous.get(key)
 
             if value:

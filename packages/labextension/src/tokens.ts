@@ -446,6 +446,12 @@ export interface IWorkshopEvent {
   /** The subscribed collection that lists the workshop, or empty. */
   collection: string;
 
+  /** The id the collection's index declares, empty when none. */
+  collection_id: string;
+
+  /** The collection index's title, for display. */
+  collection_title: string;
+
   /** Sequence number within the session, from 1. */
   seq: number;
 

@@ -488,6 +488,8 @@ export class WorkshopManager implements IWorkshopManager {
 
       this._decision = decision;
       this._collection = membership?.location ?? '';
+      this._collectionId = membership?.index.id ?? '';
+      this._collectionTitle = membership?.index.title ?? '';
       this._offered = offered;
       this._workshop = {
         path: workshopPath,
@@ -880,6 +882,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._error = null;
     this._authoring = false;
     this._collection = '';
+    this._collectionId = '';
+    this._collectionTitle = '';
     this._offered = null;
     this._store.load({}, []);
 
@@ -1023,6 +1027,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._error = null;
     this._authoring = false;
     this._collection = '';
+    this._collectionId = '';
+    this._collectionTitle = '';
     this._offered = null;
     this._store.load({}, []);
 
@@ -1749,6 +1755,8 @@ export class WorkshopManager implements IWorkshopManager {
       version: workshop.manifest.version ?? '',
       source: workshop.trust.sourceKey,
       collection: this._collection,
+      collection_id: this._collectionId,
+      collection_title: this._collectionTitle,
       seq: this._seq,
       labels: { ...(this.analytics?.labels ?? {}) },
       frontend: this.frontend,
@@ -2461,6 +2469,8 @@ export class WorkshopManager implements IWorkshopManager {
   private _sessionId = '';
   private _seq = 0;
   private _collection = '';
+  private _collectionId = '';
+  private _collectionTitle = '';
   private _offered: IAnalyticsBlock | null = null;
   private _collectionSources: (() => Promise<string[]>) | null = null;
   private _indexes = new Map<string, ICollectionIndex | null>();

@@ -64,6 +64,9 @@ export interface ICheckReport {
 
   /** The locations a catalog names, as written, for the caller to resolve. */
   locations: string[];
+
+  /** What is worth fixing but does not make the file invalid. */
+  warnings: string[];
 }
 
 /**
@@ -86,7 +89,8 @@ export function checkIndexFile(file: string): ICheckReport {
       kind: 'catalog',
       title: catalog.title ?? '',
       entries: catalog.collections.length,
-      locations: catalog.collections.map(entry => entry.url)
+      locations: catalog.collections.map(entry => entry.url),
+      warnings: []
     };
   }
 
@@ -97,7 +101,12 @@ export function checkIndexFile(file: string): ICheckReport {
     kind: 'collection',
     title: collection.title ?? '',
     entries: collection.workshops.length,
-    locations: []
+    locations: [],
+    warnings: collection.id
+      ? []
+      : [
+          'the collection has no "id", so analytics identify it by where it was subscribed from, which differs between deployments; give it one that is the same wherever it runs, such as example.org/python-basics'
+        ]
   };
 }
 
