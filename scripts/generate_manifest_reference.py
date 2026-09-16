@@ -120,10 +120,12 @@ def nested_object(
 
         return None
 
+    # The items of a list may be an object in place or a reference to a
+    # definition, as the page entries of the events schema are.
     if prop.get("type") == "array":
         items = prop.get("items", {})
 
-        return items if isinstance(items, dict) and "properties" in items else None
+        return nested_object(items, definitions) if isinstance(items, dict) else None
 
     if prop.get("type") == "object":
         if "properties" in prop:

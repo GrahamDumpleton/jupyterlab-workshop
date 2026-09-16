@@ -66,6 +66,26 @@ workshop, and each session keeps the list it actually ran with. Every
 other event names a page by its id alone, which is the file name without
 its extension unless the page's front matter sets `id`.
 
+Each page entry also carries `directives`, since 0.2.1: the directives
+on the page that can produce an event, in document order, so a service
+can tell what nobody ran from what was there to run. Each is listed
+with its `id`, as `action-executed`, `verify-result`, `quiz-answered`,
+`form-submitted` and `hint-opened` report it, its `type` (an action
+type such as `execute`, or `verify`, `quiz`, `form` or `hint`), and its
+`trigger`, how it is expected to start, in the words those events use:
+`auto` for a directive carrying `auto`, `cascade` for the target of
+another directive's `cascade`, `trigger` for a check whose `trigger`
+lists anything beyond a click, and `click` otherwise, the first of
+those winning where more than one applies and the manifest's
+`defaults.actions` applied under the page's own options. An entry
+inside a `{when}` block, or carrying its own `when`, has
+`conditional: true`, since whether the learner ever saw it depends on
+the variables when the page was shown. Inline roles have no ids and
+produce no events, so they are not listed. A sink that holds page
+entries to an older copy of the schema rejects the event that carries
+the field, so a sink is brought up to date before the extension that
+sends it is released.
+
 A `heartbeat` is sent every minute while the browser tab is visible and
 every five minutes while it is hidden, with `hidden` saying which, and
 once at every change between the two, so a service can tell a learner

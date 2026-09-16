@@ -156,3 +156,37 @@ def test_recorded_events_match_the_published_schema() -> None:
 
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate({**event, "labels": {"Bad": "x"}}, schema)
+
+
+def test_a_page_entry_lists_its_directives_or_not() -> None:
+    """A page entry is closed, and its inventory is optional.
+
+    A session from an older extension carries entries without
+    ``directives``; a newer one lists them. Either validates, and a
+    field the contract does not name is refused, which is what makes
+    the inventory an additive change a sink must accept before the
+    extension sends it.
+    """
+
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = json.loads(EVENTS_SCHEMA.read_text(encoding="utf-8"))
+    page = {"id": "01-start", "path": "pages/01-start.md", "title": "Start"}
+    listed = {
+        **page,
+        "directives": [
+            {"id": "01-start-1", "type": "execute", "trigger": "click"},
+            {"id": "done", "type": "verify", "trigger": "trigger", "conditional": True},
+        ],
+    }
+    entry = {**schema, **schema["definitions"]["page"]}
+
+    jsonschema.validate(page, entry)
+    jsonschema.validate(listed, entry)
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({**page, "colour": "red"}, entry)
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {**page, "directives": [{"id": "x", "type": "execute"}]}, entry
+        )

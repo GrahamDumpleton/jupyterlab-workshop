@@ -11,6 +11,7 @@ import {
   TrustLevel,
   Variables,
   normalizeLocation,
+  pageInventory,
   parseCatalog,
   parseCollectionIndex,
   resolveCatalog,
@@ -528,10 +529,13 @@ export class WorkshopManager implements IWorkshopManager {
       };
       this._state.save();
 
+      // The page list carries each page's directives too, so a service
+      // can report what was never run against what was there to run.
       const pages = visible.map(page => ({
         id: page.id,
         path: page.path,
-        title: page.title
+        title: page.title,
+        directives: pageInventory(page, manifest.defaults)
       }));
 
       if (resumed) {

@@ -556,6 +556,34 @@ test.describe('workshop browser', () => {
     );
     expect(new Set(recorded.map(event => event.session_id)).size).toBe(1);
 
+    // Each page entry lists its directives, ids as the events report
+    // them, with how each is expected to start.
+    const inventory = (
+      resume?.pages as {
+        directives: { id: string; type: string; trigger: string }[];
+      }[]
+    )[0].directives;
+
+    expect(inventory.map(entry => entry.type)).toEqual([
+      'execute',
+      'execute',
+      'execute',
+      'form',
+      'execute',
+      'execute',
+      'verify'
+    ]);
+    expect(inventory.find(entry => entry.id === 'identity')).toEqual({
+      id: 'identity',
+      type: 'form',
+      trigger: 'click'
+    });
+    expect(inventory.find(entry => entry.id === 'repo-created')).toEqual({
+      id: 'repo-created',
+      type: 'verify',
+      trigger: 'trigger'
+    });
+
     // Opened by command with the progress stale again, the dialog asks,
     // and Restart starts over in a session that names the old one.
     await page.evaluate(() => {

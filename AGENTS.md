@@ -180,6 +180,12 @@ underlying commands yourself; run `just --list` to see everything.
   be reflected in the JSON schema, the lint rules and the format
   documentation in the same change.
 
+- The progress event contract (`packages/core/src/schema/events.schema.json`
+  and `docs/analytics.md`) is consumed by the analytics service, which
+  vendors the schema. An additive change to it lands in the service, and
+  is rolled out, before the extension release that sends it, since a
+  service holding events to an older copy would reject them.
+
 - Verify JupyterLab API names against the installed version's TypeScript
   definitions (under `node_modules/@jupyterlab/*/lib/`) before using them.
   Use only public tokens and APIs.

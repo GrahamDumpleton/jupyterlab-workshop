@@ -9,6 +9,7 @@ export * from './errors';
 export * from './format/analytics';
 export * from './format/directives';
 export * from './format/frontmatter';
+export * from './format/inventory';
 export * from './format/layouts';
 export * from './format/manifest';
 export * from './format/page';

@@ -160,8 +160,19 @@ describe('events schema', () => {
     trust: 'trusted'
   };
   const page = { id: '01-init', path: 'pages/01-init.md', title: 'Init' };
+  const listed = {
+    ...page,
+    directives: [
+      { id: '01-init-1', type: 'execute', trigger: 'click' },
+      { id: 'check', type: 'verify', trigger: 'trigger', conditional: true }
+    ]
+  };
   const samples: Record<string, Record<string, unknown>> = {
-    'workshop-start': { page: '01-init', pages: [page], restarted_from: 'old' },
+    'workshop-start': {
+      page: '01-init',
+      pages: [listed],
+      restarted_from: 'old'
+    },
     'workshop-resume': { page: '01-init', pages: [page], resumed_from: 'old' },
     'workshop-finish': { pages: 3 },
     'workshop-abandon': { page: '01-init' },
