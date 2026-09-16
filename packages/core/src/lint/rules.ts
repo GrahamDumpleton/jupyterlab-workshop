@@ -898,6 +898,22 @@ function lintCapabilities(
         }
       }
 
+      // A verify triggered after an action that no page carries would
+      // only ever run when clicked, which the author did not intend.
+      if (node.name === 'verify') {
+        for (const trigger of parseTriggers(node.options.trigger).triggers) {
+          if (trigger.kind === 'action' && trigger.id && !ids.has(trigger.id)) {
+            messages.push({
+              level: 'error',
+              rule: 'unknown-action-id',
+              message: `"${node.id}" is triggered by unknown action "${trigger.id}"`,
+              path: page.path,
+              line: node.line
+            });
+          }
+        }
+      }
+
       if (
         isAutomatic(node) &&
         auto !== 'page-enter' &&

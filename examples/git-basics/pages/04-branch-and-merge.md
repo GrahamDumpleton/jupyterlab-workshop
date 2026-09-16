@@ -53,6 +53,7 @@ Merge the branch. Because `main` has not changed since `feature` was
 created, git simply moves `main` forward, which it calls a fast-forward.
 
 ```{execute}
+:id: merge-feature
 :session: git
 git merge feature
 ```
@@ -71,5 +72,5 @@ after the merge command, and every ten seconds.
 :id: merged
 :label: main includes the feature branch
 :script: verify/merged.py
-:trigger: after:branch-and-merge-7; interval 10s
+:trigger: after:merge-feature; interval 10s
 ```

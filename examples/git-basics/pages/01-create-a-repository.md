@@ -21,6 +21,7 @@ Create a new repository in the `{{ repo_dir }}` directory, with `main` as
 the name of the default branch.
 
 ```{execute}
+:id: create-repo
 :session: git
 git init -b main {{ repo_dir }}
 ```
@@ -68,6 +69,6 @@ after the `git init` command, and you can click Check at any time.
 :id: repo-created
 :label: The repository has been created
 :substrate: contents
-:trigger: after:create-a-repository-2; terminal-output "Initialized empty Git repository"
+:trigger: after:create-repo; terminal-output "Initialized empty Git repository"
 exists {{ repo_dir }}
 ```

@@ -231,6 +231,12 @@ git status
 :auto: sometimes
 git status
 \`\`\`
+
+\`\`\`{verify}
+:substrate: contents
+:trigger: after:nothing; after:missing-too; terminal-output "ok"
+exists README.md
+\`\`\`
 `,
       MANIFEST.replace('- terminal', '- terminal\n  - auto-run')
     );
@@ -239,9 +245,53 @@ git status
       'unused-capability',
       'unknown-action-id',
       'unknown-action-id',
-      'unknown-auto'
+      'unknown-auto',
+      'unknown-action-id',
+      'unknown-action-id'
     ]);
     expect(messages[1].line).toBe(5);
+    expect(messages[4].message).toBe(
+      '"01-4" is triggered by unknown action "nothing"'
+    );
+  });
+
+  it('accepts a verify triggered by an action on another page', () => {
+    const messages = lintWorkshop({
+      manifest: parseManifest(
+        MANIFEST.replace('[pages/01.md]', '[pages/01.md, pages/02.md]')
+      ),
+      pages: [
+        parsePage(
+          `---
+title: One
+---
+
+\`\`\`{execute}
+:id: setup
+git status
+\`\`\`
+`,
+          { path: 'pages/01.md', variables: {} }
+        ),
+        parsePage(
+          `---
+title: Two
+---
+
+\`\`\`{verify}
+:substrate: contents
+:trigger: after:setup
+exists README.md
+\`\`\`
+`,
+          { path: 'pages/02.md', variables: {} }
+        )
+      ]
+    });
+
+    expect(messages.map(message => message.rule)).not.toContain(
+      'unknown-action-id'
+    );
   });
 });
 

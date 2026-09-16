@@ -142,6 +142,7 @@ Leave a first file there. The greeting uses the `learner` variable
 declared in `workshop.yaml`.
 
 ```{{execute}}
+:id: write-hello
 echo "Hello, {{{{ learner }}}}" > hello.txt
 :windows:
 Set-Content hello.txt "Hello, {{{{ learner }}}}"
@@ -154,7 +155,7 @@ above and can also be run with the Check button.
 :id: hello-exists
 :label: The first file exists
 :substrate: contents
-:trigger: after:welcome-2
+:trigger: after:write-hello
 exists hello.txt
 ```
 """
