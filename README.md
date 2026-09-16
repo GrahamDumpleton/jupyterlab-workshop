@@ -67,6 +67,14 @@ edits them in place.
 - [Source, issues and contributing](https://github.com/GrahamDumpleton/jupyterlab-workshop):
   see `CONTRIBUTING.md` in the repository for the development setup.
 
+## Developed with AI
+
+This package was developed with the help of AI coding assistants,
+working to the author's design and direction, with the author
+reviewing what they produce. If you would rather not use software
+produced that way, that is understood, and this package is not for
+you.
+
 ## License
 
 Apache License 2.0.
