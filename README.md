@@ -2,10 +2,6 @@
 
 Guided, interactive workshops inside JupyterLab.
 
-> **Early in development.** The documentation and the experience are
-> still being polished, and the workshop format, settings and command
-> line can change between releases without a compatibility path.
-
 Teaching in JupyterLab usually means a notebook with explanation between
 the code cells. Learners read down it pressing Run, everything has to be
 a cell in one language, and nothing can tell whether a step was done.

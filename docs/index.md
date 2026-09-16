@@ -2,12 +2,6 @@
 
 Guided, interactive workshops inside JupyterLab.
 
-```{warning}
-Early in development: the documentation and the experience are still
-being polished, and the workshop format, settings and command line can
-change between releases without a compatibility path.
-```
-
 ## Why
 
 JupyterLab is a natural place to teach, and the usual way to do it is a
