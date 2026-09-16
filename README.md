@@ -18,6 +18,8 @@ pages until requirements are met, and snapshot the working directory,
 and the subject can be anything JupyterLab can host, including
 JupyterLab itself.
 
+![JupyterLab with the Why a workshop? workshop open in the Workshop panel](https://jupyterlab-workshop.readthedocs.io/en/latest/_images/panel.png)
+
 A workshop is a directory with a `workshop.yaml` manifest and Markdown
 pages. The format is text based and git friendly. A workshop runs
 wherever JupyterLab runs, and can be handed to learners through a
