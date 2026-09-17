@@ -788,8 +788,10 @@ export class WorkshopManager implements IWorkshopManager {
         this._environment = { ...status, creating: false };
         this._changed.emit();
 
-        // Terminals pick the environment up through the env files.
-        void this._envWriter.invoke();
+        // Terminals pick the environment up through the env files, and
+        // the action stays running until open terminals have loaded them,
+        // so a command that follows never runs against the old PATH.
+        await this._envWriter.invoke();
       }
 
       this._emit('environment-created', { kernel: status.kernel });

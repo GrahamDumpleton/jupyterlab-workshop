@@ -63,7 +63,10 @@ environment file the terminals load exports `VIRTUAL_ENV` and puts the
 environment's `bin` (`Scripts` on Windows) first on `PATH`, so `python`,
 `pip`, `pytest` and whatever the requirements installed are the
 environment's, with no activation step on the page. Terminals already
-open pick it up when the environment is created. `execute-capture`,
+open pick it up when the environment is created, and the
+`environment-create` action only reports the environment ready once they
+have, so a command that follows it runs with the new `PATH`.
+`execute-capture`,
 `shell` checks and `script` checks run with the same `PATH`. A workshop
 that needs Python packages in a terminal therefore declares them in the
 requirements file and lets the learner start work, instead of walking
