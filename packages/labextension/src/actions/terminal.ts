@@ -77,6 +77,13 @@ const CARRIAGE_RETURN_SHELLS: ReadonlySet<string> = new Set([
 /** How much recent terminal output is kept for matching. */
 export const OUTPUT_WINDOW = 4096;
 
+/** A terminal's report of one of its colours, its answer to an OSC query. */
+// eslint-disable-next-line no-control-regex
+const COLOUR_REPLY = /^\x1b\]1[0-9];[^\x07\x1b]*(?:\x07|\x1b\\)$/;
+
+/** How much output is kept while watching for a stray reply's echo. */
+const STRAY_WINDOW = 256;
+
 const KEY_NAMES: Readonly<Record<string, string>> = {
   enter: '\r',
   return: '\r',
@@ -247,6 +254,23 @@ export class TerminalSessions {
 
     this._widgets.set(name, widget);
 
+    // Everything sent to the terminal passes through the connection's
+    // public send method, so wrapping it is how typed input is observed
+    // for the recorder; the original is put back when the widget goes.
+    const send = session.send.bind(session);
+
+    // The JupyterLite shell asks the terminal for its background colour
+    // as it starts and reads the reply in raw mode for a moment. A reply
+    // that arrives after the shell has gone back to reading a command
+    // line, as when the first terminal is still fetching xterm, is taken
+    // for typed text, its escape characters dropped, and echoed onto the
+    // line ahead of whatever is typed next. The echo is watched for and
+    // backspaced away: backspace is the one editing key that shell has,
+    // and on an empty line it does nothing.
+    const cockle = this._manager.platform?.shell === 'cockle';
+    let stray: string | null = null;
+    let recent = '';
+
     // Relay what the terminal prints so verifies can react to it, note
     // when it last printed anything, to tell when the shell is up, and
     // pick out the prompts it draws. The scanner lives as long as the
@@ -267,19 +291,36 @@ export class TerminalSessions {
         for (const marker of scanner.feed(text)) {
           this._prompts.emit({ name, marker });
         }
+
+        if (stray) {
+          recent = (recent + text).slice(-STRAY_WINDOW);
+
+          if (recent.includes(stray)) {
+            send({ type: 'stdin', content: ['\x7f'.repeat(stray.length)] });
+            stray = null;
+            recent = '';
+          }
+        }
       }
     };
 
     session.messageReceived.connect(onMessage);
 
-    // Everything sent to the terminal passes through the connection's
-    // public send method, so wrapping it is how typed input is observed
-    // for the recorder; the original is put back when the widget goes.
-    const send = session.send.bind(session);
-
     session.send = (message: TerminalService.IMessage): void => {
       if (message.type === 'stdin' && message.content) {
-        this._input.emit({ name, text: message.content.map(String).join('') });
+        const text = message.content.map(String).join('');
+
+        // A colour report is the terminal answering the shell, not
+        // anyone typing, so the recorder never sees it.
+        if (COLOUR_REPLY.test(text)) {
+          if (cockle) {
+            // eslint-disable-next-line no-control-regex
+            stray = text.replace(/\x1b/g, '');
+            recent = '';
+          }
+        } else {
+          this._input.emit({ name, text });
+        }
       }
 
       send(message);

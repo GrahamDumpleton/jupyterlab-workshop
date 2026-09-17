@@ -150,6 +150,15 @@ Give the action a `:jupyterlite:` variant or hide it with
 `:when: frontend != "jupyterlite"`; `jupyter workshop lint --frontend
 jupyterlite` reports the cases. See [JupyterLite](lite.md).
 
+**In JupyterLite the first command in a new terminal fails with
+`']11': command not found`, and `]11;rgb:...` is on the line ahead of
+it.** The shell asks the terminal for its background colour as it
+starts and waits only briefly for the answer; when the answer is late,
+as it can be while the first terminal is still downloading xterm, the
+shell takes it for typed text. Releases from 0.5.1 notice the stray
+text and erase it before typing anything. On an earlier release, press
+Backspace until the line is empty and run the action again.
+
 **The self-test passes locally and fails in CI on one action, with a
 timeout.** Actions that wait for terminal output can be slow on a
 loaded runner. Rerun the failed job before treating it as a
