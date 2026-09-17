@@ -185,6 +185,23 @@ export interface ILoadedWorkshop {
   launched: boolean;
 }
 
+/**
+ * The workshop being opened while its trust prompt is up, for the panel
+ * to show its first page behind the dialog.
+ */
+export interface IWorkshopPreview {
+  /** Directory of the workshop relative to the JupyterLab root. */
+  path: string;
+
+  manifest: IWorkshopManifest;
+
+  /** The first page the learner would see, rendered with the defaults. */
+  page: IPage | null;
+
+  /** The built-ins and manifest defaults the page was rendered with. */
+  variables: Variables;
+}
+
 /** Answer to a confirmation prompt. */
 export type ConfirmAnswer = 'yes' | 'always' | 'no';
 
@@ -601,6 +618,14 @@ export interface IWorkshopManager {
   readonly environmentChanged: ISignal<IWorkshopManager, void>;
 
   readonly workshop: ILoadedWorkshop | null;
+
+  /**
+   * The workshop waiting on its trust prompt, or null. Set only while the
+   * prompt is up, never alongside an open workshop, so the panel can show
+   * what is being asked about without anything in it running.
+   */
+  readonly preview: IWorkshopPreview | null;
+
   readonly variables: IVariableStore;
   readonly platform: IPlatformInfo | null;
 

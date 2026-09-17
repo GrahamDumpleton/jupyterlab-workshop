@@ -922,6 +922,49 @@ test.describe('workshop browser', () => {
     expect(page.url()).not.toContain('restart');
   });
 
+  test('opens a workshop once from a launch link that also resets the window', async ({
+    page
+  }) => {
+    // JupyterLab answers `reset` by clearing its state and routing the
+    // address again without it. The launch must act on that second pass
+    // only, or the workshop opens twice and the trust dialog comes back
+    // the moment it is answered. The link is the demo's, on the plain
+    // lab path rather than the fixture's tree path.
+    await page
+      .evaluate((search: string) => {
+        const base = window.location.pathname.replace(/\/tree\/.*$/, '');
+
+        window.location.assign(`${base}${search}`);
+      }, `?reset&workshop=${WORKSHOPS_DIR}/${WORKSHOP}&restart=force`)
+      .catch(() => undefined);
+
+    const dialog = page.locator('.jp-Dialog');
+    const panel = page.locator('#jupyterlab-workshop-panel');
+
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible({
+      timeout: 60000
+    });
+
+    // The panel already shows the first page behind the dialog.
+    await expect(panel.locator('.jp-WorkshopPanel-previewTitle')).toHaveText(
+      'Git from the command line'
+    );
+    await expect(
+      panel.locator('.jp-WorkshopPanel-previewNodes .jp-WorkshopPanel-action')
+    ).not.toHaveCount(0);
+
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
+      'Git from the command line'
+    );
+
+    // No second dialog follows, and the address is clean.
+    await page.waitForTimeout(3000);
+    await expect(dialog).toHaveCount(0);
+    expect(new URL(page.url()).search).toBe('');
+  });
+
   test('installs a named workshop of a collection from a launch link', async ({
     page
   }) => {

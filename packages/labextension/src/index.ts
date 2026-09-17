@@ -434,10 +434,25 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     // after a restart). Each opening has its own session id, so a restart
     // of the same workshop counts as a new one.
     let openSession = '';
+    let previewed = '';
 
     manager.changed.connect(() => {
       const workshop = manager.workshop;
       const session = manager.sessionId;
+      const preview = manager.preview;
+
+      // A workshop waiting on its trust prompt shows its first page in the
+      // panel meanwhile, where the manifest puts the panel.
+      if (!workshop && preview) {
+        if (preview.path !== previewed) {
+          previewed = preview.path;
+          layouts.revealPanel(preview.manifest).catch(error => {
+            console.warn('Unable to show the workshop panel', error);
+          });
+        }
+      } else {
+        previewed = '';
+      }
 
       if (session !== openSession) {
         openSession = session;
@@ -918,6 +933,16 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           typeof args.search === 'string'
             ? args.search
             : window.location.search;
+
+        // JupyterLab's own `reset` parameter is handled by a route of its
+        // own that clears the state database and then navigates to the
+        // same address without it, which routes this command a second
+        // time. Acting on both passes would open the workshop twice, so
+        // the first pass is left to the second.
+        if (RESET_PARAM.test(search)) {
+          return;
+        }
+
         const request = parseLaunchLink(search);
         const sources = parseSourceLink(search);
         const welcome = parseWelcomeLink(search) !== undefined;
@@ -1561,6 +1586,9 @@ interface ILaunchRequest {
    */
   restart?: 'ask' | 'force';
 }
+
+/** JupyterLab's `reset` parameter, bare or with a value, as its router matches it. */
+const RESET_PARAM = /(\?|&)reset(=[^&#]*)?($|&|#)/;
 
 /** Query parameters a launch link uses. */
 const LAUNCH_PARAMS: ReadonlySet<string> = new Set([

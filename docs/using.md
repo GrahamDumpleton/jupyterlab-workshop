@@ -86,9 +86,12 @@ how far to trust it:
 The trust dialog for a showcase workshop.
 ```
 
-Cancel leaves the workshop closed. The choice is remembered for that
-workshop at that content, so it opens without asking next time and asks
-again only if it has changed. The badge in the panel header shows the
+While the dialog is up the panel already shows the workshop's first
+page, so you can see what you are being asked about; nothing on it can
+be clicked, and nothing runs, until you answer. Cancel leaves the
+workshop closed. The choice is remembered for that workshop at that
+content, so it opens without asking next time and asks again only if
+it has changed. The badge in the panel header shows the
 level; clicking it, or "Workshop: Change Trust Level…", brings the
 dialog back. In restricted mode the affected actions carry a badge
 saying "types only", "confirms" or "auto off", and an action whose

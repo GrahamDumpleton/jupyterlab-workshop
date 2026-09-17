@@ -263,6 +263,31 @@
   white-space: pre-wrap;
 }
 
+/* The first page shown behind the trust dialog: readable, not clickable. */
+
+.jp-WorkshopPanel-previewTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--jp-ui-font-size2);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.jp-WorkshopPanel-previewNote {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--jp-brand-color1);
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopPanel-previewNodes {
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Highlight and callout used by the highlight action. */
 
 .jp-Workshop-highlight {

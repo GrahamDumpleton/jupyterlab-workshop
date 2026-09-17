@@ -46,7 +46,8 @@ import {
   IActionRequest,
   IActionStatus,
   IFeaturePolicy,
-  IWorkshopManager
+  IWorkshopManager,
+  IWorkshopPreview
 } from '../tokens';
 import { visibleDirectives } from '../util';
 import { revealBelow } from './reveal';
@@ -105,6 +106,13 @@ function PanelContent({
 }: IPanelProps): JSX.Element {
   const workshop = manager.workshop;
   const page = manager.currentPage;
+  const preview = manager.preview;
+
+  if (!workshop && preview) {
+    return (
+      <PreviewContent preview={preview} manager={manager} commands={commands} />
+    );
+  }
 
   if (!workshop || !page) {
     return (
@@ -371,6 +379,58 @@ function EmptyState({
           >
             Open from URL
           </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The first page of a workshop whose trust dialog is up: the title and
+ * the page as the learner would first see it, readable but not
+ * clickable, so the dialog is not over an empty window. Nothing here
+ * runs; the open continues once the dialog is answered.
+ */
+function PreviewContent({
+  preview,
+  manager,
+  commands
+}: {
+  preview: IWorkshopPreview;
+  manager: IWorkshopManager;
+  commands: CommandRegistry;
+}): JSX.Element {
+  const page = preview.page;
+  const ignore = (): void => undefined;
+
+  return (
+    <div className="jp-WorkshopPanel-content jp-mod-preview">
+      <div className="jp-WorkshopPanel-header">
+        <div className="jp-WorkshopPanel-titleRow">
+          <h2
+            className="jp-WorkshopPanel-previewTitle"
+            title={preview.manifest.description}
+          >
+            {preview.manifest.title}
+          </h2>
+        </div>
+      </div>
+      <div className="jp-WorkshopPanel-body">
+        <div className="jp-WorkshopPanel-previewNote">
+          Answer the dialog to start. Nothing on this page runs until you do.
+        </div>
+        {page ? (
+          <>
+            <h3 className="jp-WorkshopPanel-pageTitle">{page.title}</h3>
+            <div className="jp-WorkshopPanel-previewNodes">
+              <Nodes
+                nodes={page.nodes}
+                manager={manager}
+                commands={commands}
+                onProseClick={ignore}
+              />
+            </div>
+          </>
         ) : null}
       </div>
     </div>

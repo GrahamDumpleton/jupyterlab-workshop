@@ -2,6 +2,7 @@ import {
   findLayout,
   ILayoutArea,
   ILayoutSpec,
+  IWorkshopManifest,
   isLayoutPlaceholder,
   LAYOUT_AREA_KEYWORDS,
   parseLayoutWidget,
@@ -205,6 +206,33 @@ export class LayoutManager {
     }
 
     await this.apply(name, { initial: true }, empty);
+  }
+
+  /**
+   * Show the instructions panel for a workshop whose trust prompt is up,
+   * on the side and at the width its manifest asks for, so the learner
+   * sees the first page behind the dialog. The layout itself waits for
+   * the answer; the other sidebar and the main area are left alone.
+   */
+  async revealPanel(manifest: IWorkshopManifest): Promise<void> {
+    const empty = this._emptySides();
+    const side =
+      manifest.instructions?.side ??
+      this._panelSide() ??
+      (await this._settingSide());
+
+    this._movePanel(side);
+
+    const width = manifest.instructions?.width;
+
+    if (width !== undefined) {
+      this._expand(side);
+      this._resizeSides(
+        side === 'left' ? [width, undefined] : [undefined, width]
+      );
+    }
+
+    this._showPanel(empty, undefined, manifest);
   }
 
   /**
@@ -783,9 +811,13 @@ export class LayoutManager {
    * given the default share so the panel does not appear at its minimum,
    * unless the layout or the manifest sized that side itself.
    */
-  private _showPanel(empty: ReadonlySet<Side>, spec?: ILayoutSpec): void {
+  private _showPanel(
+    empty: ReadonlySet<Side>,
+    spec?: ILayoutSpec,
+    manifest: IWorkshopManifest | undefined = this._context.manager.workshop
+      ?.manifest
+  ): void {
     const { shell, panelId } = this._context;
-    const manifest = this._context.manager.workshop?.manifest;
 
     shell.activateById(panelId);
 

@@ -83,6 +83,7 @@ import {
   IWorkshopBackend,
   IWorkshopEvent,
   IWorkshopManager,
+  IWorkshopPreview,
   PathBase,
   IWorkshopSource,
   errorMessage
@@ -203,6 +204,10 @@ export class WorkshopManager implements IWorkshopManager {
 
   get workshop(): ILoadedWorkshop | null {
     return this._workshop;
+  }
+
+  get preview(): IWorkshopPreview | null {
+    return this._preview;
   }
 
   get workspacePath(): string | null {
@@ -396,7 +401,22 @@ export class WorkshopManager implements IWorkshopManager {
         hash: record?.sha256,
         analytics: offer
       });
-      const decision = await this._resolveTrust(trust);
+      // While the learner is asked, the panel shows the first page they
+      // would see, so the dialog does not sit over an empty window.
+      const decision = await this._resolveTrust(trust, () => {
+        this._preview = {
+          path: workshopPath,
+          manifest,
+          page:
+            preview.find(page =>
+              conditionHolds(page.frontmatter.when, defaults)
+            ) ?? null,
+          variables: defaults
+        };
+        this._changed.emit();
+      });
+
+      this._preview = null;
 
       if (!decision) {
         this._workshop = null;
@@ -571,6 +591,7 @@ export class WorkshopManager implements IWorkshopManager {
       }
     } catch (error) {
       this._workshop = null;
+      this._preview = null;
       this._currentPageId = '';
       this._decision = null;
       this._authoring = false;
@@ -1531,7 +1552,14 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   evaluate(condition: string): boolean {
-    return conditionHolds(condition, this._store.values);
+    // A page shown while the trust prompt is up was rendered with the
+    // defaults, which is what its conditions are judged against too.
+    const values =
+      !this._workshop && this._preview
+        ? this._preview.variables
+        : this._store.values;
+
+    return conditionHolds(condition, values);
   }
 
   resolvePath(path: string, base: PathBase = 'workspace'): string {
@@ -2250,6 +2278,26 @@ export class WorkshopManager implements IWorkshopManager {
     const workshop = this._workshop;
     const decision = this._decision;
 
+    // A page shown while the trust prompt is up carries only the badges
+    // that hold at every level: the capabilities the workshop never
+    // declared.
+    if (!workshop && this._preview) {
+      const manifest = this._preview.manifest;
+
+      return decideAction({
+        type,
+        options,
+        level: 'trusted',
+        automatic,
+        declared: manifest.capabilities,
+        allowed: [],
+        disabled: this._trustStore.policy.disabledCapabilities,
+        layout: {
+          requirements: manifest.environment?.requirements
+        }
+      });
+    }
+
     if (!workshop || !decision) {
       return { kind: 'reject', reason: 'No workshop is open' };
     }
@@ -2356,8 +2404,14 @@ export class WorkshopManager implements IWorkshopManager {
     await this._trustStore.set(decision);
   }
 
+  /**
+   * The trust decision for a workshop: the administrator's policy, then
+   * the learner's stored choice, then the prompt. `onPrompt` runs just
+   * before the learner is asked, and not at all when nothing asks.
+   */
   private async _resolveTrust(
-    summary: ITrustSummary
+    summary: ITrustSummary,
+    onPrompt?: () => void
   ): Promise<ITrustDecision | null> {
     const policy = this._trustStore.policy;
     const stored = await this._trustStore.get(summary.sourceKey, summary.hash);
@@ -2394,6 +2448,8 @@ export class WorkshopManager implements IWorkshopManager {
     if (stored) {
       return stored;
     }
+
+    onPrompt?.();
 
     const choice = await this._prompts.decide(summary, policy.defaultLevel);
 
@@ -2461,6 +2517,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _prompts: ITrustPrompts;
   private _settings: ISettingRegistry | null;
   private _decision: ITrustDecision | null = null;
+  private _preview: IWorkshopPreview | null = null;
   private _preflight: IPreflightResult[] | null = null;
   private _environment: IEnvironmentStatus | null = null;
   private _sessionId = '';
