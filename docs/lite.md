@@ -63,7 +63,10 @@ The shell has the coreutils commands (`ls`, `cat`, `echo`, `env`,
 `mkdir`, `sed`, `grep`, `expr` and so on), `cd`, `export` and a few other
 builtins, but no `python`, `git` or package managers. Variables reach the
 terminal through `export` rather than a sourced file. A `requires.tools`
-list naming anything but Python shows the preflight banner in Lite.
+list naming anything but Python shows the preflight banner in Lite and
+puts the names in `missing_tools`; a tool that JupyterLite could never
+provide is better declared with `frontends: [jupyterlab]`, so it is not
+looked for there.
 
 The `frontend` built-in variable is `jupyterlite` and `platform` is
 `emscripten`, Pyodide's name for itself, so a `:linux:` variant is never

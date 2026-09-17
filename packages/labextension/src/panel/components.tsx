@@ -1029,12 +1029,6 @@ function PreflightBanner({
                 : ' (version unknown)'
               : ' (not installed)'}
             {result.optional ? ', optional' : ''}
-            {result.hint ? (
-              <span className="jp-WorkshopPanel-preflightHint">
-                {' '}
-                Try: <code>{result.hint}</code>
-              </span>
-            ) : null}
           </li>
         ))}
       </ul>

@@ -3,7 +3,7 @@ import { load } from 'js-yaml';
 import { WorkshopFormatError } from '../errors';
 import { isRecord, isStringArray } from '../util';
 import { IAnalyticsBlock, parseAnalyticsBlock } from './analytics';
-import { FRONTEND_NAMES, PLATFORM_NAMES } from './variants';
+import { FRONTEND_NAMES, MARKER_NAMES, PLATFORM_NAMES } from './variants';
 
 /** Capability names and write scopes a manifest may declare. */
 const CAPABILITY_NAMES: readonly string[] = [
@@ -65,7 +65,16 @@ export interface IToolRequirement {
   name: string;
   version?: string;
   optional: boolean;
-  hint: Record<string, string>;
+
+  /**
+   * Platforms the tool is looked for on; every platform when empty. A
+   * tool that goes by another name elsewhere is a second entry with a
+   * disjoint list.
+   */
+  platforms: string[];
+
+  /** Frontends the tool is looked for under; every frontend when empty. */
+  frontends: string[];
 }
 
 /** Preflight requirements. */
@@ -126,6 +135,20 @@ export interface ILayoutSpec {
 /** Gating policy for moving between pages. */
 export type GatingPolicy = 'off' | 'soft' | 'strict';
 
+/**
+ * The settings a `variants` entry overrides for one platform or
+ * frontend. Only settings whose whole value can differ by marker are
+ * here; whether one item of a list applies is said on the item, as a
+ * tool's `platforms` does.
+ */
+export interface IManifestVariant {
+  /** Environment variables merged over the manifest's `env`. */
+  env: Record<string, string>;
+
+  /** Action option defaults merged over the manifest's `defaults.actions`. */
+  defaults: Record<string, string>;
+}
+
 /** The parsed contents of a `workshop.yaml` manifest. */
 export interface IWorkshopManifest {
   apiVersion: string;
@@ -184,6 +207,12 @@ export interface IWorkshopManifest {
 
   /** Default option values for action directives, keyed by option name. */
   defaults: Record<string, string>;
+
+  /**
+   * Overrides of `env` and `defaults` keyed by platform or frontend
+   * name, as written. `resolveManifest` merges the entries that apply.
+   */
+  variants: Record<string, IManifestVariant>;
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
@@ -285,8 +314,61 @@ export function parseManifest(
     tracks: parseTracks(data.tracks, path),
     pages,
     defaults: parseDefaults(data.defaults, path),
-    env: parseEnv(data.env, path)
+    env: parseEnv(data.env, path),
+    variants: parseVariants(data.variants, path)
   };
+}
+
+/**
+ * Whether a required tool is looked for on a platform and frontend: it
+ * is unless the entry lists platforms or frontends that leave them out.
+ */
+export function toolApplies(
+  tool: IToolRequirement,
+  platform: string,
+  frontend: string
+): boolean {
+  return (
+    (tool.platforms.length === 0 || tool.platforms.includes(platform)) &&
+    (tool.frontends.length === 0 || tool.frontends.includes(frontend))
+  );
+}
+
+/**
+ * The manifest as it applies on one platform and frontend: the `env`
+ * and `defaults` of the matching `variants` entries merged over the
+ * base, the frontend entry over the platform entry over the base, which
+ * is the order body markers are chosen in. Everything else is returned
+ * as it was, and a manifest with no applicable entry is returned as is.
+ */
+export function resolveManifest(
+  manifest: IWorkshopManifest,
+  platform?: string,
+  frontend?: string
+): IWorkshopManifest {
+  const layers: IManifestVariant[] = [];
+
+  for (const name of [platform, frontend]) {
+    const layer = name === undefined ? undefined : manifest.variants[name];
+
+    if (layer) {
+      layers.push(layer);
+    }
+  }
+
+  if (layers.length === 0) {
+    return manifest;
+  }
+
+  let env = { ...manifest.env };
+  let defaults = { ...manifest.defaults };
+
+  for (const layer of layers) {
+    env = { ...env, ...layer.env };
+    defaults = { ...defaults, ...layer.defaults };
+  }
+
+  return { ...manifest, env, defaults };
 }
 
 function requireString(
@@ -317,11 +399,31 @@ function optionalString(
     return undefined;
   }
 
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new WorkshopFormatError(`Field "${field}" must be a string`, path);
+  if (typeof value !== 'string') {
+    throw new WorkshopFormatError(
+      `Field "${field}" must be a string${quotingAdvice(value)}`,
+      path
+    );
   }
 
-  return String(value);
+  return value;
+}
+
+/**
+ * Why a value that should be a string is not, when YAML is the reason:
+ * an unquoted `1.10` is read as the number 1.1 and an unquoted `true` as
+ * a boolean, so the fix is to quote it.
+ */
+function quotingAdvice(value: unknown): string {
+  if (typeof value === 'number') {
+    return '; quote a number such as "1.10" so YAML keeps it as written';
+  }
+
+  if (typeof value === 'boolean') {
+    return '; quote a true or false so YAML keeps it as text';
+  }
+
+  return '';
 }
 
 function optionalStringList(
@@ -481,21 +583,21 @@ function parseRequirements(value: unknown, path: string): IRequirements {
         );
       }
 
-      const hint: Record<string, string> = {};
-
-      if (isRecord(item.hint)) {
-        for (const [key, text] of Object.entries(item.hint)) {
-          hint[key] = String(text);
-        }
-      } else if (typeof item.hint === 'string') {
-        hint.default = item.hint;
+      // Install advice used to be a hint on the entry; it is prose on the
+      // first page now, shown when the tool is in missing_tools.
+      if ('hint' in item) {
+        throw new WorkshopFormatError(
+          `Tool "${item.name}" in "requires.tools" has a "hint", which is no longer a field; put the install advice on the first page under a when block testing "${item.name}" in missing_tools`,
+          path
+        );
       }
 
       tools.push({
         name: item.name,
         version: typeof item.version === 'string' ? item.version : undefined,
         optional: item.optional === true,
-        hint
+        platforms: parseNames(item, 'platforms', PLATFORM_NAMES, path),
+        frontends: parseNames(item, 'frontends', FRONTEND_NAMES, path)
       });
     }
   }
@@ -812,13 +914,22 @@ function parseTracks(value: unknown, path: string): ITrack[] {
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function parseEnv(value: unknown, path: string): Record<string, string> {
+/**
+ * An `env` mapping: environment variable names to string values. Values
+ * are strings only, as the environment itself holds, so a number or a
+ * true/false that YAML would read as something else has to be quoted.
+ */
+function parseEnv(
+  value: unknown,
+  path: string,
+  field = 'env'
+): Record<string, string> {
   if (value === undefined || value === null) {
     return {};
   }
 
   if (!isRecord(value)) {
-    throw new WorkshopFormatError('Field "env" must be a mapping', path);
+    throw new WorkshopFormatError(`Field "${field}" must be a mapping`, path);
   }
 
   const env: Record<string, string> = {};
@@ -826,35 +937,40 @@ function parseEnv(value: unknown, path: string): Record<string, string> {
   for (const [name, entry] of Object.entries(value)) {
     if (!ENV_NAME.test(name)) {
       throw new WorkshopFormatError(
-        `Field "env" has an invalid variable name "${name}"`,
+        `Field "${field}" has an invalid variable name "${name}"`,
         path
       );
     }
 
-    if (
-      typeof entry !== 'string' &&
-      typeof entry !== 'number' &&
-      typeof entry !== 'boolean'
-    ) {
+    if (typeof entry !== 'string') {
       throw new WorkshopFormatError(
-        `Field "env.${name}" must be a string, number or boolean`,
+        `Field "${field}.${name}" must be a string${quotingAdvice(entry)}`,
         path
       );
     }
 
-    env[name] = String(entry);
+    env[name] = entry;
   }
 
   return env;
 }
 
-function parseDefaults(value: unknown, path: string): Record<string, string> {
+/**
+ * A `defaults` mapping, whose `actions` entry holds option defaults for
+ * every directive. Directive options are the text of `:name: value`
+ * lines, so the defaults are strings only too.
+ */
+function parseDefaults(
+  value: unknown,
+  path: string,
+  field = 'defaults'
+): Record<string, string> {
   if (value === undefined || value === null) {
     return {};
   }
 
   if (!isRecord(value)) {
-    throw new WorkshopFormatError('Field "defaults" must be a mapping', path);
+    throw new WorkshopFormatError(`Field "${field}" must be a mapping`, path);
   }
 
   const defaults: Record<string, string> = {};
@@ -863,15 +979,79 @@ function parseDefaults(value: unknown, path: string): Record<string, string> {
   if (actions !== undefined && actions !== null) {
     if (!isRecord(actions)) {
       throw new WorkshopFormatError(
-        'Field "defaults.actions" must be a mapping',
+        `Field "${field}.actions" must be a mapping`,
         path
       );
     }
 
     for (const [key, item] of Object.entries(actions)) {
-      defaults[key] = String(item);
+      if (typeof item !== 'string') {
+        throw new WorkshopFormatError(
+          `Field "${field}.actions.${key}" must be a string${quotingAdvice(item)}`,
+          path
+        );
+      }
+
+      defaults[key] = item;
     }
   }
 
   return defaults;
+}
+
+/** The settings a `variants` entry may hold. */
+const VARIANT_FIELDS: readonly string[] = ['env', 'defaults'];
+
+/**
+ * The `variants` mapping: marker names (platforms and frontends) to the
+ * settings that differ there. Each entry holds only `env` and
+ * `defaults`, in the same shape as the top level, so every field keeps
+ * one type; anything else under an entry is an error rather than a
+ * setting that would silently never apply.
+ */
+function parseVariants(
+  value: unknown,
+  path: string
+): Record<string, IManifestVariant> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError('Field "variants" must be a mapping', path);
+  }
+
+  const variants: Record<string, IManifestVariant> = {};
+
+  for (const [name, entry] of Object.entries(value)) {
+    if (!MARKER_NAMES.includes(name)) {
+      throw new WorkshopFormatError(
+        `Unknown variant "${name}" in "variants"; expected a platform or frontend: ${MARKER_NAMES.join(', ')}`,
+        path
+      );
+    }
+
+    if (!isRecord(entry)) {
+      throw new WorkshopFormatError(
+        `Field "variants.${name}" must be a mapping`,
+        path
+      );
+    }
+
+    for (const field of Object.keys(entry)) {
+      if (!VARIANT_FIELDS.includes(field)) {
+        throw new WorkshopFormatError(
+          `Field "variants.${name}.${field}" is not a setting a variant can override; only ${VARIANT_FIELDS.join(' and ')} differ by platform or frontend`,
+          path
+        );
+      }
+    }
+
+    variants[name] = {
+      env: parseEnv(entry.env, path, `variants.${name}.env`),
+      defaults: parseDefaults(entry.defaults, path, `variants.${name}.defaults`)
+    };
+  }
+
+  return variants;
 }

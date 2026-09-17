@@ -17,6 +17,36 @@ First, check that git is installed.
 git --version
 ```
 
+````{when} "git" in missing_tools and platform == "macos"
+Git was not found on this machine, or is older than 2.30. Install it
+with [Homebrew](https://brew.sh), then reload JupyterLab so that a new
+terminal can see it:
+
+```
+brew install git
+```
+````
+
+````{when} "git" in missing_tools and platform == "linux"
+Git was not found on this machine, or is older than 2.30. Install it
+with your distribution's package manager, then reload JupyterLab so
+that a new terminal can see it. On Debian and Ubuntu:
+
+```
+sudo apt install git
+```
+````
+
+````{when} "git" in missing_tools and platform == "windows"
+Git was not found on this machine, or is older than 2.30. Install
+[Git for Windows](https://git-scm.com/download/win), which also provides
+a bash shell, then reload JupyterLab so that a new terminal can see it:
+
+```
+winget install Git.Git
+```
+````
+
 Create a new repository in the `{{ repo_dir }}` directory, with `main` as
 the name of the default branch.
 

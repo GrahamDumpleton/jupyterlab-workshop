@@ -20,7 +20,8 @@
       "minLength": 1
     },
     "version": {
-      "type": ["string", "number"]
+      "type": "string",
+      "description": "Version of the workshop, always a string: quote a value such as 1.10, which YAML would otherwise read as the number 1.1."
     },
     "description": {
       "type": "string"
@@ -123,24 +124,28 @@
               "optional": {
                 "type": "boolean"
               },
-              "hint": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  }
-                ]
+              "platforms": {
+                "type": "array",
+                "description": "Platforms the tool is looked for on; every platform when absent. A tool that goes by another name elsewhere is a second entry with a disjoint list.",
+                "items": {
+                  "type": "string",
+                  "enum": ["linux", "macos", "windows"]
+                }
+              },
+              "frontends": {
+                "type": "array",
+                "description": "Frontends the tool is looked for under; every frontend when absent. Install advice for a missing tool is prose on the first page under a when block testing missing_tools.",
+                "items": {
+                  "type": "string",
+                  "enum": ["jupyterlab", "jupyterlite"]
+                }
               }
             }
           }
         },
         "shell": {
-          "type": "string"
+          "type": "string",
+          "description": "The one shell the workshop is written for: bash, zsh, sh (any POSIX shell), fish, powershell or cmd. Set it only when the workshop truly supports one shell; a workshop that runs under several omits it and puts when conditions on the actions that differ. When the terminal shell does not satisfy it the panel shows a banner on the first page."
         }
       }
     },
@@ -299,24 +304,30 @@
       }
     },
     "env": {
-      "type": "object",
-      "description": "Environment variables exported to the workshop terminals alongside the variables, such as PAGER: cat so that git and man do not wait for a key press in a small terminal.",
-      "propertyNames": {
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-      },
-      "additionalProperties": {
-        "type": ["string", "number", "boolean"]
-      }
+      "$ref": "#/definitions/env",
+      "description": "Environment variables exported to the workshop terminals alongside the variables, and set for checks and captures, such as PAGER: cat so that git and man do not wait for a key press in a small terminal. Values are strings only, as the environment holds them; quote a number or a true/false so YAML keeps it as written."
     },
     "defaults": {
+      "$ref": "#/definitions/defaults",
+      "description": "Fallback values applied under the options of every action directive."
+    },
+    "variants": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "actions": {
-          "type": "object",
-          "description": "Default option values for every action directive, keyed by option name.",
-          "additionalProperties": {
-            "type": ["string", "number", "boolean"]
+      "description": "Overrides of env and defaults for one platform or frontend, keyed by the same names body markers use. The entries that apply are merged over the base in the order the markers are chosen: the frontend entry over the platform entry over the base. Only env and defaults may appear under an entry; whether one item of a list applies somewhere is said on the item, as a tool's platforms does.",
+      "propertyNames": {
+        "enum": ["jupyterlab", "jupyterlite", "linux", "macos", "windows"]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "env": {
+            "$ref": "#/definitions/env",
+            "description": "Environment variables merged over the manifest's env."
+          },
+          "defaults": {
+            "$ref": "#/definitions/defaults",
+            "description": "Action option defaults merged over the manifest's defaults."
           }
         }
       }
@@ -331,6 +342,28 @@
     }
   },
   "definitions": {
+    "env": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "type": "object",
+          "description": "Default option values for every action directive, keyed by option name. Directive options are text, so the defaults are strings only; quote a number or a true/false.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "layoutSide": {
       "oneOf": [
         {

@@ -412,9 +412,6 @@ export interface IPreflightResult {
   satisfied: boolean;
   requirement?: string;
   optional: boolean;
-
-  /** Installation hint for the platform, from the manifest. */
-  hint?: string;
 }
 
 /**

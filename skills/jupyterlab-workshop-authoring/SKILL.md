@@ -120,10 +120,13 @@ capabilities: # what the pages need; lint checks this
   - kernel-exec
 requires:
   tools:
-    - { name: git, version: '>=2.30', hint: { linux: apt install git } }
+    - { name: git, version: '>=2.30' } # missing or old tools are listed in the missing_tools built-in; install advice goes on page 1 under {when} "git" in missing_tools
+    - { name: py, platforms: [windows] } # looked for on the listed platforms (or frontends) only
 workspace: work # the default; the learner's directory, filled from files/
 gating: soft # off, soft or strict
-env: { PAGER: cat, PYTHONDONTWRITEBYTECODE: '1' } # for terminals, checks and captures; nothing by default. Which values a workshop needs: references/gotchas.md
+env: { PAGER: cat, PYTHONDONTWRITEBYTECODE: '1' } # for terminals, checks and captures; nothing by default; strings only, so quote numbers. Which values a workshop needs: references/gotchas.md
+variants: # env and defaults.actions that differ by platform or frontend, keyed by marker name; frontend entry over platform entry over base
+  windows: { env: { PAGER: more } }
 variables:
   - {
       name: repo_dir, # exported to terminals as REPO_DIR; never reuse a shell name such as path

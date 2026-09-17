@@ -30,7 +30,8 @@ when: track == "cli"
 - `when` shows the page only while a condition holds, written like the
   `{when}` directive below. A page hidden this way is left out of the
   page list and the count, which is how [tracks](variables.md#tracks)
-  work.
+  work, and how an install page shown only to learners who need it is
+  written: `when: '"git" in missing_tools'`.
 
 - `id` overrides the page id, which is otherwise the file name without
   its extension, such as `02-first-commit`. Directive ids and progress

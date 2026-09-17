@@ -519,6 +519,92 @@ echo {{ user_name }}
     );
   });
 
+  it('warns about tools that are never looked for', () => {
+    const withTools = (tools: string, lists = '') =>
+      MANIFEST.replace(
+        'pages:',
+        `${lists}requires:\n  tools:\n${tools}\npages:`
+      );
+
+    // Every platform, JupyterLab only, unless the manifest says otherwise.
+    expect(
+      rules('# x\n', withTools('    - { name: py, platforms: [windows] }'))
+    ).not.toContain('unreachable-tool');
+    expect(
+      rules('# x\n', withTools('    - { name: git, frontends: [jupyterlite] }'))
+    ).toContain('unreachable-tool');
+    expect(
+      rules(
+        '# x\n',
+        withTools(
+          '    - { name: py, platforms: [windows] }',
+          'platforms: [linux, macos]\n'
+        )
+      )
+    ).toContain('unreachable-tool');
+
+    // Under JupyterLite the platform is emscripten, so a platform list
+    // never matches there; the tool is still reachable through JupyterLab.
+    expect(
+      rules(
+        '# x\n',
+        withTools(
+          '    - { name: git, platforms: [linux] }',
+          'platforms: [linux]\nfrontends: [jupyterlab, jupyterlite]\n'
+        )
+      )
+    ).not.toContain('unreachable-tool');
+    expect(
+      rules(
+        '# x\n',
+        withTools(
+          '    - { name: git, platforms: [linux], frontends: [jupyterlite] }',
+          'platforms: [linux]\nfrontends: [jupyterlab, jupyterlite]\n'
+        )
+      )
+    ).toContain('unreachable-tool');
+  });
+
+  it('warns about names tested against missing_tools that no tool declares', () => {
+    const manifest = MANIFEST.replace(
+      'pages:',
+      'requires:\n  tools:\n    - { name: git }\npages:'
+    );
+    const when = (condition: string) =>
+      `\`\`\`{when} ${condition}\nInstall it.\n\`\`\`\n`;
+
+    expect(rules(when('"git" in missing_tools'), manifest)).not.toContain(
+      'unknown-tool'
+    );
+    expect(rules(when('"gti" in missing_tools'), manifest)).toContain(
+      'unknown-tool'
+    );
+    expect(rules(when('"curl" not in missing_tools'), manifest)).toContain(
+      'unknown-tool'
+    );
+
+    // The rule looks at the front matter, at nested blocks and at the
+    // when option of a directive, and only at tests against missing_tools.
+    expect(
+      rules(`---\nwhen: '"curl" in missing_tools'\n---\n# x\n`, manifest)
+    ).toContain('unknown-tool');
+    expect(
+      rules(
+        when(`platform == "linux"\n\n${when('"curl" in missing_tools')}`),
+        manifest
+      )
+    ).toContain('unknown-tool');
+    expect(
+      rules(
+        '\`\`\`{execute}\n:when: "curl" in missing_tools\nbrew install curl\n\`\`\`\n',
+        manifest
+      )
+    ).toContain('unknown-tool');
+    expect(rules(when('"curl" in ["curl", "wget"]'), manifest)).not.toContain(
+      'unknown-tool'
+    );
+  });
+
   it('warns about actions a listed frontend cannot run', () => {
     const manifest = MANIFEST.replace(
       'pages:',

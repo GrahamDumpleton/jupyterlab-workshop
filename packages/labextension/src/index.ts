@@ -1,4 +1,4 @@
-import { ICollectionIndex } from '@jupyterlab-workshop/core';
+import { ICollectionIndex, toolApplies } from '@jupyterlab-workshop/core';
 import {
   ILabShell,
   ILayoutRestorer,
@@ -1689,14 +1689,24 @@ async function fetchWorkshop(
 async function runPreflight(manager: IWorkshopManager): Promise<void> {
   const workshop = manager.workshop;
 
-  if (!workshop || workshop.manifest.requires.tools.length === 0) {
+  if (!workshop) {
     manager.setPreflight(null);
 
     return;
   }
 
-  const tools = workshop.manifest.requires.tools;
-  const platform = manager.platform?.os ?? '';
+  // A tool listed for other platforms or frontends is not looked for
+  // here; with none left the check has nothing to do and nothing missing.
+  const platform = manager.platform;
+  const tools = workshop.manifest.requires.tools.filter(tool =>
+    toolApplies(tool, platform?.os ?? '', platform?.frontend ?? '')
+  );
+
+  if (tools.length === 0) {
+    manager.setPreflight([]);
+
+    return;
+  }
 
   try {
     // Running each tool for its version only happens once trusted.
@@ -1713,16 +1723,7 @@ async function runPreflight(manager: IWorkshopManager): Promise<void> {
       return;
     }
 
-    manager.setPreflight(
-      results.map(result => {
-        const tool = tools.find(item => item.name === result.name);
-
-        return {
-          ...result,
-          hint: tool?.hint[platform] ?? tool?.hint.default ?? tool?.hint.any
-        };
-      })
-    );
+    manager.setPreflight(results);
   } catch (error) {
     console.warn('Preflight check failed', error);
   }

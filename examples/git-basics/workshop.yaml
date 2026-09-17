@@ -24,7 +24,7 @@ env:
   GIT_PAGER: cat
 requires:
   tools:
-    - { name: git, version: ">=2.30", hint: { macos: "brew install git", linux: "apt install git", windows: "winget install Git.Git" } }
+    - { name: git, version: ">=2.30" }
 layout: default
 gating: soft
 layouts:

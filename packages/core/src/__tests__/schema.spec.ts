@@ -77,6 +77,79 @@ describe('workshop schema', () => {
     ).toBe(true);
     expect(validate({ ...base, platforms: ['lite'] })).toBe(false);
     expect(validate({ ...base, frontends: ['vscode'] })).toBe(false);
+  });
+
+  it('takes strings only for version, env and action defaults', () => {
+    const base = {
+      apiVersion: 'jupyterlab-workshop/v1alpha1',
+      name: 'x',
+      title: 'X',
+      pages: ['a.md']
+    };
+
+    expect(
+      validate({
+        ...base,
+        version: '1.10',
+        env: { PAGER: 'cat', RETRIES: '3' },
+        defaults: { actions: { delay: '1s', scroll: 'false' } }
+      })
+    ).toBe(true);
+    expect(validate({ ...base, version: 1.1 })).toBe(false);
+    expect(validate({ ...base, env: { RETRIES: 3 } })).toBe(false);
+    expect(validate({ ...base, env: { DEBUG: true } })).toBe(false);
+    expect(
+      validate({ ...base, defaults: { actions: { scroll: false } } })
+    ).toBe(false);
+  });
+
+  it('knows tool platforms and frontends and no longer a hint', () => {
+    const base = {
+      apiVersion: 'jupyterlab-workshop/v1alpha1',
+      name: 'x',
+      title: 'X',
+      pages: ['a.md']
+    };
+    const tools = (tool: Record<string, unknown>) => ({
+      ...base,
+      requires: { tools: [{ name: 'git', ...tool }] }
+    });
+
+    expect(validate(tools({ platforms: ['windows'] }))).toBe(true);
+    expect(validate(tools({ frontends: ['jupyterlab'], optional: true }))).toBe(
+      true
+    );
+    expect(validate(tools({ platforms: ['lite'] }))).toBe(false);
+    expect(validate(tools({ hint: 'brew install git' }))).toBe(false);
+    expect(validate(tools({ hint: { macos: 'brew install git' } }))).toBe(
+      false
+    );
+  });
+
+  it('takes variants of env and defaults keyed by marker name', () => {
+    const base = {
+      apiVersion: 'jupyterlab-workshop/v1alpha1',
+      name: 'x',
+      title: 'X',
+      pages: ['a.md']
+    };
+
+    expect(
+      validate({
+        ...base,
+        variants: {
+          windows: { env: { PAGER: 'more' } },
+          jupyterlite: { defaults: { actions: { timeout: '5m' } } }
+        }
+      })
+    ).toBe(true);
+    expect(validate({ ...base, variants: { lite: { env: {} } } })).toBe(false);
+    expect(
+      validate({ ...base, variants: { windows: { requires: { shell: 'x' } } } })
+    ).toBe(false);
+    expect(
+      validate({ ...base, variants: { windows: { env: { RETRIES: 3 } } } })
+    ).toBe(false);
     expect(
       validate({
         ...base,

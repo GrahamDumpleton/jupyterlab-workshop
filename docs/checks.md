@@ -243,17 +243,45 @@ capability.
 
 When a manifest lists `requires.tools`, opening the workshop asks the
 server which of them are on its path. A banner on the first page lists
-tools that are missing or too old, with the `hint` for the platform from
-the manifest. Versions are read from `<tool> --version` only when the
-workshop is trusted; otherwise only presence is checked.
+tools that are missing or too old. Versions are read from
+`<tool> --version` only when the workshop is trusted; otherwise only
+presence is checked.
 
 ```yaml
 requires:
   tools:
-    - {
-        name: git,
-        version: '>=2.30',
-        hint: { macos: 'brew install git', linux: 'apt install git' }
-      }
+    - { name: git, version: '>=2.30' }
     - { name: docker, optional: true }
+    - { name: py, platforms: [windows] }
+    - { name: curl, frontends: [jupyterlab] }
 ```
+
+A tool with `platforms` or `frontends` is looked for only there, so a
+tool that exists on one platform, or one that JupyterLite could never
+provide, is not reported missing elsewhere. A tool that goes by another
+name on another platform is two entries with disjoint lists. The linter
+reports `unreachable-tool` for an entry whose lists leave out every
+platform and frontend the manifest supports.
+
+What the check found reaches the pages as the `missing_tools` built-in,
+a list of the names not found or too old, optional ones included. The
+install advice, which is rarely one line and differs by platform, is
+prose on the first page under a condition that tests it:
+
+````markdown
+```{when} "git" in missing_tools and platform == "macos"
+Git was not found. Install it with [Homebrew](https://brew.sh), then
+reload JupyterLab so that a new terminal can see it:
+
+    brew install git
+```
+````
+
+The same condition in a page's front matter shows an "Install the
+tools" page only to the learners who need it. Until the check has
+finished `missing_tools` is empty, so a block that tests
+`"git" not in missing_tools` shows for a moment on a machine where git
+is missing; write the advice for the missing case. The linter reports
+`unknown-tool` for a name tested against `missing_tools` that no entry
+in `requires.tools` declares. The self-test runs where the tools are
+installed, so these blocks are parsed and linted there but never shown.

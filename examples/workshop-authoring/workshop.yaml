@@ -15,8 +15,8 @@ capabilities:
   - kernel-exec
 requires:
   tools:
-    - { name: jupyter, hint: { default: "pip install jupyterlab-workshop" } }
-    - { name: node, optional: true, hint: { default: "Install Node.js 18 or newer; jupyter workshop lint needs it" } }
+    - { name: jupyter }
+    - { name: node, optional: true }
 layout: default
 gating: strict
 layouts:

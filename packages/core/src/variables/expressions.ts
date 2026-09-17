@@ -11,7 +11,9 @@
  *
  * Names resolve to workshop variables. Values are strings, booleans or
  * lists of strings. A string is true when it is non-empty and not one of
- * `false`, `no` or `0`.
+ * `false`, `no` or `0`. `in` on a string is a substring test, so a
+ * variable that holds a list is named in `LIST_VARIABLES` and split on
+ * commas when it is read, and `in` on it is membership.
  */
 
 import { Variables } from './substitute';
@@ -42,6 +44,23 @@ interface IToken {
 const KEYWORDS = new Set(['and', 'or', 'not', 'in', 'true', 'false']);
 
 /**
+ * Variables whose value is a comma-separated list, read as a list by
+ * conditions: `missing_tools` holds the names of the required tools the
+ * preflight check did not find, so `"git" in missing_tools` is true for
+ * `git` and not for a `gitk` that happens to contain it.
+ */
+export const LIST_VARIABLES: ReadonlySet<string> = new Set(['missing_tools']);
+
+/** One `<string> in <name>` or `<string> not in <name>` test of a condition. */
+export interface IMembershipTest {
+  /** The quoted string on the left. */
+  item: string;
+
+  /** The variable name on the right. */
+  container: string;
+}
+
+/**
  * Evaluate a `when` expression against variables.
  */
 export function evaluateExpression(
@@ -52,6 +71,42 @@ export function evaluateExpression(
   const value = parser.parse();
 
   return { value: truthy(value), unknown: parser.unknown };
+}
+
+/**
+ * The membership tests an expression makes against named variables,
+ * without evaluating it: for `"git" in missing_tools or platform ==
+ * "windows"` the one test of `git` against `missing_tools`. Lint uses
+ * it to check the strings a page compares with a list variable.
+ */
+export function membershipTests(source: string): IMembershipTest[] {
+  const tokens = tokenize(source);
+  const tests: IMembershipTest[] = [];
+
+  tokens.forEach((token, index) => {
+    if (token.kind !== 'string') {
+      return;
+    }
+
+    // `in name`, or `not in name`, must follow the string directly.
+    let next = index + 1;
+
+    if (tokens[next]?.kind === 'name' && tokens[next].text === 'not') {
+      next += 1;
+    }
+
+    if (tokens[next]?.kind !== 'name' || tokens[next].text !== 'in') {
+      return;
+    }
+
+    const container = tokens[next + 1];
+
+    if (container?.kind === 'name' && !KEYWORDS.has(container.text)) {
+      tests.push({ item: token.text, container: container.text });
+    }
+  });
+
+  return tests;
 }
 
 /**
@@ -262,7 +317,9 @@ class Parser {
         return '';
       }
 
-      return this._variables[token.text];
+      const value = this._variables[token.text];
+
+      return LIST_VARIABLES.has(token.text) ? splitList(value) : value;
     }
 
     throw new ExpressionError(
@@ -332,6 +389,17 @@ class Parser {
   private _tokens: IToken[];
   private _variables: Variables;
   private _position = 0;
+}
+
+/**
+ * The items of a comma-separated list, trimmed, with empty items left
+ * out so an empty string is an empty list.
+ */
+function splitList(value: string): string[] {
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(item => item !== '');
 }
 
 function truthy(value: Value): boolean {

@@ -25,6 +25,7 @@ import {
   lineDiff,
   parseManifest,
   parsePage,
+  resolveManifest,
   DEFAULT_WORKSPACE,
   IVenvExports,
   WORKSHOP_FILES_DIR,
@@ -322,7 +323,11 @@ export class WorkshopManager implements IWorkshopManager {
       const platform = await this._ensurePlatform();
       const manifestPath = PathExt.join(workshopPath, MANIFEST_FILE);
       const manifestSource = await readTextFile(this._contents, manifestPath);
-      const manifest = parseManifest(manifestSource, manifestPath);
+      const manifest = resolveManifest(
+        parseManifest(manifestSource, manifestPath),
+        platform.os,
+        platform.frontend
+      );
 
       // Read every page up front so navigation is instant.
       const sources: Record<string, string> = {};
@@ -505,6 +510,7 @@ export class WorkshopManager implements IWorkshopManager {
         manifest.variables,
         state.variables
       );
+      this._applyMissingTools();
 
       // Values from a launch link sit above the manifest defaults but
       // below anything the learner sets.
@@ -619,7 +625,11 @@ export class WorkshopManager implements IWorkshopManager {
     try {
       const manifestPath = PathExt.join(workshop.path, MANIFEST_FILE);
       const manifestSource = await readTextFile(this._contents, manifestPath);
-      const manifest = parseManifest(manifestSource, manifestPath);
+      const manifest = resolveManifest(
+        parseManifest(manifestSource, manifestPath),
+        platform.os,
+        platform.frontend
+      );
       const sources: Record<string, string> = {};
 
       await Promise.all(
@@ -681,6 +691,7 @@ export class WorkshopManager implements IWorkshopManager {
         manifest.variables,
         this._store.persistable()
       );
+      this._applyMissingTools();
       this._renderPages();
       this._error = null;
 
@@ -1233,9 +1244,11 @@ export class WorkshopManager implements IWorkshopManager {
 
   setPreflight(results: IPreflightResult[] | null): void {
     this._preflight = results;
+    this._applyMissingTools();
     this._changed.emit();
 
-    if (results) {
+    // A check that looked for nothing has nothing to report.
+    if (results && results.length > 0) {
       this._emit('preflight-result', {
         tools: results.map(result => ({
           name: result.name,
@@ -2135,6 +2148,29 @@ export class WorkshopManager implements IWorkshopManager {
 
       return null;
     }
+  }
+
+  /**
+   * Publish what the preflight found as the `missing_tools` built-in: the
+   * names of the required tools not found or too old, optional ones
+   * included, as a comma-separated list. It stays unset until the check
+   * has run, so a page's "install it" and "you already have it" blocks
+   * are both hidden rather than one shown wrongly for a moment, and it
+   * is an empty list once the check found nothing missing, including
+   * when the manifest listed nothing to look for.
+   */
+  private _applyMissingTools(): void {
+    const results = this._preflight;
+
+    if (!this._workshop || results === null) {
+      return;
+    }
+
+    const missing = results
+      .filter(result => !result.satisfied)
+      .map(result => result.name);
+
+    this._store.set('missing_tools', missing.join(','), 'builtin');
   }
 
   private _onVariablesChanged(): void {

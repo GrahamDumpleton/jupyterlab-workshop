@@ -52,7 +52,7 @@ capabilities:
   - kernel-exec
 requires:
   tools:
-    - { name: git, hint: { macos: brew install git, linux: apt install git } }
+    - { name: git }
 env:
   PAGER: cat
   GIT_PAGER: cat
@@ -77,7 +77,8 @@ What each part is for:
   the pages need and the manifest lacks, and any declared but unused.
 
 - `requires.tools` lists `git`, so a learner without it sees a banner
-  with the install hint for their platform instead of failing commands.
+  on the first page instead of failing commands, and a page can show
+  install advice under `{when} "git" in missing_tools`.
 
 - `env` sets the pagers to `cat`, since `git log` in a terminal a few
   lines tall would otherwise wait for a key press.

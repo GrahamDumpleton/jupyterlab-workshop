@@ -67,6 +67,12 @@ You can install packages freely; nothing here outlives the session.
 ```
 ````
 
+One more comes from the workshop rather than the machine:
+`missing_tools` is the list of the tools in `requires.tools` that the
+[preflight check](checks.md#preflight) did not find, so
+`"git" in missing_tools` shows install advice to the learners who need
+it.
+
 ## Command variants
 
 A directive body may hold alternatives for particular platforms or
@@ -204,6 +210,43 @@ swaps text for text of the same length within a second of the previous
 run leaves the next run executing the old code. The self-test, which
 runs actions back to back, hits this more often than a learner does.
 
+Values are strings, as the environment holds them, so a number or a
+`true` has to be quoted, or YAML reads it as something else and the
+manifest is refused. The same holds for the manifest's `version`, where
+an unquoted `1.10` would become `1.1`, and for `defaults.actions`.
+
+### Settings that differ by platform
+
+Where an `env` value, or an action default under `defaults.actions`,
+differs by platform or frontend, a `variants` mapping keyed by the same
+names the body markers use overrides it there:
+
+```yaml
+env:
+  PAGER: cat
+defaults:
+  actions:
+    timeout: 60s
+variants:
+  windows:
+    env:
+      PAGER: more
+  jupyterlite:
+    defaults:
+      actions:
+        timeout: 5m
+```
+
+The entries that apply are merged over the base by key, the frontend
+entry after the platform entry, which is the order in which body
+markers are chosen. Only `env` and `defaults` can appear under an
+entry: they are the settings whose whole value can differ by platform.
+Whether one item of a list applies somewhere is said on the item
+instead, as a tool's `platforms` in `requires.tools` is, and a shell
+requirement is not overridden at all, for the reason below.
+
+### Requiring a shell
+
 A manifest may require a shell:
 
 ```yaml
@@ -211,16 +254,36 @@ requires:
   shell: bash
 ```
 
-When the detected shell does not satisfy it (`sh` accepts `bash` and
-`zsh`; other names must match) the panel shows a banner on the first
-page explaining that commands may need adjusting and how to change the
-server's terminal shell, for example for Git Bash on Windows:
+Set it only when the workshop truly runs under one shell. `sh` means
+any POSIX shell, satisfied by `sh`, `bash` and `zsh`, where every other
+name must match exactly, so a workshop whose commands are plain POSIX
+asks for `sh` and is not flagged on a Mac, whose default shell is zsh.
+A workshop that supports several shells with commands that differ
+omits the field and puts a condition on the actions that differ,
+`:when: shell == "fish"` on one and `:when: shell != "fish"` on the
+other, since body markers select by platform and frontend, not by
+shell.
+
+When the detected shell does not satisfy the requirement the panel
+shows a banner on the first page explaining that commands may need
+adjusting and how to change the server's terminal shell, for example
+for Git Bash on Windows:
 
 ```python
 c.ServerApp.terminado_settings = {
     "shell_command": ["C:\\Program Files\\Git\\bin\\bash.exe"]
 }
 ```
+
+Advice of your own, such as which shell to install and how, goes on the
+first page under a condition on the `shell` built-in, which says what
+the page requires as it does so:
+
+````markdown
+```{when} shell not in ["bash", "zsh"]
+These commands need bash or zsh; terminals here run `{{ shell }}`.
+```
+````
 
 ## Remote kernels
 

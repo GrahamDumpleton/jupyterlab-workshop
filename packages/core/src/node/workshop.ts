@@ -6,7 +6,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { IWorkshopManifest, parseManifest } from '../format/manifest';
+import {
+  IWorkshopManifest,
+  parseManifest,
+  resolveManifest
+} from '../format/manifest';
 import { IPage, parsePage } from '../format/page';
 import { declaredVariables } from '../format/page';
 import { FRONTEND_NAMES, PLATFORM_NAMES } from '../format/variants';
@@ -128,7 +132,11 @@ export function loadWorkshopFiles(
   }
 
   const manifestSource = fs.readFileSync(manifestPath, 'utf8');
-  const manifest = parseManifest(manifestSource, 'workshop.yaml');
+  const manifest = resolveManifest(
+    parseManifest(manifestSource, 'workshop.yaml'),
+    platform,
+    frontend
+  );
   const sources = new Map<string, string>();
 
   for (const pagePath of manifest.pages) {

@@ -68,8 +68,9 @@ list wins:
 
 1. **Built-ins** describe the machine and the session: `platform`,
    `frontend`, `shell`, `path_sep`, `workshop_dir`, `workspace`, `home`,
-   `user`, `host` and `container`. They cannot be changed.
-   [Platforms](platforms.md) says what each holds.
+   `user`, `host` and `container`, and `missing_tools` lists the required
+   tools the [preflight check](checks.md#preflight) did not find. They
+   cannot be changed. [Platforms](platforms.md) says what each holds.
 
 2. **Manifest defaults**, from the `default` of a declaration.
 
@@ -147,7 +148,11 @@ Windows users: run the commands in PowerShell.
 
 Conditions use `==`, `!=`, `in`, `not in`, `and`, `or`, `not` and
 parentheses over variables, quoted strings and `[lists]`. A bare
-variable name is true when it has a non-empty value.
+variable name is true when it has a non-empty value. `in` on a string
+is a substring test, so `"mac" in platform` holds for `macos`; a
+variable that holds a list, which today is only `missing_tools`, is
+read as one, so `"git" in missing_tools` holds for `git` and not for a
+`gitk` that happens to contain it.
 
 ## Tracks
 

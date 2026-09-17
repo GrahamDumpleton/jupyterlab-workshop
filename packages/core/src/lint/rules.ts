@@ -27,10 +27,16 @@ import {
   LAYOUT_WIDGET_PATH_KINDS,
   parseLayoutWidget
 } from '../format/layouts';
-import { IWorkshopManifest } from '../format/manifest';
-import { IDirectiveNode, IPage } from '../format/page';
+import { IWorkshopManifest, toolApplies } from '../format/manifest';
+import { IDirectiveNode, IPage, PageNode } from '../format/page';
+import { PLATFORM_NAMES } from '../format/variants';
 import { liteShellProblems, usesSubprocess } from '../lite';
-import { evaluateExpression, expressionNames } from '../variables/expressions';
+import {
+  IMembershipTest,
+  evaluateExpression,
+  expressionNames,
+  membershipTests
+} from '../variables/expressions';
 import {
   actionCapability,
   allDirectives,
@@ -91,6 +97,7 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintDirectives(input, messages);
   lintChecks(input, messages);
   lintRequirements(input, messages);
+  lintTools(input, manifestPath, messages);
   lintFormOrder(input, messages);
   lintLayouts(input, manifestPath, messages);
   lintCapabilities(input, manifestPath, messages);
@@ -246,6 +253,91 @@ function lintRequirements(input: ILintInput, messages: ILintMessage[]): void {
         });
       }
     }
+  }
+}
+
+/**
+ * The tools a manifest requires: an entry whose `platforms` and
+ * `frontends` leave out every combination the manifest supports is
+ * never looked for, and a page that tests a name against
+ * `missing_tools` which no entry declares can never see it missing.
+ */
+function lintTools(
+  input: ILintInput,
+  manifestPath: string,
+  messages: ILintMessage[]
+): void {
+  const manifest = input.manifest;
+  const frontends =
+    manifest.frontends.length > 0 ? manifest.frontends : DEFAULT_FRONTENDS;
+  const platforms =
+    manifest.platforms.length > 0 ? manifest.platforms : PLATFORM_NAMES;
+
+  for (const tool of manifest.requires.tools) {
+    // JupyterLite runs on Pyodide, whose platform is emscripten whatever
+    // the manifest lists, so a platform list never matches there.
+    const reachable = frontends.some(frontend =>
+      (frontend === 'jupyterlite' ? ['emscripten'] : platforms).some(platform =>
+        toolApplies(tool, platform, frontend)
+      )
+    );
+
+    if (!reachable) {
+      messages.push({
+        level: 'warning',
+        rule: 'unreachable-tool',
+        message: `Tool "${tool.name}" is never looked for: its platforms and frontends leave out every combination the manifest supports`,
+        path: manifestPath
+      });
+    }
+  }
+
+  const names = new Set(manifest.requires.tools.map(tool => tool.name));
+
+  const check = (
+    condition: string | undefined,
+    path: string,
+    line?: number
+  ): void => {
+    if (!condition) {
+      return;
+    }
+
+    let tests: IMembershipTest[];
+
+    try {
+      tests = membershipTests(condition);
+    } catch {
+      return;
+    }
+
+    for (const test of tests) {
+      if (test.container === 'missing_tools' && !names.has(test.item)) {
+        messages.push({
+          level: 'warning',
+          rule: 'unknown-tool',
+          message: `"${test.item}" is tested against missing_tools but is not in requires.tools, so it is never reported missing`,
+          path,
+          ...(line === undefined ? {} : { line })
+        });
+      }
+    }
+  };
+
+  const walk = (nodes: PageNode[], path: string): void => {
+    for (const node of nodes) {
+      if (node.kind === 'when') {
+        check(node.condition, path, node.line);
+        walk(node.nodes, path);
+      } else if (node.kind === 'directive') {
+        check(node.options.when, path, node.line);
+      }
+    }
+  };
+
+  for (const page of input.pages) {
+    check(page.frontmatter.when, page.path);
+    walk(page.nodes, page.path);
   }
 }
 

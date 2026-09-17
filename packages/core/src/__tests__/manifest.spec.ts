@@ -1,5 +1,5 @@
 import { WorkshopFormatError } from '../errors';
-import { parseManifest } from '../format/manifest';
+import { parseManifest, resolveManifest } from '../format/manifest';
 
 const VALID = `
 apiVersion: jupyterlab-workshop/v1alpha1
@@ -13,8 +13,8 @@ capabilities:
   - network: [github.com, pypi.org]
 requires:
   tools:
-    - { name: git, version: ">=2.30", hint: { macos: "brew install git" } }
-    - { name: python, optional: true }
+    - { name: git, version: ">=2.30", platforms: [linux, macos] }
+    - { name: python, optional: true, frontends: [jupyterlab] }
   shell: bash
 environment:
   requirements: requirements.txt
@@ -45,11 +45,97 @@ describe('parseManifest', () => {
   it('parses the terminal environment', () => {
     expect(parseManifest(VALID).env).toEqual({});
     expect(
-      parseManifest(`${VALID}\nenv:\n  PAGER: less\n  RETRIES: 3\n`).env
+      parseManifest(`${VALID}\nenv:\n  PAGER: less\n  RETRIES: "3"\n`).env
     ).toEqual({ PAGER: 'less', RETRIES: '3' });
     expect(() => parseManifest(`${VALID}\nenv:\n  bad-name: x\n`)).toThrow(
       WorkshopFormatError
     );
+  });
+
+  it('takes strings only where YAML would read something else', () => {
+    // An unquoted 1.10 is the number 1.1 to YAML, an unquoted yes is
+    // true, and neither is what the author wrote.
+    expect(() => parseManifest(VALID.replace('1.2.0', '1.10'))).toThrow(
+      /Field "version" must be a string; quote/
+    );
+    expect(() => parseManifest(`${VALID}\nenv:\n  RETRIES: 3\n`)).toThrow(
+      /Field "env.RETRIES" must be a string; quote a number/
+    );
+    expect(() => parseManifest(`${VALID}\nenv:\n  DEBUG: true\n`)).toThrow(
+      /Field "env.DEBUG" must be a string; quote a true/
+    );
+    expect(() =>
+      parseManifest(VALID.replace('delay: 1s', 'delay: 1s\n    scroll: false'))
+    ).toThrow(/Field "defaults.actions.scroll" must be a string/);
+  });
+
+  it('refuses the old tool hint and takes tool platforms and frontends', () => {
+    expect(() =>
+      parseManifest(
+        VALID.replace(
+          'optional: true, frontends: [jupyterlab]',
+          'optional: true, hint: { macos: "brew install python" }'
+        )
+      )
+    ).toThrow(/has a "hint".*"python" in missing_tools/);
+    expect(() =>
+      parseManifest(
+        VALID.replace('platforms: [linux, macos]', 'platforms: [lite]')
+      )
+    ).toThrow(/Unknown platform "lite"/);
+    expect(() =>
+      parseManifest(
+        VALID.replace('frontends: [jupyterlab]', 'frontends: [vscode]')
+      )
+    ).toThrow(/Unknown frontend "vscode"/);
+  });
+
+  it('parses variants and resolves them for a platform and frontend', () => {
+    const manifest = parseManifest(
+      `${VALID}\nenv:\n  PAGER: cat\n  A: base\nvariants:\n  windows:\n    env: { PAGER: more, B: windows }\n  jupyterlite:\n    env: { A: lite }\n    defaults: { actions: { timeout: 5m } }\n`
+    );
+
+    expect(manifest.variants).toEqual({
+      windows: { env: { PAGER: 'more', B: 'windows' }, defaults: {} },
+      jupyterlite: {
+        env: { A: 'lite' },
+        defaults: { timeout: '5m' }
+      }
+    });
+
+    // Nothing applies on linux under JupyterLab, so the manifest is as is.
+    expect(resolveManifest(manifest, 'linux', 'jupyterlab')).toBe(manifest);
+
+    const windows = resolveManifest(manifest, 'windows', 'jupyterlab');
+
+    expect(windows.env).toEqual({ PAGER: 'more', A: 'base', B: 'windows' });
+    expect(windows.defaults).toEqual({ delay: '1s' });
+
+    // The frontend entry is merged after the platform entry.
+    const lite = resolveManifest(manifest, 'windows', 'jupyterlite');
+
+    expect(lite.env).toEqual({ PAGER: 'more', A: 'lite', B: 'windows' });
+    expect(lite.defaults).toEqual({ delay: '1s', timeout: '5m' });
+    expect(lite.variants).toBe(manifest.variants);
+  });
+
+  it('rejects variants that name the unknown or override other settings', () => {
+    expect(() =>
+      parseManifest(`${VALID}\nvariants:\n  lite: { env: { A: b } }\n`)
+    ).toThrow(/Unknown variant "lite"/);
+    expect(() =>
+      parseManifest(
+        `${VALID}\nvariants:\n  windows: { requires: { shell: powershell } }\n`
+      )
+    ).toThrow(
+      /"variants.windows.requires" is not a setting a variant can override/
+    );
+    expect(() =>
+      parseManifest(`${VALID}\nvariants:\n  windows: { env: { A: 1 } }\n`)
+    ).toThrow(/Field "variants.windows.env.A" must be a string/);
+    expect(() =>
+      parseManifest(`${VALID}\nvariants:\n  windows: [env]\n`)
+    ).toThrow(/"variants.windows" must be a mapping/);
   });
 
   it('parses the finish message', () => {
@@ -135,9 +221,16 @@ describe('parseManifest', () => {
         name: 'git',
         version: '>=2.30',
         optional: false,
-        hint: { macos: 'brew install git' }
+        platforms: ['linux', 'macos'],
+        frontends: []
       },
-      { name: 'python', version: undefined, optional: true, hint: {} }
+      {
+        name: 'python',
+        version: undefined,
+        optional: true,
+        platforms: [],
+        frontends: ['jupyterlab']
+      }
     ]);
     expect(manifest.environment).toEqual({
       requirements: 'requirements.txt',
@@ -159,6 +252,7 @@ describe('parseManifest', () => {
       { id: 'conda', label: 'conda' }
     ]);
     expect(manifest.defaults).toEqual({ delay: '1s' });
+    expect(manifest.variants).toEqual({});
     expect(manifest.variables).toEqual([
       {
         name: 'repo_dir',

@@ -278,6 +278,64 @@ test.describe('workshop panel', () => {
       .toBeLessThan(0.4);
   });
 
+  test('lists missing tools in a banner and in missing_tools', async ({
+    page,
+    tmpPath
+  }) => {
+    // One tool that exists on the Linux runner, one that cannot, and one
+    // confined to Windows that is therefore not looked for here.
+    const tooled = `${tmpPath}/tooled`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: tooled',
+        'title: Tooled',
+        'requires:',
+        '  tools:',
+        '    - { name: sh }',
+        '    - { name: no-such-tool-for-the-test, optional: true }',
+        '    - { name: also-absent, platforms: [windows] }',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${tooled}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '# Tools',
+        '',
+        '```{when} "no-such-tool-for-the-test" in missing_tools',
+        'Install the test tool.',
+        '```',
+        '',
+        '```{when} "sh" not in missing_tools',
+        'The shell is here.',
+        '```',
+        '',
+        '```{when} "also-absent" in missing_tools',
+        'Never shown on Linux.',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${tooled}/pages/01.md`
+    );
+    await openWorkshop(page, tooled);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const banner = panel.locator('.jp-WorkshopPanel-preflight');
+
+    await expect(banner).toContainText('no-such-tool-for-the-test');
+    await expect(banner).toContainText('optional');
+    await expect(banner).not.toContainText('also-absent');
+    await expect(panel).toContainText('Install the test tool.');
+    await expect(panel).toContainText('The shell is here.');
+    await expect(panel).not.toContainText('Never shown on Linux.');
+  });
+
   test('keeps the environment across a reset and drops it on restart', async ({
     page,
     tmpPath
