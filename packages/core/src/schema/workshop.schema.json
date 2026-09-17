@@ -202,53 +202,61 @@
         }
       }
     },
+    "instructions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where the instructions panel sits for the whole workshop: the sidebar it lives in and the fraction of the window that sidebar takes. Left out, the panelSide setting chooses the side and the width is left as the learner has it.",
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": ["left", "right"],
+          "description": "Sidebar the panel lives in. The same for every step: a layout may change the width but never the side."
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "Fraction of the window width the panel's sidebar takes. A layout may override it for its own step."
+        }
+      }
+    },
+    "sidebar": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The sidebar the instructions are not in, when the workshop opens: hidden, the default, collapses it; a sidebar widget id such as filebrowser brings that widget forward there, moving it from the other sidebar if needed."
+    },
     "layout": {
       "type": "string",
-      "description": "Name of the layout applied when the workshop opens."
+      "description": "Name of the layout applied when the workshop opens: one declared under layouts, or the built-in default (a terminal below whatever is open) or terminal-only (a terminal filling the main area)."
     },
     "layouts": {
       "type": "object",
-      "description": "Named arrangements of the JupyterLab window, applied by the layout field when the workshop is first opened and by the layout directive. The built-in layouts are default (a terminal below the main area), terminal-only (a terminal filling the main area) and notebook (the main area left alone).",
+      "description": "Named arrangements of the JupyterLab window, applied by the layout field when the workshop is first opened, by the layout directive from a page, and by the Reset Layout command. A layout describes the result: where things go, never what to close.",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "left": {
-            "$ref": "#/definitions/layoutSide",
-            "description": "What to do with the left sidebar: instructions, collapsed, a sidebar widget id such as filebrowser, or a mapping."
+          "sidebar": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The sidebar the instructions are not in, while this layout is applied: hidden, or a sidebar widget id such as filebrowser. Left out, that sidebar is left as it is."
           },
-          "right": {
-            "$ref": "#/definitions/layoutSide",
-            "description": "What to do with the right sidebar: instructions, collapsed, a sidebar widget id such as jp-property-inspector, or a mapping."
-          },
-          "main": {
-            "type": "array",
-            "description": "Regions split off the main area in order, each holding widgets as tabs.",
-            "items": {
-              "type": "object",
-              "required": ["area", "widgets"],
-              "additionalProperties": false,
-              "properties": {
-                "area": {
-                  "type": "string",
-                  "enum": ["top", "bottom", "left", "right"],
-                  "description": "Edge of the main area the region splits off."
-                },
-                "widgets": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Widget references: terminal:<name>, file:<path>, markdown:<path>, notebook:<path>, launcher or editor."
-                },
-                "size": {
-                  "type": "number",
-                  "exclusiveMinimum": 0,
-                  "exclusiveMaximum": 1,
-                  "description": "Fraction of the main area the region takes."
-                }
+          "instructions": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Width of the instructions sidebar for this step, overriding the top-level instructions width.",
+            "properties": {
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 1,
+                "description": "Fraction of the window width the panel's sidebar takes while this layout is applied."
               }
             }
+          },
+          "main": {
+            "$ref": "#/definitions/layoutArea",
+            "description": "The main area as a tree of areas. Left out, the main area is left as it is."
           }
         }
       }
@@ -334,33 +342,42 @@
         }
       }
     },
-    "layoutSide": {
-      "oneOf": [
-        {
+    "layoutArea": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One area of the main-area tree: either tabs, or a split into child areas. Exactly one of tabs and areas is given; lint reports an area with both or neither.",
+      "properties": {
+        "name": {
           "type": "string",
-          "description": "instructions for the workshop panel, collapsed, or a sidebar widget id."
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Name an action's area option can target; unique within a layout, and reusable across layouts."
         },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "widget": {
-              "type": "string",
-              "description": "instructions for the workshop panel, or a sidebar widget id such as filebrowser."
-            },
-            "collapsed": {
-              "type": "boolean",
-              "description": "Whether the sidebar starts collapsed."
-            },
-            "size": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "exclusiveMaximum": 1,
-              "description": "Fraction of the window width the sidebar takes."
-            }
-          }
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Widget references opened as tabs, the first active: terminal:<name>, file:<path>, markdown:<path>, notebook:<path> or launcher. An empty list is the placeholder that holds whatever else is open."
+        },
+        "split": {
+          "type": "string",
+          "enum": ["rows", "columns"],
+          "description": "Direction the child areas are laid out in; rows unless said."
+        },
+        "areas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/layoutArea"
+          },
+          "description": "Child areas of a split, in order."
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "Fraction of the parent split this area takes; siblings without one share the remainder equally."
         }
-      ]
+      }
     },
     "capabilityName": {
       "type": "string",

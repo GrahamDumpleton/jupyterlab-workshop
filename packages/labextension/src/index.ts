@@ -114,7 +114,12 @@ import {
   IBrowserSettings,
   WorkshopBrowser
 } from './browser/widget';
-import { closePlaceholders, isPlaceholderMain, LayoutManager } from './layout';
+import {
+  closePlaceholders,
+  ILayoutManager,
+  isPlaceholderMain,
+  LayoutManager
+} from './layout';
 import { LiteBackend } from './lite/backend';
 import { isJupyterLite } from './lite/detect';
 import { WorkshopManager, normalizeWorkshopPath } from './manager';
@@ -234,13 +239,14 @@ const terminalsPlugin: JupyterFrontEndPlugin<TerminalSessions> = {
 };
 
 /**
- * Provides the action registry with the built-in actions registered.
+ * Provides the layout manager, which arranges the window as a workshop's
+ * layouts ask and places what actions open.
  */
-const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
-  id: `${PLUGIN_PREFIX}:actions`,
-  description: 'Implements workshop actions against JupyterLab.',
+const layoutsPlugin: JupyterFrontEndPlugin<LayoutManager> = {
+  id: `${PLUGIN_PREFIX}:layouts`,
+  description: 'Arranges the JupyterLab window as workshop layouts ask.',
   autoStart: true,
-  provides: IActionRegistry,
+  provides: ILayoutManager,
   requires: [IWorkshopManager, ILabShell, IDocumentManager, ITerminalSessions],
   optional: [IEditorTracker, ISettingRegistry, IStateDB],
   activate: (
@@ -252,24 +258,22 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     editorTracker: IEditorTracker | null,
     settingRegistry: ISettingRegistry | null,
     stateDB: IStateDB | null
-  ): IActionRegistry => {
-    const kernel = new WorkshopKernel(app, manager);
-
-    // Commands run without a terminal go through the kernel on a server
-    // and through the terminal extension's headless shell in JupyterLite.
-    const runner: IShellRunner =
-      manager.backend.kind === 'lite'
-        ? new LiteShell(app.commands)
-        : new KernelShell(kernel);
+  ): LayoutManager => {
     const layouts = new LayoutManager({
       app,
       shell,
       manager,
       terminals,
       docManager,
+      editorTracker,
+      settingRegistry,
       stateDB,
       panelId: PANEL_ID
     });
+
+    // New terminals go where the layout puts terminals.
+    terminals.placement = (area?: string) =>
+      layouts.placement('terminal', area);
 
     app.commands.addCommand(CommandIDs.applyLayout, {
       label: 'Workshop: Reset Layout',
@@ -279,23 +283,64 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
         const name = manager.workshop?.manifest.layout;
 
         if (name) {
-          await layouts.apply(name);
+          await layouts.apply(name, { initial: true });
         }
       }
     });
+
+    return layouts;
+  }
+};
+
+/**
+ * Provides the action registry with the built-in actions registered.
+ */
+const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
+  id: `${PLUGIN_PREFIX}:actions`,
+  description: 'Implements workshop actions against JupyterLab.',
+  autoStart: true,
+  provides: IActionRegistry,
+  requires: [
+    IWorkshopManager,
+    ILabShell,
+    IDocumentManager,
+    ITerminalSessions,
+    ILayoutManager
+  ],
+  optional: [IEditorTracker, ISettingRegistry],
+  activate: (
+    app: JupyterFrontEnd,
+    manager: IWorkshopManager,
+    shell: ILabShell,
+    docManager: IDocumentManager,
+    terminals: TerminalSessions,
+    layouts: LayoutManager,
+    editorTracker: IEditorTracker | null,
+    settingRegistry: ISettingRegistry | null
+  ): IActionRegistry => {
+    const kernel = new WorkshopKernel(app, manager);
+
+    // Commands run without a terminal go through the kernel on a server
+    // and through the terminal extension's headless shell in JupyterLite.
+    const runner: IShellRunner =
+      manager.backend.kind === 'lite'
+        ? new LiteShell(app.commands)
+        : new KernelShell(kernel);
     const files: IFileActionContext = {
       app,
       docManager,
       editorTracker,
       manager,
-      terminals
+      terminals,
+      layouts
     };
     const notebooks: INotebookActionContext = {
       app,
       docManager,
       manager,
       terminals,
-      kernel
+      kernel,
+      layouts
     };
     const checks: ICheckActionContext = {
       app,
@@ -311,7 +356,7 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
     const implementations = [
       new ExecuteAction(terminals, manager),
       new ExecuteCaptureAction(runner, manager),
-      new TerminalOpenAction(terminals, shell, manager),
+      new TerminalOpenAction(terminals, layouts, manager),
       new TerminalClearAction(terminals, manager),
       new TerminalCloseAction(terminals),
       new TerminalTypeAction(terminals, manager),
@@ -347,11 +392,11 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       new OutputClearAction(notebooks),
       new CommandAction(app),
       new LayoutAction(layouts),
-      new ActivateAction(shell, 'panel-open'),
+      new ActivateAction(shell, 'panel-open', layouts),
       new ActivateAction(shell, 'focus'),
-      new PanelCloseAction(shell),
+      new PanelCloseAction(shell, layouts),
       new SettingsSetAction(settingRegistry),
-      new LauncherOpenAction(app),
+      new LauncherOpenAction(app, layouts),
       new HighlightAction(),
       new TooltipAction(),
       new TourAction(),
@@ -425,7 +470,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     ILabShell,
     IDocumentManager,
     IFeaturePolicy,
-    ITerminalSessions
+    ITerminalSessions,
+    ILayoutManager
   ],
   optional: [
     ISettingRegistry,
@@ -443,6 +489,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     docManager: IDocumentManager,
     features: IFeaturePolicy,
     terminals: TerminalSessions,
+    layouts: LayoutManager,
     settingRegistry: ISettingRegistry | null,
     palette: ICommandPalette | null,
     restorer: ILayoutRestorer | null,
@@ -1114,6 +1161,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
           if (path !== undefined) {
             await closeWorkshopWidgets(cleanup, path);
+            await layouts.forget(path);
           }
 
           await manager.uninstall();
@@ -1753,6 +1801,7 @@ export default [
   featuresPlugin,
   managerPlugin,
   terminalsPlugin,
+  layoutsPlugin,
   actionsPlugin,
   panelPlugin,
   authoringPlugin

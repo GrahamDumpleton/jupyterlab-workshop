@@ -3,6 +3,7 @@ import { MainAreaWidget } from '@jupyterlab/apputils';
 import { Launcher } from '@jupyterlab/launcher';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { JSONValue } from '@lumino/coreutils';
+import { Widget } from '@lumino/widgets';
 
 import { LayoutManager } from '../layout';
 import {
@@ -67,9 +68,24 @@ export class LayoutAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
-    await this._layouts.apply(
-      request.options.name || request.argument || 'default'
-    );
+    const name = request.options.name || request.argument || 'default';
+    const outcome = await this._layouts.apply(name);
+
+    // What could be arranged has been; what could not is the error, so
+    // the learner sees it and running the action again completes it.
+    if (outcome.missing.length > 0) {
+      return {
+        status: 'error',
+        message: `Layout "${name}" could not open ${outcome.missing.join(', ')}`
+      };
+    }
+
+    if (!outcome.arranged) {
+      return {
+        status: 'error',
+        message: `Layout "${name}" could not be arranged as declared`
+      };
+    }
 
     return { status: 'ok' };
   }
@@ -78,11 +94,18 @@ export class LayoutAction implements IActionImplementation {
 }
 
 /**
- * The `panel-open` and `focus` actions: activate a widget by id.
+ * The `panel-open` and `focus` actions: activate a widget by id. A
+ * sidebar widget opened this way is shown in the sidebar the
+ * instructions are not in, so the two do not cover each other.
  */
 export class ActivateAction implements IActionImplementation {
-  constructor(shell: ILabShell, type: 'panel-open' | 'focus') {
+  constructor(
+    shell: ILabShell,
+    type: 'panel-open' | 'focus',
+    layouts: LayoutManager | null = null
+  ) {
     this._shell = shell;
+    this._layouts = layouts;
     this.type = type;
   }
 
@@ -106,30 +129,45 @@ export class ActivateAction implements IActionImplementation {
       return { status: 'error', message: `No widget has the id "${id}"` };
     }
 
-    this._shell.activateById(id);
+    if (!this._layouts?.showSidebarWidget(id)) {
+      this._shell.activateById(id);
+    }
 
     return { status: 'ok' };
   }
 
   private _shell: ILabShell;
+  private _layouts: LayoutManager | null;
 }
 
 /**
- * The `panel-close` action: collapse a sidebar.
+ * The `panel-close` action: collapse a sidebar, by default the one the
+ * instructions are not in.
  */
 export class PanelCloseAction implements IActionImplementation {
   readonly type = 'panel-close';
 
-  constructor(shell: ILabShell) {
+  constructor(shell: ILabShell, layouts: LayoutManager) {
     this._shell = shell;
+    this._layouts = layouts;
   }
 
   describe(request: IActionRequest): string {
-    return `Collapse the ${request.options.side ?? 'left'} sidebar`;
+    const side = request.options.side;
+
+    return side === 'left' || side === 'right'
+      ? `Collapse the ${side} sidebar`
+      : 'Collapse the sidebar beside the instructions';
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
-    if (request.options.side === 'right') {
+    const option = request.options.side;
+    const side =
+      option === 'left' || option === 'right'
+        ? option
+        : this._layouts.otherSide();
+
+    if (side === 'right') {
       this._shell.collapseRight();
     } else {
       this._shell.collapseLeft();
@@ -139,6 +177,7 @@ export class PanelCloseAction implements IActionImplementation {
   }
 
   private _shell: ILabShell;
+  private _layouts: LayoutManager;
 }
 
 /**
@@ -185,15 +224,18 @@ export class SettingsSetAction implements IActionImplementation {
 export class LauncherOpenAction implements IActionImplementation {
   readonly type = 'launcher-open';
 
-  constructor(app: JupyterFrontEnd) {
+  constructor(app: JupyterFrontEnd, layouts: LayoutManager) {
     this._app = app;
+    this._layouts = layouts;
   }
 
   describe(): string {
     return 'Open the launcher';
   }
 
-  async run(): Promise<IActionResult> {
+  async run(request: IActionRequest): Promise<IActionResult> {
+    const area = request.options.area;
+
     // JupyterLab's command always makes a new launcher pane, so bring an
     // existing one to the front instead when there is one.
     for (const widget of this._app.shell.widgets('main')) {
@@ -201,16 +243,29 @@ export class LauncherOpenAction implements IActionImplementation {
         widget instanceof MainAreaWidget ? widget.content : widget;
 
       if (content instanceof Launcher) {
-        this._app.shell.activateById(widget.id);
+        await this._layouts.place(widget, 'document', area, {
+          existed: true,
+          placed: true
+        });
 
         return { status: 'ok' };
       }
     }
 
-    await this._app.commands.execute('launcher:create');
+    const created = (await this._app.commands.execute(
+      'launcher:create'
+    )) as unknown;
+
+    if (created instanceof Widget) {
+      await this._layouts.place(created, 'document', area, {
+        existed: false,
+        placed: false
+      });
+    }
 
     return { status: 'ok' };
   }
 
   private _app: JupyterFrontEnd;
+  private _layouts: LayoutManager;
 }

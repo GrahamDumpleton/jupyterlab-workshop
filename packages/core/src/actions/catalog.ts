@@ -194,7 +194,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Write the body, or a file shipped with the workshop, to a file.',
         'write-files',
         'optional',
-        ['path', 'open', 'mode', 'from']
+        ['path', 'open', 'mode', 'from', 'area']
       ),
       spec(
         'file-open',
@@ -202,7 +202,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Open a file in the editor, optionally at a line.',
         'none',
         'none',
-        ['path', 'line', 'split']
+        ['path', 'line', 'area']
       ),
       spec(
         'file-close',
@@ -308,7 +308,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Open a notebook, optionally at a cell.',
         'none',
         'none',
-        ['path', 'cell', 'split']
+        ['path', 'cell', 'area']
       ),
       spec(
         'notebook-create',
@@ -316,7 +316,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Create a notebook with the cells listed in the body.',
         'write-files',
         'yaml',
-        ['path', 'kernel', 'open']
+        ['path', 'kernel', 'open', 'area']
       ),
       spec(
         'cell-insert',
@@ -404,7 +404,7 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Open a console attached to a notebook.',
         'none',
         'none',
-        ['path']
+        ['path', 'area']
       ),
       spec(
         'output-clear',
@@ -462,7 +462,8 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'ui',
         'Open the launcher, or show the open one.',
         'none',
-        'none'
+        'none',
+        ['area']
       ),
 
       // Guidance.

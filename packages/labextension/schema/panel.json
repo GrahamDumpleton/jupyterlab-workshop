@@ -21,7 +21,7 @@
     "panelSide": {
       "type": "string",
       "title": "Panel side",
-      "description": "Which sidebar the workshop panel starts in. Moving the panel by hand is remembered by JupyterLab's layout, and a workshop layout that names \"instructions\" for a side overrides this.",
+      "description": "Which sidebar the workshop panel starts in. Moving the panel by hand is remembered by JupyterLab's layout, and a workshop whose manifest sets instructions.side overrides this.",
       "enum": ["left", "right"],
       "default": "right"
     },

@@ -38,8 +38,24 @@ interface IExposedApp {
         specs: { kernelspecs: Record<string, unknown> } | null;
       };
     };
-    shell: { widgets(area: string): Iterable<IExposedWidget> };
+    shell: {
+      widgets(area: string): Iterable<IExposedWidget>;
+      currentWidget: IExposedWidget | null;
+      activateById(id: string): void;
+      saveLayout(): {
+        mainArea: { dock: { main: IExposedAreaConfig | null } | null };
+      };
+    };
   };
+}
+
+/** A saved dock area, as far as the tests look at one. */
+interface IExposedAreaConfig {
+  type: 'tab-area' | 'split-area';
+  widgets?: IExposedWidget[];
+  orientation?: 'horizontal' | 'vertical';
+  children?: IExposedAreaConfig[];
+  sizes?: number[];
 }
 
 /** A main-area widget, as far as the tests look at one. */
@@ -112,6 +128,75 @@ async function uploadExample(
       await page.contents.deleteDirectory(directory);
     }
   }
+}
+
+/**
+ * The shape of the main area's dock: which widgets share a tab area and
+ * how the areas are split, with document widgets named by their file and
+ * previews by their class, sizes aside.
+ */
+function dockShape(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(() => {
+    const exposed = window as unknown as IExposedApp;
+    const label = (widget: IExposedWidget): string => {
+      if (widget.id.startsWith('jupyterlab-workshop-terminal-')) {
+        return widget.id;
+      }
+
+      if (
+        widget.node.querySelector('.jp-MarkdownViewer') ||
+        widget.node.classList.contains('jp-MarkdownViewer')
+      ) {
+        return 'jp-MarkdownViewer';
+      }
+
+      const title = widget.node
+        .closest('.lm-DockPanel')
+        ?.querySelector(
+          `.lm-TabBar-tab[data-id="${widget.id}"] .lm-TabBar-tabLabel`
+        );
+
+      return title?.textContent || widget.id;
+    };
+    const shape = (config: IExposedAreaConfig | null): string => {
+      if (!config) {
+        return 'empty';
+      }
+
+      if (config.type === 'tab-area') {
+        return `[${(config.widgets ?? []).map(label).join(',')}]`;
+      }
+
+      const inner = (config.children ?? []).map(shape).join(' ');
+
+      return `${config.orientation === 'horizontal' ? 'cols' : 'rows'}(${inner})`;
+    };
+
+    return shape(
+      exposed.jupyterapp.shell.saveLayout().mainArea.dock?.main ?? null
+    );
+  });
+}
+
+function mainShare(
+  page: import('@playwright/test').Page,
+  id: string
+): Promise<number | null> {
+  return page.evaluate((target: string) => {
+    const exposed = window as unknown as IExposedApp;
+    const dock = document.getElementById('jp-main-dock-panel');
+
+    for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+      if (widget.id === target && dock) {
+        return (
+          widget.node.getBoundingClientRect().height /
+          dock.getBoundingClientRect().height
+        );
+      }
+    }
+
+    return null;
+  }, id);
 }
 
 test.describe('workshop panel', () => {
@@ -237,14 +322,14 @@ test.describe('workshop panel', () => {
         'version: 0.1.0',
         'description: Layout sizing.',
         'capabilities: [terminal]',
+        'instructions: { side: right, width: 0.3 }',
         'layout: default',
         'layouts:',
         '  default:',
-        '    left: collapsed',
-        '    right: { widget: instructions, size: 0.3 }',
         '    main:',
-        '      - { area: top, widgets: ["markdown:../README.md"] }',
-        '      - { area: bottom, widgets: ["terminal:shell"], size: 0.33 }',
+        '      areas:',
+        '        - { tabs: ["markdown:../README.md"] }',
+        '        - { size: 0.33, tabs: ["terminal:shell"] }',
         'pages:',
         '  - pages/01-create-a-repository.md',
         ''
@@ -276,6 +361,281 @@ test.describe('workshop panel', () => {
         })
       )
       .toBeLessThan(0.4);
+  });
+
+  test('arranges the main area as the layout tree declares and keeps what was open', async ({
+    page,
+    tmpPath
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    // The placeholder beside the terminal has nothing to hold when the
+    // workshop opens, so it is dropped; a file opened later goes there
+    // when the layout is applied again, rather than being closed.
+    const treed = `${tmpPath}/treed`;
+
+    await page.contents.uploadDirectory(EXAMPLE_DIR, treed);
+    await page.contents.uploadContent('notes\n', 'text', `${treed}/notes.txt`);
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: treed',
+        'title: Treed',
+        'capabilities: [terminal]',
+        'layout: default',
+        'layouts:',
+        '  default:',
+        '    main:',
+        '      areas:',
+        '        - { name: docs, tabs: ["markdown:../README.md", "file:../notes.txt"] }',
+        '        - name: shells',
+        '          size: 0.4',
+        '          split: columns',
+        '          areas:',
+        '            - { tabs: ["terminal:shell"] }',
+        '            - { tabs: [] }',
+        'pages:',
+        '  - pages/01-create-a-repository.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${treed}/workshop.yaml`
+    );
+    await openWorkshop(page, treed);
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+
+    // Two rows: the documents above the terminal alone, since the
+    // placeholder beside it had nothing to hold.
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([jp-MarkdownViewer,notes.txt] [jupyterlab-workshop-terminal-shell])'
+      );
+    await expect
+      .poll(() => mainShare(page, 'jupyterlab-workshop-terminal-shell'))
+      .toBeLessThan(0.45);
+
+    // The current widget is the first tab of the first area, and every
+    // widget the layout placed is one the shell tracks: activating the
+    // terminal by id makes it current.
+    const currentId = (): Promise<string> =>
+      page.evaluate(() => {
+        const exposed = window as unknown as IExposedApp;
+
+        return exposed.jupyterapp.shell.currentWidget?.id ?? '';
+      });
+    const previewId = await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+        if (widget.node.querySelector('.jp-MarkdownViewer')) {
+          return widget.id;
+        }
+      }
+
+      return '';
+    });
+
+    expect(previewId).not.toBe('');
+    await expect.poll(currentId).toBe(previewId);
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      exposed.jupyterapp.shell.activateById(
+        'jupyterlab-workshop-terminal-shell'
+      );
+    });
+    await expect.poll(currentId).toBe('jupyterlab-workshop-terminal-shell');
+
+    // A file opened afterwards is not named by the layout. Reset Layout
+    // keeps it, in the placeholder beside the terminal, and the rest of
+    // the window is as declared again.
+    await page.evaluate(async (path: string) => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.commands.execute('docmanager:open', { path });
+    }, `${treed}/pages/01-create-a-repository.md`);
+    await expect(page.locator('.jp-FileEditor')).toHaveCount(2);
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.commands.execute('workshop:apply-layout', {});
+    });
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([jp-MarkdownViewer,notes.txt] cols([jupyterlab-workshop-terminal-shell] [01-create-a-repository.md]))'
+      );
+    await expect(page.locator('.jp-FileEditor')).toHaveCount(2);
+  });
+
+  test('switches layouts from a page without losing the terminal, and reports what it cannot open', async ({
+    page,
+    tmpPath
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    const switched = `${tmpPath}/switched`;
+
+    await page.contents.uploadDirectory(EXAMPLE_DIR, switched);
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: switched',
+        'title: Switched',
+        'capabilities: [terminal, write-files]',
+        'layout: default',
+        'layouts:',
+        '  default:',
+        '    main:',
+        '      areas:',
+        '        - { tabs: ["file:../pages/01-create-a-repository.md"] }',
+        '        - { size: 0.4, tabs: ["terminal:shell"] }',
+        '  diagram:',
+        '    main:',
+        '      areas:',
+        '        - { tabs: ["markdown:trace.md"] }',
+        '        - { size: 0.4, tabs: ["terminal:shell"] }',
+        'pages:',
+        '  - pages/switch.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${switched}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Switch',
+        '---',
+        '',
+        '```{execute}',
+        ':id: mark',
+        ':session: shell',
+        'echo layout-mark-$((40+2))',
+        '```',
+        '',
+        '```{layout}',
+        ':id: early',
+        ':name: diagram',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: write',
+        ':path: trace.md',
+        '# Trace',
+        '```',
+        '',
+        '```{layout}',
+        ':id: show',
+        ':name: diagram',
+        '```',
+        '',
+        '```{file-open}',
+        ':id: reopen',
+        ':path: ../pages/01-create-a-repository.md',
+        ':area: bottom',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${switched}/pages/switch.md`
+    );
+    await openWorkshop(page, switched);
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([01-create-a-repository.md] [jupyterlab-workshop-terminal-shell])'
+      );
+
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    // Collect what the terminal prints, and mark its node, so that the
+    // terminal after the switch can be shown to be the same one.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+      const terminal = [...exposed.jupyterapp.shell.widgets('main')].find(
+        widget => widget.id === 'jupyterlab-workshop-terminal-shell'
+      );
+      const captured: string[] = [];
+
+      (window as unknown as ICapturedOutput).__workshopOutput = captured;
+      terminal?.content?.session?.messageReceived?.connect((_, message) => {
+        if (message.type === 'stdout' && message.content) {
+          captured.push(message.content.map(String).join(''));
+        }
+      });
+      terminal?.node.setAttribute('data-test-mark', 'same-terminal');
+    });
+
+    const panel = page.locator(PANEL);
+    const mark = panel.locator('[data-action-id="mark"]');
+    const output = (): Promise<string> =>
+      page.evaluate(() =>
+        (window as unknown as ICapturedOutput).__workshopOutput.join('')
+      );
+
+    await mark.click();
+    await expect(mark).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await expect.poll(output).toContain('layout-mark-42');
+
+    // The preview does not exist yet: the layout arranges what it can
+    // and the action says what it could not open.
+    const early = panel.locator('[data-action-id="early"]');
+
+    await early.click();
+    await expect(early).toHaveClass(/jp-mod-status-error/);
+    await expect(early).toContainText('could not open markdown:trace.md');
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([01-create-a-repository.md] [jupyterlab-workshop-terminal-shell])'
+      );
+
+    const write = panel.locator('[data-action-id="write"]');
+
+    await write.click();
+    await expect(write).toHaveClass(/jp-mod-status-ok/);
+
+    // Now the preview takes the top, the page file stays as a tab beside
+    // it, and the terminal is the same widget with its output intact.
+    const show = panel.locator('[data-action-id="show"]');
+
+    await show.click();
+    await expect(show).toHaveClass(/jp-mod-status-ok/);
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([jp-MarkdownViewer,01-create-a-repository.md] [jupyterlab-workshop-terminal-shell])'
+      );
+    await expect(page.locator('.jp-Terminal')).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-mark="same-terminal"] .jp-Terminal')
+    ).toHaveCount(1);
+    expect(await output()).toContain('layout-mark-42');
+
+    // An area keyword places relative to the current widget: the file,
+    // already open, moves below the preview.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      for (const widget of exposed.jupyterapp.shell.widgets('main')) {
+        if (widget.id.includes('jp-MarkdownViewer')) {
+          exposed.jupyterapp.shell.activateById(widget.id);
+        }
+      }
+    });
+
+    const reopen = panel.locator('[data-action-id="reopen"]');
+
+    await reopen.click();
+    await expect(reopen).toHaveClass(/jp-mod-status-ok/);
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([jp-MarkdownViewer] [01-create-a-repository.md] [jupyterlab-workshop-terminal-shell])'
+      );
   });
 
   test('lists missing tools in a banner and in missing_tools', async ({

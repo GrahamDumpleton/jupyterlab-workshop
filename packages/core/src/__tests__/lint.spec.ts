@@ -633,7 +633,7 @@ describe('layout rules', () => {
       rules(
         '```{layout}\n:name: terminal-only\n```\n',
         withLayouts(
-          '  custom:\n    left: collapsed\n    right: { widget: instructions, size: 0.2 }\n    main:\n      - { area: top, widgets: ["markdown:README.md"] }\n      - { area: bottom, widgets: ["terminal:git"], size: 0.3 }\n'
+          '  custom:\n    sidebar: hidden\n    instructions: { width: 0.2 }\n    main:\n      areas:\n        - { name: docs, tabs: ["markdown:README.md"] }\n        - size: 0.3\n          split: columns\n          areas:\n            - { tabs: ["terminal:git"] }\n            - { tabs: [] }\n'
         )
       ).filter(rule => rule.includes('layout'))
     ).toEqual([]);
@@ -656,13 +656,63 @@ describe('layout rules', () => {
     const findings = rules(
       'text',
       withLayouts(
-        '  custom:\n    main:\n      - { area: top, widgets: ["window:x", "markdown", "launcher"] }\n'
+        '  custom:\n    main:\n      tabs: ["window:x", "markdown", "launcher", "editor"]\n'
       )
     );
 
     expect(
       findings.filter(rule => rule === 'unknown-layout-widget')
-    ).toHaveLength(2);
+    ).toHaveLength(3);
+  });
+
+  it('reports areas that are neither tabs nor a split, or both', () => {
+    const findings = lint(
+      'text',
+      withLayouts(
+        '  custom:\n    main:\n      areas:\n        - { name: a }\n        - { tabs: ["terminal:x"], areas: [{ tabs: [] }] }\n'
+      )
+    ).filter(message => message.rule === 'layout-area');
+
+    expect(findings.map(message => message.message)).toEqual([
+      expect.stringContaining('neither "tabs" nor "areas"'),
+      expect.stringContaining('both "tabs" and "areas"')
+    ]);
+  });
+
+  it('reports duplicate area names and more than one placeholder', () => {
+    const findings = lint(
+      'text',
+      withLayouts(
+        '  custom:\n    main:\n      areas:\n        - { name: a, tabs: [] }\n        - { name: a, tabs: [] }\n  other:\n    main:\n      tabs: []\n      name: a\n'
+      )
+    ).filter(message => message.rule === 'layout-area');
+
+    expect(findings.map(message => message.message)).toEqual([
+      expect.stringContaining('names two areas "a"'),
+      expect.stringContaining('2 empty "tabs" areas')
+    ]);
+  });
+
+  it('checks the area option of opening actions against the layouts', () => {
+    const manifest = withLayouts(
+      '  custom:\n    main:\n      areas:\n        - { name: code, tabs: [] }\n        - { tabs: ["terminal:shell"] }\n'
+    );
+
+    expect(
+      rules(
+        '```{file-open}\n:path: a.py\n:area: code\n```\n\n```{terminal-open}\n:session: x\n:area: bottom\n```\n\n```{notebook-open}\n:path: a.ipynb\n:area: {{ where }}\n```\n',
+        manifest
+      ).filter(rule => rule === 'unknown-layout-area')
+    ).toEqual([]);
+
+    const findings = lint(
+      '```{file-open}\n:path: a.py\n:area: shells\n```\n',
+      manifest
+    ).filter(message => message.rule === 'unknown-layout-area');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].message).toContain('"shells"');
+    expect(findings[0].path).toBe('pages/01.md');
   });
 });
 

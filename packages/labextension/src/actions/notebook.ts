@@ -2,6 +2,7 @@ import { JupyterFrontEnd } from '@jupyterlab/application';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { Cell } from '@jupyterlab/cells';
 import { NotebookActions, NotebookPanel } from '@jupyterlab/notebook';
+import { Widget } from '@lumino/widgets';
 import { load } from 'js-yaml';
 
 import {
@@ -12,7 +13,7 @@ import {
 } from '../tokens';
 import { parseDuration } from '../util';
 import { ensureDirectory } from './contents';
-import { documentPlacement } from './files';
+import { LayoutManager } from '../layout';
 import { WorkshopKernel, executeInKernel } from './kernel';
 import { requireBody, requireOption } from './registry';
 import { TerminalSessions } from './terminal';
@@ -112,6 +113,7 @@ export interface INotebookActionContext {
   manager: IWorkshopManager;
   terminals: TerminalSessions;
   kernel: WorkshopKernel;
+  layouts: LayoutManager;
 }
 
 interface ICellSpec {
@@ -147,22 +149,21 @@ async function revealCell(
 }
 
 /**
- * Open a notebook, placing it above the workshop terminal when it is new,
- * and wait until it is ready.
+ * Open a notebook where its `area`, or the workshop's layout, says, and
+ * wait until it is ready. A notebook already open is revealed, and moved
+ * only when an area is asked for.
  */
 export async function openNotebook(
   context: INotebookActionContext,
   serverPath: string,
   kernel?: string,
-  split?: string
+  area?: string
 ): Promise<NotebookPanel> {
-  const existing = context.docManager.findWidget(serverPath, NOTEBOOK_FACTORY);
-  const current = context.app.shell.currentWidget;
+  const existing =
+    context.docManager.findWidget(serverPath, NOTEBOOK_FACTORY) !== undefined;
   const options = existing
     ? undefined
-    : (split === 'right' || split === 'bottom') && current
-      ? { mode: `split-${split}` as const, ref: current.id }
-      : documentPlacement(context);
+    : context.layouts.placement('document', area);
 
   const widget = context.docManager.openOrReveal(
     serverPath,
@@ -177,6 +178,10 @@ export async function openNotebook(
 
   await widget.context.ready;
   await widget.revealed;
+  await context.layouts.place(widget, 'document', area, {
+    existed: existing,
+    placed: !existing
+  });
 
   return widget;
 }
@@ -340,7 +345,7 @@ export class NotebookOpenAction implements IActionImplementation {
       this._context,
       notebookPath(this._context, request),
       undefined,
-      request.options.split
+      request.options.area
     );
 
     if (request.options.cell) {
@@ -411,7 +416,12 @@ export class NotebookCreateAction implements IActionImplementation {
     });
 
     if (request.options.open !== 'false') {
-      await openNotebook(this._context, serverPath, kernel);
+      await openNotebook(
+        this._context,
+        serverPath,
+        kernel,
+        request.options.area
+      );
     }
 
     return { status: 'ok' };
@@ -784,7 +794,22 @@ export class ConsoleOpenAction implements IActionImplementation {
       args.path = panel.context.path;
     }
 
-    await this._context.app.commands.execute('console:create', args);
+    const console = (await this._context.app.commands.execute(
+      'console:create',
+      args
+    )) as unknown;
+
+    if (console instanceof Widget) {
+      await this._context.layouts.place(
+        console,
+        'document',
+        request.options.area,
+        {
+          existed: false,
+          placed: false
+        }
+      );
+    }
 
     return { status: 'ok' };
   }

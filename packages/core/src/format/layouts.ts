@@ -1,22 +1,20 @@
-import { ILayoutSpec } from './manifest';
+import { ILayoutArea, ILayoutSpec } from './manifest';
 
 /** Layouts available to every workshop without declaring them. */
 export const BUILTIN_LAYOUTS: Readonly<Record<string, ILayoutSpec>> = {
   default: {
-    main: [{ area: 'bottom', widgets: ['terminal:workshop'] }]
+    main: {
+      areas: [{ tabs: [] }, { size: 0.4, tabs: ['terminal:workshop'] }]
+    }
   },
   'terminal-only': {
-    main: [{ area: 'top', widgets: ['terminal:workshop'] }]
-  },
-  notebook: {
-    main: []
+    main: { tabs: ['terminal:workshop'] }
   }
 };
 
-/** The kinds of widget a layout's `main` entries can name. */
+/** The kinds of widget a layout's `tabs` can name. */
 export const LAYOUT_WIDGET_KINDS: ReadonlySet<string> = new Set([
   'terminal',
-  'editor',
   'file',
   'markdown',
   'notebook',
@@ -28,6 +26,17 @@ export const LAYOUT_WIDGET_PATH_KINDS: ReadonlySet<string> = new Set([
   'file',
   'markdown',
   'notebook'
+]);
+
+/**
+ * Values of an action's `area` option that place a widget relative to
+ * the current one rather than in a named area: a tab beside it, or a
+ * split to its right or below it.
+ */
+export const LAYOUT_AREA_KEYWORDS: ReadonlySet<string> = new Set([
+  'tab',
+  'right',
+  'bottom'
 ]);
 
 /** A widget reference split into its kind and target. */
@@ -59,4 +68,48 @@ export function findLayout(
   name: string
 ): ILayoutSpec | undefined {
   return layouts[name] ?? BUILTIN_LAYOUTS[name];
+}
+
+/**
+ * Every area of a layout tree, parents before children, in the order
+ * they are written.
+ */
+export function* walkLayoutAreas(area: ILayoutArea): Generator<ILayoutArea> {
+  yield area;
+
+  for (const child of area.areas ?? []) {
+    yield* walkLayoutAreas(child);
+  }
+}
+
+/**
+ * Whether an area is a placeholder: a `tabs` list with nothing in it,
+ * which holds whatever is open that the layout does not name.
+ */
+export function isLayoutPlaceholder(area: ILayoutArea): boolean {
+  return area.areas === undefined && area.tabs?.length === 0;
+}
+
+/**
+ * The names of every area declared across a set of layouts, so an
+ * action's `area` option can be checked against them.
+ */
+export function layoutAreaNames(
+  layouts: Record<string, ILayoutSpec>
+): Set<string> {
+  const names = new Set<string>();
+
+  for (const spec of Object.values(layouts)) {
+    if (!spec.main) {
+      continue;
+    }
+
+    for (const area of walkLayoutAreas(spec.main)) {
+      if (area.name) {
+        names.add(area.name);
+      }
+    }
+  }
+
+  return names;
 }

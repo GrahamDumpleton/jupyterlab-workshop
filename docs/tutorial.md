@@ -83,7 +83,8 @@ What each part is for:
 - `env` sets the pagers to `cat`, since `git log` in a terminal a few
   lines tall would otherwise wait for a key press.
 
-- `layout: default` opens a terminal below the main area.
+- `layout: default` opens a terminal below whatever is open, taking two
+  fifths of the height, and collapses the file browser's sidebar.
 
 - `gating: soft` lets the learner move on past an unmet check but says
   so; `strict` would disable Next until it passes.

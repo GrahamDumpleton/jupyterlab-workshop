@@ -52,19 +52,39 @@ def type_of(prop: dict[str, Any], definitions: dict[str, Any]) -> str:
     return str(kind)
 
 
+def reference_name(prop: dict[str, Any]) -> str | None:
+    """The definition a property, or the items of a list, refers to."""
+
+    if "$ref" in prop:
+        return str(prop["$ref"]).split("/")[-1]
+
+    items = prop.get("items")
+
+    if isinstance(items, dict) and "$ref" in items:
+        return str(items["$ref"]).split("/")[-1]
+
+    return None
+
+
 def render_properties(
     properties: dict[str, Any],
     required: list[str],
     definitions: dict[str, Any],
     depth: int,
     lines: list[str],
+    rendering: frozenset[str] = frozenset(),
 ) -> None:
-    """Append a table of properties, then sections for nested objects."""
+    """Append a table of properties, then sections for nested objects.
+
+    A definition that refers to itself, as a layout area does through its
+    child areas, is rendered once: inside its own section a field that
+    refers back to it gets a note instead of another section.
+    """
 
     lines.append("| Field | Type | Required | Description |")
     lines.append("| --- | --- | --- | --- |")
 
-    nested: list[tuple[str, dict[str, Any]]] = []
+    nested: list[tuple[str, dict[str, Any], frozenset[str]]] = []
 
     for name, prop in properties.items():
         description = str(prop.get("description", "")).replace("|", "\\|")
@@ -73,17 +93,25 @@ def render_properties(
         if default not in (None, [], {}):
             description = f"{description} Default `{json.dumps(default)}`.".strip()
 
+        reference = reference_name(prop)
+        recursive = reference is not None and reference in rendering
+
+        if recursive:
+            note = "Each entry has the fields of this table."
+            description = f"{description} {note}".strip()
+
         lines.append(
             f"| `{name}` | {type_of(prop, definitions)} | "
             f"{'yes' if name in required else 'no'} | {description} |"
         )
 
-        inner = nested_object(prop, definitions)
+        inner = None if recursive else nested_object(prop, definitions)
 
         if inner is not None:
-            nested.append((name, inner))
+            seen = rendering | {reference} if reference else rendering
+            nested.append((name, inner, seen))
 
-    for name, inner in nested:
+    for name, inner, seen in nested:
         lines.append("")
         lines.append(f"{'#' * (depth + 1)} `{name}` entries")
         lines.append("")
@@ -98,6 +126,7 @@ def render_properties(
             definitions,
             depth + 1,
             lines,
+            seen,
         )
 
 

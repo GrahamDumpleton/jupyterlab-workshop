@@ -23,9 +23,13 @@ import {
 } from '../checks/verify';
 import {
   findLayout,
+  isLayoutPlaceholder,
+  LAYOUT_AREA_KEYWORDS,
   LAYOUT_WIDGET_KINDS,
   LAYOUT_WIDGET_PATH_KINDS,
-  parseLayoutWidget
+  layoutAreaNames,
+  parseLayoutWidget,
+  walkLayoutAreas
 } from '../format/layouts';
 import {
   IWorkshopManifest,
@@ -830,10 +834,48 @@ function lintLayouts(
     }
   }
 
-  // Widget references must name a known kind, and file kinds need a path.
+  // Every area is tabs or a split, names are unique within a layout,
+  // and at most one area is the placeholder; widget references must name
+  // a known kind, and file kinds need a path.
   for (const [name, spec] of Object.entries(manifest.layouts)) {
-    for (const area of spec.main) {
-      for (const reference of area.widgets) {
+    if (!spec.main) {
+      continue;
+    }
+
+    const names = new Set<string>();
+    let placeholders = 0;
+
+    for (const area of walkLayoutAreas(spec.main)) {
+      const tabs = area.tabs !== undefined;
+      const areas = area.areas !== undefined;
+
+      if (tabs === areas) {
+        messages.push({
+          level: 'error',
+          rule: 'layout-area',
+          message: `Layout "${name}" has an area with ${tabs ? 'both' : 'neither'} "tabs" ${tabs ? 'and' : 'nor'} "areas"; give it one of the two`,
+          path: manifestPath
+        });
+      }
+
+      if (area.name !== undefined) {
+        if (names.has(area.name)) {
+          messages.push({
+            level: 'error',
+            rule: 'layout-area',
+            message: `Layout "${name}" names two areas "${area.name}"; names are unique within a layout`,
+            path: manifestPath
+          });
+        }
+
+        names.add(area.name);
+      }
+
+      if (isLayoutPlaceholder(area)) {
+        placeholders += 1;
+      }
+
+      for (const reference of area.tabs ?? []) {
         const { kind, target } = parseLayoutWidget(reference);
 
         if (!LAYOUT_WIDGET_KINDS.has(kind)) {
@@ -852,6 +894,43 @@ function lintLayouts(
           });
         }
       }
+    }
+
+    if (placeholders > 1) {
+      messages.push({
+        level: 'error',
+        rule: 'layout-area',
+        message: `Layout "${name}" has ${placeholders} empty "tabs" areas; only one can hold whatever else is open`,
+        path: manifestPath
+      });
+    }
+  }
+
+  // An action's area option names a keyword or an area some layout
+  // declares. A substituted value is checked when the page runs.
+  const areaNames = layoutAreaNames(manifest.layouts);
+
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      const area = node.options.area;
+
+      if (
+        area === undefined ||
+        !ACTION_TYPES[node.name]?.options.includes('area') ||
+        area.includes('{{') ||
+        LAYOUT_AREA_KEYWORDS.has(area) ||
+        areaNames.has(area)
+      ) {
+        continue;
+      }
+
+      messages.push({
+        level: 'error',
+        rule: 'unknown-layout-area',
+        message: `The ${node.name} action names area "${area}", which no layout declares; use ${[...LAYOUT_AREA_KEYWORDS].join(', ')} or a declared area name`,
+        path: page.path,
+        line: node.line
+      });
     }
   }
 }

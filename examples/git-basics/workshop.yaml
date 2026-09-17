@@ -25,15 +25,15 @@ env:
 requires:
   tools:
     - { name: git, version: ">=2.30" }
+instructions: { side: right, width: 0.25 }
 layout: default
 gating: soft
 layouts:
   default:
-    left: collapsed
-    right: { widget: instructions, size: 0.25 }
     main:
-      - { area: top, widgets: ["markdown:../README.md"] }
-      - { area: bottom, widgets: ["terminal:git"], size: 0.4 }
+      areas:
+        - { tabs: ["markdown:../README.md"] }
+        - { size: 0.4, tabs: ["terminal:git"] }
 variables:
   - name: repo_dir
     type: path

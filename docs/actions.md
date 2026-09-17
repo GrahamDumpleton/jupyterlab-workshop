@@ -6,7 +6,9 @@ described in [Pages and actions](pages.md#common-options), which also covers
 the page syntax, inline roles, conditions and how the editor actions point at
 text. Paths in options are relative to the learner's workspace, except `from`,
 which names a shipped file and is relative to the workshop directory; see
-[paths](platforms.md#paths).
+[paths](platforms.md#paths). The `area` option of the actions that open
+something names the layout area it goes in; see
+[where actions open things](layouts.md#where-actions-open-things).
 
 ## Terminal
 
@@ -14,7 +16,7 @@ which names a shipped file and is relative to the workshop directory; see
 | ----------------- | ----------- | -------- | ----------------------------------- | ----------------------------------------------------------------------- |
 | `execute`         | terminal    | required | `session`, `cwd`, `wait`, `timeout` | Run a command in a named terminal.                                      |
 | `execute-capture` | kernel-exec | required | `capture`, `cwd`, `timeout`         | Run a command in the background and capture its output into a variable. |
-| `terminal-open`   | terminal    | none     | `session`, `cwd`, `area`            | Open or reveal a named terminal.                                        |
+| `terminal-open`   | terminal    | none     | `session`, `cwd`, `area`            | Open or reveal a named terminal, optionally in a layout area.           |
 | `terminal-clear`  | terminal    | none     | `session`                           | Clear a named terminal.                                                 |
 | `terminal-close`  | terminal    | none     | `session`                           | Close a named terminal and end its session.                             |
 | `terminal-type`   | terminal    | required | `session`                           | Type text into a terminal without pressing Enter.                       |
@@ -25,8 +27,8 @@ which names a shipped file and is relative to the workshop directory; see
 
 | Directive             | Capability  | Body     | Options                                                             | Description                                                                              |
 | --------------------- | ----------- | -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `file-write`          | write-files | optional | `path`, `open`, `mode`, `from`                                      | Write the body, or a file shipped with the workshop, to a file.                          |
-| `file-open`           | none        | none     | `path`, `line`, `split`                                             | Open a file in the editor, optionally at a line.                                         |
+| `file-write`          | write-files | optional | `path`, `open`, `mode`, `from`, `area`                              | Write the body, or a file shipped with the workshop, to a file.                          |
+| `file-open`           | none        | none     | `path`, `line`, `area`                                              | Open a file in the editor, optionally at a line.                                         |
 | `file-close`          | none        | none     | `path`                                                              | Close every editor and preview showing a file.                                           |
 | `file-delete`         | write-files | none     | `path`, `recursive`, `missing`                                      | Delete a file, or a directory and its contents, closing its tabs.                        |
 | `file-rename`         | write-files | none     | `path`, `to`                                                        | Rename or move a file or directory, following it in open tabs.                           |
@@ -73,8 +75,8 @@ the paths stay inside the workspace like any write.
 
 | Directive          | Capability  | Body     | Options                               | Description                                                            |
 | ------------------ | ----------- | -------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| `notebook-open`    | none        | none     | `path`, `cell`, `split`               | Open a notebook, optionally at a cell.                                 |
-| `notebook-create`  | write-files | yaml     | `path`, `kernel`, `open`              | Create a notebook with the cells listed in the body.                   |
+| `notebook-open`    | none        | none     | `path`, `cell`, `area`                | Open a notebook, optionally at a cell.                                 |
+| `notebook-create`  | write-files | yaml     | `path`, `kernel`, `open`, `area`      | Create a notebook with the cells listed in the body.                   |
 | `cell-insert`      | write-files | required | `path`, `at`, `kind`, `tags`, `run`   | Insert a cell into a notebook.                                         |
 | `cell-run`         | kernel-exec | none     | `path`, `cell`                        | Run a cell of a notebook.                                              |
 | `cell-run-all`     | kernel-exec | none     | `path`                                | Run every cell of a notebook.                                          |
@@ -85,7 +87,7 @@ the paths stay inside the workspace like any write.
 | `kernel-interrupt` | none        | none     | `path`                                | Interrupt the kernel of a notebook.                                    |
 | `kernel-select`    | none        | none     | `path`, `kernel`                      | Change the kernel of a notebook.                                       |
 | `kernel-execute`   | kernel-exec | required | `path`, `kernel`, `silent`, `capture` | Run code in a kernel, optionally capturing the output into a variable. |
-| `console-open`     | none        | none     | `path`                                | Open a console attached to a notebook.                                 |
+| `console-open`     | none        | none     | `path`, `area`                        | Open a console attached to a notebook.                                 |
 | `output-clear`     | none        | none     | `path`                                | Clear the outputs of a notebook.                                       |
 
 ## Interface and layout
@@ -95,10 +97,10 @@ the paths stay inside the workspace like any write.
 | `command`       | none        | optional | `command`       | Run a JupyterLab command, with JSON arguments in the body.       |
 | `layout`        | none        | none     | `name`          | Arrange the JupyterLab panels using a named layout.              |
 | `panel-open`    | none        | none     | `id`            | Show a JupyterLab panel or widget by id.                         |
-| `panel-close`   | none        | none     | `id`, `side`    | Hide a JupyterLab sidebar panel.                                 |
+| `panel-close`   | none        | none     | `id`, `side`    | Collapse a sidebar, by default the one beside the instructions.  |
 | `focus`         | none        | none     | `id`            | Give a widget focus.                                             |
 | `settings-set`  | ui-settings | required | `plugin`, `key` | Change a setting of the editor, with the JSON value in the body. |
-| `launcher-open` | none        | none     | (none)          | Open the launcher, or show the open one.                         |
+| `launcher-open` | none        | none     | `area`          | Open the launcher, or show the open one.                         |
 
 ## Guidance
 

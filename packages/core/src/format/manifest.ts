@@ -102,35 +102,54 @@ export interface IEnvironment {
 /** Where a workshop asks to report progress events; see `IAnalyticsBlock`. */
 export type IAnalytics = IAnalyticsBlock;
 
-/** One region of a named layout. */
+/**
+ * One area of a layout's main-area tree: a set of tabs, or a split into
+ * child areas. `tabs` and `areas` are exclusive; lint reports an area
+ * with both or neither.
+ */
 export interface ILayoutArea {
-  /** Edge of the main area the region splits off. */
-  area: 'top' | 'bottom' | 'left' | 'right';
+  /** Name an action's `area` option can target; unique within a layout. */
+  name?: string;
 
-  /** Widget references such as `terminal:git` or `markdown:README.md`. */
-  widgets: string[];
+  /**
+   * Widget references opened as tabs, the first of them active, such as
+   * `terminal:git` or `markdown:README.md`. An empty list is the
+   * placeholder that holds whatever else is open.
+   */
+  tabs?: string[];
 
-  /** Fraction of the main area the region takes, between 0 and 1. */
+  /** Direction the child areas are laid out in; rows unless said. */
+  split?: 'rows' | 'columns';
+
+  /** Child areas of a split. */
+  areas?: ILayoutArea[];
+
+  /** Fraction of the parent split the area takes, between 0 and 1. */
   size?: number;
 }
 
-/** What a named layout does with one sidebar. */
-export interface ILayoutSide {
-  /** `instructions` for the workshop panel, or a sidebar widget id to show. */
-  widget?: string;
+/** Where the instructions panel sits and how wide its sidebar is. */
+export interface IInstructionsPlacement {
+  /** Sidebar the panel lives in for the whole workshop. */
+  side?: 'left' | 'right';
 
-  /** Whether the sidebar starts collapsed. */
-  collapsed?: boolean;
-
-  /** Fraction of the window width the sidebar takes, between 0 and 1. */
-  size?: number;
+  /** Fraction of the window width its sidebar takes, between 0 and 1. */
+  width?: number;
 }
 
-/** A named arrangement of JupyterLab panels. */
+/** A named arrangement of the JupyterLab window. */
 export interface ILayoutSpec {
-  left?: ILayoutSide;
-  right?: ILayoutSide;
-  main: ILayoutArea[];
+  /**
+   * The sidebar the instructions are not in: `hidden` to collapse it, or
+   * the id of a sidebar widget such as `filebrowser` to bring forward.
+   */
+  sidebar?: string;
+
+  /** Width of the instructions sidebar while this layout is applied. */
+  instructions?: { width?: number };
+
+  /** The main area, when the layout arranges it. */
+  main?: ILayoutArea;
 }
 
 /** Gating policy for moving between pages. */
@@ -196,6 +215,15 @@ export interface IWorkshopManifest {
    */
   resumable: boolean;
   variables: IVariableDefinition[];
+
+  /** Where the instructions panel sits, for the whole workshop. */
+  instructions?: IInstructionsPlacement;
+
+  /**
+   * The other sidebar when the workshop opens: `hidden`, the default, or
+   * a sidebar widget id to bring forward.
+   */
+  sidebar?: string;
   layout?: string;
   layouts: Record<string, ILayoutSpec>;
   gating: GatingPolicy;
@@ -226,12 +254,23 @@ const VARIABLE_TYPES: ReadonlySet<string> = new Set([
   'email'
 ]);
 
-const LAYOUT_AREAS: ReadonlySet<string> = new Set([
-  'top',
-  'bottom',
-  'left',
-  'right'
+const LAYOUT_AREA_FIELDS: ReadonlySet<string> = new Set([
+  'name',
+  'tabs',
+  'split',
+  'areas',
+  'size'
 ]);
+
+const LAYOUT_FIELDS: ReadonlySet<string> = new Set([
+  'sidebar',
+  'instructions',
+  'main'
+]);
+
+const LAYOUT_SPLITS: ReadonlySet<string> = new Set(['rows', 'columns']);
+
+const SIDES: ReadonlySet<string> = new Set(['left', 'right']);
 
 /**
  * Parse and validate the YAML source of a workshop manifest.
@@ -284,6 +323,15 @@ export function parseManifest(
     );
   }
 
+  const sidebar = optionalString(data, 'sidebar', path);
+
+  if (sidebar === '') {
+    throw new WorkshopFormatError(
+      'Field "sidebar" must be "hidden" or a sidebar widget id',
+      path
+    );
+  }
+
   const gating = optionalString(data, 'gating', path) ?? 'off';
 
   if (gating !== 'off' && gating !== 'soft' && gating !== 'strict') {
@@ -313,6 +361,8 @@ export function parseManifest(
     analytics: parseAnalytics(data.analytics, path),
     resumable: parseFlag(data, 'resumable', path),
     variables: parseVariables(data.variables, path),
+    instructions: parseInstructions(data.instructions, path),
+    sidebar,
     layout: optionalString(data, 'layout', path),
     layouts: parseLayouts(data.layouts, path),
     gating,
@@ -704,81 +754,68 @@ function parseLayouts(
       throw new WorkshopFormatError(`Layout "${name}" must be a mapping`, path);
     }
 
-    const main: ILayoutArea[] = [];
-    const rawMain = spec.main;
-
-    if (rawMain !== undefined && rawMain !== null) {
-      if (!Array.isArray(rawMain)) {
+    for (const key of Object.keys(spec)) {
+      if (!LAYOUT_FIELDS.has(key)) {
         throw new WorkshopFormatError(
-          `Layout "${name}": "main" must be a list`,
+          `Layout "${name}" has unknown field "${key}"`,
+          path
+        );
+      }
+    }
+
+    const layout: ILayoutSpec = {};
+    const label = `Layout "${name}"`;
+
+    if (spec.sidebar !== undefined && spec.sidebar !== null) {
+      if (typeof spec.sidebar !== 'string' || spec.sidebar === '') {
+        throw new WorkshopFormatError(
+          `${label}: "sidebar" must be "hidden" or a sidebar widget id`,
           path
         );
       }
 
-      for (const item of rawMain) {
-        if (
-          !isRecord(item) ||
-          typeof item.area !== 'string' ||
-          !LAYOUT_AREAS.has(item.area) ||
-          !isStringArray(item.widgets)
-        ) {
-          throw new WorkshopFormatError(
-            `Layout "${name}": each main entry needs an "area" of top, bottom, left or right and a "widgets" list`,
-            path
-          );
-        }
-
-        main.push({
-          area: item.area as ILayoutArea['area'],
-          widgets: item.widgets,
-          size: parseFraction(item.size, `Layout "${name}": "size"`, path)
-        });
-      }
+      layout.sidebar = spec.sidebar;
     }
 
-    layouts[name] = {
-      left: parseLayoutSide(spec.left, `Layout "${name}": "left"`, path),
-      right: parseLayoutSide(spec.right, `Layout "${name}": "right"`, path),
-      main
-    };
+    if (spec.instructions !== undefined && spec.instructions !== null) {
+      const placement = parseInstructions(spec.instructions, path, label);
+
+      if (placement?.side !== undefined) {
+        throw new WorkshopFormatError(
+          `${label}: "instructions" may set only "width"; the side is set once, at the top level`,
+          path
+        );
+      }
+
+      layout.instructions = { width: placement?.width };
+    }
+
+    if (spec.main !== undefined && spec.main !== null) {
+      layout.main = parseLayoutArea(spec.main, `${label}: "main"`, path);
+    }
+
+    layouts[name] = layout;
   }
 
   return layouts;
 }
 
-const LAYOUT_SIDE_FIELDS: ReadonlySet<string> = new Set([
-  'widget',
-  'collapsed',
-  'size'
-]);
-
 /**
- * Parse one side of a layout: the word `collapsed`, the name of a widget
- * to show (`instructions` for the workshop panel), or a mapping with
- * `widget`, `collapsed` and `size` fields.
+ * Parse one area of a layout tree: `tabs`, or `split` and `areas`, with
+ * an optional `name` and `size`. Whether the area has exactly one of
+ * `tabs` and `areas` is left to lint, so the whole manifest still loads.
  */
-function parseLayoutSide(
+function parseLayoutArea(
   value: unknown,
   label: string,
   path: string
-): ILayoutSide | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  if (typeof value === 'string') {
-    return value === 'collapsed' ? { collapsed: true } : { widget: value };
-  }
-
+): ILayoutArea {
   if (!isRecord(value)) {
-    throw new WorkshopFormatError(
-      `${label} must be "collapsed", a widget name or a mapping`,
-      path
-    );
+    throw new WorkshopFormatError(`${label} must be a mapping`, path);
   }
 
   for (const key of Object.keys(value)) {
-    if (!LAYOUT_SIDE_FIELDS.has(key)) {
+    if (!LAYOUT_AREA_FIELDS.has(key)) {
       throw new WorkshopFormatError(
         `${label} has unknown field "${key}"`,
         path
@@ -786,34 +823,110 @@ function parseLayoutSide(
     }
   }
 
-  if (value.widget !== undefined && typeof value.widget !== 'string') {
-    throw new WorkshopFormatError(`${label}: "widget" must be a string`, path);
+  const area: ILayoutArea = {};
+
+  if (value.name !== undefined && value.name !== null) {
+    if (typeof value.name !== 'string' || !NAME.test(value.name)) {
+      throw new WorkshopFormatError(
+        `${label}: "name" must be lower case letters, digits and hyphens`,
+        path
+      );
+    }
+
+    area.name = value.name;
   }
 
-  if (value.collapsed !== undefined && typeof value.collapsed !== 'boolean') {
-    throw new WorkshopFormatError(
-      `${label}: "collapsed" must be true or false`,
-      path
+  if (value.tabs !== undefined && value.tabs !== null) {
+    if (!isStringArray(value.tabs)) {
+      throw new WorkshopFormatError(
+        `${label}: "tabs" must be a list of widget references`,
+        path
+      );
+    }
+
+    area.tabs = value.tabs;
+  }
+
+  if (value.split !== undefined && value.split !== null) {
+    if (typeof value.split !== 'string' || !LAYOUT_SPLITS.has(value.split)) {
+      throw new WorkshopFormatError(
+        `${label}: "split" must be rows or columns`,
+        path
+      );
+    }
+
+    area.split = value.split as ILayoutArea['split'];
+  }
+
+  if (value.areas !== undefined && value.areas !== null) {
+    if (!Array.isArray(value.areas)) {
+      throw new WorkshopFormatError(`${label}: "areas" must be a list`, path);
+    }
+
+    area.areas = value.areas.map((item: unknown, index: number) =>
+      parseLayoutArea(item, `${label}: area ${index + 1}`, path)
     );
-  }
-
-  const side: ILayoutSide = {};
-
-  if (typeof value.widget === 'string') {
-    side.widget = value.widget;
-  }
-
-  if (typeof value.collapsed === 'boolean') {
-    side.collapsed = value.collapsed;
   }
 
   const size = parseFraction(value.size, `${label}: "size"`, path);
 
   if (size !== undefined) {
-    side.size = size;
+    area.size = size;
   }
 
-  return side;
+  return area;
+}
+
+const INSTRUCTIONS_FIELDS: ReadonlySet<string> = new Set(['side', 'width']);
+
+/**
+ * Parse an `instructions` placement: the sidebar the panel sits in and
+ * the fraction of the window its sidebar takes.
+ */
+function parseInstructions(
+  value: unknown,
+  path: string,
+  owner = 'Field'
+): IInstructionsPlacement | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const label = `${owner} "instructions"`;
+
+  if (!isRecord(value)) {
+    throw new WorkshopFormatError(`${label} must be a mapping`, path);
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!INSTRUCTIONS_FIELDS.has(key)) {
+      throw new WorkshopFormatError(
+        `${label} has unknown field "${key}"`,
+        path
+      );
+    }
+  }
+
+  const placement: IInstructionsPlacement = {};
+
+  if (value.side !== undefined && value.side !== null) {
+    if (typeof value.side !== 'string' || !SIDES.has(value.side)) {
+      throw new WorkshopFormatError(
+        `${label}: "side" must be left or right`,
+        path
+      );
+    }
+
+    placement.side = value.side as IInstructionsPlacement['side'];
+  }
+
+  const width = parseFraction(value.width, `${label}: "width"`, path);
+
+  if (width !== undefined) {
+    placement.width = width;
+  }
+
+  return placement;
 }
 
 /**

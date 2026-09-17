@@ -31,6 +31,7 @@ import {
   getIfExists,
   readTextFile
 } from './contents';
+import { LayoutManager } from '../layout';
 import { requireOption } from './registry';
 import { TerminalSessions } from './terminal';
 
@@ -44,6 +45,7 @@ export interface IFileActionContext {
   editorTracker: IEditorTracker | null;
   manager: IWorkshopManager;
   terminals: TerminalSessions;
+  layouts: LayoutManager;
 }
 
 /**
@@ -131,7 +133,11 @@ export class FileWriteAction implements IActionImplementation {
     }
 
     if (request.options.open === 'true') {
-      const opened = await openEditor(this._context, serverPath);
+      const opened = await openEditor(
+        this._context,
+        serverPath,
+        request.options.area
+      );
 
       revealLine(opened, firstLine, 'start');
     }
@@ -163,7 +169,7 @@ export class FileOpenAction implements IActionImplementation {
     const widget = await openEditor(
       this._context,
       this._context.manager.resolvePath(path),
-      request.options.split
+      request.options.area
     );
 
     if (request.options.line) {
@@ -429,6 +435,9 @@ export class FileBrowserRevealAction implements IActionImplementation {
   async run(request: IActionRequest): Promise<IActionResult> {
     const path = this._context.manager.resolvePath(request.options.path ?? '.');
 
+    // The file browser is brought forward on the side the instructions
+    // are not, so the two do not take turns covering each other.
+    this._context.layouts.showSidebarWidget('filebrowser');
     await this._context.app.commands.execute('filebrowser:go-to-path', {
       path
     });
@@ -761,24 +770,50 @@ async function closeUnder(
 }
 
 /**
- * Open a file in the text editor, placing it sensibly relative to the
- * workshop terminals, and wait until it is ready.
+ * Open a file in the text editor where its `area`, or the workshop's
+ * layout, says, and wait until it is ready.
  *
  * If the file is already open and unmodified it is reloaded from disk so
- * that changes made by terminal commands are visible.
+ * that changes made by terminal commands are visible; it is moved only
+ * when an area is asked for.
  */
 export async function openEditor(
   context: IFileActionContext,
   serverPath: string,
-  split?: string
+  area?: string
+): Promise<IDocumentWidget<FileEditor>> {
+  const existing = findEditor(context.docManager, serverPath) !== undefined;
+  const options = existing
+    ? undefined
+    : context.layouts.placement('document', area);
+  const widget = await openEditorWidget(context, serverPath, options);
+
+  await context.layouts.place(widget, 'document', area, {
+    existed: existing,
+    placed: !existing
+  });
+
+  return widget;
+}
+
+/**
+ * Open a file in the text editor with the shell options given, or where
+ * JupyterLab puts it, and wait until it is ready. A file already open and
+ * unmodified is reloaded from disk.
+ */
+export async function openEditorWidget(
+  context: {
+    docManager: IDocumentManager;
+  },
+  serverPath: string,
+  options?: DocumentRegistry.IOpenOptions
 ): Promise<IDocumentWidget<FileEditor>> {
   const existing = findEditor(context.docManager, serverPath);
-  const options = existing ? undefined : placementFor(context, split);
   const widget = context.docManager.openOrReveal(
     serverPath,
     EDITOR_FACTORY,
     undefined,
-    options
+    existing ? undefined : options
   );
 
   if (!widget) {
@@ -796,54 +831,6 @@ export async function openEditor(
   }
 
   return widget;
-}
-
-function placementFor(
-  context: IFileActionContext,
-  split?: string
-): DocumentRegistry.IOpenOptions | undefined {
-  const current = context.app.shell.currentWidget;
-
-  if ((split === 'right' || split === 'bottom') && current) {
-    return { mode: `split-${split}`, ref: current.id };
-  }
-
-  // Keep documents together as tabs: beside the current editor, else
-  // beside whatever document is already open (a README preview, a
-  // notebook), and only above the first workshop terminal when there is
-  // no document at all.
-  const editor = context.editorTracker?.currentWidget;
-
-  if (editor && !editor.isDisposed) {
-    return { mode: 'tab-after', ref: editor.id };
-  }
-
-  return documentPlacement(context);
-}
-
-/**
- * Where a new document goes: as a tab after the first document open in
- * the main area, or split above the first workshop terminal, or, with
- * neither, wherever JupyterLab puts it.
- */
-export function documentPlacement(context: {
-  app: JupyterFrontEnd;
-  docManager: IDocumentManager;
-  terminals: TerminalSessions;
-}): DocumentRegistry.IOpenOptions | undefined {
-  for (const widget of context.app.shell.widgets('main')) {
-    if (!widget.isDisposed && context.docManager.contextForWidget(widget)) {
-      return { mode: 'tab-after', ref: widget.id };
-    }
-  }
-
-  const terminal = context.terminals.first;
-
-  if (terminal) {
-    return { mode: 'split-top', ref: terminal.id };
-  }
-
-  return undefined;
 }
 
 function findEditor(

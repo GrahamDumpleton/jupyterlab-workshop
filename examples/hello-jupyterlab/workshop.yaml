@@ -15,7 +15,6 @@ capabilities:
   - write-files
   - kernel-exec
   - auto-run
-layout: notebook
 gating: off
 tracks:
   - { id: pip, label: pip }

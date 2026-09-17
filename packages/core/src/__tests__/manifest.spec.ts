@@ -18,13 +18,14 @@ requires:
 environment:
   requirements: requirements.txt
   kernel: workshop-git
+instructions: { side: left, width: 0.3 }
 layout: default
 layouts:
   default:
-    left: instructions
     main:
-      - { area: top, widgets: [editor] }
-      - { area: bottom, widgets: ["terminal:workshop"], size: 0.35 }
+      areas:
+        - { name: code, tabs: [] }
+        - { size: 0.35, tabs: ["terminal:workshop"] }
 gating: soft
 tracks:
   - { id: pip, label: pip }
@@ -215,14 +216,16 @@ describe('parseManifest', () => {
       kernel: 'workshop-git',
       terminals: true
     });
+    expect(manifest.instructions).toEqual({ side: 'left', width: 0.3 });
+    expect(manifest.sidebar).toBeUndefined();
     expect(manifest.layout).toBe('default');
     expect(manifest.layouts.default).toEqual({
-      left: { widget: 'instructions' },
-      right: undefined,
-      main: [
-        { area: 'top', widgets: ['editor'], size: undefined },
-        { area: 'bottom', widgets: ['terminal:workshop'], size: 0.35 }
-      ]
+      main: {
+        areas: [
+          { name: 'code', tabs: [] },
+          { size: 0.35, tabs: ['terminal:workshop'] }
+        ]
+      }
     });
     expect(manifest.gating).toBe('soft');
     expect(manifest.tracks).toEqual([
@@ -351,46 +354,87 @@ describe('parseManifest', () => {
       parseManifest(VALID.replace('type: path', 'type: colour'))
     ).toThrow(/unknown type/);
     expect(() =>
-      parseManifest(VALID.replace('area: top', 'area: middle'))
-    ).toThrow(/Layout/);
+      parseManifest(VALID.replace('name: code', 'edge: top'))
+    ).toThrow(/Layout "default": "main": area 1 has unknown field "edge"/);
     expect(() =>
       parseManifest(VALID.replace('size: 0.35', 'size: 1.5'))
     ).toThrow(/between 0 and 1/);
   });
 
-  it('parses layout sides given as words or mappings', () => {
+  it('parses the sidebar fields of the manifest and a layout', () => {
     const manifest = parseManifest(
       VALID.replace(
-        '    left: instructions\n',
-        '    left: collapsed\n    right: { widget: instructions, size: 0.2 }\n'
+        '  default:\n',
+        '  browse:\n    sidebar: filebrowser\n    instructions: { width: 0.2 }\n  default:\n    sidebar: hidden\n'
+      ).replace(
+        'instructions: { side: left, width: 0.3 }',
+        'sidebar: filebrowser'
       )
     );
 
-    expect(manifest.layouts.default.left).toEqual({ collapsed: true });
-    expect(manifest.layouts.default.right).toEqual({
-      widget: 'instructions',
-      size: 0.2
+    expect(manifest.instructions).toBeUndefined();
+    expect(manifest.sidebar).toBe('filebrowser');
+    expect(manifest.layouts.default.sidebar).toBe('hidden');
+    expect(manifest.layouts.browse).toEqual({
+      sidebar: 'filebrowser',
+      instructions: { width: 0.2 },
+      main: undefined
     });
-    expect(
-      parseManifest(VALID.replace('left: instructions', 'left: filebrowser'))
-        .layouts.default.left
-    ).toEqual({ widget: 'filebrowser' });
   });
 
-  it('rejects malformed layout sides', () => {
+  it('parses nested splits with their direction and sizes', () => {
+    const manifest = parseManifest(
+      VALID.replace(
+        '        - { size: 0.35, tabs: ["terminal:workshop"] }\n',
+        '        - size: 0.35\n          split: columns\n          areas:\n            - { tabs: ["terminal:shell"] }\n            - { tabs: ["terminal:client"], size: 0.5 }\n'
+      )
+    );
+
+    expect(manifest.layouts.default.main?.areas?.[1]).toEqual({
+      size: 0.35,
+      split: 'columns',
+      areas: [
+        { tabs: ['terminal:shell'] },
+        { tabs: ['terminal:client'], size: 0.5 }
+      ]
+    });
+  });
+
+  it('rejects malformed layouts and placements', () => {
     expect(() =>
-      parseManifest(VALID.replace('left: instructions', 'left: [a, b]'))
-    ).toThrow(/"left" must be/);
+      parseManifest(VALID.replace('name: code', 'name: Code'))
+    ).toThrow(/"name" must be lower case/);
     expect(() =>
-      parseManifest(VALID.replace('left: instructions', 'left: { panel: x }'))
-    ).toThrow(/unknown field "panel"/);
+      parseManifest(VALID.replace('tabs: []', 'tabs: launcher'))
+    ).toThrow(/"tabs" must be a list/);
     expect(() =>
       parseManifest(
-        VALID.replace('left: instructions', 'left: { collapsed: yes }')
+        VALID.replace('      areas:\n', '      split: grid\n      areas:\n')
       )
-    ).toThrow(/"collapsed" must be/);
+    ).toThrow(/"split" must be rows or columns/);
     expect(() =>
-      parseManifest(VALID.replace('left: instructions', 'left: { size: 0 }'))
+      parseManifest(
+        VALID.replace('  default:\n', '  default:\n    left: collapsed\n')
+      )
+    ).toThrow(/unknown field "left"/);
+    expect(() =>
+      parseManifest(
+        VALID.replace(
+          '  default:\n',
+          '  default:\n    instructions: { side: right }\n'
+        )
+      )
+    ).toThrow(/may set only "width"/);
+    expect(() =>
+      parseManifest(VALID.replace('side: left', 'side: top'))
+    ).toThrow(/"side" must be left or right/);
+    expect(() =>
+      parseManifest(VALID.replace('width: 0.3', 'width: 3'))
     ).toThrow(/between 0 and 1/);
+    expect(() =>
+      parseManifest(
+        VALID.replace('instructions: { side: left, width: 0.3 }', 'sidebar: ""')
+      )
+    ).toThrow(/sidebar/);
   });
 });

@@ -16,7 +16,10 @@ command", clicking the box runs that command in a real terminal, and the
 learner can equally type it, or something else, themselves.
 
 A workshop can say how the window should look when it opens, for example
-a rendered README above a terminal, through a [layout](layouts.md).
+a rendered README above a terminal with the instructions on the right,
+through a [layout](layouts.md). A layout describes the result and never
+closes anything, so a page can switch layouts mid-workshop without the
+learner losing a terminal or a notebook.
 
 The panel's header holds the buttons for the things a learner does most:
 open, browse, restart, variables, trust. Every command the extension
@@ -30,8 +33,8 @@ A workshop is a directory holding two kinds of file:
 
 - `workshop.yaml`, the manifest: the name and title, the platforms and
   frontends it was written for, the capabilities its pages need, its
-  variables, its layouts, whether it can be resumed after JupyterLab
-  restarts, and the ordered list of pages. The
+  variables, where the instructions sit and its layouts, whether it can
+  be resumed after JupyterLab restarts, and the ordered list of pages. The
   [manifest reference](reference/manifest.md) lists every field.
 
 - `pages/*.md`, one MyST Markdown page per step, with a title in front

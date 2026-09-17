@@ -22,7 +22,9 @@ gating: strict
 layouts:
   default:
     main:
-      - { area: bottom, widgets: ["terminal:author"] }
+      areas:
+        - { tabs: [] }
+        - { size: 0.4, tabs: ["terminal:author"] }
 variables:
   - name: workshop_dir
     type: path

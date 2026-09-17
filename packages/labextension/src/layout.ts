@@ -1,29 +1,40 @@
 import {
   findLayout,
   ILayoutArea,
-  ILayoutSide,
   ILayoutSpec,
-  parseLayoutWidget
+  isLayoutPlaceholder,
+  LAYOUT_AREA_KEYWORDS,
+  parseLayoutWidget,
+  sha256
 } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
+import { DocumentRegistry } from '@jupyterlab/docregistry';
+import { IEditorTracker } from '@jupyterlab/fileeditor';
 import { Launcher } from '@jupyterlab/launcher';
+import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
+import { Terminal } from '@jupyterlab/terminal';
+import { Token } from '@lumino/coreutils';
 import { DockLayout, DockPanel, SplitPanel, Widget } from '@lumino/widgets';
 
-import { openEditor } from './actions/files';
+import { openEditorWidget } from './actions/files';
 import { TerminalSessions } from './actions/terminal';
+import { readSetting } from './settings';
 import { fetchForServer, saveForServer } from './statedb';
 import { ILoadedWorkshop, IWorkshopManager } from './tokens';
 
 /** Widget factory that renders a Markdown file as a preview. */
 const MARKDOWN_FACTORY = 'Markdown Preview';
 
+/** Widget factory that opens a notebook. */
+const NOTEBOOK_FACTORY = 'Notebook';
+
 /** Where the workshops whose layout has been applied are recorded. */
 const STATE_KEY = '@jupyterlab-workshop/labextension:layouts';
 
-/** Ids JupyterLab gives the panels whose sizes a layout adjusts. */
+/** Ids JupyterLab gives the panels a layout reads and adjusts. */
 const DOCK_PANEL_ID = 'jp-main-dock-panel';
 const SPLIT_PANEL_ID = 'jp-main-split-panel';
 
@@ -36,6 +47,15 @@ const DEFAULT_PANEL_SHARE = 0.25;
 /** A sidebar share below this counts as no width at all. */
 const MIN_SHARE = 0.02;
 
+/** Rank a sidebar widget gets when a layout moves it to the other side. */
+const SIDEBAR_RANK = 100;
+
+/** A sidebar of the JupyterLab shell. */
+export type Side = 'left' | 'right';
+
+/** The kinds of widget an action opens, for choosing where it goes. */
+export type PlacementKind = 'document' | 'terminal';
+
 /** Services the layout manager needs. */
 export interface ILayoutContext {
   app: JupyterFrontEnd;
@@ -43,20 +63,68 @@ export interface ILayoutContext {
   manager: IWorkshopManager;
   terminals: TerminalSessions;
   docManager: IDocumentManager;
+  editorTracker: IEditorTracker | null;
+  settingRegistry: ISettingRegistry | null;
   stateDB: IStateDB | null;
 
   /** Id of the instructions panel widget. */
   panelId: string;
 }
 
+/** What applying a layout produced. */
+export interface ILayoutOutcome {
+  /** Widget references that could not be opened, in the order written. */
+  missing: string[];
+
+  /** Whether the dock ended up arranged as the layout declares. */
+  arranged: boolean;
+}
+
+/** Options for applying a layout. */
+export interface IApplyOptions {
+  /**
+   * Whether this is the workshop's own opening of the layout, when the
+   * manifest's sidebar default applies, as opposed to a page directive,
+   * which leaves a sidebar it says nothing about alone.
+   */
+  initial?: boolean;
+
+  /** Widgets to put in areas beyond what the layout names, by area id. */
+  extra?: Map<string, Widget[]>;
+}
+
 /** What the state database holds under the layouts key. */
 interface ILayoutRecord {
   /**
-   * Paths of the workshops whose layout has been applied in this
-   * workspace, on this server.
+   * Keys of the workshops whose layout has been applied in this
+   * workspace, on this server: the path and a hash of the layout, so an
+   * edited layout applies again.
    */
   applied: string[];
 }
+
+/** One area of a layout tree while it is being realised. */
+interface INode {
+  /** Position in the tree, such as `0.1`, stable across applications. */
+  id: string;
+  name?: string;
+  leaf: boolean;
+  placeholder: boolean;
+
+  /** Widget references of a leaf, as written. */
+  refs: string[];
+
+  /** Widgets the leaf holds once resolved, strays and extras included. */
+  widgets: Widget[];
+  split: 'rows' | 'columns';
+  children: INode[];
+  size?: number;
+}
+
+/** Where a widget should go: shell options, or an area to apply again. */
+type Target =
+  | { options: DocumentRegistry.IOpenOptions }
+  | { layout: string; areaId: string };
 
 function isLayoutRecord(value: unknown): value is ILayoutRecord {
   return (
@@ -67,9 +135,13 @@ function isLayoutRecord(value: unknown): value is ILayoutRecord {
 }
 
 /**
- * Arranges JupyterLab panels according to a named layout from the
- * manifest or the built-in set. The arrangement is approximate: widgets
- * are added with split and tab modes and the learner may rearrange them.
+ * Arranges the JupyterLab window according to a named layout from the
+ * manifest or the built-in set.
+ *
+ * A layout describes a result. The main area is a tree of tab areas and
+ * splits that is handed to the dock panel whole, so applying the same
+ * layout twice gives the same window, and a widget the layout does not
+ * name is kept as a tab in the placeholder area rather than closed.
  */
 export class LayoutManager {
   constructor(context: ILayoutContext) {
@@ -86,6 +158,11 @@ export class LayoutManager {
     );
   }
 
+  /** The name of the layout last applied to the open workshop, if any. */
+  get applied(): string | null {
+    return this._applied;
+  }
+
   /**
    * Apply the layout the manifest names when a workshop is opened.
    *
@@ -98,65 +175,626 @@ export class LayoutManager {
     // Which sidebars have no width is read now, before the command that
     // opened the workshop reveals the panel at its minimum width.
     const empty = this._emptySides();
+    const key = this._recordKey(workshop);
     const name = workshop.manifest.layout;
 
+    this._applied = null;
+    this._nodes = new Map();
+
+    if (!workshop.launched && (await this._wasApplied(key))) {
+      // JupyterLab restored the learner's arrangement; note which of its
+      // widgets belong to which area so actions still find their places.
+      const spec = name ? this.find(name) : undefined;
+
+      if (name && spec) {
+        this._adopt(name, spec);
+      }
+
+      this._showPanel(empty);
+
+      return;
+    }
+
+    await this._recordApplied(key);
+
     if (!name) {
+      await this._arrangeSides(undefined, true);
       this._showPanel(empty);
 
       return;
     }
 
-    if (!workshop.launched && (await this._wasApplied(workshop.path))) {
-      this._showPanel(empty);
-
-      return;
-    }
-
-    await this._recordApplied(workshop.path);
-    await this.apply(name, empty);
+    await this.apply(name, { initial: true }, empty);
   }
 
   /**
-   * Apply a named layout in full: the main area regions and their sizes,
-   * then the sidebars, finishing with the instructions panel shown.
+   * Apply a named layout in full: the main area as declared, then the
+   * sidebars, finishing with the instructions panel shown. Widgets the
+   * layout could not open are reported rather than stopping the rest.
    */
   async apply(
     name: string,
-    empty: ReadonlySet<'left' | 'right'> = this._emptySides()
-  ): Promise<void> {
+    options: IApplyOptions = {},
+    empty: ReadonlySet<Side> = this._emptySides()
+  ): Promise<ILayoutOutcome> {
     const spec = this.find(name);
 
     if (!spec) {
       throw new Error(`Unknown layout "${name}"`);
     }
 
-    await this._arrangeMain(spec);
+    const outcome = spec.main
+      ? await this._arrangeMain(name, spec.main, options.extra)
+      : { missing: [], arranged: true };
 
-    for (const side of ['left', 'right'] as const) {
-      this._arrangeSide(side, spec[side]);
+    this._applied = name;
+
+    await this._arrangeSides(spec, options.initial === true);
+    this._showPanel(empty, spec);
+
+    return outcome;
+  }
+
+  /**
+   * Shell options that put a widget an action is about to open where its
+   * `area` option, or the applied layout, says. Undefined leaves the
+   * placement to JupyterLab, or to `place` once the widget exists.
+   */
+  placement(
+    kind: PlacementKind,
+    area?: string
+  ): DocumentRegistry.IOpenOptions | undefined {
+    const target = this._target(kind, area);
+
+    return target && 'options' in target ? target.options : undefined;
+  }
+
+  /**
+   * Put a widget an action opened or revealed where its `area` option,
+   * or the applied layout, says, and bring it forward. A widget that
+   * was already open moves only when an area is asked for; one that was
+   * opened with the options `placement` gave (`placed`) is where it
+   * should be unless its area had nothing open in it, which needs the
+   * layout applied again with the widget added.
+   */
+  async place(
+    widget: Widget,
+    kind: PlacementKind,
+    area: string | undefined,
+    state: { existed: boolean; placed: boolean }
+  ): Promise<void> {
+    const { shell } = this._context;
+    const target =
+      state.existed && area === undefined ? null : this._target(kind, area);
+
+    if (target && 'areaId' in target) {
+      await this.apply(target.layout, {
+        extra: new Map([[target.areaId, [widget]]])
+      });
+
+      return;
     }
 
-    this._resizeSides([spec.left?.size, spec.right?.size]);
-    this._showPanel(empty, spec);
+    if (target && !state.placed) {
+      shell.add(widget, 'main', { ...target.options, activate: false });
+    }
+
+    shell.activateById(widget.id);
+  }
+
+  /**
+   * Bring a sidebar widget forward in the sidebar the instructions panel
+   * is not in, moving it there first if it shares the panel's side, so
+   * the two never cover each other. Returns false when no sidebar holds
+   * a widget with the id.
+   */
+  showSidebarWidget(id: string): boolean {
+    const { shell } = this._context;
+    const side = this.otherSide();
+
+    for (const candidate of ['left', 'right'] as const) {
+      for (const widget of shell.widgets(candidate)) {
+        if (widget.id !== id) {
+          continue;
+        }
+
+        if (candidate !== side) {
+          shell.add(widget, side, { rank: SIDEBAR_RANK });
+        }
+
+        this._expand(side);
+        shell.activateById(id);
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /** The sidebar the instructions panel is not in. */
+  otherSide(): Side {
+    return (this._panelSide() ?? 'right') === 'left' ? 'right' : 'left';
+  }
+
+  /**
+   * Forget that a workshop's layout was applied, so it applies again the
+   * next time the workshop is opened at that path.
+   */
+  async forget(path: string): Promise<void> {
+    const { stateDB } = this._context;
+
+    if (!stateDB) {
+      return;
+    }
+
+    const record = await this._readRecord();
+    const applied = record.applied.filter(
+      key => key !== path && !key.startsWith(`${path}#`)
+    );
+
+    if (applied.length === record.applied.length) {
+      return;
+    }
+
+    try {
+      await saveForServer(stateDB, STATE_KEY, { applied });
+    } catch (error) {
+      console.warn('Unable to forget the workshop layout', error);
+    }
+  }
+
+  /**
+   * Realise the main-area tree: open what it names, gather what is open
+   * that it does not name into the placeholder, and hand the dock the
+   * result as one configuration.
+   */
+  private async _arrangeMain(
+    name: string,
+    main: ILayoutArea,
+    extra?: Map<string, Widget[]>
+  ): Promise<ILayoutOutcome> {
+    const { shell } = this._context;
+    const root = buildTree(main);
+    const nodes = new Map<string, INode>();
+    const leaves: INode[] = [];
+
+    for (const node of walk(root)) {
+      nodes.set(node.id, node);
+
+      if (node.leaf) {
+        leaves.push(node);
+      }
+    }
+
+    // A launcher JupyterLab shows because the main area was empty gives way
+    // to the layout's own widgets, as it does when an item is launched.
+    const wantsLauncher = leaves.some(node =>
+      node.refs.some(
+        reference => parseLayoutWidget(reference).kind === 'launcher'
+      )
+    );
+    const onlyLaunchers = !wantsLauncher && isPlaceholderMain(shell);
+
+    // Open or find every widget the layout names. One that cannot be
+    // opened is left out and reported; the rest of the tree stands.
+    const missing: string[] = [];
+    const named = new Set<Widget>();
+
+    for (const node of leaves) {
+      for (const reference of node.refs) {
+        const widget = await this._resolve(reference);
+
+        if (widget && !named.has(widget)) {
+          node.widgets.push(widget);
+          named.add(widget);
+        } else if (!widget) {
+          missing.push(reference);
+        }
+      }
+    }
+
+    for (const [id, widgets] of extra ?? []) {
+      const node = nodes.get(id);
+
+      if (!node) {
+        continue;
+      }
+
+      for (const widget of widgets) {
+        if (!named.has(widget)) {
+          node.widgets.push(widget);
+          named.add(widget);
+        }
+      }
+    }
+
+    // Whatever else is open goes to the placeholder, or the first area
+    // when the layout has none, as tabs behind what the layout named.
+    const placeholder =
+      leaves.find(node => node.placeholder) ?? leaves[0] ?? null;
+
+    for (const widget of shell.widgets('main')) {
+      if (
+        widget.isDisposed ||
+        named.has(widget) ||
+        (onlyLaunchers && isLauncher(widget))
+      ) {
+        continue;
+      }
+
+      if (placeholder) {
+        placeholder.widgets.push(widget);
+        named.add(widget);
+      }
+    }
+
+    this._nodes = nodes;
+    this._placeholderId = placeholder?.id ?? null;
+    this._watch(named);
+
+    const config = toConfig(root);
+
+    if (!config || shell.mode !== 'multiple-document') {
+      return { missing, arranged: true };
+    }
+
+    const dock = findWidget(shell, DOCK_PANEL_ID);
+
+    if (!(dock instanceof DockPanel)) {
+      return { missing, arranged: false };
+    }
+
+    if (onlyLaunchers) {
+      closePlaceholders(shell);
+    }
+
+    dock.restoreLayout({ main: config });
+
+    const arranged = shape(dock.saveLayout().main) === shape(config);
+
+    if (!arranged) {
+      console.warn(`Layout "${name}" was not arranged as declared`);
+    }
+
+    // The first tab of the first area is the natural current widget.
+    const first = leaves.find(node => node.widgets.length > 0)?.widgets[0];
+
+    if (first) {
+      shell.activateById(first.id);
+    }
+
+    return { missing, arranged };
+  }
+
+  /**
+   * Note which of the widgets JupyterLab restored belong to which area of
+   * the manifest's layout, without opening or moving anything, so that
+   * actions opening into an area find their anchors after a reload.
+   */
+  private _adopt(name: string, spec: ILayoutSpec): void {
+    if (!spec.main) {
+      return;
+    }
+
+    const root = buildTree(spec.main);
+    const nodes = new Map<string, INode>();
+    const open = [...this._context.shell.widgets('main')];
+    const named = new Set<Widget>();
+    let placeholder: INode | null = null;
+
+    for (const node of walk(root)) {
+      nodes.set(node.id, node);
+
+      if (!node.leaf) {
+        continue;
+      }
+
+      if (node.placeholder && !placeholder) {
+        placeholder = node;
+      }
+
+      for (const reference of node.refs) {
+        const widget = this._findOpen(reference, open);
+
+        if (widget && !named.has(widget)) {
+          node.widgets.push(widget);
+          named.add(widget);
+        }
+      }
+    }
+
+    this._applied = name;
+    this._nodes = nodes;
+    this._placeholderId = placeholder?.id ?? null;
+    this._watch(named);
+  }
+
+  /**
+   * Where a widget of a kind, or one bound for a named area, goes now:
+   * beside a widget already in that area, or into an area that has
+   * nothing open, which means applying its layout again with the widget
+   * added. Null leaves the placement to the caller's own fallback.
+   */
+  private _target(kind: PlacementKind, area?: string): Target | null {
+    const current = this._context.shell.currentWidget;
+
+    // The keywords place relative to the current widget, whatever the
+    // layout.
+    if (area !== undefined && LAYOUT_AREA_KEYWORDS.has(area)) {
+      if (!current) {
+        return null;
+      }
+
+      return {
+        options:
+          area === 'tab'
+            ? { mode: 'tab-after', ref: current.id }
+            : { mode: `split-${area as 'right' | 'bottom'}`, ref: current.id }
+      };
+    }
+
+    if (area !== undefined) {
+      const found = this._areaByName(area);
+
+      if (!found) {
+        console.warn(`No layout declares an area named "${area}"`);
+
+        return null;
+      }
+
+      if (found.layout === this._applied) {
+        const live = this._live(found.areaId);
+
+        if (live.length > 0) {
+          return {
+            options: { mode: 'tab-after', ref: live[live.length - 1].id }
+          };
+        }
+      }
+
+      return found;
+    }
+
+    if (!this._applied) {
+      return this._fallback(kind);
+    }
+
+    // No area asked for: beside the first widget of the same kind the
+    // layout holds, else the placeholder for a document, else the
+    // fallback a workshop without a layout gets.
+    for (const node of this._nodes.values()) {
+      if (!node.leaf) {
+        continue;
+      }
+
+      const match = this._live(node.id).find(widget =>
+        kind === 'terminal' ? isTerminal(widget) : !isTerminal(widget)
+      );
+
+      if (match) {
+        return { options: { mode: 'tab-after', ref: match.id } };
+      }
+    }
+
+    if (kind === 'document' && this._placeholderId !== null) {
+      return { layout: this._applied, areaId: this._placeholderId };
+    }
+
+    return this._fallback(kind);
+  }
+
+  /**
+   * Where a widget goes when no layout says: a document beside the
+   * current editor, else beside the first document open, else above the
+   * first workshop terminal; a terminal below the main area, or beside
+   * the first terminal when there is one.
+   */
+  private _fallback(kind: PlacementKind): Target | null {
+    const { shell, docManager, editorTracker, terminals } = this._context;
+
+    if (kind === 'terminal') {
+      const first = terminals.first;
+
+      return {
+        options: first
+          ? { mode: 'split-right', ref: first.id }
+          : { mode: 'split-bottom' }
+      };
+    }
+
+    const editor = editorTracker?.currentWidget;
+
+    if (editor && !editor.isDisposed) {
+      return { options: { mode: 'tab-after', ref: editor.id } };
+    }
+
+    for (const widget of shell.widgets('main')) {
+      if (!widget.isDisposed && docManager.contextForWidget(widget)) {
+        return { options: { mode: 'tab-after', ref: widget.id } };
+      }
+    }
+
+    const terminal = terminals.first;
+
+    return terminal
+      ? { options: { mode: 'split-top', ref: terminal.id } }
+      : null;
+  }
+
+  /**
+   * The layout, the applied one first, that declares an area name, with
+   * the area's id in that layout's tree.
+   */
+  private _areaByName(name: string): { layout: string; areaId: string } | null {
+    const layouts = this._context.manager.workshop?.manifest.layouts ?? {};
+    const candidates = this._applied
+      ? [this._applied, ...Object.keys(layouts)]
+      : Object.keys(layouts);
+
+    for (const layout of candidates) {
+      const spec = this.find(layout);
+
+      if (!spec?.main) {
+        continue;
+      }
+
+      for (const node of walk(buildTree(spec.main))) {
+        if (node.name === name) {
+          return { layout, areaId: node.id };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /** The widgets of an area that are still open in the main area. */
+  private _live(areaId: string): Widget[] {
+    const node = this._nodes.get(areaId);
+
+    if (!node) {
+      return [];
+    }
+
+    const open = new Set(this._context.shell.widgets('main'));
+
+    return node.widgets.filter(
+      widget => !widget.isDisposed && open.has(widget)
+    );
+  }
+
+  /**
+   * When a widget the layout placed closes, put the declared sizes back
+   * on the areas that remain, since the dock hands a closed area's share
+   * to its siblings in equal parts rather than in proportion.
+   */
+  private _watch(widgets: Iterable<Widget>): void {
+    for (const widget of widgets) {
+      if (this._watched.has(widget)) {
+        continue;
+      }
+
+      this._watched.add(widget);
+      widget.disposed.connect(() => {
+        this._watched.delete(widget);
+        this._restoreSizes();
+      });
+    }
+  }
+
+  private _restoreSizes(): void {
+    const { shell } = this._context;
+
+    if (!this._applied || shell.mode !== 'multiple-document') {
+      return;
+    }
+
+    const dock = findWidget(shell, DOCK_PANEL_ID);
+
+    if (!(dock instanceof DockPanel)) {
+      return;
+    }
+
+    const config = dock.saveLayout();
+    let changed = false;
+
+    for (const node of this._nodes.values()) {
+      const parent = this._parentOf(node);
+
+      if (node.size === undefined || !parent) {
+        continue;
+      }
+
+      const live = leafWidgets(node).find(
+        widget => !widget.isDisposed && widget.parent !== null
+      );
+      const orientation =
+        parent.split === 'columns' ? 'horizontal' : 'vertical';
+
+      if (
+        live &&
+        config.main &&
+        resizeAreaConfig(config.main, live, orientation, node.size)
+      ) {
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      dock.restoreLayout(config);
+    }
+  }
+
+  private _parentOf(node: INode): INode | null {
+    const index = node.id.lastIndexOf('.');
+
+    return index === -1
+      ? null
+      : (this._nodes.get(node.id.slice(0, index)) ?? null);
+  }
+
+  /**
+   * Place the instructions panel and deal with the other sidebar: the
+   * panel goes to the manifest's side, or stays where it is, at the
+   * width the layout or the manifest asks for; the other sidebar is
+   * collapsed or shows the widget asked for.
+   */
+  private async _arrangeSides(
+    spec: ILayoutSpec | undefined,
+    initial: boolean
+  ): Promise<void> {
+    const { shell } = this._context;
+    const manifest = this._context.manager.workshop?.manifest;
+    const side =
+      manifest?.instructions?.side ??
+      this._panelSide() ??
+      (await this._settingSide());
+    const other: Side = side === 'left' ? 'right' : 'left';
+
+    this._movePanel(side);
+
+    const sidebar =
+      spec?.sidebar ?? (initial ? (manifest?.sidebar ?? 'hidden') : undefined);
+
+    if (sidebar === 'hidden') {
+      if (other === 'left') {
+        shell.collapseLeft();
+      } else {
+        shell.collapseRight();
+      }
+    } else if (sidebar !== undefined) {
+      this.showSidebarWidget(sidebar);
+    }
+
+    const width = spec?.instructions?.width ?? manifest?.instructions?.width;
+
+    if (width !== undefined) {
+      this._expand(side);
+      this._resizeSides(
+        side === 'left' ? [width, undefined] : [undefined, width]
+      );
+    }
   }
 
   /**
    * Bring the instructions panel forward. A sidebar that had no width,
    * as after a session started in the browser with both collapsed, is
    * given the default share so the panel does not appear at its minimum,
-   * unless the layout sized that side itself.
+   * unless the layout or the manifest sized that side itself.
    */
-  private _showPanel(
-    empty: ReadonlySet<'left' | 'right'>,
-    spec?: ILayoutSpec
-  ): void {
+  private _showPanel(empty: ReadonlySet<Side>, spec?: ILayoutSpec): void {
     const { shell, panelId } = this._context;
+    const manifest = this._context.manager.workshop?.manifest;
 
     shell.activateById(panelId);
 
     const side = this._panelSide();
+    const sized =
+      spec?.instructions?.width !== undefined ||
+      manifest?.instructions?.width !== undefined;
 
-    if (!side || !empty.has(side) || spec?.[side]?.size !== undefined) {
+    if (!side || !empty.has(side) || sized) {
       return;
     }
 
@@ -167,11 +805,31 @@ export class LayoutManager {
     );
   }
 
+  private async _settingSide(): Promise<Side> {
+    const side = await readSetting(
+      this._context.settingRegistry,
+      'panelSide',
+      'right'
+    );
+
+    return side === 'left' ? 'left' : 'right';
+  }
+
+  private _expand(side: Side): void {
+    const { shell } = this._context;
+
+    if (side === 'left' && shell.leftCollapsed) {
+      shell.expandLeft();
+    } else if (side === 'right' && shell.rightCollapsed) {
+      shell.expandRight();
+    }
+  }
+
   /**
    * The sidebars that currently take no width, collapsed or never shown.
    */
-  private _emptySides(): Set<'left' | 'right'> {
-    const empty = new Set<'left' | 'right'>();
+  private _emptySides(): Set<Side> {
+    const empty = new Set<Side>();
     const split = findWidget(this._context.shell, SPLIT_PANEL_ID);
 
     if (!(split instanceof SplitPanel) || split.widgets.length !== 3) {
@@ -191,7 +849,7 @@ export class LayoutManager {
     return empty;
   }
 
-  private _panelSide(): 'left' | 'right' | null {
+  private _panelSide(): Side | null {
     const { shell, panelId } = this._context;
 
     for (const side of ['left', 'right'] as const) {
@@ -205,13 +863,29 @@ export class LayoutManager {
     return null;
   }
 
-  private async _wasApplied(path: string): Promise<boolean> {
-    const record = await this._readRecord();
+  private _recordKey(workshop: ILoadedWorkshop): string {
+    const { manifest } = workshop;
+    const name = manifest.layout;
+    const layout = name ? (findLayout(manifest.layouts, name) ?? null) : null;
+    const hash = sha256(
+      JSON.stringify([
+        name ?? null,
+        layout,
+        manifest.instructions ?? null,
+        manifest.sidebar ?? null
+      ])
+    );
 
-    return record.applied.includes(path);
+    return `${workshop.path}#${hash}`;
   }
 
-  private async _recordApplied(path: string): Promise<void> {
+  private async _wasApplied(key: string): Promise<boolean> {
+    const record = await this._readRecord();
+
+    return record.applied.includes(key);
+  }
+
+  private async _recordApplied(key: string): Promise<void> {
     const { stateDB } = this._context;
 
     if (!stateDB) {
@@ -220,13 +894,13 @@ export class LayoutManager {
 
     const record = await this._readRecord();
 
-    if (record.applied.includes(path)) {
+    if (record.applied.includes(key)) {
       return;
     }
 
     try {
       await saveForServer(stateDB, STATE_KEY, {
-        applied: [...record.applied, path]
+        applied: [...record.applied, key]
       });
     } catch (error) {
       console.warn('Unable to record the workshop layout', error);
@@ -248,124 +922,6 @@ export class LayoutManager {
       console.warn('Unable to read the workshop layout record', error);
 
       return { applied: [] };
-    }
-  }
-
-  /**
-   * Split the main area into the regions of the layout, each holding its
-   * widgets as tabs, sizing a region when the layout asks for it.
-   */
-  private async _arrangeMain(spec: ILayoutSpec): Promise<void> {
-    const { shell } = this._context;
-    let anchor: Widget | null = null;
-
-    // A launcher JupyterLab shows because the main area was empty gives way
-    // to the layout's own widgets, as it does when an item is launched.
-    const wantsLauncher = spec.main.some(area =>
-      area.widgets.some(
-        reference => parseLayoutWidget(reference).kind === 'launcher'
-      )
-    );
-    const onlyLaunchers = !wantsLauncher && isPlaceholderMain(shell);
-    const sized: [Widget, ILayoutArea][] = [];
-
-    for (const area of spec.main) {
-      const widgets: Widget[] = [];
-
-      for (const reference of area.widgets) {
-        const widget = await this._resolve(reference);
-
-        if (widget) {
-          widgets.push(widget);
-        }
-      }
-
-      if (widgets.length === 0) {
-        continue;
-      }
-
-      // The first widget of an area splits off the previous area; the rest
-      // become tabs beside it.
-      const [first, ...rest] = widgets;
-
-      // Areas split the dock: the first relative to the whole main area, the
-      // rest relative to the previous area's first widget.
-      shell.add(first, 'main', {
-        mode: `split-${area.area}`,
-        ref: anchor ? anchor.id : null,
-        activate: false
-      });
-
-      for (const widget of rest) {
-        shell.add(widget, 'main', {
-          mode: 'tab-after',
-          ref: first.id,
-          activate: false
-        });
-      }
-
-      this._resizeRegion(first, area);
-      sized.push([first, area]);
-      anchor = first;
-    }
-
-    // The placeholder's share of the split goes to its siblings in equal
-    // parts when it closes, not in proportion, so the regions are sized
-    // again once it has gone.
-    if (anchor && onlyLaunchers) {
-      closePlaceholders(shell);
-
-      for (const [first, area] of sized) {
-        this._resizeRegion(first, area);
-      }
-    }
-  }
-
-  /**
-   * Show, move or collapse one sidebar as the layout asks. Naming
-   * `instructions` pins the workshop panel to that side; any other widget
-   * name is a sidebar widget id to bring forward.
-   */
-  private _arrangeSide(
-    side: 'left' | 'right',
-    spec: ILayoutSide | undefined
-  ): void {
-    const { shell } = this._context;
-
-    if (!spec) {
-      return;
-    }
-
-    if (spec.widget === 'instructions') {
-      this._movePanel(side);
-      shell.activateById(this._context.panelId);
-    } else if (spec.widget) {
-      shell.activateById(spec.widget);
-    }
-
-    if (spec.collapsed) {
-      if (side === 'left') {
-        shell.collapseLeft();
-      } else {
-        shell.collapseRight();
-      }
-
-      return;
-    }
-
-    // A width only means something for a sidebar that is showing, so a
-    // collapsed one is expanded first.
-    if (spec.size !== undefined) {
-      const collapsed =
-        side === 'left' ? shell.leftCollapsed : shell.rightCollapsed;
-
-      if (collapsed) {
-        if (side === 'left') {
-          shell.expandLeft();
-        } else {
-          shell.expandRight();
-        }
-      }
     }
   }
 
@@ -427,36 +983,7 @@ export class LayoutManager {
     ]);
   }
 
-  /**
-   * Give the region holding a widget the fraction of the main area the
-   * layout asks for, by rewriting the sizes of the dock split it sits in.
-   */
-  private _resizeRegion(widget: Widget, area: ILayoutArea): void {
-    const { shell } = this._context;
-
-    if (area.size === undefined || shell.mode !== 'multiple-document') {
-      return;
-    }
-
-    const dock = findWidget(shell, DOCK_PANEL_ID);
-
-    if (!(dock instanceof DockPanel)) {
-      return;
-    }
-
-    const config = dock.saveLayout();
-    const orientation =
-      area.area === 'top' || area.area === 'bottom' ? 'vertical' : 'horizontal';
-
-    if (
-      config.main &&
-      resizeAreaConfig(config.main, widget, orientation, area.size)
-    ) {
-      dock.restoreLayout(config);
-    }
-  }
-
-  private _movePanel(side: 'left' | 'right'): void {
+  private _movePanel(side: Side): void {
     const { shell, panelId } = this._context;
 
     for (const widget of shell.widgets(side)) {
@@ -474,51 +1001,246 @@ export class LayoutManager {
     }
   }
 
+  /**
+   * Open the widget a reference names, or find it when it is open. A file
+   * that does not exist is reported as missing rather than opened, which
+   * would raise JupyterLab's load error dialog.
+   */
   private async _resolve(reference: string): Promise<Widget | null> {
     const { app, manager, terminals, docManager } = this._context;
     const { kind, target } = parseLayoutWidget(reference);
 
+    try {
+      switch (kind) {
+        case 'terminal':
+          // Layout terminals start where action terminals do: in the
+          // workspace when one is declared.
+          return await terminals.get(target || 'workshop', {
+            cwd: manager.workspacePath ?? manager.workshop?.path
+          });
+        case 'file':
+        case 'markdown':
+        case 'notebook': {
+          const path = manager.resolvePath(target);
+
+          if (!(await this._exists(path))) {
+            return null;
+          }
+
+          if (kind === 'file') {
+            return await openEditorWidget(this._context, path);
+          }
+
+          return (
+            docManager.openOrReveal(
+              path,
+              kind === 'markdown' ? MARKDOWN_FACTORY : NOTEBOOK_FACTORY
+            ) ?? null
+          );
+        }
+        case 'launcher': {
+          const widget = (await app.commands.execute(
+            'launcher:create'
+          )) as unknown;
+
+          return widget instanceof Widget ? widget : null;
+        }
+        default:
+          console.warn(`Unknown layout widget "${reference}"`);
+
+          return null;
+      }
+    } catch (error) {
+      console.warn(`Unable to open layout widget "${reference}"`, error);
+
+      return null;
+    }
+  }
+
+  /** The open main-area widget a reference names, without opening one. */
+  private _findOpen(reference: string, open: Widget[]): Widget | null {
+    const { manager, docManager } = this._context;
+    const { kind, target } = parseLayoutWidget(reference);
+
     switch (kind) {
-      case 'terminal':
-        // Layout terminals start where action terminals do: in the
-        // workspace when one is declared.
-        return terminals.get(target || 'workshop', {
-          cwd: manager.workspacePath ?? manager.workshop?.path
-        });
-      case 'editor':
-        return this._context.app.shell.currentWidget ?? null;
+      case 'terminal': {
+        const id = `jupyterlab-workshop-terminal-${target || 'workshop'}`;
+
+        return open.find(widget => widget.id === id) ?? null;
+      }
       case 'file':
-        return openEditor(
-          { app, docManager, editorTracker: null, manager, terminals },
-          manager.resolvePath(target)
-        );
       case 'markdown':
+      case 'notebook': {
+        const path = manager.resolvePath(target);
+
         return (
-          docManager.openOrReveal(
-            manager.resolvePath(target),
-            MARKDOWN_FACTORY
+          open.find(
+            widget => docManager.contextForWidget(widget)?.path === path
           ) ?? null
         );
-      case 'notebook':
-        return (
-          docManager.openOrReveal(manager.resolvePath(target), 'Notebook') ??
-          null
-        );
-      case 'launcher': {
-        const widget = (await app.commands.execute(
-          'launcher:create'
-        )) as unknown;
-
-        return widget instanceof Widget ? widget : null;
       }
+      case 'launcher':
+        return open.find(isLauncher) ?? null;
       default:
-        console.warn(`Unknown layout widget "${reference}"`);
-
         return null;
     }
   }
 
+  private async _exists(path: string): Promise<boolean> {
+    try {
+      await this._context.docManager.services.contents.get(path, {
+        content: false
+      });
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private _context: ILayoutContext;
+  private _applied: string | null = null;
+  private _nodes: Map<string, INode> = new Map();
+  private _placeholderId: string | null = null;
+  private _watched: Set<Widget> = new Set();
+}
+
+/** The layout manager, for plugins that arrange or forget layouts. */
+export const ILayoutManager = new Token<LayoutManager>(
+  '@jupyterlab-workshop/labextension:ILayoutManager',
+  'Arranges the JupyterLab window as a workshop layout asks.'
+);
+
+/**
+ * Turn a layout's main-area tree into nodes with stable ids, without
+ * resolving any widget.
+ */
+function buildTree(area: ILayoutArea, id = '0'): INode {
+  const leaf = area.areas === undefined;
+
+  return {
+    id,
+    name: area.name,
+    leaf,
+    placeholder: isLayoutPlaceholder(area),
+    refs: leaf ? [...(area.tabs ?? [])] : [],
+    widgets: [],
+    split: area.split ?? 'rows',
+    children: leaf
+      ? []
+      : (area.areas ?? []).map((child, index) =>
+          buildTree(child, `${id}.${index}`)
+        ),
+    size: area.size
+  };
+}
+
+function* walk(node: INode): Generator<INode> {
+  yield node;
+
+  for (const child of node.children) {
+    yield* walk(child);
+  }
+}
+
+function leafWidgets(node: INode): Widget[] {
+  return node.leaf
+    ? node.widgets
+    : node.children.flatMap(child => leafWidgets(child));
+}
+
+/**
+ * The dock configuration a tree of resolved nodes describes: areas with
+ * nothing in them are dropped, a split with one child collapses into it,
+ * a child split running the same way is merged into its parent, as the
+ * dock itself normalises, and sizes not given share what is left.
+ */
+function toConfig(node: INode): DockLayout.AreaConfig | null {
+  if (node.leaf) {
+    return node.widgets.length > 0
+      ? { type: 'tab-area', widgets: node.widgets, currentIndex: 0 }
+      : null;
+  }
+
+  const kept: { config: DockLayout.AreaConfig; size?: number }[] = [];
+
+  for (const child of node.children) {
+    const config = toConfig(child);
+
+    if (config) {
+      kept.push({ config, size: child.size });
+    }
+  }
+
+  if (kept.length === 0) {
+    return null;
+  }
+
+  if (kept.length === 1) {
+    return kept[0].config;
+  }
+
+  const orientation = node.split === 'columns' ? 'horizontal' : 'vertical';
+  const sizes = shareSizes(kept.map(item => item.size));
+  const children: DockLayout.AreaConfig[] = [];
+  const flat: number[] = [];
+
+  kept.forEach((item, index) => {
+    const { config } = item;
+
+    if (config.type === 'split-area' && config.orientation === orientation) {
+      const total = config.sizes.reduce((sum, size) => sum + size, 0) || 1;
+
+      children.push(...config.children);
+      flat.push(...config.sizes.map(size => (sizes[index] * size) / total));
+    } else {
+      children.push(config);
+      flat.push(sizes[index]);
+    }
+  });
+
+  return { type: 'split-area', orientation, children, sizes: flat };
+}
+
+/**
+ * Fractions for the children of a split: those given as written, the
+ * rest sharing what remains equally.
+ */
+function shareSizes(declared: (number | undefined)[]): number[] {
+  const given = declared.reduce<number>((sum, size) => sum + (size ?? 0), 0);
+  const open = declared.filter(size => size === undefined).length;
+  const remaining = Math.max(0, 1 - given);
+  const share = open > 0 ? remaining / open : 0;
+
+  return declared.map(
+    size => size ?? (share > 0 ? share : 1 / declared.length)
+  );
+}
+
+/**
+ * The structure of a dock configuration as a string: which widgets share
+ * an area and how areas are split, sizes aside, for comparing what the
+ * dock did with what was asked.
+ */
+function shape(config: DockLayout.AreaConfig | null): string {
+  if (!config) {
+    return 'empty';
+  }
+
+  if (config.type === 'tab-area') {
+    return `[${config.widgets.map(widget => widget.id).join(',')}]`;
+  }
+
+  const inner = config.children.map(child => shape(child)).join(' ');
+
+  return `${config.orientation === 'horizontal' ? 'cols' : 'rows'}(${inner})`;
+}
+
+/**
+ * Whether a main area widget is a workshop terminal.
+ */
+function isTerminal(widget: Widget): boolean {
+  return widget instanceof MainAreaWidget && widget.content instanceof Terminal;
 }
 
 /**

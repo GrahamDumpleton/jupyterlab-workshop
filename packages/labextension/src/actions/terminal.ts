@@ -5,12 +5,14 @@ import {
 } from '@jupyterlab-workshop/core';
 import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget } from '@jupyterlab/apputils';
+import { DocumentRegistry } from '@jupyterlab/docregistry';
 import { Terminal as TerminalService } from '@jupyterlab/services';
 import { Terminal } from '@jupyterlab/terminal';
 import { terminalIcon } from '@jupyterlab/ui-components';
 import { Token } from '@lumino/coreutils';
 import { ISignal, Signal } from '@lumino/signaling';
 
+import { LayoutManager } from '../layout';
 import { WORKSHOP_STATE_DIR } from '../state';
 import {
   IActionImplementation,
@@ -25,8 +27,14 @@ import { IShellRunner, commandEnvironment } from './shell';
 /** Name of the terminal used when an action does not name one. */
 export const DEFAULT_SESSION = 'workshop';
 
-/** Where a new terminal is placed relative to the main area. */
-export type TerminalArea = 'bottom' | 'right' | 'main';
+/**
+ * Decides where a new terminal goes: shell options for a terminal bound
+ * for an `area`, or for the applied layout's terminal area. Set by the
+ * layout manager once it exists.
+ */
+export type TerminalPlacement = (
+  area?: string
+) => DocumentRegistry.IOpenOptions | undefined;
 
 /** Longest wait for a new terminal's shell to print its prompt. */
 const PROMPT_WAIT_MS = 15000;
@@ -91,10 +99,11 @@ const KEY_NAMES: Readonly<Record<string, string>> = {
  * Terminals opened by the workshop, keyed by the session name used in
  * workshop pages.
  *
- * The first terminal opens in a split beneath the main area; later ones
- * open beside it. New terminals source the workshop environment file so
- * that variables are available as environment variables and the workshop
- * prompt, with its marker, is installed.
+ * A new terminal goes where the workshop's layout puts terminals, or,
+ * with no layout, in a split beneath the main area for the first and
+ * beside it for later ones. New terminals source the workshop environment
+ * file so that variables are available as environment variables and the
+ * workshop prompt, with its marker, is installed.
  */
 export class TerminalSessions {
   constructor(options: TerminalSessions.IOptions) {
@@ -102,6 +111,9 @@ export class TerminalSessions {
     this._shell = options.shell;
     this._manager = options.manager;
   }
+
+  /** Where new terminals go; the layout manager sets this. */
+  placement: TerminalPlacement | null = null;
 
   /** The first terminal opened, used as the anchor for layout. */
   get first(): MainAreaWidget<Terminal> | null {
@@ -164,7 +176,7 @@ export class TerminalSessions {
    */
   async get(
     name: string,
-    options: { cwd?: string; area?: TerminalArea } = {}
+    options: { cwd?: string; area?: string } = {}
   ): Promise<MainAreaWidget<Terminal>> {
     const existing = this._widgets.get(name);
 
@@ -187,7 +199,7 @@ export class TerminalSessions {
 
   private async _start(
     name: string,
-    options: { cwd?: string; area?: TerminalArea }
+    options: { cwd?: string; area?: string }
   ): Promise<MainAreaWidget<Terminal>> {
     // Start a new terminal session on the server and wrap it in a widget.
     const session = await this._app.serviceManager.terminals.startNew({
@@ -219,19 +231,15 @@ export class TerminalSessions {
         : `Workshop terminal "${name}"`;
     });
 
-    // Place the first terminal under the main area and later ones beside it.
+    // Place the terminal where the layout says, else under the main area
+    // for the first and beside it for later ones.
     const anchor = this.first;
-    const area = options.area ?? (anchor ? 'right' : 'bottom');
+    const placed = this.placement?.(options.area) ?? {
+      mode: anchor ? 'split-right' : 'split-bottom',
+      ref: anchor?.id
+    };
 
-    this._shell.add(
-      widget,
-      'main',
-      area === 'main'
-        ? { activate: false }
-        : anchor
-          ? { mode: `split-${area}`, ref: anchor.id, activate: false }
-          : { mode: `split-${area}`, activate: false }
-    );
+    this._shell.add(widget, 'main', { ...placed, activate: false });
 
     if (!anchor) {
       this._first = widget;
@@ -859,11 +867,11 @@ export class TerminalOpenAction implements IActionImplementation {
 
   constructor(
     terminals: TerminalSessions,
-    shell: ILabShell,
+    layouts: LayoutManager,
     manager: IWorkshopManager
   ) {
     this._terminals = terminals;
-    this._shell = shell;
+    this._layouts = layouts;
     this._manager = manager;
   }
 
@@ -872,22 +880,26 @@ export class TerminalOpenAction implements IActionImplementation {
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
+    const name = sessionName(request);
     const area = request.options.area;
-    const widget = await this._terminals.get(sessionName(request), {
+    const existed = this._terminals.has(name);
+    const widget = await this._terminals.get(name, {
       cwd: terminalCwd(request, this._manager),
-      area:
-        area === 'bottom' || area === 'right' || area === 'main'
-          ? area
-          : undefined
+      area
     });
 
-    this._shell.activateById(widget.id);
+    // A new terminal was placed as it started; an open one moves only
+    // when an area is asked for.
+    await this._layouts.place(widget, 'terminal', area, {
+      existed,
+      placed: !existed
+    });
 
     return { status: 'ok' };
   }
 
   private _terminals: TerminalSessions;
-  private _shell: ILabShell;
+  private _layouts: LayoutManager;
   private _manager: IWorkshopManager;
 }
 

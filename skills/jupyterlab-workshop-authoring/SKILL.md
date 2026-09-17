@@ -145,15 +145,18 @@ checks), `install-packages` (needed by `environment`), `auto-run`
 `ui-settings`. Declare exactly what the pages use; lint reports both
 missing and unused capabilities.
 
-Other fields: `layout` and `layouts` (named panel arrangements: `left` and
-`right` take `instructions`, `collapsed`, a sidebar widget id, or a mapping
-of `widget`, `collapsed` and `size`; `main` lists regions of `area`,
-`widgets` such as `terminal:git`, `markdown:../README.md` (paths start at
-the workspace, so a shipped README needs the `../`), `file:<path>`,
-`notebook:<path>` or `launcher`, and `size`, the fraction of the main
-area the region takes, so `bottom` at `0.33` leaves two thirds for the
-editors above it, while on `left` and `right` it is that sidebar's share
-of the window; built-ins are `default`, `terminal-only` and `notebook`),
+Other fields: `instructions` (`side` and `width` of the instructions
+panel, workshop-wide), `sidebar` (the other sidebar on opening: `hidden`,
+the default, or a sidebar widget id such as `filebrowser`), `layout` and
+`layouts` (named arrangements of the main area as a tree: an area is
+either `tabs`, a list of `terminal:git`, `markdown:../README.md` (paths
+start at the workspace, so a shipped README needs the `../`),
+`file:<path>`, `notebook:<path>` or `launcher`, or a `split` of `rows` or
+`columns` into `areas`; `size` is the fraction of the parent split, so a
+terminal row at `0.4` leaves three fifths above it; `tabs: []` is the
+placeholder for whatever else is open; `name` lets an action's `area`
+option open into that area; a layout never closes anything; built-ins are
+`default` and `terminal-only`),
 `tracks` (alternative paths chosen with `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
 `environment` (`requirements`, `kernel`, `terminals`), `analytics`
 (`sink`, `token`, `labels`), `frontends` (`jupyterlab`, `jupyterlite`;
