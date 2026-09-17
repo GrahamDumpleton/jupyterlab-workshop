@@ -27,7 +27,11 @@ import {
   LAYOUT_WIDGET_PATH_KINDS,
   parseLayoutWidget
 } from '../format/layouts';
-import { IWorkshopManifest, toolApplies } from '../format/manifest';
+import {
+  IWorkshopManifest,
+  WORKSPACE_DIR,
+  toolApplies
+} from '../format/manifest';
 import { IDirectiveNode, IPage, PageNode } from '../format/page';
 import { PLATFORM_NAMES } from '../format/variants';
 import { liteShellProblems, usesSubprocess } from '../lite';
@@ -45,12 +49,7 @@ import {
   declaredCapabilities,
   isAutomatic
 } from '../trust/capabilities';
-import {
-  dangerWarnings,
-  hostAllowed,
-  mentionsAbsolutePath,
-  urlHosts
-} from './danger';
+import { dangerWarnings, mentionsAbsolutePath } from './danger';
 import { writeTargetProblem } from '../trust/paths';
 import { isWebLink } from '../util';
 import { ILintMessage } from './types';
@@ -72,7 +71,7 @@ const SCANNED_BODIES: ReadonlySet<string> = new Set([
   'command'
 ]);
 
-/** Option names holding a path that a write-files scope constrains. */
+/** Option names holding a path that must stay inside the workshop. */
 const PATH_OPTIONS: readonly string[] = ['path', 'from', 'to', 'cwd'];
 
 /**
@@ -410,11 +409,6 @@ function usedVariables(page: IPage): Set<string> {
 
 function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
   const declared = declaredCapabilities(input.manifest);
-  const networkScopes = declared.get('network') ?? [];
-  const writeScopes = declared.get('write-files') ?? [];
-  const workspaceOnly =
-    writeScopes.length === 0 ||
-    writeScopes.every(scope => scope === 'workspace');
 
   for (const page of input.pages) {
     for (const node of allDirectives([page])) {
@@ -437,8 +431,7 @@ function lintDirectives(input: ILintInput, messages: ILintMessage[]): void {
 
       lintOptions(node, where, messages);
       lintBody(node, where, messages);
-      lintPaths(node, workspaceOnly, input.manifest, where, messages);
-      lintHosts(node, declared.has('network'), networkScopes, where, messages);
+      lintPaths(node, input.manifest, where, messages);
       lintVariants(
         node,
         input.manifest.platforms,
@@ -722,7 +715,6 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
 
 function lintPaths(
   node: IDirectiveNode,
-  workspaceOnly: boolean,
   manifest: IWorkshopManifest,
   where: { path: string; line: number },
   messages: ILintMessage[]
@@ -734,15 +726,9 @@ function lintPaths(
   }
 
   // What the trust policy would refuse outright is an error here.
-  const refused = writeTargetProblem(
-    node.name,
-    node.options,
-    manifest.capabilities,
-    {
-      workspace: manifest.workspace,
-      requirements: manifest.environment?.requirements
-    }
-  );
+  const refused = writeTargetProblem(node.name, node.options, {
+    requirements: manifest.environment?.requirements
+  });
 
   if (refused) {
     messages.push({
@@ -755,15 +741,9 @@ function lintPaths(
     return;
   }
 
-  if (!workspaceOnly) {
-    return;
-  }
-
-  // Paths in a workspace-scoped workshop stay inside the workshop. From
-  // a declared workspace, `..` on a read such as `from` may climb as far
-  // as the workshop directory, which holds the shipped files.
-  const workspace = manifest.workspace;
-
+  // Paths stay inside the workshop. From the workspace, `..` on a read
+  // such as `from` may climb as far as the workshop directory, which
+  // holds the shipped files.
   for (const option of PATH_OPTIONS) {
     const value = node.options[option];
 
@@ -771,7 +751,7 @@ function lintPaths(
       continue;
     }
 
-    const start = option === 'from' ? undefined : workspace;
+    const start = option === 'from' ? undefined : WORKSPACE_DIR;
     const escapes =
       value.startsWith('/') ||
       value.startsWith('~') ||
@@ -810,36 +790,6 @@ function climbsOut(value: string, workspace: string | undefined): boolean {
   }
 
   return false;
-}
-
-function lintHosts(
-  node: IDirectiveNode,
-  networkDeclared: boolean,
-  scopes: readonly string[],
-  where: { path: string; line: number },
-  messages: ILintMessage[]
-): void {
-  if (!SCANNED_BODIES.has(node.name)) {
-    return;
-  }
-
-  for (const host of urlHosts(node.body)) {
-    if (!networkDeclared) {
-      messages.push({
-        level: 'warning',
-        rule: 'undeclared-host',
-        message: `Uses host ${host} in ${node.name} "${node.id}" but the manifest declares no network capability`,
-        ...where
-      });
-    } else if (scopes.length > 0 && !hostAllowed(host, scopes)) {
-      messages.push({
-        level: 'warning',
-        rule: 'undeclared-host',
-        message: `Uses host ${host} in ${node.name} "${node.id}" which is not in the declared network hosts`,
-        ...where
-      });
-    }
-  }
 }
 
 function lintLayouts(
@@ -920,13 +870,7 @@ function lintCapabilities(
         rule: 'undeclared-capability',
         message: `Pages use the "${use.capability}" capability (${use.count} ${use.count === 1 ? 'action' : 'actions'}) but the manifest does not declare it`,
         path: manifestPath,
-        fix: {
-          kind: 'add-capability',
-          capability:
-            use.capability === 'write-files'
-              ? 'write-files:workspace'
-              : use.capability
-        }
+        fix: { kind: 'add-capability', capability: use.capability }
       });
     }
   }
@@ -939,11 +883,7 @@ function lintCapabilities(
     used.add('install-packages');
   }
 
-  for (const [name] of declaredCapabilities(input.manifest)) {
-    if (name === 'network') {
-      continue;
-    }
-
+  for (const name of declaredCapabilities(input.manifest)) {
     if (!used.has(name as never)) {
       messages.push({
         level: 'warning',

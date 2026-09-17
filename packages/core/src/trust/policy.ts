@@ -59,7 +59,7 @@ export interface IPolicyInput {
   /** Capabilities an administrator has disabled. */
   disabled?: readonly string[];
 
-  /** Where the manifest says writes may go; see `writeTargetProblem`. */
+  /** What a write may not touch; see `writeTargetProblem`. */
   layout?: IWriteLayout;
 }
 
@@ -70,9 +70,7 @@ export function isDeclared(
   capability: Capability,
   declared: readonly string[]
 ): boolean {
-  return declared.some(
-    item => item === capability || item.startsWith(`${capability}:`)
-  );
+  return declared.includes(capability);
 }
 
 /** Actions that the restricted level degrades to typing into the terminal. */
@@ -116,13 +114,12 @@ export function decideAction(input: IPolicyInput): ActionDisposition {
     }
   }
 
-  // A write aimed at the workshop's own files, or outside a declared
-  // workspace under the workspace scope, never runs at any level.
+  // A write aimed at the workshop's own files, or outside the
+  // workspace, never runs at any level.
   if (capability === 'write-files') {
     const problem = writeTargetProblem(
       input.type,
       input.options ?? {},
-      input.declared,
       input.layout ?? {}
     );
 

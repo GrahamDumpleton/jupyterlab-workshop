@@ -48,8 +48,7 @@ the workshop uses:
 ```yaml
 capabilities:
   - terminal
-  - write-files: [workspace]
-  - network: [github.com, pypi.org]
+  - write-files
   - kernel-exec
   - auto-run
 ```
@@ -57,21 +56,22 @@ capabilities:
 | Capability         | Grants                                                               |
 | ------------------ | -------------------------------------------------------------------- |
 | `terminal`         | Running commands and typing into terminals.                          |
-| `write-files`      | Creating and changing files and notebooks. Scopes below.             |
-| `network`          | Downloading from the listed hosts (informational; checked by lint).  |
+| `write-files`      | Creating and changing files and notebooks in the workspace.          |
 | `install-packages` | Creating the workshop's isolated environment (`environment-create`). |
 | `kernel-exec`      | Running code in kernels, including background captures.              |
 | `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
 | `ui-settings`      | Changing settings of the editor the workshop runs in.                |
 
-The `write-files` scopes are `workspace` (the default), `home` and `any`
-(paths may reach anywhere under the JupyterLab root; the contents API
-cannot go higher). Under the `workspace` scope writes must stay inside
-the workshop's [workspace](concepts.md#the-workspace), and the trust
-dialog says so. Under every scope the workshop's own files, the
-manifest, the pages, the shipped `files/` and the requirements file,
-are read-only to actions: an action that names one is refused with a
-"not allowed" badge, and lint reports it as an error.
+Each capability is a name; none carries a value. Every one gates an
+action type, so the dialog shows only what the extension enforces. There
+is no network capability: `terminal` already says that commands run,
+and a command can reach anything the machine can, which no list of
+hosts could honestly narrow. Write actions are confined to the
+workshop's [workspace](concepts.md#the-workspace), and the workshop's
+own files, the manifest, the pages, the shipped `files/` and the
+requirements file, are read-only to actions: an action that names one,
+or a path outside the workspace, is refused with a "not allowed" badge,
+and lint reports it as an error.
 
 An action whose capability the manifest does not declare never runs, at
 any trust level. It shows a "not allowed" badge in the panel and the trust
@@ -88,8 +88,7 @@ the capabilities it declares and how many actions use each,
 the number of automatic actions, and any lint findings, including the
 danger heuristics: piping downloads into a shell, `sudo`, recursive
 deletes outside the workshop, `eval`, executing base64-decoded content,
-home directory paths, absolute paths in file actions, and hosts that are
-not in the declared `network` list.
+home directory paths, and absolute paths in file actions.
 
 A workshop opened in author mode (see [Writing workshops in
 JupyterLab](authoring.md)) is marked as the learner's own and is trusted

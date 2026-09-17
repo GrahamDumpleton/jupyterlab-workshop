@@ -137,14 +137,12 @@ export function buildTrustSummary(options: {
 
   for (const name of CAPABILITY_NAMES) {
     const use = uses.get(name);
-    const scopes = declared.get(name);
 
-    if (scopes !== undefined || use) {
+    if (declared.has(name) || use) {
       capabilities.push({
         capability: name,
-        scopes: scopes ?? [],
         count: use?.count ?? 0,
-        declared: scopes !== undefined
+        declared: declared.has(name)
       });
     }
   }
@@ -156,7 +154,6 @@ export function buildTrustSummary(options: {
   return {
     name: manifest.name,
     title: manifest.title,
-    workspace: manifest.workspace,
     version: manifest.version ?? '',
     source,
     sourceKey: sourceKey(source),

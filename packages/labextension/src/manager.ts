@@ -18,7 +18,6 @@ import {
   parseRequirement,
   actionCapability,
   decideAction,
-  declaredCapabilities,
   declaredVariables,
   formatDiff,
   isAutomatic,
@@ -26,7 +25,7 @@ import {
   parseManifest,
   parsePage,
   resolveManifest,
-  DEFAULT_WORKSPACE,
+  WORKSPACE_DIR,
   IVenvExports,
   WORKSHOP_FILES_DIR,
   renderEnvCmd,
@@ -209,9 +208,7 @@ export class WorkshopManager implements IWorkshopManager {
   get workspacePath(): string | null {
     const workshop = this._workshop;
 
-    return workshop
-      ? PathExt.join(workshop.path, workshop.manifest.workspace)
-      : null;
+    return workshop ? PathExt.join(workshop.path, WORKSPACE_DIR) : null;
   }
 
   get variables(): VariableStore {
@@ -371,7 +368,7 @@ export class WorkshopManager implements IWorkshopManager {
       const pathSep = platform.path_sep;
       const declared = this._collectDeclared(manifest, sources);
       const defaults: Variables = {
-        ...buildBuiltins(workshopPath, platform, manifest.workspace)
+        ...buildBuiltins(workshopPath, platform)
       };
 
       for (const definition of manifest.variables) {
@@ -419,7 +416,7 @@ export class WorkshopManager implements IWorkshopManager {
       // The workspace is created and filled from files/ before any
       // action can touch it; an existing one holds the learner's work
       // and is left alone.
-      await this._populateWorkspace(workshopPath, manifest.workspace);
+      await this._populateWorkspace(workshopPath);
 
       // The state directory is created once, here, before the progress
       // save, the environment files and the server's event log all start
@@ -506,7 +503,7 @@ export class WorkshopManager implements IWorkshopManager {
         launched: options.launch === true
       };
       this._store.load(
-        buildBuiltins(workshopPath, platform, manifest.workspace),
+        buildBuiltins(workshopPath, platform),
         manifest.variables,
         state.variables
       );
@@ -645,7 +642,7 @@ export class WorkshopManager implements IWorkshopManager {
       // so it is rebuilt; the decision itself stands.
       const declared = this._collectDeclared(manifest, sources);
       const defaults: Variables = {
-        ...buildBuiltins(workshop.path, platform, manifest.workspace)
+        ...buildBuiltins(workshop.path, platform)
       };
 
       for (const definition of manifest.variables) {
@@ -687,7 +684,7 @@ export class WorkshopManager implements IWorkshopManager {
       }
 
       this._store.load(
-        buildBuiltins(workshop.path, platform, manifest.workspace),
+        buildBuiltins(workshop.path, platform),
         manifest.variables,
         this._store.persistable()
       );
@@ -1112,18 +1109,12 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     // Put the files back: the workspace is emptied and refilled from
-    // files/, leaving the pages and everything else alone. A workshop
-    // that is not open is asked which directory that is.
-    const manifest = open
-      ? workshop.manifest
-      : await this._readManifest(target);
-    const workspace = manifest?.workspace ?? DEFAULT_WORKSPACE;
-
+    // files/, leaving the pages and everything else alone.
     // The file browser leaves the workshop's contents before they go, or
     // JupyterLab would report its own directory missing.
     await leaveDirectory(this._fileBrowser, target, target);
-    await deleteTree(this._contents, PathExt.join(target, workspace));
-    await this._populateWorkspace(target, workspace);
+    await deleteTree(this._contents, PathExt.join(target, WORKSPACE_DIR));
+    await this._populateWorkspace(target);
 
     // The environment goes too: a learner restarts when something is
     // broken, and a venv they can pip into is one of the things that can
@@ -1276,7 +1267,7 @@ export class WorkshopManager implements IWorkshopManager {
       workshop.path,
       name,
       this._store.persistable(),
-      workshop.manifest.workspace
+      WORKSPACE_DIR
     );
 
     if (!state.checkpoints.includes(name)) {
@@ -1557,17 +1548,8 @@ export class WorkshopManager implements IWorkshopManager {
         ? !resolved.startsWith('..')
         : resolved === root || resolved.startsWith(`${root}/`);
 
-    // A wider write scope lets paths reach anywhere JupyterLab can serve,
-    // but never above its root.
     if (!inside) {
-      const scopes = declaredCapabilities(this._workshop.manifest).get(
-        'write-files'
-      );
-      const wide = scopes?.some(scope => scope === 'home' || scope === 'any');
-
-      if (!wide || resolved.startsWith('..')) {
-        throw new Error(`Path "${path}" is outside the workshop directory`);
-      }
+      throw new Error(`Path "${path}" is outside the workshop directory`);
     }
 
     return resolved;
@@ -2108,11 +2090,8 @@ export class WorkshopManager implements IWorkshopManager {
    * it does not exist yet. An existing workspace is left as it is, since
    * it holds the learner's work.
    */
-  private async _populateWorkspace(
-    path: string,
-    workspace: string
-  ): Promise<void> {
-    const target = PathExt.join(path, workspace);
+  private async _populateWorkspace(path: string): Promise<void> {
+    const target = PathExt.join(path, WORKSPACE_DIR);
 
     if (await getIfExists(this._contents, target, false)) {
       return;
@@ -2128,25 +2107,6 @@ export class WorkshopManager implements IWorkshopManager {
       }
     } catch (error) {
       console.warn('Unable to fill the workshop workspace', error);
-    }
-  }
-
-  /**
-   * Read and parse the manifest of a workshop that is not open, or null
-   * when it cannot be read.
-   */
-  private async _readManifest(path: string): Promise<IWorkshopManifest | null> {
-    const manifestPath = PathExt.join(path, MANIFEST_FILE);
-
-    try {
-      return parseManifest(
-        await readTextFile(this._contents, manifestPath),
-        manifestPath
-      );
-    } catch (error) {
-      console.warn(`Unable to read ${manifestPath}`, error);
-
-      return null;
     }
   }
 
@@ -2301,7 +2261,6 @@ export class WorkshopManager implements IWorkshopManager {
       allowed: decision.allowed,
       disabled: this._trustStore.policy.disabledCapabilities,
       layout: {
-        workspace: workshop.manifest.workspace,
         requirements: workshop.manifest.environment?.requirements
       }
     });
@@ -2593,15 +2552,14 @@ function emptyEnvironment(kernel: string): IEnvironmentStatus {
 
 function buildBuiltins(
   workshopPath: string,
-  platform: IPlatformInfo,
-  workspace: string
+  platform: IPlatformInfo
 ): Variables {
   return {
     platform: platform.os,
     shell: platform.shell,
     path_sep: platform.path_sep,
     workshop_dir: workshopPath,
-    workspace: PathExt.join(workshopPath, workspace),
+    workspace: PathExt.join(workshopPath, WORKSPACE_DIR),
     home: platform.home,
     user: platform.user,
     host: platform.host,

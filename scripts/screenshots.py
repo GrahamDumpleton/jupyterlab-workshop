@@ -333,8 +333,16 @@ def start_server(
         f"--LabApp.workspaces_dir={settings.parent / 'workspaces'}",
     ]
 
+    # Kernels that other workshops' isolated environments registered in
+    # the developer's user data directory would show in the launcher, so
+    # the server gets an empty one; the environment's own kernel and the
+    # extension live under its prefix and are still found.
+    environment = dict(os.environ, JUPYTER_DATA_DIR=str(settings.parent / "data"))
+
     with log.open("wb") as handle:
-        return subprocess.Popen(command, stdout=handle, stderr=subprocess.STDOUT)
+        return subprocess.Popen(
+            command, stdout=handle, stderr=subprocess.STDOUT, env=environment
+        )
 
 
 def wait_for_server(port: int, token: str) -> None:

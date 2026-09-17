@@ -63,10 +63,7 @@ FRONTENDS = ["jupyterlab", "jupyterlite"]
 
 CAPABILITIES = [
     "terminal",
-    "write-files:workspace",
-    "write-files:home",
-    "write-files:any",
-    "network",
+    "write-files",
     "install-packages",
     "kernel-exec",
     "auto-run",

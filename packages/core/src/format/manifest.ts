@@ -5,18 +5,15 @@ import { isRecord, isStringArray } from '../util';
 import { IAnalyticsBlock, parseAnalyticsBlock } from './analytics';
 import { FRONTEND_NAMES, MARKER_NAMES, PLATFORM_NAMES } from './variants';
 
-/** Capability names and write scopes a manifest may declare. */
+/** Capability names a manifest may declare, each gating an action type. */
 const CAPABILITY_NAMES: readonly string[] = [
   'terminal',
   'write-files',
-  'network',
   'install-packages',
   'kernel-exec',
   'auto-run',
   'ui-settings'
 ];
-
-const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
 
 /**
  * Directory of a workshop whose contents are copied into the workspace
@@ -24,8 +21,12 @@ const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
  */
 export const WORKSHOP_FILES_DIR = 'files';
 
-/** The learner's working directory when the manifest names none. */
-export const DEFAULT_WORKSPACE = 'work';
+/**
+ * The learner's working directory inside every workshop. Write actions
+ * are confined to it, Restart empties and refills it, and checkpoints
+ * archive it alone.
+ */
+export const WORKSPACE_DIR = 'work';
 
 /** The manifest API version this package understands. */
 export const MANIFEST_API_VERSION = 'jupyterlab-workshop/v1alpha1';
@@ -180,14 +181,10 @@ export interface IWorkshopManifest {
    * `jupyterlite`. A manifest that lists none supports JupyterLab only.
    */
   frontends: string[];
+
+  /** The capability names declared; see `CAPABILITY_NAMES`. */
   capabilities: string[];
   requires: IRequirements;
-
-  /**
-   * The learner's working directory, relative to the workshop; `work`
-   * unless the manifest says otherwise. See `parseWorkspace`.
-   */
-  workspace: string;
   environment?: IEnvironment;
   analytics?: IAnalytics;
 
@@ -278,6 +275,15 @@ export function parseManifest(
     );
   }
 
+  // The learner's directory is always `work`; the field that once named
+  // it is refused rather than ignored, so the author learns why.
+  if (data.workspace !== undefined) {
+    throw new WorkshopFormatError(
+      `Field "workspace" is no longer supported; the learner's directory is always "${WORKSPACE_DIR}"`,
+      path
+    );
+  }
+
   const gating = optionalString(data, 'gating', path) ?? 'off';
 
   if (gating !== 'off' && gating !== 'soft' && gating !== 'strict') {
@@ -303,7 +309,6 @@ export function parseManifest(
     frontends: parseNames(data, 'frontends', FRONTEND_NAMES, path),
     capabilities: parseCapabilities(data.capabilities, path),
     requires: parseRequirements(data.requires, path),
-    workspace: parseWorkspace(data.workspace, path),
     environment: parseEnvironment(data.environment, path),
     analytics: parseAnalytics(data.analytics, path),
     resumable: parseFlag(data, 'resumable', path),
@@ -507,52 +512,42 @@ function parseCapabilities(value: unknown, path: string): string[] {
     throw new WorkshopFormatError('Field "capabilities" must be a list', path);
   }
 
-  // Entries are either `name` or `{ name: [scopes] }`, flattened to
-  // `name:scope` strings.
+  // Entries are names only. A mapping is what a scoped capability used
+  // to look like, so it gets its own message.
   const capabilities: string[] = [];
 
   for (const item of value) {
-    if (typeof item === 'string') {
-      checkCapability(item, [], path);
-      capabilities.push(item);
-    } else if (isRecord(item) && Object.keys(item).length === 1) {
-      const [key, scopes] = Object.entries(item)[0];
-      const list = (Array.isArray(scopes) ? scopes : [scopes]).map(String);
+    if (isRecord(item)) {
+      const name = Object.keys(item)[0] ?? '';
 
-      checkCapability(key, list, path);
-
-      for (const scope of list) {
-        capabilities.push(`${key}:${scope}`);
-      }
-    } else {
       throw new WorkshopFormatError(
-        'Each capability must be a name or a single-key mapping of name to scopes',
+        `Capability "${name}" carries scopes, which are no longer declared; write-files always means the workspace, so write it as "- ${name}"`,
         path
       );
+    }
+
+    if (typeof item !== 'string') {
+      throw new WorkshopFormatError('Each capability must be a name', path);
+    }
+
+    if (!CAPABILITY_NAMES.includes(item)) {
+      const hint =
+        item === 'network'
+          ? '; network is no longer a capability, since terminal commands reach the network anyway'
+          : '';
+
+      throw new WorkshopFormatError(
+        `Unknown capability "${item}"; expected one of ${CAPABILITY_NAMES.join(', ')}${hint}`,
+        path
+      );
+    }
+
+    if (!capabilities.includes(item)) {
+      capabilities.push(item);
     }
   }
 
   return capabilities;
-}
-
-function checkCapability(name: string, scopes: string[], path: string): void {
-  if (!CAPABILITY_NAMES.includes(name)) {
-    throw new WorkshopFormatError(
-      `Unknown capability "${name}"; expected one of ${CAPABILITY_NAMES.join(', ')}`,
-      path
-    );
-  }
-
-  if (name === 'write-files') {
-    for (const scope of scopes) {
-      if (!WRITE_SCOPES.includes(scope)) {
-        throw new WorkshopFormatError(
-          `Unknown write-files scope "${scope}"; expected one of ${WRITE_SCOPES.join(', ')}`,
-          path
-        );
-      }
-    }
-  }
 }
 
 function parseRequirements(value: unknown, path: string): IRequirements {
@@ -603,54 +598,6 @@ function parseRequirements(value: unknown, path: string): IRequirements {
   }
 
   return { tools, shell: optionalString(value, 'shell', path) };
-}
-
-/** Names a workspace may not take, since they are the workshop's own. */
-const RESERVED_WORKSPACE_NAMES: ReadonlySet<string> = new Set([
-  '_workshop',
-  'pages',
-  WORKSHOP_FILES_DIR,
-  'workshop.yaml'
-]);
-
-/**
- * The `workspace` field: a relative directory path inside the workshop,
- * with trailing slashes dropped, that is not one of the workshop's own
- * directories. Every workshop has one; it is `work` unless set.
- */
-function parseWorkspace(value: unknown, path: string): string {
-  if (value === undefined || value === null) {
-    return DEFAULT_WORKSPACE;
-  }
-
-  if (typeof value !== 'string') {
-    throw new WorkshopFormatError('Field "workspace" must be a string', path);
-  }
-
-  const cleaned = value.trim().replace(/\/+$/, '');
-  const parts = cleaned.split('/');
-
-  if (
-    cleaned === '' ||
-    cleaned.startsWith('/') ||
-    cleaned.startsWith('~') ||
-    /^[A-Za-z]:/.test(cleaned) ||
-    parts.some(part => part === '' || part === '.' || part === '..')
-  ) {
-    throw new WorkshopFormatError(
-      `Field "workspace" must be a relative path inside the workshop, not "${value}"`,
-      path
-    );
-  }
-
-  if (RESERVED_WORKSPACE_NAMES.has(parts[0])) {
-    throw new WorkshopFormatError(
-      `Field "workspace" cannot be "${parts[0]}", which the workshop uses itself`,
-      path
-    );
-  }
-
-  return cleaned;
 }
 
 function parseEnvironment(

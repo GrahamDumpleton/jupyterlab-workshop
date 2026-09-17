@@ -314,7 +314,7 @@ def create_server(
 
         Templates: starter (terminal, file write, check and quiz), blank,
         or notebook (notebook-create, cell-run-all and a kernel check).
-        Capabilities are names such as terminal or write-files:workspace.
+        Capabilities are names such as terminal or write-files.
         Platforms are linux, macos and windows; frontends are jupyterlab
         and jupyterlite, and a workshop that lists none supports
         JupyterLab only.

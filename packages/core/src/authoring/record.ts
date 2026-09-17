@@ -175,7 +175,7 @@ export function draftBlocks(
           );
         }
 
-        capabilities.add('write-files:workspace');
+        capabilities.add('write-files');
         break;
       }
 
@@ -187,7 +187,7 @@ export function draftBlocks(
             body: event.source
           })}`
         );
-        capabilities.add('write-files:workspace');
+        capabilities.add('write-files');
         capabilities.add('kernel-exec');
         break;
 

@@ -2,7 +2,8 @@ import {
   CAPABILITY_DESCRIPTIONS,
   TRUST_LEVEL_DESCRIPTIONS,
   TrustLevel,
-  formatLintMessage
+  formatLintMessage,
+  WORKSPACE_DIR
 } from '@jupyterlab-workshop/core';
 import { Dialog, showDialog } from '@jupyterlab/apputils';
 import { ReactWidget } from '@jupyterlab/ui-components';
@@ -71,15 +72,9 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
                 className={item.declared ? '' : 'jp-mod-undeclared'}
               >
                 <code>{item.capability}</code>
-                {item.scopes.length > 0 ? (
-                  <span className="jp-WorkshopTrust-scopes">
-                    {' '}
-                    ({item.scopes.join(', ')})
-                  </span>
-                ) : null}
                 <span className="jp-WorkshopTrust-description">
                   {' '}
-                  {describeCapability(item, summary.workspace)}
+                  {describeCapability(item)}
                   {item.count > 0
                     ? ` Used by ${item.count} ${item.count === 1 ? 'action' : 'actions'}.`
                     : ' Not used by any action.'}
@@ -149,24 +144,16 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
 }
 
 /**
- * The one-line explanation of a capability, with where writes go when
- * the workshop declares a workspace and the write scope is confined.
+ * The one-line explanation of a capability, with where writes go.
  */
-function describeCapability(
-  item: ICapabilitySummary,
-  workspace: string | undefined
-): string {
+function describeCapability(item: ICapabilitySummary): string {
   const description = CAPABILITY_DESCRIPTIONS[item.capability];
 
-  if (
-    item.capability !== 'write-files' ||
-    !workspace ||
-    item.scopes.some(scope => scope === 'home' || scope === 'any')
-  ) {
+  if (item.capability !== 'write-files') {
     return description;
   }
 
-  return `${description} Only under ${workspace}/ in the workshop; the pages and the workshop's own files are never changed.`;
+  return `${description} Only under ${WORKSPACE_DIR}/ in the workshop; the pages and the workshop's own files are never changed.`;
 }
 
 function sinkHost(url: string): string {

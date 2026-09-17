@@ -8,6 +8,7 @@ import * as path from 'path';
 
 import {
   IWorkshopManifest,
+  WORKSPACE_DIR,
   parseManifest,
   resolveManifest
 } from '../format/manifest';
@@ -156,7 +157,7 @@ export function loadWorkshopFiles(
   const builtins = BUILTINS[platform];
   const variables: Variables = {
     ...builtins,
-    workspace: manifest.workspace
+    workspace: WORKSPACE_DIR
   };
   const declared = new Set<string>(
     manifest.variables.map(definition => definition.name)

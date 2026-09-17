@@ -44,8 +44,7 @@ and publishes one from the files alone.
 ### The workspace
 
 The learner's files are kept apart from the workshop's own in a
-workspace, a directory inside the workshop called `work` unless the
-manifest's `workspace` field names another:
+workspace, a directory inside the workshop called `work`:
 
 ```
 my-workshop/
@@ -62,8 +61,8 @@ learner's work lives there, and the extension treats the two halves
 differently: Restart empties and refills the workspace and leaves the
 pages and the manifest alone, a checkpoint archives and restores the
 workspace alone, so "put the bug back" cannot put an old page back, and
-the `workspace` scope of `write-files` means the workspace, so a page
-can read the shipped files with a `../` path but never write them. The
+write actions are confined to it, so a page can read the shipped files
+with a `../` path but never write them. The
 `files/` directory is committed; the workspace never is, and `jupyter
 workshop publish` and the self-test leave it out.
 
@@ -85,7 +84,7 @@ learner need not watch.
 ## Capabilities and trust
 
 Every action type needs a capability: `terminal`, `write-files`,
-`kernel-exec`, `network`, `install-packages`, `ui-settings`, or none.
+`kernel-exec`, `install-packages`, `ui-settings`, or none.
 The manifest declares the capabilities the workshop uses, and an action
 whose capability is not declared never runs. When a workshop opens, the
 trust dialog shows the source, a content hash, the declared capabilities

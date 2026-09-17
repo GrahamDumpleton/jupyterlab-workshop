@@ -110,7 +110,7 @@
           },
           "capabilities": {
             "type": "array",
-            "description": "Capability names, with scopes as name:scope, as the manifest declares them.",
+            "description": "Capability names as the manifest declares them.",
             "items": {
               "type": "string"
             }

@@ -12,7 +12,7 @@ platforms: [linux, macos, windows]
 frontends: [jupyterlab, jupyterlite]
 capabilities:
   - terminal
-  - write-files: [workspace]
+  - write-files
   - kernel-exec
   - auto-run
 layout: notebook

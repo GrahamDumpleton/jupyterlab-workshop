@@ -49,7 +49,7 @@ title: Demo
 # What the workshop may do
 capabilities:
   - terminal
-  - write-files: [workspace]
+  - write-files
 gating: soft
 pages:
   - pages/01.md
@@ -136,21 +136,22 @@ describe('manifest editing', () => {
     expect(parseManifest(edited).pages).toEqual(['pages/02.md', 'pages/03.md']);
   });
 
-  it('adds and removes capabilities with scopes grouped', () => {
-    expect(manifestCapabilities(MANIFEST)).toEqual([
-      'terminal',
-      'write-files:workspace'
-    ]);
+  it('adds and removes capabilities', () => {
+    expect(manifestCapabilities(MANIFEST)).toEqual(['terminal', 'write-files']);
 
-    const added = addManifestCapability(
-      addManifestCapability(MANIFEST, 'write-files:home'),
-      'kernel-exec'
-    );
+    const added = addManifestCapability(MANIFEST, 'kernel-exec');
 
     expect(added).toContain(
-      'capabilities:\n  - terminal\n  - write-files: [workspace, home]\n  - kernel-exec\ngating: soft'
+      'capabilities:\n  - terminal\n  - write-files\n  - kernel-exec\ngating: soft'
     );
     expect(addManifestCapability(added, 'terminal')).toBe(added);
+
+    // The old scoped form counts by its name, so a fix rewrites it plain.
+    expect(
+      manifestCapabilities(
+        MANIFEST.replace('- write-files', '- write-files: [workspace]')
+      )
+    ).toEqual(['terminal', 'write-files']);
 
     const removed = removeManifestCapability(added, 'write-files');
 
@@ -301,7 +302,7 @@ describe('draftFromRecording', () => {
     ]);
     expect(draft.capabilities).toEqual([
       'terminal',
-      'write-files:workspace',
+      'write-files',
       'kernel-exec'
     ]);
 
@@ -338,7 +339,7 @@ describe('draftFromRecording', () => {
 
     expect(parseManifest(manifest).capabilities).toEqual([
       'terminal',
-      'write-files:workspace',
+      'write-files',
       'kernel-exec'
     ]);
     expect(parseManifest(manifest).pages).toEqual(

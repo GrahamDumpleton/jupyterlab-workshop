@@ -15,7 +15,7 @@ duration: 30m
 platforms: [linux, macos, windows]
 capabilities:
   - terminal
-  - write-files: [workspace]
+  - write-files
   - kernel-exec
   - auto-run
 # The terminal is only a few lines tall, so git must not page its output.

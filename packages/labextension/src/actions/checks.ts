@@ -7,7 +7,8 @@ import {
   parsePredicates,
   parseQuiz,
   validateForm,
-  verifySubstrate
+  verifySubstrate,
+  WORKSPACE_DIR
 } from '@jupyterlab-workshop/core';
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { ICodeCellModel } from '@jupyterlab/cells';
@@ -118,7 +119,7 @@ export class VerifyAction implements IActionImplementation {
     const result = await manager.backend.runScript({
       workshop: manager.workshop?.path ?? '',
       script,
-      cwd: manager.workshop?.manifest.workspace,
+      cwd: WORKSPACE_DIR,
       timeout: parseDuration(request.options.timeout, 60000) / 1000,
       environment: {
         ...commandEnvironment(manager),

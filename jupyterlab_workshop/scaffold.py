@@ -16,9 +16,9 @@ GATING = ("off", "soft", "strict")
 DEFAULT_PLATFORMS = ["linux", "macos"]
 
 DEFAULT_CAPABILITIES: dict[str, list[str]] = {
-    "starter": ["terminal", "write-files:workspace"],
+    "starter": ["terminal", "write-files"],
     "blank": [],
-    "notebook": ["write-files:workspace", "kernel-exec"],
+    "notebook": ["write-files", "kernel-exec"],
 }
 
 
@@ -31,23 +31,15 @@ def slug(text: str) -> str:
 
 
 def capability_lines(capabilities: list[str]) -> list[str]:
-    """Manifest list lines for capabilities given as ``name`` or ``name:scope``."""
+    """Manifest list lines for capability names, without repeats."""
 
-    grouped: dict[str, list[str]] = {}
+    names: list[str] = []
 
     for item in capabilities:
-        name, _, scope = item.partition(":")
-        scopes = grouped.setdefault(name, [])
+        if item not in names:
+            names.append(item)
 
-        if scope and scope not in scopes:
-            scopes.append(scope)
-
-    lines = []
-
-    for name, scopes in grouped.items():
-        lines.append(f"  - {name}: [{', '.join(scopes)}]" if scopes else f"  - {name}")
-
-    return lines
+    return [f"  - {name}" for name in names]
 
 
 def manifest(
@@ -131,8 +123,8 @@ and the actions in boxes drive the session: click one and it runs. You can
 also type the commands yourself.
 
 Start by checking which directory you are in. Terminals start in the
-workshop's `work` directory, the workspace named in `workshop.yaml`,
-where everything you make in this workshop goes.
+workshop's `work` directory, the workspace, where everything you make
+in this workshop goes.
 
 ```{{execute}}
 pwd

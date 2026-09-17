@@ -28,11 +28,8 @@ const FRONTENDS: readonly string[] = ['jupyterlab', 'jupyterlite'];
 
 const CAPABILITIES: readonly string[] = [
   'terminal',
-  'write-files:workspace',
-  'write-files:home',
-  'write-files:any',
+  'write-files',
   'kernel-exec',
-  'network',
   'install-packages',
   'auto-run',
   'ui-settings'
@@ -116,14 +113,14 @@ export async function showNewWorkshopDialog(
     template: 'starter',
     platforms: ['linux', 'macos'],
     frontends: ['jupyterlab'],
-    capabilities: ['terminal', 'write-files:workspace'],
+    capabilities: ['terminal', 'write-files'],
     gating: 'soft',
     ci: false
   };
   const templateCapabilities: Record<string, string[]> = {
-    starter: ['terminal', 'write-files:workspace'],
+    starter: ['terminal', 'write-files'],
     blank: [],
-    notebook: ['write-files:workspace', 'kernel-exec']
+    notebook: ['write-files', 'kernel-exec']
   };
   const body = new ValueBody<INewWorkshopRequest>(initial, (value, update) => {
     const toggle = (

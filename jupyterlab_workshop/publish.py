@@ -17,8 +17,8 @@ import yaml
 
 PUBLISH_EXCLUDES = {"_workshop", ".git", ".github", "scratch", "dist", "node_modules"}
 
-#: The learner's workspace directory when the manifest names none.
-DEFAULT_WORKSPACE = "work"
+#: The learner's workspace directory inside every workshop.
+WORKSPACE_DIR = "work"
 
 
 class PublishError(Exception):
@@ -86,11 +86,9 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
 
     # The workspace is generated when the workshop opens, so it is no
     # more part of the archive than the state directory is.
-    workspace = str(manifest.get("workspace") or DEFAULT_WORKSPACE).strip("/")
-
     with tarfile.open(archive, "w:gz") as tar:
         for entry in sorted(directory.iterdir()):
-            if entry.name in PUBLISH_EXCLUDES or entry.name == workspace:
+            if entry.name in PUBLISH_EXCLUDES or entry.name == WORKSPACE_DIR:
                 continue
 
             tar.add(entry, arcname=f"{name}-{version}/{entry.name}", filter=_clean_tar)
@@ -106,7 +104,7 @@ def publish_workshop(directory: Path, out: Path, url: str = "") -> PublishResult
         "tags": manifest.get("tags", []),
         "platforms": manifest.get("platforms", []),
         "frontends": manifest.get("frontends", []),
-        "capabilities": flatten_capabilities(manifest.get("capabilities")),
+        "capabilities": capability_names(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),
         **manifest_links(manifest),
@@ -145,26 +143,13 @@ def manifest_links(manifest: dict[str, Any]) -> dict[str, str]:
     return links
 
 
-def flatten_capabilities(value: object) -> list[str]:
-    """Flatten manifest capabilities to ``name`` and ``name:scope`` strings."""
-
-    # The manifest writes scoped capabilities as single-key mappings; the
-    # collection lists them as name:scope strings.
-    names: list[str] = []
+def capability_names(value: object) -> list[str]:
+    """The capability names a manifest lists, as strings."""
 
     if not isinstance(value, list):
-        return names
+        return []
 
-    for item in value:
-        if isinstance(item, str):
-            names.append(item)
-        elif isinstance(item, dict):
-            for key, scopes in item.items():
-                listed = scopes if isinstance(scopes, list) else [scopes]
-
-                names.extend(f"{key}:{scope}" for scope in listed)
-
-    return names
+    return [item for item in value if isinstance(item, str)]
 
 
 def _clean_tar(info: tarfile.TarInfo) -> tarfile.TarInfo | None:

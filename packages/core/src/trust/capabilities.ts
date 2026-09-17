@@ -9,26 +9,22 @@ import { CODE_SUBSTRATES, verifySubstrate } from '../checks/verify';
 import { IWorkshopManifest } from '../format/manifest';
 import { IDirectiveNode, IPage, PageNode } from '../format/page';
 
-/** The capability names a manifest may declare. */
+/** The capability names a manifest may declare, each gating an action type. */
 export const CAPABILITY_NAMES: readonly Capability[] = [
   'terminal',
   'write-files',
-  'network',
   'install-packages',
   'kernel-exec',
   'auto-run',
   'ui-settings'
 ];
 
-/** Scopes accepted by `write-files`. */
-export const WRITE_SCOPES: readonly string[] = ['workspace', 'home', 'any'];
-
 /** One-line explanations shown in the trust dialog. */
 export const CAPABILITY_DESCRIPTIONS: Readonly<Record<Capability, string>> = {
   none: 'No special access.',
-  terminal: 'Run commands in terminals.',
-  'write-files': 'Create and change files.',
-  network: 'Download from the network.',
+  terminal:
+    'Run commands in terminals, which can reach anything the machine can.',
+  'write-files': 'Create and change files in the workspace.',
   'install-packages': 'Install packages.',
   'kernel-exec': 'Run code in kernels, including in the background.',
   'auto-run': 'Run actions automatically without a click.',
@@ -47,45 +43,10 @@ export interface ICapabilityUse {
 }
 
 /**
- * Return the name part of a declared capability such as
- * `write-files:workspace`.
+ * The capability names the manifest declares.
  */
-export function capabilityName(declared: string): string {
-  const colon = declared.indexOf(':');
-
-  return colon < 0 ? declared : declared.slice(0, colon);
-}
-
-/**
- * Return the scope part of a declared capability, or an empty string.
- */
-export function capabilityScope(declared: string): string {
-  const colon = declared.indexOf(':');
-
-  return colon < 0 ? '' : declared.slice(colon + 1);
-}
-
-/**
- * Group the manifest's capabilities by name, mapping each to its scopes.
- */
-export function declaredCapabilities(
-  manifest: IWorkshopManifest
-): Map<string, string[]> {
-  const declared = new Map<string, string[]>();
-
-  for (const item of manifest.capabilities) {
-    const name = capabilityName(item);
-    const scope = capabilityScope(item);
-    const scopes = declared.get(name) ?? [];
-
-    if (scope !== '' && !scopes.includes(scope)) {
-      scopes.push(scope);
-    }
-
-    declared.set(name, scopes);
-  }
-
-  return declared;
+export function declaredCapabilities(manifest: IWorkshopManifest): Set<string> {
+  return new Set(manifest.capabilities);
 }
 
 /**

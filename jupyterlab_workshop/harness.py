@@ -35,7 +35,7 @@ import yaml
 
 from .environment import EnvironmentSetupError, environment_status, remove_environment
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
-from .publish import DEFAULT_WORKSPACE
+from .publish import WORKSPACE_DIR
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
@@ -613,26 +613,11 @@ def _prepare_root(options: SelfTestOptions, work: Path) -> tuple[Path, str]:
         source,
         target,
         ignore=shutil.ignore_patterns(
-            "_workshop", ".git", "node_modules", *declared_workspace(source)
+            "_workshop", ".git", "node_modules", WORKSPACE_DIR
         ),
     )
 
     return root, source.name
-
-
-def declared_workspace(directory: Path) -> list[str]:
-    """The workspace directory of a workshop, ``work`` unless its
-    manifest says otherwise, as a one-name list for an ignore pattern;
-    empty when there is no manifest to read."""
-
-    try:
-        manifest = yaml.safe_load((directory / "workshop.yaml").read_text("utf-8"))
-    except (OSError, yaml.YAMLError):
-        return []
-
-    workspace = manifest.get("workspace") if isinstance(manifest, dict) else None
-
-    return [str(workspace or DEFAULT_WORKSPACE).strip("/")]
 
 
 def _write_overrides(work: Path, trust: str) -> Path:

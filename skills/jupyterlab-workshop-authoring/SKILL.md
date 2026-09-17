@@ -24,8 +24,7 @@ my-workshop/
   work/                  the learner's workspace, generated; never commit it
 ```
 
-The workspace is `work/` unless the manifest's `workspace` field names
-another directory. It is created and filled from `files/` when the
+The workspace is always `work/`. It is created and filled from `files/` when the
 workshop opens; Restart empties and refills it and leaves the pages
 alone; checkpoints archive it alone; and paths in actions, terminals
 and checks start there, so pages name the learner's files plainly.
@@ -116,13 +115,12 @@ duration: 30m
 platforms: [linux, macos, windows]
 capabilities: # what the pages need; lint checks this
   - terminal
-  - write-files: [workspace] # scopes: workspace, home, any
+  - write-files # writes are confined to work/; nothing carries a scope
   - kernel-exec
 requires:
   tools:
     - { name: git, version: '>=2.30' } # missing or old tools are listed in the missing_tools built-in; install advice goes on page 1 under {when} "git" in missing_tools
     - { name: py, platforms: [windows] } # looked for on the listed platforms (or frontends) only
-workspace: work # the default; the learner's directory, filled from files/
 gating: soft # off, soft or strict
 env: { PAGER: cat, PYTHONDONTWRITEBYTECODE: '1' } # for terminals, checks and captures; nothing by default; strings only, so quote numbers. Which values a workshop needs: references/gotchas.md
 variants: # env and defaults.actions that differ by platform or frontend, keyed by marker name; frontend entry over platform entry over base
@@ -140,10 +138,9 @@ pages:
 ```
 
 Capabilities: `terminal` (run commands), `write-files` (create and change
-files; scope `workspace` keeps writes inside the workspace; the pages,
-manifest and `files/` are never writable),
-`kernel-exec` (run code in kernels; also needed by code checks),
-`network`, `install-packages` (needed by `environment`), `auto-run`
+files inside the workspace only; the pages, manifest and `files/` are
+never writable), `kernel-exec` (run code in kernels; also needed by code
+checks), `install-packages` (needed by `environment`), `auto-run`
 (actions that run without a click: `:auto:` and `:cascade:`),
 `ui-settings`. Declare exactly what the pages use; lint reports both
 missing and unused capabilities.
@@ -384,10 +381,9 @@ pass, `soft` only shows what is missing.
   where to go next) and what to do now. To checkpoint after a check,
   give the `verify` a `:cascade:` naming a `checkpoint` block.
 
-- Keep `write-files` paths inside the workspace unless the scope is
-  wider; lint warns on `..`, `~` and absolute paths, and reports as an
-  error a write aimed at the pages, the manifest, `files/` or anywhere
-  else outside the workspace.
+- Keep `write-files` paths inside the workspace; lint warns on `..`,
+  `~` and absolute paths, and reports as an error a write aimed at the
+  pages, the manifest, `files/` or anywhere else outside the workspace.
 
 - Do not pipe downloads into a shell, use `sudo`, or `rm -rf` outside the
   workshop; lint flags these and the trust dialog shows them.

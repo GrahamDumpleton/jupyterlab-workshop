@@ -353,7 +353,7 @@ test.describe('workshop panel', () => {
         'apiVersion: jupyterlab-workshop/v1alpha1',
         'name: envy',
         'title: Envy',
-        'capabilities: [install-packages, kernel-exec, write-files: [workspace]]',
+        'capabilities: [install-packages, kernel-exec, write-files]',
         'environment: { requirements: requirements.txt }',
         'pages: [pages/01.md]',
         ''
@@ -530,7 +530,7 @@ test.describe('workshop panel', () => {
     expect(await kernels()).not.toContain(kernelName);
   });
 
-  test('fills a declared workspace and refills it on restart', async ({
+  test('fills the workspace and refills it on restart', async ({
     page,
     tmpPath
   }) => {
@@ -553,8 +553,7 @@ test.describe('workshop panel', () => {
         'apiVersion: jupyterlab-workshop/v1alpha1',
         'name: roomy',
         'title: Roomy',
-        'workspace: work',
-        'capabilities: [write-files: [workspace], kernel-exec]',
+        'capabilities: [write-files, kernel-exec]',
         'pages: [pages/01.md]',
         ''
       ].join('\n'),

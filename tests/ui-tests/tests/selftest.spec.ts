@@ -23,7 +23,7 @@ version: 0.1.0
 description: A command writes files a few seconds after it returns.
 capabilities:
   - terminal
-  - write-files: [workspace]
+  - write-files
 pages:
   - pages/01-wait.md
 `;

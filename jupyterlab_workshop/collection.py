@@ -28,7 +28,7 @@ import yaml
 from .fetch import Downloader, FetchError, _relative, _resolve_inside, download
 from .publish import (
     PublishError,
-    flatten_capabilities,
+    capability_names,
     manifest_links,
     read_manifest,
 )
@@ -311,7 +311,7 @@ def index_entry(directory: Path, subdir: str, repo: str, ref: str) -> dict[str, 
         "tags": manifest.get("tags", []),
         "platforms": manifest.get("platforms", []),
         "frontends": manifest.get("frontends", []),
-        "capabilities": flatten_capabilities(manifest.get("capabilities")),
+        "capabilities": capability_names(manifest.get("capabilities")),
         "duration": manifest.get("duration", ""),
         "authors": manifest.get("authors", []),
         **manifest_links(manifest),

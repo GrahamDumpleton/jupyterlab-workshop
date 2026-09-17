@@ -67,7 +67,7 @@ destination's directory when it is missing and refuse a destination
 that exists, so neither replaces the learner's work; `file-rename` also
 moves, since `to` is a full path. All four go through the contents API,
 so they behave the same on every platform, including JupyterLite, and
-the paths follow the `write-files` scope like any write.
+the paths stay inside the workspace like any write.
 
 ## Notebooks and kernels
 

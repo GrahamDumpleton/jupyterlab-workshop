@@ -48,8 +48,6 @@ const PATTERNS: readonly IDangerPattern[] = [
 
 const ABSOLUTE_PATH = /(?:^|[\s=:"'])\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+/m;
 
-const URL = /https?:\/\/([A-Za-z0-9.-]+)(?::\d+)?/g;
-
 /** A danger warning about a piece of text. */
 export interface IDangerWarning {
   rule: string;
@@ -76,44 +74,4 @@ export function dangerWarnings(text: string): IDangerWarning[] {
  */
 export function mentionsAbsolutePath(text: string): boolean {
   return ABSOLUTE_PATH.test(text);
-}
-
-/**
- * The host names of every `http` or `https` URL in the text, in order of
- * first appearance.
- */
-export function urlHosts(text: string): string[] {
-  const hosts: string[] = [];
-
-  for (const match of text.matchAll(URL)) {
-    const host = match[1].toLowerCase();
-
-    if (!hosts.includes(host)) {
-      hosts.push(host);
-    }
-  }
-
-  return hosts;
-}
-
-/**
- * Whether a host is covered by a declared network scope. A scope matches
- * itself and, when it starts with a dot or `*.`, any subdomain.
- */
-export function hostAllowed(host: string, scopes: readonly string[]): boolean {
-  return scopes.some(scope => {
-    const lower = scope.toLowerCase();
-
-    if (lower === '*' || lower === host) {
-      return true;
-    }
-
-    const suffix = lower.startsWith('*.')
-      ? lower.slice(1)
-      : lower.startsWith('.')
-        ? lower
-        : `.${lower}`;
-
-    return host.endsWith(suffix);
-  });
 }

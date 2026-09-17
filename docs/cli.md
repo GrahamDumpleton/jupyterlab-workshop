@@ -45,9 +45,9 @@ reports problems: unknown
 directives and options, missing bodies, capabilities used but not
 declared (or declared but unused), invalid checks, quizzes and forms,
 requirements that name nothing, variables used before the form that sets
-them, danger heuristics such as piping a download into a shell, hosts
-not in the declared `network` list, variants missing for a listed
-platform or frontend, and actions a listed frontend cannot run. Exits
+them, danger heuristics such as piping a download into a shell,
+variants missing for a listed platform or frontend, and actions a
+listed frontend cannot run. Exits
 with 1 when there are errors. `--json` prints the report as JSON for
 other tools. `--platform` renders the pages as that platform sees them,
 selecting its command variants and built-in variables, so a Linux CI

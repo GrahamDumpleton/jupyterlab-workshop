@@ -11,7 +11,6 @@ export type Capability =
   | 'none'
   | 'terminal'
   | 'write-files'
-  | 'network'
   | 'install-packages'
   | 'kernel-exec'
   | 'auto-run'

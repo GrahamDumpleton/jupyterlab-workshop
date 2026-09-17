@@ -14,7 +14,7 @@ name: demo
 title: Demo
 capabilities:
   - terminal
-  - write-files: [workspace]
+  - write-files
 pages: [pages/01.md]
 `;
 
@@ -47,13 +47,10 @@ function pages() {
 }
 
 describe('capabilities', () => {
-  it('groups declared capabilities with their scopes', () => {
+  it('lists the declared capabilities', () => {
     const declared = declaredCapabilities(parseManifest(MANIFEST));
 
-    expect([...declared.entries()]).toEqual([
-      ['terminal', []],
-      ['write-files', ['workspace']]
-    ]);
+    expect([...declared]).toEqual(['terminal', 'write-files']);
   });
 
   it('reports what pages use against what is declared', () => {
@@ -72,23 +69,23 @@ describe('capabilities', () => {
     expect(countAutomatic(pages())).toBe(1);
   });
 
-  it('rejects unknown capability names and scopes in the manifest', () => {
+  it('rejects unknown capability names and the old scoped form', () => {
     expect(() =>
       parseManifest(MANIFEST.replace('terminal', 'teleport'))
     ).toThrow(/Unknown capability "teleport"/);
     expect(() =>
-      parseManifest(MANIFEST.replace('[workspace]', '[everywhere]'))
-    ).toThrow(/Unknown write-files scope/);
+      parseManifest(
+        MANIFEST.replace('- write-files', '- write-files: [workspace]')
+      )
+    ).toThrow(/"write-files" carries scopes, which are no longer declared/);
+    expect(() =>
+      parseManifest(MANIFEST.replace('- terminal', '- network'))
+    ).toThrow(/network is no longer a capability/);
   });
 });
 
 describe('decideAction', () => {
-  const declared = [
-    'terminal',
-    'write-files:workspace',
-    'kernel-exec',
-    'auto-run'
-  ];
+  const declared = ['terminal', 'write-files', 'kernel-exec', 'auto-run'];
 
   it('runs everything when trusted', () => {
     expect(
@@ -191,10 +188,10 @@ describe('decideAction', () => {
 });
 
 describe('write targets', () => {
-  const declared = ['write-files:workspace'];
+  const declared = ['write-files'];
   const decide = (
     options: Record<string, string>,
-    layout: { workspace?: string; requirements?: string } = {}
+    layout: { requirements?: string } = {}
   ) =>
     decideAction({
       type: 'file-write',
@@ -205,7 +202,7 @@ describe('write targets', () => {
       layout
     });
 
-  it("refuses the workshop's own files at every scope", () => {
+  it("refuses the workshop's own files", () => {
     expect(decide({ path: '../pages/01.md' })).toMatchObject({
       kind: 'reject',
       reason: expect.stringContaining('part of the workshop')
@@ -224,23 +221,15 @@ describe('write targets', () => {
     expect(decide({ path: 'pages/01.md' })).toEqual({ kind: 'run' });
   });
 
-  it('confines the workspace scope to the workspace', () => {
-    expect(decide({ path: 'notes.txt' }, { workspace: 'work' })).toEqual({
-      kind: 'run'
-    });
+  it('confines writes to the workspace', () => {
+    expect(decide({ path: 'notes.txt' })).toEqual({ kind: 'run' });
+    expect(decide({ path: 'sub/notes.txt' })).toEqual({ kind: 'run' });
     expect(decide({ path: '../notes.txt' })).toMatchObject({
       kind: 'reject',
       reason: expect.stringContaining('outside the workspace')
     });
-    expect(
-      decideAction({
-        type: 'file-write',
-        options: { path: '../notes.txt' },
-        level: 'trusted',
-        automatic: false,
-        declared: ['write-files:any'],
-        layout: { workspace: 'work' }
-      })
-    ).toEqual({ kind: 'run' });
+    expect(decide({ path: '../scratch/notes.txt' })).toMatchObject({
+      kind: 'reject'
+    });
   });
 });

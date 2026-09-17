@@ -48,7 +48,7 @@ const SAMPLE = {
       tags: ['git', 'cli'],
       platforms: ['linux', 'macos'],
       frontends: ['jupyterlab', 'jupyterlite'],
-      capabilities: ['terminal', 'write-files:workspace'],
+      capabilities: ['terminal', 'write-files'],
       versions: [
         {
           version: '1.2.0',
@@ -83,7 +83,7 @@ describe('parseCollectionIndex', () => {
     expect(index.workshops).toHaveLength(2);
     expect(index.workshops[0].capabilities).toEqual([
       'terminal',
-      'write-files:workspace'
+      'write-files'
     ]);
     expect(index.workshops[1].platforms).toEqual([]);
     expect(latestVersion(index.workshops[0]).sha256).toBe('a'.repeat(64));

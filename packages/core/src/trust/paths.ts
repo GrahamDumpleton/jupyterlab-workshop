@@ -1,20 +1,15 @@
 /**
- * Where a write-files action may write. The `workspace` scope means
- * the workshop's workspace directory, and the workshop's own
- * files (the manifest, the pages, the shipped files and the
- * requirements file) are never a target under any scope. Shared by the
- * trust policy, which refuses the action, and the linter, which reports
- * it while the workshop is written.
+ * Where a write-files action may write: inside the workshop's workspace
+ * directory only, and never at the workshop's own files (the manifest,
+ * the pages, the shipped files and the requirements file). Shared by
+ * the trust policy, which refuses the action, and the linter, which
+ * reports it while the workshop is written.
  */
 
-import { DEFAULT_WORKSPACE, WORKSHOP_FILES_DIR } from '../format/manifest';
-import { capabilityName, capabilityScope } from './capabilities';
+import { WORKSHOP_FILES_DIR, WORKSPACE_DIR } from '../format/manifest';
 
-/** The parts of a manifest that say where writes may go. */
+/** The parts of a manifest that say what a write may not touch. */
 export interface IWriteLayout {
-  /** The workspace, relative to the workshop; `work` when not given. */
-  workspace?: string;
-
   /** The environment's requirements file, relative to the workshop. */
   requirements?: string;
 }
@@ -75,21 +70,14 @@ function isWorkshopSource(segments: string[], layout: IWriteLayout): boolean {
 
 /**
  * The reason a write-files action may not write where it names, or null
- * when it may. `declared` is the manifest's capability list, from which
- * the write scopes are read; `type` and `options` are the action's.
+ * when it may. `type` and `options` are the action's.
  */
 export function writeTargetProblem(
   type: string,
   options: Readonly<Record<string, string>>,
-  declared: readonly string[],
   layout: IWriteLayout
 ): string | null {
-  const scopes = declared
-    .filter(item => capabilityName(item) === 'write-files')
-    .map(capabilityScope)
-    .filter(Boolean);
-  const confined = !scopes.some(scope => scope === 'home' || scope === 'any');
-  const start = layout.workspace ?? DEFAULT_WORKSPACE;
+  const start = WORKSPACE_DIR;
 
   for (const option of WRITE_OPTIONS) {
     const value = options[option];
@@ -110,15 +98,13 @@ export function writeTargetProblem(
       return `${type} would write ${segments.join('/')}, which is part of the workshop itself and cannot be changed by an action`;
     }
 
-    if (confined) {
-      const root = start.split('/').filter(Boolean);
-      const inside =
-        segments.length >= root.length &&
-        root.every((part, index) => segments[index] === part);
+    const root = start.split('/').filter(Boolean);
+    const inside =
+      segments.length >= root.length &&
+      root.every((part, index) => segments[index] === part);
 
-      if (!inside) {
-        return `${type} would write outside the workspace ${start}, which the write-files scope does not allow`;
-      }
+    if (!inside) {
+      return `${type} would write outside the workspace ${start}, which write actions cannot do`;
     }
   }
 

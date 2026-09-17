@@ -9,8 +9,7 @@ version: 1.2.0
 tags: [git, cli]
 capabilities:
   - terminal
-  - write-files: [workspace]
-  - network: [github.com, pypi.org]
+  - write-files
 requires:
   tools:
     - { name: git, version: ">=2.30", platforms: [linux, macos] }
@@ -163,26 +162,10 @@ describe('parseManifest', () => {
     ).toThrow(WorkshopFormatError);
   });
 
-  it('parses and checks the workspace', () => {
-    expect(parseManifest(VALID).workspace).toBe('work');
-    expect(parseManifest(`${VALID}\nworkspace: work/\n`).workspace).toBe(
-      'work'
+  it('refuses the workspace field, since the directory is always work', () => {
+    expect(() => parseManifest(`${VALID}\nworkspace: work\n`)).toThrow(
+      /"workspace" is no longer supported.*always "work"/
     );
-    expect(parseManifest(`${VALID}\nworkspace: learner/src\n`).workspace).toBe(
-      'learner/src'
-    );
-
-    for (const bad of ['', '/abs', '../up', 'a/../b', '~/x', 'C:/x']) {
-      expect(() => parseManifest(`${VALID}\nworkspace: "${bad}"\n`)).toThrow(
-        WorkshopFormatError
-      );
-    }
-
-    for (const reserved of ['_workshop', 'pages', 'files', 'workshop.yaml']) {
-      expect(() => parseManifest(`${VALID}\nworkspace: ${reserved}\n`)).toThrow(
-        'uses itself'
-      );
-    }
   });
 
   it('parses the links', () => {
@@ -209,12 +192,7 @@ describe('parseManifest', () => {
     expect(manifest.tags).toEqual(['git', 'cli']);
     expect(manifest.authors).toEqual([]);
     expect(manifest.pages).toEqual(['pages/01-init.md']);
-    expect(manifest.capabilities).toEqual([
-      'terminal',
-      'write-files:workspace',
-      'network:github.com',
-      'network:pypi.org'
-    ]);
+    expect(manifest.capabilities).toEqual(['terminal', 'write-files']);
     expect(manifest.requires.shell).toBe('bash');
     expect(manifest.requires.tools).toEqual([
       {

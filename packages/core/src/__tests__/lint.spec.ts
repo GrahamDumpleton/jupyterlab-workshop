@@ -1,11 +1,6 @@
 import { parseManifest } from '../format/manifest';
 import { parsePage } from '../format/page';
-import {
-  dangerWarnings,
-  hostAllowed,
-  mentionsAbsolutePath,
-  urlHosts
-} from '../lint/danger';
+import { dangerWarnings, mentionsAbsolutePath } from '../lint/danger';
 import { lintWorkshop } from '../lint/rules';
 import { formatLintMessage } from '../lint/types';
 
@@ -15,8 +10,7 @@ name: demo
 title: Demo
 capabilities:
   - terminal
-  - write-files: [workspace]
-  - network: [github.com]
+  - write-files
 pages: [pages/01.md]
 `;
 
@@ -53,18 +47,9 @@ describe('dangerWarnings', () => {
     expect(rulesFor('git status')).toEqual([]);
   });
 
-  it('finds hosts and absolute paths', () => {
-    expect(
-      urlHosts(
-        'pip install x -i https://pypi.org/simple http://Example.com:8080/a https://pypi.org'
-      )
-    ).toEqual(['pypi.org', 'example.com']);
+  it('finds absolute paths', () => {
     expect(mentionsAbsolutePath('cat /etc/hosts')).toBe(true);
     expect(mentionsAbsolutePath('cat etc/hosts')).toBe(false);
-    expect(hostAllowed('api.github.com', ['github.com'])).toBe(true);
-    expect(hostAllowed('github.com', ['github.com'])).toBe(true);
-    expect(hostAllowed('github.com.evil', ['github.com'])).toBe(false);
-    expect(hostAllowed('anything', ['*'])).toBe(true);
   });
 });
 
@@ -139,7 +124,7 @@ print(1)
     );
   });
 
-  it('warns about dangerous commands, hosts and paths', () => {
+  it('warns about dangerous commands and paths', () => {
     const found = rules(`---
 title: One
 ---
@@ -172,7 +157,6 @@ hello
     // the workspace, which is refused rather than merely warned about.
     expect(found).toEqual([
       'danger-pipe-to-shell',
-      'undeclared-host',
       'path-outside-workspace',
       'write-refused',
       'path-outside-workspace'
@@ -837,15 +821,10 @@ hello
 \`\`\`
 `;
 
-  it('flags a path that climbs out of the workshop, counting the workspace depth', () => {
+  it('flags a path that climbs out of the workshop', () => {
     expect(rules(page('notes.txt'))).toEqual([]);
     expect(rules(page('../../notes.txt'))).toContain('path-outside-workspace');
-    expect(
-      rules(page('../../../x'), `${MANIFEST}workspace: learner/src\n`)
-    ).toContain('path-outside-workspace');
-    expect(
-      rules(page('../../x'), `${MANIFEST}workspace: learner/src\n`)
-    ).not.toContain('path-outside-workspace');
+    expect(rules(page('../README.md'))).not.toContain('path-outside-workspace');
   });
 });
 
@@ -870,8 +849,6 @@ hello
     expect(rules(page('../notes.txt'))).toContain('write-refused');
     expect(rules(page('notes.txt'))).not.toContain('write-refused');
     expect(rules(page('pages/01.md'))).not.toContain('write-refused');
-    expect(
-      rules(page('../work/notes.txt'), `${MANIFEST}workspace: learner\n`)
-    ).toContain('write-refused');
+    expect(rules(page('../scratch/notes.txt'))).toContain('write-refused');
   });
 });

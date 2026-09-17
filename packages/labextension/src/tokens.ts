@@ -67,7 +67,6 @@ export interface IWorkshopSource {
 /** A capability as shown in the trust dialog. */
 export interface ICapabilitySummary {
   capability: Capability;
-  scopes: string[];
 
   /** Number of actions in the pages needing the capability. */
   count: number;
@@ -93,9 +92,6 @@ export interface ITrustSummary {
 
   /** Number of actions that run without a click. */
   automatic: number;
-
-  /** The workspace, which the write-files workspace scope confines writes to. */
-  workspace?: string;
 
   lint: ILintMessage[];
 

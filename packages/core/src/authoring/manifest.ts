@@ -73,31 +73,32 @@ export function setManifestPages(source: string, pages: string[]): string {
 }
 
 /**
- * The manifest's capabilities flattened to `name` or `name:scope` strings.
+ * The capability names the manifest lists. A mapping entry, the shape a
+ * scoped capability once had, counts by its name, so a fix rewrites it
+ * to the plain form.
  */
 export function manifestCapabilities(source: string): string[] {
-  const flattened: string[] = [];
+  const names: string[] = [];
 
   for (const item of manifestList(source, 'capabilities')) {
-    if (typeof item === 'string') {
-      flattened.push(item);
-    } else if (isRecord(item)) {
-      for (const [name, scopes] of Object.entries(item)) {
-        const list = Array.isArray(scopes) ? scopes : [scopes];
+    const name =
+      typeof item === 'string'
+        ? item
+        : isRecord(item)
+          ? Object.keys(item)[0]
+          : undefined;
 
-        for (const scope of list) {
-          flattened.push(`${name}:${String(scope)}`);
-        }
-      }
+    if (name !== undefined && !names.includes(name)) {
+      names.push(name);
     }
   }
 
-  return flattened;
+  return names;
 }
 
 /**
- * Add a capability such as `terminal` or `write-files:workspace` to the
- * manifest, merging scopes into an existing entry of the same name.
+ * Add a capability such as `terminal` to the manifest, unless it is
+ * already declared.
  */
 export function addManifestCapability(
   source: string,
@@ -113,54 +114,30 @@ export function addManifestCapability(
 }
 
 /**
- * Remove every entry of a capability name from the manifest.
+ * Remove a capability from the manifest.
  */
 export function removeManifestCapability(
   source: string,
   capability: string
 ): string {
-  const name = capability.split(':')[0];
   const remaining = manifestCapabilities(source).filter(
-    item => item.split(':')[0] !== name
+    item => item !== capability
   );
 
   return setManifestCapabilities(source, remaining);
 }
 
 /**
- * Write the capabilities list, grouping scopes under their name as
- * `- write-files: [workspace]`.
+ * Write the capabilities list, one name per line.
  */
 export function setManifestCapabilities(
   source: string,
   capabilities: string[]
 ): string {
-  const grouped = new Map<string, string[]>();
-
-  for (const item of capabilities) {
-    const colon = item.indexOf(':');
-    const name = colon < 0 ? item : item.slice(0, colon);
-    const scope = colon < 0 ? '' : item.slice(colon + 1);
-    const scopes = grouped.get(name) ?? [];
-
-    if (scope !== '' && !scopes.includes(scope)) {
-      scopes.push(scope);
-    }
-
-    grouped.set(name, scopes);
-  }
-
-  const block = ['capabilities:'];
-
-  for (const [name, scopes] of grouped) {
-    block.push(
-      scopes.length > 0 ? `  - ${name}: [${scopes.join(', ')}]` : `  - ${name}`
-    );
-  }
-
-  if (grouped.size === 0) {
-    block[0] = 'capabilities: []';
-  }
+  const block =
+    capabilities.length > 0
+      ? ['capabilities:', ...capabilities.map(name => `  - ${name}`)]
+      : ['capabilities: []'];
 
   return replaceManifestBlock(source, 'capabilities', block);
 }

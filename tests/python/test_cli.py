@@ -108,7 +108,6 @@ def test_publish_builds_a_stable_archive(
 
     with (target / "workshop.yaml").open("a") as manifest:
         manifest.write("issues: https://example.org/pub/issues\n")
-        manifest.write("workspace: work\n")
 
     (target / "work").mkdir()
     (target / "work" / "learner.txt").write_text("mine\n")
