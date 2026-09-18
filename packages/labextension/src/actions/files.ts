@@ -469,7 +469,20 @@ export class DownloadAction implements IActionImplementation {
     const url =
       await this._context.app.serviceManager.contents.getDownloadUrl(path);
 
-    window.open(url, '_blank', 'noopener');
+    // A link with the download attribute saves the file without asking
+    // the browser to open anything, which is what JupyterLab's own file
+    // browser does. Opening a window instead was blocked as a popup
+    // once the click was too far in the past, as after JupyterLite's
+    // asynchronous lookup, and would show rather than save the blob
+    // URLs JupyterLite hands out. Those carry no name, so the link
+    // supplies the file's own.
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = PathExt.basename(path);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
     return { status: 'ok' };
   }

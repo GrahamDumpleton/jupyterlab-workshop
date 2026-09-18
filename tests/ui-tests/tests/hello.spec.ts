@@ -223,6 +223,17 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect(fileClose).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-FileEditor')).toHaveCount(0);
 
+    // Download hands the browser a file to save rather than opening a
+    // window, so no popup blocker gets a say.
+    const download = panel.locator('.jp-WorkshopPanel-action.jp-mod-download');
+    const [downloaded] = await Promise.all([
+      page.waitForEvent('download'),
+      download.click()
+    ]);
+
+    expect(downloaded.suggestedFilename()).toBe('notes.md');
+    await expect(download).toHaveClass(/jp-mod-status-ok/);
+
     // Copy, rename, create and delete go through the contents API; the
     // directory delete takes the renamed copy with it.
     const workshopDir = `${tmpPath}/${WORKSHOP}`;
