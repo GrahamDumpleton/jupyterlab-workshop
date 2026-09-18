@@ -858,7 +858,11 @@ export class LayoutManager {
   }
 
   /**
-   * The sidebars that currently take no width, collapsed or never shown.
+   * The sidebars that nobody has sized: collapsed, never shown, or held
+   * at the minimum width JupyterLab's stylesheet allows. A sidebar sits
+   * at that minimum when a restored arrangement carried no proportions,
+   * as happens after a reload in JupyterLite, and a panel that narrow is
+   * no arrangement the learner chose.
    */
   private _emptySides(): Set<Side> {
     const empty = new Set<Side>();
@@ -869,13 +873,25 @@ export class LayoutManager {
     }
 
     const sizes = split.relativeSizes();
+    const sides: [number, Side][] = [
+      [0, 'left'],
+      [2, 'right']
+    ];
 
-    if ((sizes[0] ?? 0) < MIN_SHARE) {
-      empty.add('left');
-    }
+    for (const [index, side] of sides) {
+      const area = split.widgets[index];
 
-    if ((sizes[2] ?? 0) < MIN_SHARE) {
-      empty.add('right');
+      if ((sizes[index] ?? 0) < MIN_SHARE) {
+        empty.add(side);
+        continue;
+      }
+
+      const minimum = parseFloat(getComputedStyle(area.node).minWidth);
+      const width = area.node.getBoundingClientRect().width;
+
+      if (!area.isHidden && minimum > 0 && width <= minimum + 1) {
+        empty.add(side);
+      }
     }
 
     return empty;

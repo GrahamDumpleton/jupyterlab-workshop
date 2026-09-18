@@ -965,6 +965,67 @@ test.describe('workshop browser', () => {
     expect(new URL(page.url()).search).toBe('');
   });
 
+  test('widens a panel left at the minimum width when the workshop restarts', async ({
+    page
+  }) => {
+    // Wide enough that the default share is well clear of the minimum.
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?workshop=${WORKSHOPS_DIR}/${WORKSHOP}`)
+      .catch(() => undefined);
+
+    await trustWorkshop(page, 'Git from the command line');
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+    const width = async (): Promise<number> =>
+      (await panel.boundingBox())?.width ?? 0;
+
+    // Drag the divider to the window's edge: the sidebar stops at the
+    // minimum its stylesheet allows, where a restore without saved
+    // proportions leaves it too, as JupyterLite's does after a reload.
+    const handle = page.locator('#jp-main-split-panel > .lm-SplitPanel-handle');
+    const box = await handle.nth(1).boundingBox();
+    const viewport = page.viewportSize();
+
+    if (!box || !viewport) {
+      throw new Error('The split handle or the viewport is missing');
+    }
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(viewport.width - 10, box.y + box.height / 2, {
+      steps: 10
+    });
+    await page.mouse.up();
+
+    const minimum = await width();
+    const floor = await page.evaluate(() =>
+      parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          '--jp-sidebar-min-width'
+        )
+      )
+    );
+
+    expect(floor).toBeGreaterThan(0);
+    expect(minimum).toBeLessThanOrEqual(floor + 2);
+
+    // Restart reopens the workshop as a launch does, and a panel held at
+    // the minimum is given the default share rather than left there.
+    await panel.locator('button[title="Restart this workshop"]').click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText('Restart workshop');
+    await dialog.getByRole('button', { name: 'Restart' }).click();
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
+      'Git from the command line'
+    );
+    await expect.poll(width).toBeGreaterThan(minimum + 40);
+  });
+
   test('installs a named workshop of a collection from a launch link', async ({
     page
   }) => {
