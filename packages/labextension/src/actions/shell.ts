@@ -1,4 +1,7 @@
-import { environmentVariables } from '@jupyterlab-workshop/core';
+import {
+  environmentVariables,
+  liteShellOutput
+} from '@jupyterlab-workshop/core';
 import { CommandRegistry } from '@lumino/commands';
 
 import { IShellResult, IWorkshopManager } from '../tokens';
@@ -117,7 +120,7 @@ export class LiteShell implements IShellRunner {
       cwd,
       timeout: timeoutMs
     })) as unknown as ILiteShellOutput;
-    const output = stripAnsi(result.output ?? '');
+    const output = liteShellOutput(result.output ?? '');
 
     if (result.status === 'timeout') {
       return { code: 124, output, error: result.message };
@@ -129,12 +132,4 @@ export class LiteShell implements IShellRunner {
   }
 
   private _commands: CommandRegistry;
-}
-
-/**
- * Remove terminal colour codes from text.
- */
-export function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 }

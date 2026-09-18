@@ -141,3 +141,21 @@ export function liteShellProblems(command: string): string[] {
 export function usesSubprocess(code: string): boolean {
   return /\bsubprocess\b|\bos\.system\(|\bos\.popen\(|\bpty\b/.test(code);
 }
+
+/**
+ * The text a command run in the JupyterLite terminal's headless shell
+ * printed, as a terminal would have shown it: colour and cursor codes
+ * removed, and with them the spinner the terminal draws into the shell's
+ * output while a command's WebAssembly module downloads. The spinner
+ * hides the cursor, writes its dots and text, then erases the line and
+ * shows the cursor again, so everything between those codes is gone.
+ */
+export function liteShellOutput(text: string): string {
+  return (
+    text
+      // eslint-disable-next-line no-control-regex
+      .replace(/\x1b\[\?25l[^]*?\x1b\[K\x1b\[\?25h/g, '')
+      // eslint-disable-next-line no-control-regex
+      .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+  );
+}

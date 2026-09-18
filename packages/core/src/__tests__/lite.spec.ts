@@ -1,5 +1,6 @@
 import { parsePage } from '../format/page';
 import {
+  liteShellOutput,
   liteShellProblems,
   parseForgeUrl,
   rawBaseUrl,
@@ -103,5 +104,22 @@ describe('liteShellProblems', () => {
   it('spots Python that needs a process', () => {
     expect(usesSubprocess('import subprocess')).toBe(true);
     expect(usesSubprocess('print(os.getcwd())')).toBe(false);
+  });
+});
+
+describe('liteShellOutput', () => {
+  it('drops the download spinner and cursor codes', () => {
+    // As captured from a headless shell whose first command had to
+    // fetch coreutils: the spinner's hide cursor, dots and text, each
+    // dot followed by a cursor left, then erase to end of line and show
+    // cursor, before the command's own output.
+    const spinner =
+      "\x1b[?25l⠇ downloading wasm module 'coreutils'\x1b[36D" +
+      '⠋\x1b[1D⠙\x1b[1D⠸\x1b[1D' +
+      '\x1b[K\x1b[?25h';
+
+    expect(liteShellOutput(`${spinner}42\n`)).toBe('42\n');
+    expect(liteShellOutput('\x1b[0;31mError\x1b[1;0m\x1b[?25h')).toBe('Error');
+    expect(liteShellOutput('plain')).toBe('plain');
   });
 });
