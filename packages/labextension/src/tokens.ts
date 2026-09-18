@@ -183,6 +183,13 @@ export interface ILoadedWorkshop {
 
   /** Whether the workshop was opened from a launch link. */
   launched: boolean;
+
+  /**
+   * Whether no progress was recorded when the workshop was opened: its
+   * first open, or one after Restart, Reset Progress or a deleted state
+   * directory, so the window is arranged as for a first open.
+   */
+  fresh: boolean;
 }
 
 /**

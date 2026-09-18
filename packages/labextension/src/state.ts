@@ -120,6 +120,8 @@ export class StateStore {
 
     const content = await readIfExists(this._contents, this._path);
 
+    this._existed = content !== null;
+
     if (content !== null) {
       try {
         const parsed = JSON.parse(content) as Partial<IWorkshopState>;
@@ -147,6 +149,17 @@ export class StateStore {
   }
 
   /**
+   * Whether a state file was there when the current workshop was loaded.
+   *
+   * None means the workshop is being opened for the first time, or its
+   * progress was cleared since it was last open: by Restart, by Reset
+   * Progress, or by deleting the state directory by hand.
+   */
+  get existed(): boolean {
+    return this._existed;
+  }
+
+  /**
    * Forget the current workshop without writing.
    */
   async unload(): Promise<void> {
@@ -154,6 +167,7 @@ export class StateStore {
 
     this._state = null;
     this._path = '';
+    this._existed = false;
   }
 
   /**
@@ -209,4 +223,5 @@ export class StateStore {
   private _debouncer: Debouncer;
   private _state: IWorkshopState | null = null;
   private _path = '';
+  private _existed = false;
 }

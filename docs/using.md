@@ -190,7 +190,8 @@ deal with it:
   as it did when the workshop was first opened; the pages and the
   manifest are never touched. It forgets all progress, closes the
   documents and terminals it had open, and reopens the workshop at the
-  first page. It works offline and in JupyterLite. It only covers the
+  first page with its [layout](layouts.md#when-a-layout-is-applied)
+  applied again. It works offline and in JupyterLite. It only covers the
   workspace, so a workshop
   that writes elsewhere, such as into the home directory, is not undone
   there. A workshop with an [isolated environment](environment.md)
@@ -201,7 +202,8 @@ deal with it:
 - **Reset Progress** ("Workshop: Reset Progress…") forgets page
   progress, action results, captured variables and the action log,
   restores any JupyterLab settings the workshop changed, and reopens it
-  at the first page, keeping the files and the environment as they are.
+  at the first page with its layout applied again, keeping the files and
+  the environment as they are.
 
 - **Remove** ("Workshop: Remove…", or Remove on the card in the
   browser) lists what it will do before doing it: delete the workshop

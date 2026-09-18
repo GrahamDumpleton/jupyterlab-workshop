@@ -520,7 +520,8 @@ export class WorkshopManager implements IWorkshopManager {
         pages: [],
         source,
         trust,
-        launched: options.launch === true
+        launched: options.launch === true,
+        fresh: !this._state.existed
       };
       this._store.load(
         buildBuiltins(workshopPath, platform),

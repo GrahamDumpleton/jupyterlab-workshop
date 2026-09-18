@@ -240,7 +240,13 @@ from a [launch link](collections.md), including from Binder or the
 JupyterLab restores whatever arrangement the learner left, so reloading
 the page or reopening the workshop from the browser keeps their
 sidebars and panes as they were and only brings the instructions panel
-forward. Removing a workshop forgets that its layout was applied.
+forward, at the width the manifest asks for if its sidebar had none.
+
+A workshop that opens with no recorded progress counts as opened for
+the first time, so the layout is applied again after
+[Restart or Reset Progress](using.md#starting-over-and-clearing-up), and
+after its `_workshop` directory is deleted by hand or by a clean-up
+script. Removing a workshop forgets that its layout was applied.
 
 A learner can put things back with the "Workshop: Reset Layout" command
 in the command palette, and a page can apply any declared layout with the

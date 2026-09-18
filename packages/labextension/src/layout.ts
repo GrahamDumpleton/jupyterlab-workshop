@@ -168,9 +168,11 @@ export class LayoutManager {
    * Apply the layout the manifest names when a workshop is opened.
    *
    * The layout is applied the first time a workshop is opened in a
-   * workspace, and every time it is opened from a launch link. After that
-   * JupyterLab restores whatever arrangement the learner left, so the
-   * layout is left alone and only the instructions panel is shown.
+   * workspace, every time it is opened from a launch link, and whenever
+   * it opens with no recorded progress, as after Restart, Reset Progress
+   * or a state directory removed by hand. After that JupyterLab restores
+   * whatever arrangement the learner left, so the layout is left alone
+   * and only the instructions panel is shown.
    */
   async applyOnOpen(workshop: ILoadedWorkshop): Promise<void> {
     // Which sidebars have no width is read now, before the command that
@@ -182,7 +184,11 @@ export class LayoutManager {
     this._applied = null;
     this._nodes = new Map();
 
-    if (!workshop.launched && (await this._wasApplied(key))) {
+    if (
+      !workshop.launched &&
+      !workshop.fresh &&
+      (await this._wasApplied(key))
+    ) {
       // JupyterLab restored the learner's arrangement; note which of its
       // widgets belong to which area so actions still find their places.
       const spec = name ? this.find(name) : undefined;
@@ -191,6 +197,9 @@ export class LayoutManager {
         this._adopt(name, spec);
       }
 
+      // No layout runs to size the panel's sidebar, so one the learner
+      // left without width is given the manifest's share here.
+      this._widenPanel(empty, workshop.manifest);
       this._showPanel(empty);
 
       return;
@@ -834,6 +843,27 @@ export class LayoutManager {
       side === 'left'
         ? [DEFAULT_PANEL_SHARE, undefined]
         : [undefined, DEFAULT_PANEL_SHARE]
+    );
+  }
+
+  /**
+   * Give the instructions panel the width its manifest asks for when its
+   * sidebar has none, for an open that applies no layout.
+   */
+  private _widenPanel(
+    empty: ReadonlySet<Side>,
+    manifest: IWorkshopManifest
+  ): void {
+    const side = this._panelSide();
+    const width = manifest.instructions?.width;
+
+    if (!side || !empty.has(side) || width === undefined) {
+      return;
+    }
+
+    this._expand(side);
+    this._resizeSides(
+      side === 'left' ? [width, undefined] : [undefined, width]
     );
   }
 

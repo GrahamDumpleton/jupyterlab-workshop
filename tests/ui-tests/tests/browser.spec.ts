@@ -124,6 +124,7 @@ const MANIFEST = (name: string, title: string, version: string): string =>
 
 interface IExposedApp {
   jupyterapp: {
+    restored: Promise<void>;
     commands: { execute(id: string, args: object): Promise<unknown> };
     shell: {
       widgets(area: string): Iterable<{ id: string; node: HTMLElement }>;
@@ -306,6 +307,44 @@ async function trustWorkshop(page: Page, title: string): Promise<void> {
   await expect(
     page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
   ).toHaveText(title);
+}
+
+/**
+ * Drag the split handle so the right sidebar, where the instructions
+ * panel sits, stops at the minimum its stylesheet allows, where a restore
+ * without saved proportions leaves it too, as JupyterLite's does after a
+ * reload. Returns the width the sidebar is left at.
+ */
+async function dragPanelToMinimum(page: Page): Promise<number> {
+  const panel = page.locator('#jp-right-stack');
+  const handle = page.locator('#jp-main-split-panel > .lm-SplitPanel-handle');
+  const box = await handle.nth(1).boundingBox();
+  const viewport = page.viewportSize();
+
+  if (!box || !viewport) {
+    throw new Error('The split handle or the viewport is missing');
+  }
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(viewport.width - 10, box.y + box.height / 2, {
+    steps: 10
+  });
+  await page.mouse.up();
+
+  const minimum = (await panel.boundingBox())?.width ?? 0;
+  const floor = await page.evaluate(() =>
+    parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue(
+        '--jp-sidebar-min-width'
+      )
+    )
+  );
+
+  expect(floor).toBeGreaterThan(0);
+  expect(minimum).toBeLessThanOrEqual(floor + 2);
+
+  return minimum;
 }
 
 test.use({
@@ -981,36 +1020,7 @@ test.describe('workshop browser', () => {
     const panel = page.locator('#jupyterlab-workshop-panel');
     const width = async (): Promise<number> =>
       (await panel.boundingBox())?.width ?? 0;
-
-    // Drag the divider to the window's edge: the sidebar stops at the
-    // minimum its stylesheet allows, where a restore without saved
-    // proportions leaves it too, as JupyterLite's does after a reload.
-    const handle = page.locator('#jp-main-split-panel > .lm-SplitPanel-handle');
-    const box = await handle.nth(1).boundingBox();
-    const viewport = page.viewportSize();
-
-    if (!box || !viewport) {
-      throw new Error('The split handle or the viewport is missing');
-    }
-
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(viewport.width - 10, box.y + box.height / 2, {
-      steps: 10
-    });
-    await page.mouse.up();
-
-    const minimum = await width();
-    const floor = await page.evaluate(() =>
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          '--jp-sidebar-min-width'
-        )
-      )
-    );
-
-    expect(floor).toBeGreaterThan(0);
-    expect(minimum).toBeLessThanOrEqual(floor + 2);
+    const minimum = await dragPanelToMinimum(page);
 
     // Restart reopens the workshop as a launch does, and a panel held at
     // the minimum is given the default share rather than left there.
@@ -1023,6 +1033,82 @@ test.describe('workshop browser', () => {
     await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
       'Git from the command line'
     );
+    await expect.poll(width).toBeGreaterThan(minimum + 40);
+  });
+
+  test('applies the layout again when the progress is gone, and widens the panel when it is kept', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?workshop=${WORKSHOPS_DIR}/${WORKSHOP}`)
+      .catch(() => undefined);
+
+    await trustWorkshop(page, 'Git from the command line');
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+    const title = panel.locator('.jp-WorkshopPanel-title');
+    const terminal = page.locator('#jp-main-dock-panel .jp-Terminal');
+    const stateFile = `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/state.json`;
+    const width = async (): Promise<number> =>
+      (await panel.boundingBox())?.width ?? 0;
+    const run = (command: string, args: object = {}): Promise<unknown> =>
+      page.evaluate(
+        ([id, params]) => {
+          const exposed = window as unknown as IExposedApp;
+
+          return exposed.jupyterapp.commands.execute(id, params);
+        },
+        [command, args] as [string, object]
+      );
+
+    // The layout opened the terminal, and the progress is on disk.
+    await expect(terminal).toBeVisible();
+    await expect.poll(() => page.contents.fileExists(stateFile)).toBe(true);
+
+    // Closing the workshop shuts its terminal down. After a reload the
+    // learner leaves another sidebar widget open at the minimum width,
+    // as a restore without saved proportions does. Reopened with its
+    // progress kept, the layout is left alone, so no terminal comes
+    // back, but the panel is widened to what the manifest asks for
+    // rather than left at the minimum.
+    await run('workshop:close');
+    await expect(title).toHaveCount(0);
+    await expect(terminal).toHaveCount(0);
+    await page.waitForTimeout(2000);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await page.sidebar.openTab('jp-property-inspector');
+
+    let minimum = await dragPanelToMinimum(page);
+
+    await run('workshop:open', { path: `${WORKSHOPS_DIR}/${WORKSHOP}` });
+    await expect(title).toHaveText('Git from the command line');
+    await expect.poll(width).toBeGreaterThan(minimum + 40);
+    await page.waitForTimeout(1000);
+    await expect(terminal).toHaveCount(0);
+
+    // With the state directory gone, as after a clean-up script, the
+    // workshop counts as opened for the first time: the layout applies
+    // again, terminal included, although the workspace still records
+    // that it was applied once.
+    minimum = await dragPanelToMinimum(page);
+
+    await run('workshop:close');
+    await expect(title).toHaveCount(0);
+    await page.contents.deleteDirectory(
+      `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop`
+    );
+
+    await run('workshop:open', { path: `${WORKSHOPS_DIR}/${WORKSHOP}` });
+    await expect(title).toHaveText('Git from the command line');
+    await expect(terminal).toBeVisible();
     await expect.poll(width).toBeGreaterThan(minimum + 40);
   });
 

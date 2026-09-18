@@ -1248,8 +1248,11 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         try {
           const target = path ?? manager.workshop?.path;
 
+          // The layout applies again on the reopen, as it did the first
+          // time, so the record that it was applied goes with the progress.
           if (target !== undefined) {
             await closeWorkshopWidgets(cleanup, target);
+            await layouts.forget(target);
           }
 
           await manager.restart(path);
