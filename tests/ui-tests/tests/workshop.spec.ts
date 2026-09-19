@@ -303,6 +303,78 @@ test.describe('workshop panel', () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test('keeps the instructions on their side when a page opens them as a panel', async ({
+    page,
+    tmpPath
+  }) => {
+    // "Show the file browser, then come back here" is a common pair of
+    // actions; showing the instructions must not move them to the side
+    // the file browser was sent to, nor send the file browser after them.
+    const panels = `${tmpPath}/panels`;
+
+    await page.contents.uploadDirectory(EXAMPLE_DIR, panels);
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: panels',
+        'title: Panels',
+        'version: 0.1.0',
+        'description: Sidebar switching.',
+        'instructions: { side: right }',
+        'pages:',
+        '  - pages/01-panels.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${panels}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '# Panels',
+        '',
+        '```{panel-open}',
+        ':id: filebrowser',
+        '```',
+        '',
+        '```{panel-open}',
+        ':id: jupyterlab-workshop-panel',
+        '```',
+        '',
+        '```{file-browser-reveal}',
+        'README.md',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${panels}/pages/01-panels.md`
+    );
+    await openWorkshop(page, panels);
+
+    const sides = (): Promise<Record<string, string[]>> =>
+      page.evaluate(() => {
+        const exposed = window as unknown as IExposedApp;
+        const ids = (area: string): string[] =>
+          [...exposed.jupyterapp.shell.widgets(area)].map(widget => widget.id);
+
+        return { left: ids('left'), right: ids('right') };
+      });
+
+    expect((await sides()).right).toContain('jupyterlab-workshop-panel');
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as { failed: number };
+
+    expect(report.failed).toBe(0);
+
+    const after = await sides();
+
+    expect(after.right).toContain('jupyterlab-workshop-panel');
+    expect(after.left).toContain('filebrowser');
+  });
+
   test('gives a bottom region the share the layout asks for', async ({
     page,
     tmpPath

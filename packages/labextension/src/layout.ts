@@ -326,7 +326,23 @@ export class LayoutManager {
    * a widget with the id.
    */
   showSidebarWidget(id: string): boolean {
-    const { shell } = this._context;
+    const { shell, panelId } = this._context;
+
+    // The instructions panel itself stays where it is: "the side the
+    // instructions are not in" would otherwise move it across.
+    if (id === panelId) {
+      const own = this._panelSide();
+
+      if (own === null) {
+        return false;
+      }
+
+      this._expand(own);
+      shell.activateById(id);
+
+      return true;
+    }
+
     const side = this.otherSide();
 
     for (const candidate of ['left', 'right'] as const) {
