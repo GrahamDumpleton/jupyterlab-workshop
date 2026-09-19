@@ -124,7 +124,12 @@ import { LiteBackend } from './lite/backend';
 import { isJupyterLite } from './lite/detect';
 import { WorkshopManager, normalizeWorkshopPath } from './manager';
 import { ActionLogWidget, LOG_ID } from './panel/log';
-import { ISelfTestProgress, runAll } from './selftest';
+import {
+  ISelfTestProgress,
+  ISelfTestReport,
+  pacingFrom,
+  runAll
+} from './selftest';
 import { INextStep, showFinishDialog } from './panel/finish';
 import { showAboutDialog } from './panel/about';
 import {
@@ -155,6 +160,14 @@ export { IActionRegistry, IFeaturePolicy, IWorkshopManager } from './tokens';
 const PLUGIN_PREFIX = '@jupyterlab-workshop/labextension';
 
 const PALETTE_CATEGORY = 'Workshop';
+
+/** Where the last self-test run got to, and its report once it is done. */
+interface ISelfTestStatus extends ISelfTestProgress {
+  /** A run is in progress. */
+  running: boolean;
+  /** The report of the run that finished last, until the next one starts. */
+  report: ISelfTestReport | null;
+}
 
 /**
  * Provides the workshop manager that loads workshops and tracks pages.
@@ -1424,8 +1437,15 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
     // The self-test harness opens a workshop and runs everything in it.
     // It polls the progress command while the run is going so that a
-    // run it has to abandon still reports what happened up to then.
-    let selfTestProgress: ISelfTestProgress = { results: [], current: null };
+    // run it has to abandon still reports what happened up to then. A
+    // tool that starts the run in the background polls the same command
+    // for the report once the run is done.
+    let selfTestProgress: ISelfTestStatus = {
+      results: [],
+      current: null,
+      running: false,
+      report: null
+    };
 
     app.commands.addCommand(CommandIDs.runAll, {
       label: 'Workshop: Run Every Action (self-test)',
@@ -1434,25 +1454,60 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => manager.workshop !== null,
       execute: async (args): Promise<unknown> => {
         const path = typeof args.path === 'string' ? args.path : '';
-        const actionTimeoutMs =
-          typeof args.actionTimeout === 'number' && args.actionTimeout > 0
-            ? args.actionTimeout * 1000
-            : undefined;
 
         if (path && manager.workshop?.path !== path) {
           await manager.open(path);
         }
 
-        selfTestProgress = { results: [], current: null };
+        if (selfTestProgress.running) {
+          throw new Error('A run is already in progress');
+        }
 
-        const report = await runAll(manager, {
-          actionTimeoutMs,
+        selfTestProgress = {
+          results: [],
+          current: null,
+          running: true,
+          report: null
+        };
+
+        const run = runAll(manager, {
+          ...pacingFrom(args),
           onProgress: progress => {
-            selfTestProgress = progress;
+            selfTestProgress = { ...selfTestProgress, ...progress };
           }
-        });
+        }).then(
+          report => {
+            selfTestProgress = {
+              ...selfTestProgress,
+              current: null,
+              running: false,
+              report
+            };
 
-        return report as unknown as ReadonlyJSONValue;
+            return report;
+          },
+          (error: unknown) => {
+            selfTestProgress = {
+              ...selfTestProgress,
+              current: null,
+              running: false
+            };
+
+            throw error;
+          }
+        );
+
+        // In the background, the caller gets an acknowledgement now and
+        // the report from the progress command later.
+        if (args.background === true) {
+          run.catch(error => {
+            console.warn('The workshop run failed', error);
+          });
+
+          return { started: true } as ReadonlyJSONValue;
+        }
+
+        return (await run) as unknown as ReadonlyJSONValue;
       }
     });
 

@@ -316,6 +316,9 @@ the result locally to try it out.
 jupyter workshop test my-workshop [--junit FILE] [--json FILE] [--in-place]
                                   [--headed] [--timeout SECONDS]
                                   [--action-timeout SECONDS]
+                                  [--pace fast|demo|presentation]
+                                  [--start-delay SECONDS] [--step-delay SECONDS]
+                                  [--page-delay SECONDS]
                                   [--trust trusted|restricted|ask]
                                   [--lite | --frontend jupyterlite] [--lite-dir DIR]
 ```
@@ -342,6 +345,16 @@ moment the action before it completes, the self-test reports that run's
 outcome rather than starting another. A verify with no trigger gets the
 single attempt that clicking Check gives it.
 
+Actions the page runs on its own are treated the same way. One with
+`:auto: page-enter` fires as the page is entered, one reached by a
+`cascade` or an `:auto: after:` follows the action before it, and the
+learner sees each once; the self-test lets such a chain finish and
+records the outcome of the run it made, reported with "Ran on its own"
+where the action left no message, rather than running the action a
+second time. Only what did not run on its own is run by the self-test,
+and the same holds for Run actions and Run checks in author mode: to
+run an automatic action again after editing it, click it.
+
 ```{warning}
 The temporary copy protects the workshop's own files and nothing else.
 Every terminal command, `execute-capture` body, `script` verify and
@@ -360,7 +373,11 @@ workflow written by `init --ci` runs on a fresh runner every time.
 ```
 
 An action that is still running after `--action-timeout` seconds (default 300) is reported as failed and the run stops there, since later actions
-would build on an unknown state. An action that opens a dialog nothing
+would build on an unknown state. An `execute`, `execute-capture` or
+`verify` whose directive names a longer `:timeout:` of its own (or that
+inherits one from the manifest's `defaults.actions`) is given that plus
+half a minute instead, so a step that waits on a build or a rollout is
+not cut short by the flat limit. An action that opens a dialog nothing
 will answer, such as a kernel selection or a confirmation, is failed
 sooner, after the dialog has been open for ten seconds, with the
 dialog's title in the message. `--timeout` (default 1200) bounds the
@@ -368,6 +385,26 @@ whole run: when it passes, the harness collects the results gathered so
 far, records the action in flight as failed, and exits with code 1. All
 three limits exist so that a stuck action in CI produces a report naming
 it rather than a job that never ends.
+
+### Pacing a run for an audience
+
+The same run can be slowed down to watch, to record as a video or to
+step through live in front of an audience. `--pace demo` pauses briefly
+before each action (2s before the first, 1.5s before each one, 3s on
+each new page), for a screen recording that will be edited; `--pace
+presentation` pauses longer (5s, 4s and 8s), for people watching along.
+A paced run scrolls each action into view in the instructions panel and
+pulses it before the pause, so the viewer sees what is about to happen,
+then runs it. The pauses are not charged against `--action-timeout`,
+and a paced run takes a longer `--timeout` by default (2400s for demo,
+3600s for presentation). `--start-delay`, `--step-delay` and
+`--page-delay` set any one of the pauses in seconds on top of the pace.
+Any pace but `fast` shows the browser, as `--headed` does, since there
+is nothing to watch otherwise.
+
+The MCP `run_workshop` and `run_page` tools take the same `pace` and
+delays, and run in the JupyterLab you are looking at rather than a
+headless one; see [Tools for AI agents](authoring.md#tools-for-ai-agents).
 
 The server runs with JupyterLab workspace and user settings directories
 of its own under the temporary directory, so nothing from your own

@@ -39,7 +39,7 @@ import { ReadonlyJSONObject, ReadonlyJSONValue } from '@lumino/coreutils';
 import { readTextFile, writeTextFile } from '../actions/contents';
 import { requestAPI } from '../request';
 import { newWorkshopIcon } from '../icons';
-import { runCurrentPage, summarize } from '../selftest';
+import { pacingFrom, runCurrentPage, summarize } from '../selftest';
 import { readSetting } from '../settings';
 import { WORKSHOP_STATE_DIR } from '../state';
 import {
@@ -51,6 +51,7 @@ import {
 } from '../tokens';
 import { showTrustDialog } from '../trust/dialogs';
 import { asTrustLevel } from '../trust/store';
+import { sleep } from '../util';
 import {
   IActionFormValue,
   IPageEntry,
@@ -669,7 +670,13 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         manager.goTo(index, true);
       }
 
-      const results = await runCurrentPage(manager, only);
+      const pacing = pacingFrom(args);
+
+      if ((pacing.startDelayMs ?? 0) > 0) {
+        await sleep(pacing.startDelayMs ?? 0);
+      }
+
+      const results = await runCurrentPage(manager, only, pacing);
 
       return summarize(
         manager.workshop?.path ?? '',
@@ -978,6 +985,25 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         message: result.message ?? '',
         captured: result.captured ?? {}
       };
+    }
+  });
+
+  commands.addCommand(CommandIDs.bridgeReset, {
+    label: 'Workshop: Reset Progress (bridge)',
+    isEnabled: isOpen,
+    execute: async (): Promise<ReadonlyJSONValue> => {
+      // The palette command confirms first; a tool has already decided.
+      // Reopening restores author mode from the trust store, but ask
+      // for it anyway so the next request is answered.
+      await manager.reset();
+
+      if (!manager.workshop) {
+        throw new Error(manager.error ?? 'Unable to reopen the workshop');
+      }
+
+      await manager.setAuthoring(true);
+
+      return status();
     }
   });
 

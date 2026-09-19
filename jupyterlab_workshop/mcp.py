@@ -548,31 +548,85 @@ def create_server(
         )
 
     @server.tool()
-    def run_page(page: str = "", only: str = "all", timeout: float = 600.0) -> Any:
+    def run_page(
+        page: str = "",
+        only: str = "all",
+        pace: str = "fast",
+        start_delay: float | None = None,
+        step_delay: float | None = None,
+        action_timeout: float | None = None,
+        timeout: float = 600.0,
+    ) -> Any:
         """Run the actions of a page of the open workshop in the live session.
 
         `page` is a page id (the current page when empty); `only` is
-        "actions", "checks" or "all". Returns each action's outcome. The
-        actions run for real, as the user, on the machine JupyterLab is
-        running on, and not on a copy: read the page first, and do not
-        run one that reaches outside the workshop directory unless the
-        user asked.
+        "actions", "checks" or "all". Returns each action's outcome.
+
+        `pace` is "fast" (no pauses; the default), "demo" (short pauses,
+        for a screen recording) or "presentation" (long pauses, for an
+        audience); see run_workshop. `start_delay` and `step_delay`
+        (seconds) override the pace's pauses. `action_timeout` is the
+        seconds one action may take (default 300); a directive naming a
+        longer `timeout` of its own gets that instead.
+
+        The actions run for real, as the user, on the machine JupyterLab
+        is running on, and not on a copy: read the page first, and do
+        not run one that reaches outside the workshop directory unless
+        the user asked.
         """
+
+        from .harness import resolve_pace
+
+        try:
+            paced = resolve_pace(pace, start_delay, step_delay)
+        except ValueError as error:
+            return {"error": str(error)}
+
+        args: dict[str, Any] = {"page": page, "only": only}
+        args.update(paced.command_args())
+
+        # One page has no page change to pause on.
+        del args["pageDelay"]
+
+        if action_timeout is not None:
+            args["actionTimeout"] = action_timeout
 
         return live(
             "bridge",
-            {
-                "command": "workshop:run-page",
-                "args": {"page": page, "only": only},
-                "timeout": timeout,
-            },
+            {"command": "workshop:run-page", "args": args, "timeout": timeout},
             timeout,
         )
 
     @server.tool()
-    def run_workshop(timeout: float = 1200.0) -> Any:
+    def run_workshop(
+        pace: str = "fast",
+        start_delay: float | None = None,
+        step_delay: float | None = None,
+        page_delay: float | None = None,
+        action_timeout: float | None = None,
+        wait: bool = True,
+        timeout: float | None = None,
+    ) -> Any:
         """Run every action of the open workshop in the live session and
         report the results, as the self-test does.
+
+        `pace` is "fast" (no pauses; the default, for testing), "demo"
+        (short pauses, for a screen recording that will be edited) or
+        "presentation" (long pauses, for stepping through live in front
+        of an audience). A paced run scrolls each action into view and
+        pauses before running it, and pauses again on each new page.
+        `start_delay`, `step_delay` and `page_delay` (seconds) override
+        the pace's pauses one at a time.
+
+        `action_timeout` is the seconds one action may take before the
+        run stops at it (default 300); a directive naming a longer
+        `timeout` of its own, such as a check that waits on a build or a
+        rollout, gets that instead. `timeout` bounds the wait for the
+        whole run and defaults to what the pace allows. For a run that
+        may take longer, or to report on it as it goes, pass wait=False:
+        the run starts and returns at once, and run_progress reports
+        how far it has got and, at the end, the report. Call
+        reset_workshop first for a run from a clean start.
 
         Everything runs for real, as the user, on the machine JupyterLab
         is running on, and not on a copy. Read every page first, and
@@ -580,9 +634,58 @@ def create_server(
         outside the workshop directory.
         """
 
+        from .harness import resolve_pace
+
+        try:
+            paced = resolve_pace(pace, start_delay, step_delay, page_delay, timeout)
+        except ValueError as error:
+            return {"error": str(error)}
+
+        args: dict[str, Any] = dict(paced.command_args())
+
+        if action_timeout is not None:
+            args["actionTimeout"] = action_timeout
+
+        # Started in the background, the command answers as soon as the
+        # run is under way, so only a short wait is needed for that.
+        if not wait:
+            args["background"] = True
+
+        limit = 30.0 if not wait else paced.timeout
+
         return live(
             "bridge",
-            {"command": "workshop:run-all", "args": {}, "timeout": timeout},
+            {"command": "workshop:run-all", "args": args, "timeout": limit},
+            limit,
+        )
+
+    @server.tool()
+    def run_progress(timeout: float = 15.0) -> Any:
+        """How far the run started by run_workshop has got: the results so
+        far, the action in flight, whether it is still running, and once
+        it has finished, the report."""
+
+        return live(
+            "bridge",
+            {
+                "command": "workshop:self-test-progress",
+                "args": {},
+                "timeout": timeout,
+            },
+            timeout,
+        )
+
+    @server.tool()
+    def reset_workshop(timeout: float = 120.0) -> Any:
+        """Forget the open workshop's progress (page progress, action
+        results, captured variables and the action log) and reopen it at
+        its first page, keeping its files and its environment. Use it
+        before a run that should start clean, such as a second take of a
+        recording."""
+
+        return live(
+            "bridge",
+            {"command": "workshop:bridge-reset", "args": {}, "timeout": timeout},
             timeout,
         )
 

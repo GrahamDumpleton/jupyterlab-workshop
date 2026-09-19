@@ -382,14 +382,36 @@ def build_parser() -> argparse.ArgumentParser:
     test.add_argument(
         "--timeout",
         type=float,
-        default=1200.0,
-        help="seconds to allow for the whole run (default 1200)",
+        help="seconds to allow for the whole run (default 1200, more for a paced run)",
     )
     test.add_argument(
         "--action-timeout",
         type=float,
         default=300.0,
         help="seconds one action may take before the run stops (default 300)",
+    )
+    test.add_argument(
+        "--pace",
+        choices=["fast", "demo", "presentation"],
+        default="fast",
+        help="pauses between the steps: fast (none, the default), demo "
+        "(short, for a recording) or presentation (long, for an audience); "
+        "any but fast shows the browser and allows longer for the run",
+    )
+    test.add_argument(
+        "--start-delay",
+        type=float,
+        help="seconds to pause before the first action (overrides --pace)",
+    )
+    test.add_argument(
+        "--step-delay",
+        type=float,
+        help="seconds to pause before each action (overrides --pace)",
+    )
+    test.add_argument(
+        "--page-delay",
+        type=float,
+        help="seconds to pause on each new page (overrides --pace)",
     )
     test.add_argument(
         "--trust",
@@ -1030,15 +1052,28 @@ def command_publish(args: argparse.Namespace) -> int:
 def command_test(args: argparse.Namespace) -> int:
     """Self-test a workshop in a real JupyterLab."""
 
-    from .harness import SelfTestOptions, run_self_test
+    from .harness import SelfTestOptions, resolve_pace, run_self_test
 
     directory = _workshop_dir(args.directory)
+
+    # A paced run is for someone to watch, so it shows the browser and
+    # takes the longer limit the pace carries unless one was given.
+    pace = resolve_pace(
+        args.pace,
+        start_delay=args.start_delay,
+        step_delay=args.step_delay,
+        page_delay=args.page_delay,
+        timeout=args.timeout,
+    )
+    paced = pace.start_delay > 0 or pace.step_delay > 0 or pace.page_delay > 0
+
     options = SelfTestOptions(
         directory=directory,
         in_place=args.in_place,
-        headed=args.headed,
-        timeout=args.timeout,
+        headed=args.headed or paced,
+        timeout=pace.timeout,
         action_timeout=args.action_timeout,
+        pace=pace,
         trust=args.trust,
         junit=args.junit,
         json_out=args.json_out,

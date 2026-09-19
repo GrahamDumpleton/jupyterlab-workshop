@@ -684,6 +684,13 @@ export interface IWorkshopManager {
   /** Whether a cascade or auto-run chain is in progress. */
   readonly chainRunning: boolean;
 
+  /**
+   * Ids of the directives the current page has run on its own since it
+   * was entered: on entering it, by a cascade, by a trigger, or after
+   * another action.
+   */
+  readonly ranOnItsOwn: ReadonlySet<string>;
+
   readonly log: readonly IActionLogEntry[];
 
   /** The registry actions run through; set by the actions plugin. */
@@ -1101,6 +1108,7 @@ export namespace CommandIDs {
   export const bridgeOpen = 'workshop:bridge-open';
   export const bridgeStatus = 'workshop:bridge-status';
   export const bridgeRun = 'workshop:bridge-run';
+  export const bridgeReset = 'workshop:bridge-reset';
 }
 
 /**

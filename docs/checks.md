@@ -96,7 +96,11 @@ the page afresh when it fires, so a check whose body names a variable
 with `{{ }}` uses the value a form on the same page has just set, from
 its next run on.
 
-`:timeout:` bounds script and shell runs. Code substrates, `shell`
+`:timeout:` bounds script and shell runs: a duration such as `30s`,
+`10m` or `1h` (a bare number is seconds), 60s when not given. A check
+that waits on something slow, such as a rollout or a build, does its
+waiting inside the script and names a `:timeout:` long enough for it.
+Code substrates, `shell`
 included, need the `kernel-exec` capability; the `contents` and `ui`
 substrates need nothing. Under the
 restricted trust level, code verifies do not run and show an "off" badge,

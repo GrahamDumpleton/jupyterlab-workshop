@@ -115,8 +115,22 @@ open in author mode, and take no directory. `open_workshop` opens a
 workshop in author mode, `session_status` reports what is open (the
 workshop, the current page, the trust level, whether a recording is on,
 and the lint counts), `run_action` runs one action that is not in any
-page, `run_page` runs a page's actions, its checks, or both, and
-`run_workshop` runs every page in order.
+page, `run_page` runs a page's actions, its checks, or both,
+`run_workshop` runs every page in order, `run_progress` reports how far
+a run started in the background has got, and `reset_workshop` forgets
+the workshop's progress so the next run starts from its first page.
+
+`run_workshop` and `run_page` take a `pace`: `fast` runs everything back
+to back, for testing; `demo` and `presentation` pause before each action
+and on each new page, with the action scrolled into view and pulsed in
+the panel first, so the run can be recorded as a video or stepped
+through in front of an audience. An agent asked to demonstrate or record
+a workshop picks the pace; the individual delays can be set as well when
+the timing matters. A long or paced run is started with `wait` off and
+followed through `run_progress`, which carries the report once the run
+finishes. The same pacing is available to
+[`jupyter workshop test`](cli.md#pacing-a-run-for-an-audience) for a
+recording that needs no agent.
 
 The live tools are what make an agent effective. Without them it can
 only edit files, lint, and run the self-test, which starts a JupyterLab

@@ -16,6 +16,12 @@ interface IReport {
   skipped: number;
 }
 
+/** What the progress command returns, as far as the test looks at it. */
+interface IStatus {
+  running: boolean;
+  report: IReport | null;
+}
+
 const MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
 name: ${WORKSHOP}
 title: Checks that need a moment
@@ -85,6 +91,52 @@ async function openWorkshop(
   ).toBeAttached();
 }
 
+const AUTO_WORKSHOP = 'auto-chain';
+
+const AUTO_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${AUTO_WORKSHOP}
+title: Runs on its own
+version: 0.1.0
+description: A page whose actions fire on entering it and cascade.
+capabilities:
+  - write-files
+  - auto-run
+pages:
+  - pages/01-auto.md
+`;
+
+/**
+ * The toast fires on entering the page and cascades into the write,
+ * which the highlight follows; the self-test must record those runs
+ * rather than make each happen a second time.
+ */
+const AUTO_PAGE = `# On its own
+
+\`\`\`{toast}
+:id: auto-start
+:auto: page-enter
+:cascade: true
+This appeared on its own.
+\`\`\`
+
+\`\`\`{file-write}
+:id: auto-write
+:path: automation.txt
+Written by a cascade.
+\`\`\`
+
+\`\`\`{toast}
+:id: auto-highlight
+:auto: after:auto-write
+The cascade wrote a file.
+\`\`\`
+
+\`\`\`{toast}
+:id: by-hand
+Only a click runs this one.
+\`\`\`
+`;
+
 test.describe('self-test', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
     await page.contents.uploadContent(
@@ -120,5 +172,91 @@ test.describe('self-test', () => {
     // took longer than a single run of a contents predicate.
     expect(byId.get('first-file')?.seconds).toBeGreaterThan(1);
     expect(byId.get('second-file')?.seconds).toBeGreaterThan(1);
+  });
+
+  test('a paced run in the background highlights each action and reports through progress', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    const progress = (): Promise<IStatus> =>
+      page.evaluate(() => {
+        const exposed = window as unknown as IExposedApp;
+
+        return exposed.jupyterapp.commands.execute(
+          'workshop:self-test-progress',
+          {}
+        );
+      }) as Promise<IStatus>;
+
+    const started = await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {
+        background: true,
+        startDelay: 1,
+        stepDelay: 2
+      });
+    });
+
+    expect(started).toEqual({ started: true });
+    expect((await progress()).running).toBe(true);
+
+    // The first action is scrolled to and pulsed during its pause,
+    // before it runs.
+    await expect(
+      page.locator('[data-action-id="write-later"].jp-mod-pulse')
+    ).toBeVisible({ timeout: 10000 });
+
+    await expect
+      .poll(async () => (await progress()).running, { timeout: 90000 })
+      .toBe(false);
+
+    const report = (await progress()).report;
+
+    expect(report?.failed).toBe(0);
+    expect(report?.passed).toBe(3);
+  });
+});
+
+test.describe('self-test of automatic actions', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${AUTO_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      AUTO_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      AUTO_PAGE,
+      'text',
+      `${target}/pages/01-auto.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test('records what the page ran on its own instead of running it again', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {
+        stepDelay: 1
+      });
+    })) as IReport & { results: { id: string; message: string }[] };
+
+    expect(report.failed, JSON.stringify(report.results)).toBe(0);
+    expect(report.passed).toBe(4);
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+
+    expect(byId.get('auto-start')?.message).toBe('Ran on its own');
+    expect(byId.get('auto-write')?.message).toBe('Ran on its own');
+    expect(byId.get('auto-highlight')?.message).toBe('Ran on its own');
+    expect(byId.get('by-hand')?.message).toBe('');
   });
 });

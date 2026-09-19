@@ -469,3 +469,20 @@ def test_record_drafts_pages_from_a_recording(
     assert cli.main(["record", str(recording), str(target)]) == 0
     assert "pages/04-write-a-file.md" in (target / "workshop.yaml").read_text()
     assert cli.main(["record", str(tmp_path / "missing.json"), str(target)]) == 2
+
+
+def test_cli_parses_pace_options() -> None:
+    parser = cli.build_parser()
+    plain = parser.parse_args(["test", "a"])
+    paced = parser.parse_args(
+        ["test", "a", "--pace", "presentation", "--step-delay", "2.5"]
+    )
+
+    assert plain.pace == "fast"
+    assert plain.timeout is None
+    assert plain.step_delay is None
+    assert paced.pace == "presentation"
+    assert paced.step_delay == 2.5
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["test", "a", "--pace", "leisurely"])

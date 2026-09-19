@@ -46,6 +46,77 @@ RUN_ALL_COMMAND = "workshop:run-all"
 
 PROGRESS_COMMAND = "workshop:self-test-progress"
 
+
+@dataclass(frozen=True)
+class Pace:
+    """How a run is paced: pauses in seconds, and a whole-run limit."""
+
+    #: Pause before the first action.
+    start_delay: float = 0.0
+
+    #: Pause before each action, once it is scrolled into view.
+    step_delay: float = 0.0
+
+    #: Pause after moving to a new page, before its first action.
+    page_delay: float = 0.0
+
+    #: Seconds to allow for the whole run, since the pauses add up.
+    timeout: float = 1200.0
+
+    def with_overrides(
+        self,
+        start_delay: float | None = None,
+        step_delay: float | None = None,
+        page_delay: float | None = None,
+        timeout: float | None = None,
+    ) -> Pace:
+        """This pace with any of its values replaced."""
+
+        return Pace(
+            start_delay=self.start_delay if start_delay is None else start_delay,
+            step_delay=self.step_delay if step_delay is None else step_delay,
+            page_delay=self.page_delay if page_delay is None else page_delay,
+            timeout=self.timeout if timeout is None else timeout,
+        )
+
+    def command_args(self) -> dict[str, float]:
+        """The pauses as the run commands take them."""
+
+        return {
+            "startDelay": self.start_delay,
+            "stepDelay": self.step_delay,
+            "pageDelay": self.page_delay,
+        }
+
+
+#: Named paces: ``fast`` for testing, ``demo`` for a screen recording that
+#: will be edited, ``presentation`` for stepping through live in front of
+#: an audience. The names are what tools and the skill refer to, so the
+#: numbers live here alone.
+PACES: dict[str, Pace] = {
+    "fast": Pace(),
+    "demo": Pace(start_delay=2.0, step_delay=1.5, page_delay=3.0, timeout=2400.0),
+    "presentation": Pace(
+        start_delay=5.0, step_delay=4.0, page_delay=8.0, timeout=3600.0
+    ),
+}
+
+
+def resolve_pace(
+    name: str = "fast",
+    start_delay: float | None = None,
+    step_delay: float | None = None,
+    page_delay: float | None = None,
+    timeout: float | None = None,
+) -> Pace:
+    """The named pace with any explicit values laid over it."""
+
+    if name not in PACES:
+        raise ValueError(f"Unknown pace {name!r}; expected one of {', '.join(PACES)}")
+
+    return PACES[name].with_overrides(start_delay, step_delay, page_delay, timeout)
+
+
 #: Where the page keeps the outcome of the run-all command while the
 #: harness polls for it.
 RESULT_SLOT = "__jupyterlabWorkshopSelfTest"
@@ -172,6 +243,9 @@ class SelfTestOptions:
 
     #: Seconds one action may take before the run stops at it.
     action_timeout: float = 300.0
+
+    #: Pauses between the steps, for a run someone is watching.
+    pace: Pace = field(default_factory=Pace)
     trust: str = "trusted"
     junit: Path | None = None
     json_out: Path | None = None
@@ -435,10 +509,10 @@ def _drive(
         # Start the run and park its outcome on the window rather than
         # awaiting the promise, so the polling below can carry a deadline.
         page.evaluate(
-            "([command, path, actionTimeout, slot]) => {"
+            "([command, args, slot]) => {"
             "  window[slot] = { done: false };"
             "  window.jupyterapp.commands"
-            "    .execute(command, { path, actionTimeout })"
+            "    .execute(command, args)"
             "    .then("
             "      result => { window[slot] = { done: true, result }; },"
             "      error => {"
@@ -446,7 +520,7 @@ def _drive(
             "      }"
             "    );"
             "}",
-            [RUN_ALL_COMMAND, name, options.action_timeout, RESULT_SLOT],
+            [RUN_ALL_COMMAND, run_all_args(name, options), RESULT_SLOT],
         )
 
         outcome = _poll_until_done(page, options.timeout)
@@ -468,6 +542,16 @@ def _drive(
         raise SystemExit(f"{RUN_ALL_COMMAND} failed: {failure}")
 
     return outcome["result"]
+
+
+def run_all_args(name: str, options: SelfTestOptions) -> dict[str, Any]:
+    """The arguments the run-all command is given for a workshop."""
+
+    return {
+        "path": name,
+        "actionTimeout": options.action_timeout,
+        **options.pace.command_args(),
+    }
 
 
 def _is_routine_console_noise(text: str) -> bool:

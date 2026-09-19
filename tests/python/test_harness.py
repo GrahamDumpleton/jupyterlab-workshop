@@ -9,10 +9,15 @@ from typing import Any
 import pytest
 
 from jupyterlab_workshop.harness import (
+    PACES,
+    Pace,
+    SelfTestOptions,
     _emit,
     _start_server,
     forget_environment,
     remove_work_directory,
+    resolve_pace,
+    run_all_args,
     timed_out_report,
 )
 
@@ -234,3 +239,35 @@ def test_emit_writes_plainly_to_a_stream_without_a_descriptor(
     _emit("warning: something", error=True)
 
     assert captured.getvalue() == "warning: something\n"
+
+
+def test_resolve_pace_lays_explicit_values_over_the_named_pace() -> None:
+    fast = resolve_pace()
+    presentation = resolve_pace("presentation")
+    tuned = resolve_pace("demo", step_delay=0.5, timeout=99.0)
+
+    assert fast == Pace()
+    assert presentation.step_delay > PACES["demo"].step_delay > 0
+    assert presentation.timeout > fast.timeout
+    assert tuned.start_delay == PACES["demo"].start_delay
+    assert tuned.step_delay == 0.5
+    assert tuned.timeout == 99.0
+
+    with pytest.raises(ValueError, match="Unknown pace"):
+        resolve_pace("leisurely")
+
+
+def test_run_all_args_carry_the_limit_and_the_pauses(tmp_path: Path) -> None:
+    options = SelfTestOptions(
+        directory=tmp_path,
+        action_timeout=42.0,
+        pace=resolve_pace("demo", page_delay=7.0),
+    )
+
+    assert run_all_args("my-workshop", options) == {
+        "path": "my-workshop",
+        "actionTimeout": 42.0,
+        "startDelay": 2.0,
+        "stepDelay": 1.5,
+        "pageDelay": 7.0,
+    }

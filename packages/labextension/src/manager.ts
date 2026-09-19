@@ -303,6 +303,10 @@ export class WorkshopManager implements IWorkshopManager {
     return this._queue.length > 0 || this._pumping;
   }
 
+  get ranOnItsOwn(): ReadonlySet<string> {
+    return this._ranOnItsOwn;
+  }
+
   get log(): readonly IActionLogEntry[] {
     return this._state.state?.log ?? [];
   }
@@ -1469,6 +1473,16 @@ export class WorkshopManager implements IWorkshopManager {
     this._actionChanged.emit(request.id);
     this._emitActionEvent(request, result, trigger, disposition.kind);
 
+    // The self-test records a run the page made on its own rather than
+    // making a second one; what counts is anything but a click.
+    if (
+      trigger !== 'click' &&
+      trigger !== 'role' &&
+      request.page === this._currentPageId
+    ) {
+      this._ranOnItsOwn.add(request.id);
+    }
+
     // Gating is shown outside the page body, which only redraws on the
     // broader change signal.
     const requires = this.currentPage?.frontmatter.requires ?? [];
@@ -1669,6 +1683,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._leavePage();
     this._currentPageId = id;
     this._pageEnteredAt = Date.now();
+    this._ranOnItsOwn = new Set();
 
     const state = this._state.state;
 
@@ -2542,6 +2557,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _features: IFeaturePolicy | null;
   private _workshop: ILoadedWorkshop | null = null;
   private _currentPageId = '';
+  private _ranOnItsOwn = new Set<string>();
   private _platform: IPlatformInfo | null = null;
   private _error: string | null = null;
   private _running = new Map<string, IActionStatus>();

@@ -1,6 +1,6 @@
 ---
 name: jupyterlab-workshop-authoring
-description: Write, check and self-test guided JupyterLab workshops in the jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, or make one pass jupyter workshop lint and jupyter workshop test. Not for Educates Training Platform workshops, which use a different format and their own skill.
+description: Write, check, self-test and demonstrate guided JupyterLab workshops in the jupyterlab-workshop format (a workshop.yaml manifest plus MyST Markdown pages whose fenced directives are clickable actions). Use when asked to create or edit a workshop, add actions, checks, quizzes or forms to one, make one pass jupyter workshop lint and jupyter workshop test, or run one slowly to demonstrate it, record it as a video or step through it for an audience. Not for Educates Training Platform workshops, which use a different format and their own skill.
 ---
 
 # jupyterlab-workshop authoring
@@ -492,10 +492,44 @@ into pages). Edits to the files re-render the panel as they are saved.
 Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
 `init`, `publish`, `index`, `catalog`, `draft`, `get_schema`,
 `list_collection` and `list_catalog`
-work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`
-and `run_workshop` act on a running JupyterLab that has the workshop
-open in author mode. That JupyterLab is the one named by `--url` and
-`--token` on `jupyter workshop mcp`, else by `JUPYTER_SERVER_URL` and
-`JUPYTER_TOKEN`, else the first server `jupyter server list` reports,
-which with several running may be another checkout's: pin it when
-`session_status` answers for the wrong one.
+work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`,
+`run_workshop`, `run_progress` and `reset_workshop` act on a running
+JupyterLab that has the workshop open in author mode. That JupyterLab
+is the one named by `--url` and `--token` on `jupyter workshop mcp`,
+else by `JUPYTER_SERVER_URL` and `JUPYTER_TOKEN`, else the first server
+`jupyter server list` reports, which with several running may be
+another checkout's: pin it when `session_status` answers for the wrong
+one.
+
+### Demonstrating or recording a workshop
+
+When the user wants the workshop shown rather than tested (a demo, a
+walkthrough, a video, stepping through it live for an audience, "run it
+slowly"), run it with a `pace` rather than picking delays:
+
+- `run_workshop` with `pace="presentation"` for people watching along,
+  or `pace="demo"` for a screen recording that will be edited. Both
+  scroll each action into view and pulse it before pausing, then run
+  it, and pause again on each new page. Only set `start_delay`,
+  `step_delay` or `page_delay` when the user names a timing.
+
+- Prepare the session first: the instructions panel visible and the
+  layout applied (`open_workshop` does this), leftover terminals and
+  tabs from earlier runs closed, and `reset_workshop` so gated pages
+  replay from the start rather than being skipped as already done. A
+  second take starts with `reset_workshop` again.
+
+- Start a paced run with `wait=False` and follow it with
+  `run_progress`, which carries the report when it finishes; a paced
+  run of a long workshop outlasts a single tool call.
+
+- Pass `action_timeout` when the workshop has steps that take minutes
+  and do not name a `:timeout:` of their own; a check that waits on a
+  cluster or a build otherwise stops the run in front of the audience.
+
+- `jupyter workshop test --pace presentation` does the same in a
+  browser of its own, for a recording that needs no agent.
+
+The rule at the top of this file is unchanged: a paced run executes
+every command for real, in front of people, so read the workshop first
+exactly as for a test run.

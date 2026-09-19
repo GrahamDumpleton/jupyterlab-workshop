@@ -38,9 +38,19 @@ def test_tools_and_resources_are_listed() -> None:
 
     tools, resources = _run(scenario())
 
-    assert {"lint", "test", "init", "publish", "index", "draft", "run_action"} <= set(
-        tools
-    )
+    assert {
+        "lint",
+        "test",
+        "init",
+        "publish",
+        "index",
+        "draft",
+        "run_action",
+        "run_page",
+        "run_workshop",
+        "run_progress",
+        "reset_workshop",
+    } <= set(tools)
     assert "workshop://schema/workshop" in resources
     assert "workshop://skill" in resources
 
@@ -184,6 +194,85 @@ def test_lint_tool_reports_findings(tmp_path: Path) -> None:
         "kind": "add-capability",
         "capability": "kernel-exec",
     }
+
+
+class _RecordingSession(JupyterSession):
+    """A session that answers every bridge call and keeps what was asked."""
+
+    calls: list[dict[str, object]] = []
+
+    def request(
+        self, endpoint: str, body: dict | None = None, timeout: float = 60.0
+    ) -> object:
+        type(self).calls.append(
+            {"endpoint": endpoint, "body": body, "timeout": timeout}
+        )
+
+        return {"result": {"ok": True}}
+
+
+def test_run_tools_pass_the_pace_and_limits_to_the_bridge() -> None:
+    _RecordingSession.calls = []
+    server = create_server(lambda: _RecordingSession(url="http://x", token=""))
+
+    async def scenario() -> list[str]:
+        async with Client(server) as client:
+            texts = []
+
+            for name, arguments in [
+                ("run_workshop", {}),
+                (
+                    "run_workshop",
+                    {
+                        "pace": "presentation",
+                        "step_delay": 2.0,
+                        "action_timeout": 900,
+                        "wait": False,
+                    },
+                ),
+                ("run_page", {"page": "intro", "pace": "demo"}),
+                ("run_workshop", {"pace": "leisurely"}),
+                ("run_progress", {}),
+                ("reset_workshop", {}),
+            ]:
+                texts.append(_text(await client.call_tool(name, arguments)))
+
+            return texts
+
+    texts = _run(scenario())
+    bodies = [call["body"] for call in _RecordingSession.calls]
+
+    # A plain run keeps today's behaviour: no pauses, the long wait.
+    assert bodies[0] == {
+        "command": "workshop:run-all",
+        "args": {"startDelay": 0.0, "stepDelay": 0.0, "pageDelay": 0.0},
+        "timeout": 1200.0,
+    }
+
+    # A paced run in the background carries its pauses, the explicit
+    # override, the action limit and the flag, and waits only briefly.
+    assert bodies[1]["args"] == {
+        "startDelay": 5.0,
+        "stepDelay": 2.0,
+        "pageDelay": 8.0,
+        "actionTimeout": 900,
+        "background": True,
+    }
+    assert bodies[1]["timeout"] == 30.0
+
+    assert bodies[2]["command"] == "workshop:run-page"
+    assert bodies[2]["args"] == {
+        "page": "intro",
+        "only": "all",
+        "startDelay": 2.0,
+        "stepDelay": 1.5,
+    }
+
+    # An unknown pace is answered, not sent.
+    assert "Unknown pace" in texts[3]
+    assert len(bodies) == 5
+    assert bodies[3]["command"] == "workshop:self-test-progress"
+    assert bodies[4]["command"] == "workshop:bridge-reset"
 
 
 def test_session_requests_report_server_errors() -> None:
