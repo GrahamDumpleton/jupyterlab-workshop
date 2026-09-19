@@ -103,6 +103,8 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintTools(input, manifestPath, messages);
   lintFormOrder(input, messages);
   lintLayouts(input, manifestPath, messages);
+  lintLayoutTerminals(input, manifestPath, messages);
+  lintResumable(input, manifestPath, messages);
   lintCapabilities(input, manifestPath, messages);
   lintLinks(input, manifestPath, messages);
 
@@ -156,6 +158,23 @@ function lintChecks(input: ILintInput, messages: ILintMessage[]): void {
 
         case 'file-delete':
           problems.push(...fileDeleteProblems(node.options));
+          break;
+
+        case 'notebook-create':
+          problems.push(...notebookCreateProblems(node.options));
+
+          // Run on its own, the action runs again on every visit to the
+          // page, and replacing the notebook then discards every cell the
+          // learner has added or run since.
+          if (isAutomatic(node) && node.options.existing !== 'keep') {
+            messages.push({
+              level: 'warning',
+              rule: 'notebook-overwrite',
+              message: `notebook-create "${node.id}" runs on its own and replaces the notebook each time, discarding the learner's work on a return to the page; add ":existing: keep"`,
+              ...where
+            });
+          }
+
           break;
 
         default:
@@ -717,6 +736,22 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
   return [];
 }
 
+/**
+ * Problems with the options of a `notebook-create` action.
+ */
+export function notebookCreateProblems(
+  options: Record<string, string>
+): string[] {
+  if (
+    options.existing !== undefined &&
+    !['keep', 'replace'].includes(options.existing)
+  ) {
+    return [`Unknown existing "${options.existing}", expected keep or replace`];
+  }
+
+  return [];
+}
+
 function lintPaths(
   node: IDirectiveNode,
   manifest: IWorkshopManifest,
@@ -930,6 +965,144 @@ function lintLayouts(
         message: `The ${node.name} action names area "${area}", which no layout declares; use ${[...LAYOUT_AREA_KEYWORDS].join(', ')} or a declared area name`,
         path: page.path,
         line: node.line
+      });
+    }
+  }
+}
+
+/**
+ * A layout the workshop applies that opens a terminal, when the manifest
+ * does not declare the `terminal` capability, leaves the learner looking
+ * at a terminal no page can use. The built-in layouts both open one, so
+ * this is what a notebook workshop scaffolded with `layout: default` gets.
+ */
+function lintLayoutTerminals(
+  input: ILintInput,
+  manifestPath: string,
+  messages: ILintMessage[]
+): void {
+  const { manifest } = input;
+
+  if (declaredCapabilities(manifest).has('terminal')) {
+    return;
+  }
+
+  // Only layouts something applies count: the one the manifest opens
+  // with, and those a layout directive names.
+  const applied: { name: string; path: string; line?: number }[] = [];
+
+  if (manifest.layout) {
+    applied.push({ name: manifest.layout, path: manifestPath });
+  }
+
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      if (node.name === 'layout' && node.options.name) {
+        applied.push({
+          name: node.options.name,
+          path: page.path,
+          line: node.line
+        });
+      }
+    }
+  }
+
+  const reported = new Set<string>();
+
+  for (const { name, path, line } of applied) {
+    const spec = findLayout(manifest.layouts, name);
+
+    if (!spec?.main || reported.has(name)) {
+      continue;
+    }
+
+    const opensTerminal = [...walkLayoutAreas(spec.main)].some(area =>
+      (area.tabs ?? []).some(
+        reference => parseLayoutWidget(reference).kind === 'terminal'
+      )
+    );
+
+    if (opensTerminal) {
+      reported.add(name);
+
+      messages.push({
+        level: 'warning',
+        rule: 'layout-terminal',
+        message: `Layout "${name}" opens a terminal but the manifest does not declare the "terminal" capability, so no page can use it; name a layout without a terminal, or none`,
+        path,
+        line
+      });
+    }
+  }
+}
+
+/** Directives that leave state in, or read it from, a notebook's kernel. */
+const KERNEL_STATE_ACTIONS: readonly string[] = [
+  'cell-run',
+  'cell-run-all',
+  'cell-run-to',
+  'kernel-execute'
+];
+
+/**
+ * Whether a directive runs code in, or checks, the kernel of the
+ * notebook its `path` names.
+ */
+function touchesNotebookKernel(node: IDirectiveNode): boolean {
+  if (!node.options.path) {
+    return false;
+  }
+
+  if (node.name === 'cell-insert') {
+    return node.options.run === 'true';
+  }
+
+  if (node.name === 'verify') {
+    return verifySubstrate(node.options) === 'learner-kernel';
+  }
+
+  return KERNEL_STATE_ACTIONS.includes(node.name);
+}
+
+/**
+ * A workshop marked `resumable` is continued without a question after
+ * JupyterLab restarts, which is only sound when its pages leave nothing
+ * live behind. Pages that work in the kernel of one notebook across
+ * several pages do: what earlier pages defined is gone after a restart,
+ * and the later pages fail on it.
+ */
+function lintResumable(
+  input: ILintInput,
+  manifestPath: string,
+  messages: ILintMessage[]
+): void {
+  if (!input.manifest.resumable) {
+    return;
+  }
+
+  const pagesByNotebook = new Map<string, Set<string>>();
+
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      if (!touchesNotebookKernel(node)) {
+        continue;
+      }
+
+      const notebook = node.options.path.trim();
+      const pages = pagesByNotebook.get(notebook) ?? new Set<string>();
+
+      pages.add(page.path);
+      pagesByNotebook.set(notebook, pages);
+    }
+  }
+
+  for (const [notebook, pages] of pagesByNotebook) {
+    if (pages.size > 1) {
+      messages.push({
+        level: 'warning',
+        rule: 'resumable-kernel-state',
+        message: `The manifest sets "resumable: true" but ${pages.size} pages run or check code in the kernel of "${notebook}", whose state does not survive a restart; a workshop whose later pages rely on what earlier pages ran is not resumable`,
+        path: manifestPath
       });
     }
   }

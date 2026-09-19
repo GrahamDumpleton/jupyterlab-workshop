@@ -68,6 +68,11 @@ time, so pages are short, concrete and ordered.
   the learner need not watch; they need the `auto-run` capability and
   the trust dialog counts them.
 
+- An automatic action runs again every time the learner comes back to
+  the page, so it must be safe to repeat. `notebook-create` replaces the
+  notebook, cells, outputs and the learner's edits included, unless it
+  says `:existing: keep`; give it that whenever it runs on its own.
+
 ## Checks
 
 - Check the outcome, not the keystrokes: that a commit exists, not that
@@ -101,6 +106,18 @@ git init command above first"`.
 - A value that is a multi-line string is shown with `print()`; as a bare
   expression it appears as a repr with `\n` in it.
 
+- A cell shows nothing for a result of `None` or for a trailing
+  assignment, so print any value the prose talks about rather than
+  leaving it as the last expression. A page that says
+  `plain.__closure__` is `None` above a cell ending in that expression
+  shows the learner an empty result, which looks the same as a cell that
+  did not run. No check catches this; look at the rendered notebook.
+
+- A cell whose result a check reads assigns it to a name
+  (`result = greet("Bob")`), and the check reads the name. The check
+  then does not run the learner's code a second time, with whatever
+  that code prints or changes.
+
 - Add cells with `cell-insert` and `:run: true` where the learner should
   see the output appear, and keep one page per idea so the notebook and
   the panel stay in step.
@@ -109,6 +126,13 @@ git init command above first"`.
 
 - One question per quiz, three or four options, an `explanation` for
   each wrong option that teaches something.
+
+- Do not write the correct option first out of habit. Options are
+  shuffled by default, but the shuffle is one fixed order per quiz id,
+  not a draw per learner, so about one quiz in four still shows its
+  first-written option on top. Vary where the correct one sits. Say
+  `:shuffle: false` only for options with an order of their own, such
+  as steps or numeric ranges.
 
 - Forms only for values the workshop needs (names, choices); give every
   field a `default` so the self-test and impatient learners can proceed.

@@ -70,6 +70,10 @@ def manifest(
     )
     page_text = "\n".join(f"  - {page}" for page in pages or [])
 
+    # The built-in layouts open a terminal, which only a workshop that can
+    # use one wants; any other starts with the main area left alone.
+    layout = "layout: default\n" if "terminal" in (capabilities or []) else ""
+
     return f"""apiVersion: jupyterlab-workshop/v1alpha1
 name: {name}
 title: {title}
@@ -80,8 +84,7 @@ tags: []
 duration: 30m
 platforms: [{", ".join(listed)}]
 {frontend_text}{capability_text}requires:
-{requires}layout: default
-gating: {gating}
+{requires}{layout}gating: {gating}
 {variables}pages:
 {page_text}
 """

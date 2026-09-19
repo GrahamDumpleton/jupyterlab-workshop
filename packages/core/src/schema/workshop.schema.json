@@ -150,7 +150,7 @@
     "resumable": {
       "type": "boolean",
       "default": false,
-      "description": "Whether the workshop can be continued after the JupyterLab it ran under has restarted. Terminals, running programs and notebook kernel state do not survive a restart, so unless this is true a workshop reopened under a new JupyterLab asks whether to restart or continue. Set it for a workshop whose steps leave nothing live behind, such as one that only edits files."
+      "description": "Whether the workshop can be continued after the JupyterLab it ran under has restarted. Terminals, running programs and notebook kernel state do not survive a restart, so unless this is true a workshop reopened under a new JupyterLab asks whether to restart or continue. Set it only for a workshop whose steps leave nothing live behind, such as one that only edits files. A workshop whose later pages rely on what earlier pages ran in a notebook's kernel is not resumable, however little it writes to disk."
     },
     "variables": {
       "type": "array",

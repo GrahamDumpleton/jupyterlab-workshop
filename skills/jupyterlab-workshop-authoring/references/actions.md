@@ -73,22 +73,38 @@ the paths stay inside the workspace like any write.
 
 ## Notebooks and kernels
 
-| Directive          | Capability  | Body     | Options                               | Description                                                            |
-| ------------------ | ----------- | -------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| `notebook-open`    | none        | none     | `path`, `cell`, `area`                | Open a notebook, optionally at a cell.                                 |
-| `notebook-create`  | write-files | yaml     | `path`, `kernel`, `open`, `area`      | Create a notebook with the cells listed in the body.                   |
-| `cell-insert`      | write-files | required | `path`, `at`, `kind`, `tags`, `run`   | Insert a cell into a notebook.                                         |
-| `cell-run`         | kernel-exec | none     | `path`, `cell`                        | Run a cell of a notebook.                                              |
-| `cell-run-all`     | kernel-exec | none     | `path`                                | Run every cell of a notebook.                                          |
-| `cell-run-to`      | kernel-exec | none     | `path`, `cell`                        | Run every cell up to and including one.                                |
-| `cell-select`      | none        | none     | `path`, `cell`                        | Make a cell the active cell.                                           |
-| `cell-highlight`   | none        | none     | `path`, `cell`, `duration`            | Briefly highlight a cell.                                              |
-| `kernel-restart`   | kernel-exec | none     | `path`                                | Restart the kernel of a notebook.                                      |
-| `kernel-interrupt` | none        | none     | `path`                                | Interrupt the kernel of a notebook.                                    |
-| `kernel-select`    | none        | none     | `path`, `kernel`                      | Change the kernel of a notebook.                                       |
-| `kernel-execute`   | kernel-exec | required | `path`, `kernel`, `silent`, `capture` | Run code in a kernel, optionally capturing the output into a variable. |
-| `console-open`     | none        | none     | `path`, `area`                        | Open a console attached to a notebook.                                 |
-| `output-clear`     | none        | none     | `path`                                | Clear the outputs of a notebook.                                       |
+| Directive          | Capability  | Body     | Options                                      | Description                                                                                              |
+| ------------------ | ----------- | -------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `notebook-open`    | none        | none     | `path`, `cell`, `area`                       | Open a notebook, optionally at a cell.                                                                   |
+| `notebook-create`  | write-files | yaml     | `path`, `kernel`, `existing`, `open`, `area` | Create a notebook with the cells listed in the body, replacing one already there unless told to keep it. |
+| `cell-insert`      | write-files | required | `path`, `at`, `kind`, `tags`, `run`          | Insert a cell into a notebook.                                                                           |
+| `cell-run`         | kernel-exec | none     | `path`, `cell`                               | Run a cell of a notebook.                                                                                |
+| `cell-run-all`     | kernel-exec | none     | `path`                                       | Run every cell of a notebook.                                                                            |
+| `cell-run-to`      | kernel-exec | none     | `path`, `cell`                               | Run every cell up to and including one.                                                                  |
+| `cell-select`      | none        | none     | `path`, `cell`                               | Make a cell the active cell.                                                                             |
+| `cell-highlight`   | none        | none     | `path`, `cell`, `duration`                   | Briefly highlight a cell.                                                                                |
+| `kernel-restart`   | kernel-exec | none     | `path`                                       | Restart the kernel of a notebook.                                                                        |
+| `kernel-interrupt` | none        | none     | `path`                                       | Interrupt the kernel of a notebook.                                                                      |
+| `kernel-select`    | none        | none     | `path`, `kernel`                             | Change the kernel of a notebook.                                                                         |
+| `kernel-execute`   | kernel-exec | required | `path`, `kernel`, `silent`, `capture`        | Run code in a kernel, optionally capturing the output into a variable.                                   |
+| `console-open`     | none        | none     | `path`, `area`                               | Open a console attached to a notebook.                                                                   |
+| `output-clear`     | none        | none     | `path`                                       | Clear the outputs of a notebook.                                                                         |
+
+`notebook-create` writes the notebook afresh each time it runs: a
+notebook already at the path is closed and replaced with the cells in
+the body, which is what a learner asking for a clean start wants from a
+click. With `existing: keep` a notebook already there is opened as it
+is and nothing is written. Use that on any `notebook-create` that runs
+on its own, such as one with `auto: page-enter` that makes a workshop
+open with its notebook showing: the page is entered again whenever the
+learner comes back to it, and replacing would discard every cell they
+had added and run since. The linter reports `notebook-overwrite` for an
+automatic `notebook-create` without it.
+
+`cell-insert` with `run` reports an error when the kernel never ran the
+cell, since what the cell defines is then missing for the steps after
+it. A cell that ran and raised still counts as run: showing an error
+can be the point of the cell.
 
 ## Interface and layout
 

@@ -582,10 +582,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       return installed.some(item => item.path === target);
     };
 
-    const openWorkshopAt = async (
-      path: string,
-      carryOn = false
-    ): Promise<void> => {
+    const openWorkshopAt = async (path: string): Promise<void> => {
       if (!(await mayOpenDirectory(path))) {
         await showErrorMessage(
           'Not available',
@@ -611,7 +608,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         return;
       }
 
-      await manager.open(path, { continue: carryOn });
+      await manager.open(path);
       shell.activateById(panel.id);
     };
 
@@ -621,11 +618,6 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => features.enabled('open-directory'),
       execute: async (args): Promise<void> => {
         let path = typeof args.path === 'string' ? args.path : '';
-
-        // The browser card's Continue has shown the learner that the
-        // progress predates this JupyterLab, so the reopen dialog is
-        // not shown again.
-        const carryOn = args.continue === true;
 
         if (!path && !features.enabled('open-directory')) {
           return;
@@ -647,7 +639,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           path = chosen.path;
         }
 
-        await openWorkshopAt(path, carryOn);
+        await openWorkshopAt(path);
       }
     });
 
@@ -1472,6 +1464,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
         const run = runAll(manager, {
           ...pacingFrom(args),
+          openingLayout: () => layouts.openingLayout,
           onProgress: progress => {
             selfTestProgress = { ...selfTestProgress, ...progress };
           }

@@ -16,6 +16,7 @@ from jupyterlab_workshop.lite import (
     serve_directory,
     settings_overrides,
     stage_contents,
+    uses_terminal,
     workshop_name,
 )
 
@@ -44,6 +45,39 @@ def test_workshop_name_comes_from_the_manifest(tmp_path: Path) -> None:
 
     with pytest.raises(LiteError, match="has no workshop.yaml"):
         workshop_name(tmp_path)
+
+
+def test_uses_terminal_goes_by_the_capability_and_the_headless_shell(
+    tmp_path: Path,
+) -> None:
+    def workshop(name: str, capabilities: str, page: str) -> Path:
+        directory = tmp_path / name
+        (directory / "pages").mkdir(parents=True)
+        (directory / "workshop.yaml").write_text(
+            f"name: {name}\ncapabilities: {capabilities}\npages: [pages/01.md]\n"
+        )
+        (directory / "pages" / "01.md").write_text(page)
+
+        return directory
+
+    notebook = "```{cell-run}\n:path: a.ipynb\n:cell: one\n```\n"
+
+    # A notebook workshop has nothing for a shell to run.
+    plain = workshop("notebook", "[write-files, kernel-exec]", notebook)
+
+    assert not uses_terminal(plain)
+    assert uses_terminal(workshop("declared", "[terminal]", notebook))
+
+    # A capture and a shell check run in the terminal extension's shell
+    # with no terminal shown, under kernel-exec alone.
+    capture = "```{execute-capture}\n:capture: out\nls\n```\n"
+    check = "```{verify}\n:substrate: shell\ntest -f a.txt\n```\n"
+
+    assert uses_terminal(workshop("capture", "[kernel-exec]", capture))
+    assert uses_terminal(workshop("check", "[kernel-exec]", check))
+
+    # A manifest that cannot be read is given the benefit of the doubt.
+    assert uses_terminal(tmp_path / "missing")
 
 
 def test_stage_contents_copies_workshops_without_progress(tmp_path: Path) -> None:

@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
+from typing import Any
 
 import pytest
 
@@ -365,6 +366,59 @@ def test_index_repository_builds_git_sources(tmp_path: Path) -> None:
 
     with pytest.raises(CollectionError):
         index_repository(tmp_path / "sub", [tmp_path], "https://x", "main")
+
+
+def test_index_repository_follows_an_order_that_is_spelled_out(tmp_path: Path) -> None:
+    def workshop(name: str) -> Path:
+        directory = tmp_path / "workshops" / name
+        directory.mkdir(parents=True)
+        directory.joinpath("workshop.yaml").write_text(
+            f"name: {name}\ntitle: {name}\nversion: 1.0.0\npages: [pages/01.md]\n"
+        )
+
+        return directory
+
+    def names(index: dict[str, Any]) -> list[str]:
+        return [item["name"] for item in index["workshops"]]
+
+    first, third = workshop("what-it-does"), workshop("how-it-remembers")
+
+    # Named one by one, the workshops are listed as named, not by path.
+    index = index_repository(tmp_path, [first, third], "https://x/y", "main")
+
+    assert names(index) == ["what-it-does", "how-it-remembers"]
+
+    # A workshop added later goes where the order given puts it, and the
+    # versions already listed stay with their entries.
+    second = workshop("a-first-one")
+    index = index_repository(
+        tmp_path, [first, second, third], "https://x/y", "v2", index
+    )
+
+    assert names(index) == ["what-it-does", "a-first-one", "how-it-remembers"]
+    assert [item["source"]["ref"] for item in index["workshops"][0]["versions"]] == [
+        "v2"
+    ]
+
+    # Searching a directory says nothing about order: what is listed keeps
+    # its place, and only something new is added, at the end.
+    fourth = workshop("b-last-one")
+    searched = index_repository(
+        tmp_path, [tmp_path / "workshops"], "https://x/y", "v2", index
+    )
+
+    assert names(searched) == [
+        "what-it-does",
+        "a-first-one",
+        "how-it-remembers",
+        "b-last-one",
+    ]
+
+    # Naming only some of what is listed gives the rest no place, so the
+    # order is left alone.
+    partial = index_repository(tmp_path, [fourth, first], "https://x/y", "v2", searched)
+
+    assert names(partial) == names(searched)
 
 
 def test_index_repository_carries_the_analytics_block(tmp_path: Path) -> None:

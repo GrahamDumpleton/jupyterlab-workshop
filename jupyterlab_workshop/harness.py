@@ -34,7 +34,13 @@ from xml.sax.saxutils import escape
 import yaml
 
 from .environment import EnvironmentSetupError, environment_status, remove_environment
-from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
+from .lite import (
+    LiteBuildOptions,
+    LiteError,
+    build_lite_site,
+    serve_directory,
+    uses_terminal,
+)
 from .publish import WORKSPACE_DIR
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
@@ -409,6 +415,14 @@ def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> obj
     site = work / "site" / LITE_PREFIX
     name = options.directory.name
 
+    # The terminal's build step needs node, npm and micromamba, which a
+    # workshop with nothing to run in a shell should not have to install
+    # to be tested.
+    terminal = uses_terminal(options.directory)
+
+    if not terminal:
+        _say("the workshop uses no terminal, so the site is built without one")
+
     try:
         result = build_lite_site(
             LiteBuildOptions(
@@ -416,6 +430,7 @@ def _run_lite(options: SelfTestOptions, work: Path, sync_playwright: Any) -> obj
                 output=site,
                 lite_dir=options.lite_dir,
                 trust=options.trust,
+                terminal=terminal,
             )
         )
     except LiteError as error:

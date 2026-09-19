@@ -81,6 +81,15 @@ export interface ILayoutOutcome {
   arranged: boolean;
 }
 
+/** What the layout applied as a workshop opened left out. */
+export interface IOpeningLayout {
+  /** The layout the manifest names. */
+  name: string;
+
+  /** Widget references that could not be opened, in the order written. */
+  missing: string[];
+}
+
 /** Options for applying a layout. */
 export interface IApplyOptions {
   /**
@@ -175,6 +184,28 @@ export class LayoutManager {
    * and only the instructions panel is shown.
    */
   async applyOnOpen(workshop: ILoadedWorkshop): Promise<void> {
+    this._opening = this._applyOnOpen(workshop);
+
+    // A failure is the caller's to report, and must not also surface as
+    // an unhandled rejection of the copy kept for the self-test.
+    this._opening.catch(() => undefined);
+
+    await this._opening;
+  }
+
+  /**
+   * What the layout applied as the workshop opened could not open, once
+   * it has been applied; null when no layout was applied, as on a reopen
+   * that restores the learner's arrangement. Nothing on a page reports
+   * this, since it happens before any page runs, so the self-test asks.
+   */
+  get openingLayout(): Promise<IOpeningLayout | null> {
+    return this._opening.catch(() => null);
+  }
+
+  private async _applyOnOpen(
+    workshop: ILoadedWorkshop
+  ): Promise<IOpeningLayout | null> {
     // Which sidebars have no width is read now, before the command that
     // opened the workshop reveals the panel at its minimum width.
     const empty = this._emptySides();
@@ -202,7 +233,7 @@ export class LayoutManager {
       this._widenPanel(empty, workshop.manifest);
       this._showPanel(empty);
 
-      return;
+      return null;
     }
 
     await this._recordApplied(key);
@@ -211,10 +242,12 @@ export class LayoutManager {
       await this._arrangeSides(undefined, true);
       this._showPanel(empty);
 
-      return;
+      return null;
     }
 
-    await this.apply(name, { initial: true }, empty);
+    const outcome = await this.apply(name, { initial: true }, empty);
+
+    return { name, missing: outcome.missing };
   }
 
   /**
@@ -1194,6 +1227,7 @@ export class LayoutManager {
 
   private _context: ILayoutContext;
   private _applied: string | null = null;
+  private _opening: Promise<IOpeningLayout | null> = Promise.resolve(null);
   private _nodes: Map<string, INode> = new Map();
   private _placeholderId: string | null = null;
   private _watched: Set<Widget> = new Set();

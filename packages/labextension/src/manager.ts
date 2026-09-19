@@ -314,6 +314,37 @@ export class WorkshopManager implements IWorkshopManager {
   async open(path: string, options: IOpenOptions = {}): Promise<void> {
     const workshopPath = normalizeWorkshopPath(path);
 
+    // A second plain open of a workshop that is still loading joins the
+    // first rather than loading it again. Two loads would each enter the
+    // first page, running its automatic actions twice: a site that opens
+    // its workshop by default does this to a command that opens the same
+    // one as soon as JupyterLab is up, as the self-test's does.
+    const plain = Object.keys(options).length === 0;
+    const pending = this._opening;
+
+    if (plain && pending && pending.path === workshopPath) {
+      return pending.done;
+    }
+
+    const done = this._open(workshopPath, options);
+
+    if (plain) {
+      this._opening = { path: workshopPath, done };
+    }
+
+    try {
+      await done;
+    } finally {
+      if (this._opening?.done === done) {
+        this._opening = null;
+      }
+    }
+  }
+
+  private async _open(
+    workshopPath: string,
+    options: IOpenOptions
+  ): Promise<void> {
     // Leaving a workshop that is open counts as abandoning it.
     if (this._workshop && this._workshop.path !== workshopPath) {
       this._leaveWorkshop();
@@ -459,8 +490,9 @@ export class WorkshopManager implements IWorkshopManager {
 
       // Progress made under a JupyterLab that has since restarted was made
       // with terminals, programs and kernels that are gone. Unless the
-      // workshop says it can be continued, or the learner already chose
-      // to, ask whether to restart or carry on before anything happens.
+      // workshop says it can be continued, ask whether to restart or
+      // carry on before anything happens. Nothing opens such a workshop
+      // around the question, the browser card's Continue included.
       // Progress recorded before sessions were, with no instance to
       // compare, was made under some earlier process and counts as stale.
       const previous = state.session;
@@ -471,7 +503,6 @@ export class WorkshopManager implements IWorkshopManager {
         resumed &&
         (previous?.instance ?? '') !== platform.instance_id &&
         !manifest.resumable &&
-        !options.continue &&
         options.restartedFrom === undefined;
 
       if (stale) {
@@ -2564,6 +2595,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _queue: IQueued[] = [];
   private _pumping = false;
   private _loading = false;
+  private _opening: { path: string; done: Promise<void> } | null = null;
   private _declared = new Set<string>();
   private _abort: AbortController | null = null;
 }

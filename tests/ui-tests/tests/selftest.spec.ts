@@ -260,3 +260,164 @@ test.describe('self-test of automatic actions', () => {
     expect(byId.get('by-hand')?.message).toBe('');
   });
 });
+
+const NOTEBOOK_WORKSHOP = 'notebook-checks';
+
+const NOTEBOOK_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${NOTEBOOK_WORKSHOP}
+title: Checks in a notebook's kernel
+version: 0.1.0
+description: Checks that run beside the learner's cells in one kernel.
+capabilities:
+  - write-files
+  - kernel-exec
+  - auto-run
+layout: notebook
+layouts:
+  notebook:
+    main: { tabs: ['notebook:never-made.ipynb'] }
+pages:
+  - pages/01-build.md
+  - pages/02-back.md
+`;
+
+/**
+ * The notebook is made on entering the page and kept from then on. The
+ * check is fired by the first cell, when the name it reads does not
+ * exist yet, so it raises in the learner's kernel just as the second
+ * cell is queued: that cell must still run, and the check pass once it
+ * has. The last check prints before a closing False, which decides.
+ */
+const NOTEBOOK_PAGE = `# Build it up
+
+\`\`\`{notebook-create}
+:id: create
+:path: work.ipynb
+:auto: page-enter
+:existing: keep
+- code: first = 1
+  tags: [one]
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-one
+:path: work.ipynb
+:cell: one
+\`\`\`
+
+\`\`\`{cell-insert}
+:id: insert-two
+:path: work.ipynb
+:tags: [two]
+:run: true
+second = 2
+\`\`\`
+
+\`\`\`{verify}
+:id: both
+:substrate: learner-kernel
+:path: work.ipynb
+:trigger: cell-executed one; cell-executed two
+first == 1 and second == 2
+\`\`\`
+
+\`\`\`{verify}
+:id: printed
+:substrate: learner-kernel
+:path: work.ipynb
+print("Not decorated yet")
+False
+\`\`\`
+`;
+
+/** Going back to the first page must not put the starting notebook back. */
+const NOTEBOOK_BACK_PAGE = `# Still there
+
+\`\`\`{verify}
+:id: still-defined
+:substrate: learner-kernel
+:path: work.ipynb
+second == 2
+\`\`\`
+`;
+
+test.describe("self-test of checks in a notebook's kernel", () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${NOTEBOOK_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      NOTEBOOK_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      NOTEBOOK_PAGE,
+      'text',
+      `${target}/pages/01-build.md`
+    );
+    await page.contents.uploadContent(
+      NOTEBOOK_BACK_PAGE,
+      'text',
+      `${target}/pages/02-back.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test("a check that raises leaves the learner's cells alone, and the last expression decides", async ({
+    page,
+    tmpPath
+  }) => {
+    test.setTimeout(180000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & {
+      results: { id: string; page: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+    const detail = JSON.stringify(report.results);
+
+    // The cell queued behind the failing check ran, so the check passed
+    // on a later attempt rather than never.
+    expect(byId.get('insert-two')?.status, detail).toBe('ok');
+    expect(byId.get('both')?.status, detail).toBe('ok');
+
+    // What was printed is the message, not the verdict.
+    expect(byId.get('printed')?.status, detail).toBe('error');
+    expect(byId.get('printed')?.message).toBe('Not decorated yet');
+    expect(report.failed, detail).toBe(1);
+
+    // The opening layout named a notebook that was never there, which
+    // only the report can say.
+    expect(byId.get('layout')).toMatchObject({
+      page: '(workshop)',
+      status: 'skipped'
+    });
+    expect(byId.get('layout')?.message).toContain('notebook:never-made.ipynb');
+
+    // Back on the first page the notebook is made again on its own, and
+    // keeps the cell the learner added instead of starting over.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:previous-page', {});
+    });
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+
+    await expect(panel.locator('[data-action-id="create"]')).toHaveClass(
+      /jp-mod-status-ok/,
+      { timeout: 30000 }
+    );
+
+    const saved = await page.request.get(
+      `api/contents/${tmpPath}/${NOTEBOOK_WORKSHOP}/work/work.ipynb?content=1`
+    );
+    const cells = (await saved.json()).content.cells as { source: string }[];
+
+    expect(cells.map(cell => cell.source)).toEqual(['first = 1', 'second = 2']);
+  });
+});

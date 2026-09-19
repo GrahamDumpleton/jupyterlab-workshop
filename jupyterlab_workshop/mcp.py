@@ -374,7 +374,9 @@ def create_server(
         checkout at the repository URL and ref, which default to the git
         origin and branch of the checkout holding the first directory. The
         index is written to collection.json under the checkout unless out
-        names another file; entries already listed keep their position.
+        names another file; entries already listed keep their position and
+        new ones go at the end. To set the order instead, give the workshop
+        directories themselves, all of them, in the order to list them.
         The title, description, publisher, homepage, icon and tags describe
         the collection itself and are kept from an existing index when
         not given; ordered says whether the workshops form a sequence to

@@ -16,6 +16,7 @@ import functools
 import http.server
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -119,7 +120,8 @@ def missing_requirements(terminal: bool) -> list[str]:
             if shutil.which(tool) is None:
                 problems.append(
                     f"{tool} is not on the path; the terminal's build step needs "
-                    "node, npm and micromamba (or pass --no-terminal)"
+                    "node, npm and micromamba (jupyter workshop lite takes "
+                    "--no-terminal to build without it)"
                 )
 
     return problems
@@ -142,6 +144,48 @@ def workshop_name(directory: Path) -> str:
         return str(data["name"])
 
     return directory.name
+
+
+#: Page text that needs the terminal extension's shell without a terminal
+#: being shown: a captured command, and a check on the ``shell`` substrate.
+_HEADLESS_SHELL = re.compile(
+    r"^`{3,}\{execute-capture\}|^:substrate:\s*shell\s*$", re.MULTILINE
+)
+
+
+def uses_terminal(directory: Path) -> bool:
+    """Whether a workshop needs the terminal extension in a site.
+
+    It does when its manifest declares the ``terminal`` capability, and
+    when a page captures a command or checks with a shell command, both
+    of which run in the extension's headless shell. A manifest that
+    cannot be read counts as needing it, so that a doubt never leaves a
+    workshop without something it uses.
+    """
+
+    try:
+        data = yaml.safe_load((directory / MANIFEST_FILE).read_text("utf-8"))
+    except (OSError, yaml.YAMLError):
+        return True
+
+    if not isinstance(data, dict):
+        return True
+
+    capabilities = data.get("capabilities") or []
+
+    if not isinstance(capabilities, list) or "terminal" in capabilities:
+        return True
+
+    for page in sorted(directory.rglob("*.md")):
+        relative = page.relative_to(directory).parts
+
+        if any(part in IGNORED or part == WORKSPACE_DIR for part in relative):
+            continue
+
+        if _HEADLESS_SHELL.search(page.read_text("utf-8")):
+            return True
+
+    return False
 
 
 def stage_contents(workshops: Sequence[Path], staging: Path) -> list[str]:

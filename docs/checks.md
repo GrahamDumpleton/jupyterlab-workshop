@@ -36,7 +36,17 @@ Where the check runs is chosen by `:substrate:`:
 | `shell`          | A shell command                              | Without a terminal, in the workspace: through the hidden workshop kernel on a server, as `subprocess.run(..., shell=True)` under `/bin/sh`, and the terminal's headless shell in JupyterLite. Exit code 0 passes; the output is the message. The command sees the server's environment with the variables and the manifest's `env` added, or the workshop environment when the manifest declares one, not a shell the learner activated, so name the learner's tools by path otherwise. |
 | `contents`       | Predicates, one per line                     | In the browser against the contents API. Every predicate must hold.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `ui`             | Predicates, one per line                     | In the browser against the JupyterLab interface.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `learner-kernel` | Python code; name the notebook with `:path:` | In the kernel of the learner's notebook. The printed text or the value of the last expression decides: empty, `False`, `None` or `0` fails.                                                                                                                                                                                                                                                                                                                                             |
+| `learner-kernel` | Python code; name the notebook with `:path:` | In the kernel of the learner's notebook. The value of the last expression decides: `False`, `None` or `0` fails. A body that ends in no expression is decided by what it printed, and printing nothing fails.                                                                                                                                                                                                                                                                           |
+
+A `learner-kernel` check that ends in an expression is judged on that
+expression alone, so a check may call the learner's code even when that
+code prints: `greet("Bob") == "Hello, Bob!"` fails when the comparison
+is false, whatever a logging decorator around `greet` wrote on the way.
+What was printed becomes the message, which makes
+`print("Decorate greet first")` followed by a closing `False` a way to
+say why. A check that raises fails with the error as its message, and
+leaves the learner's own cells alone: a cell queued behind it in the
+kernel still runs.
 
 Contents predicates: `exists <path>`, `missing <path>`,
 `contains <path> <text>`, `matches <path> <regex>`, and
@@ -118,19 +128,29 @@ for the rest of the workshop.
 :attempts: 3
 question: Which command moves changes into the staging area?
 options:
-  - { text: git add, correct: true }
   - { text: git commit, explanation: "git commit records what is already staged." }
+  - { text: git add, correct: true }
   - git stage-it
 explanation: git add stages changes; git commit records what is staged.
 ```
 ````
 
 `:type:` is `single` (radio buttons, default) or `multi` (check boxes,
-every correct option and no others must be picked). `:shuffle: true`
-shows the options in an order that is stable for the quiz but differs
-between quizzes. `:attempts:` limits submissions; after the last failed
-attempt the quiz locks. A correct answer shows the quiz `explanation`, a
-wrong one shows the explanations of the wrong options picked, if any.
+every correct option and no others must be picked). `:attempts:` limits
+submissions; after the last failed attempt the quiz locks. A correct
+answer shows the quiz `explanation`, a wrong one shows the explanations
+of the wrong options picked, if any.
+
+The options are shuffled unless the quiz says `:shuffle: false`. The
+correct answer tends to be the first one an author writes, and shown as
+written a learner could pass every quiz by picking the top option.
+`:shuffle: false` is for options with an order of their own, such as
+steps in a sequence or ranges of numbers. The shuffle is a fixed
+permutation worked out from the quiz id, the same for every learner and
+every visit, so it is not a randomisation: with four options about one
+quiz in four still shows its correct answer first. Vary where the
+correct option sits in the source as well. Grading and the self-test
+go by the options as written, so shuffling changes neither.
 
 ## Form
 

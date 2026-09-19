@@ -459,10 +459,19 @@ def index_repository(
     it straight from the forge. Entries for names already in ``existing``
     are updated in place, keeping their position and other versions, and
     new ones are appended in the order found.
+
+    The exception is an order the caller spells out. When every directory
+    given is itself a workshop, rather than a directory searched for
+    them, and together they account for every workshop already listed,
+    the index is written in the order given: that is how a workshop is
+    put into the middle of a sequence, or a sequence rearranged. A
+    directory that is searched yields its workshops in path order, which
+    says nothing about how they should be taken, so it never reorders.
     """
 
     root = root.resolve()
     found: list[Path] = []
+    spelled_out = True
 
     for directory in directories:
         resolved = directory.resolve()
@@ -472,6 +481,9 @@ def index_repository(
 
         if not resolved.is_relative_to(root):
             raise CollectionError(f"{directory} is outside the repository root {root}")
+
+        if not (resolved / MANIFEST_FILE).is_file():
+            spelled_out = False
 
         found.extend(find_workshops(resolved))
 
@@ -483,6 +495,11 @@ def index_repository(
         for directory in found
     ]
     index = build_collection(existing, entries, metadata)
+
+    if spelled_out:
+        index["workshops"] = _in_order_given(
+            index["workshops"], [entry["name"] for entry in entries]
+        )
 
     # The analytics block comes from collection.yaml when there is one and
     # otherwise stays as the existing index had it, so regenerating never
@@ -497,6 +514,26 @@ def index_repository(
         index["workshops"] = workshops
 
     return index
+
+
+def _in_order_given(
+    workshops: list[dict[str, Any]], names: list[str]
+) -> list[dict[str, Any]]:
+    """Return ``workshops`` in the order of ``names``, when they name them all.
+
+    A listed workshop that ``names`` leaves out has no place in the order
+    given, so the list is then returned as it is, with new entries at the
+    end, rather than guessing where the unnamed ones belong.
+    """
+
+    wanted = list(dict.fromkeys(names))
+
+    if {item["name"] for item in workshops} != set(wanted):
+        return workshops
+
+    by_name = {item["name"]: item for item in workshops}
+
+    return [by_name[name] for name in wanted]
 
 
 def checkout_root(path: Path) -> Path | None:

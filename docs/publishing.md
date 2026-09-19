@@ -70,8 +70,22 @@ Run from the checkout, both are read from git and can be left out; give
 `--ref` a tag when a course is pinned to a release, and `--ordered` when
 the workshops are meant to be taken in the order listed. An existing index
 is updated rather than replaced, so older versions stay listed and the
-order of the workshops, which is the order the browser shows, is kept;
-reorder the file by hand when the course changes. The
+order of the workshops, which is the order the browser shows, is kept.
+
+A directory that is searched lists its workshops in path order, which
+for a course is rarely the order to take them in. Set the order by
+naming the workshop directories themselves, in sequence:
+
+```
+jupyter workshop index workshops/what-it-does workshops/a-first-one workshops/how-it-remembers --ordered
+```
+
+Named one by one like that, and accounting for everything already
+listed, the workshops are written in the order given, on an update as
+well as the first time, so that is also how a new workshop is put into
+the middle of a course or a course rearranged. After that
+`jupyter workshop index workshops` refreshes the entries and leaves the
+order alone, adding anything new at the end. The
 [command line](cli.md#index) page has the full set of options and what
 is skipped when searching.
 

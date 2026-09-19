@@ -29,10 +29,11 @@ same three as buttons once one is open:
   restarted says "needs restart" and puts Restart first, with Continue
   beside it: the files and the progress are still there, but the
   terminals, running programs and notebook kernels that earlier pages
-  set up are gone, so what they set up may need doing again. Continue
-  is the learner's call; a workshop whose steps leave nothing live
-  behind says so in its manifest with `resumable: true` and resumes
-  without the fuss.
+  set up are gone, so the steps that remain may fail or behave
+  differently. Restart is the only way back to a known state. Continue
+  is the learner's call, and asks first with a dialog that says as
+  much; a workshop whose steps leave nothing live behind says so in its
+  manifest with `resumable: true` and resumes without the fuss.
 
 - **Open a directory** opens a workshop directory that is already on
   disk, by path relative to the JupyterLab root. Right-clicking a
@@ -55,7 +56,8 @@ simply forgotten. When the server itself has restarted in between, and
 the workshop is not marked resumable, a dialog asks whether to Restart
 or Continue before the workshop opens, for the reason the browser card
 gives; the same dialog appears when such a workshop is opened by
-command or launch link.
+command or launch link, and from the card's own Continue, so there is
+no way to carry on without having been told what is lost.
 
 ## The trust dialog
 

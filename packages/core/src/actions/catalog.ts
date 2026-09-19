@@ -313,10 +313,10 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       spec(
         'notebook-create',
         'notebook',
-        'Create a notebook with the cells listed in the body.',
+        'Create a notebook with the cells listed in the body, replacing one already there unless told to keep it.',
         'write-files',
         'yaml',
-        ['path', 'kernel', 'open', 'area']
+        ['path', 'kernel', 'existing', 'open', 'area']
       ),
       spec(
         'cell-insert',

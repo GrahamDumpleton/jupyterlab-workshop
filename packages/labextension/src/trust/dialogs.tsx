@@ -287,14 +287,17 @@ export async function showConfirmDialog(
  * Ask whether to restart or continue a workshop whose progress was made
  * under a JupyterLab that has since restarted. Restart is the default,
  * since terminals, running programs and notebook kernels from earlier
- * pages are gone; Continue is the learner's override.
+ * pages are gone; Continue is the learner's override. This dialog is the
+ * only way to it, so the text promises nothing for it: whether the rest
+ * of a workshop survives the loss is something only its author knows,
+ * and an author who knows it does marks the workshop `resumable`.
  */
 export async function showReopenDialog(
   request: IReopenRequest
 ): Promise<ReopenChoice> {
   const result = await showDialog({
     title: `Restart workshop "${request.title}"?`,
-    body: 'This workshop was in progress under a JupyterLab that has since restarted. Terminals, running programs and notebook kernels from earlier pages are gone, so what those pages set up may need doing again. Restart puts the files back as they were when the workshop was first opened, deletes anything added since and forgets the progress; Continue keeps the files and the progress and carries on where you left off.',
+    body: 'This workshop was in progress under a JupyterLab that has since restarted, and the workshop does not say it can be resumed after one. What its earlier pages set up no longer exists: terminals, running programs and everything defined in notebook kernels are gone, so the steps that remain may fail or behave differently. Restart is the only way back to a known state: it puts the files back as they were when the workshop was first opened, deletes anything added since and forgets the progress. Continue keeps the files and the progress and carries on where you left off, with nothing to say the rest of the workshop will work.',
     buttons: [
       Dialog.cancelButton(),
       Dialog.okButton({ label: 'Continue' }),

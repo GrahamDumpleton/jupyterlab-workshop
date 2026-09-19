@@ -139,7 +139,12 @@ at `--ref`, which default to the checkout's origin and current branch; an
 SSH remote is rewritten as the https URL. The index is written to
 `collection.json` under the root, or `--out`, and an existing index is
 updated: entries already listed keep their position and other versions,
-new ones are appended in the order found. The metadata options are those
+new ones are appended in the order found, which for a directory that is
+searched is path order. When every directory given is itself a workshop
+directory, and between them they account for every workshop already
+listed, the index is instead written in the order they are given, which
+sets the order of a new index, moves a new workshop into the middle of
+an existing one, or rearranges it. The metadata options are those
 of `collection`. A `collection.yaml` in the root supplies what the
 manifests cannot, the collection's `analytics` block, which is checked
 and copied into the index; an existing index's block is kept when the

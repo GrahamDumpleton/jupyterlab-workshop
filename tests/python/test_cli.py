@@ -395,6 +395,10 @@ def test_init_templates_and_options(tmp_path: Path) -> None:
     assert "name: notebook" in manifest
     assert (target / "pages" / "02-explore.md").exists()
 
+    # The built-in layouts open a terminal, so only a workshop that
+    # declares one is given a layout.
+    assert "layout:" not in manifest
+
     # Frontends are written only when asked for, since a manifest without
     # the list supports JupyterLab alone.
     lite = tmp_path / "lite-too"
@@ -415,6 +419,7 @@ def test_init_templates_and_options(tmp_path: Path) -> None:
     assert (
         "frontends: [jupyterlab, jupyterlite]" in (lite / "workshop.yaml").read_text()
     )
+    assert "layout: default\n" in (lite / "workshop.yaml").read_text()
 
     blank = tmp_path / "blank"
 

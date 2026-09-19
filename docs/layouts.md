@@ -34,6 +34,14 @@ declaration:
 
 A manifest with no `layout` field leaves the main area alone.
 
+Both built-in layouts open a terminal, so they suit a workshop that
+uses one and no other. A notebook workshop names neither: it declares a
+layout of its own or has no `layout` field. The linter reports
+`layout-terminal` when a layout the workshop applies opens a terminal
+and the manifest does not declare the `terminal` capability, since no
+page could then use it. `jupyter workshop init` writes `layout: default`
+only for a workshop with that capability.
+
 ## The main area
 
 `main` is a tree. Each area is either a set of `tabs` or a `split` into
@@ -97,6 +105,12 @@ Terminals named in a layout are the same terminals that `execute` and
 other terminal actions use, so a layout that opens `terminal:git` and
 actions with `:terminal: git` share one shell.
 
+Layouts are part of the manifest and are not
+[substituted](variables.md): a reference written as
+`notebook:{{ notebook }}` looks for a file of exactly that name and
+finds none. Write the path out, even when a variable holds the same
+path for the pages.
+
 ## What applying a layout does
 
 A layout describes a result, not a sequence of steps. Applying one opens
@@ -130,6 +144,17 @@ yet or a path with a typo, is left out. The rest of the layout is still
 arranged, and the action reports an error naming what was missing, so
 running it again once the file exists completes the arrangement. The
 self-test fails such a step.
+
+The layout the manifest opens with is applied before any page has run,
+so it has no action to report through, and a file it names that a page
+only creates later is always missing the first time. The learner is
+shown nothing; the self-test notes it, as a skipped `(workshop)/layout`
+line naming what was left out, which is where a typo in the opening
+layout shows up. To open a workshop on a notebook its first page
+creates, have the action do it rather than the layout: a
+`notebook-create` with `:auto: page-enter` and `:existing: keep` shows
+the notebook as the workshop opens and leaves it alone when the learner
+comes back to the page.
 
 When the main area holds nothing but the launcher JupyterLab shows for
 an empty session, the launcher is closed once the layout adds its

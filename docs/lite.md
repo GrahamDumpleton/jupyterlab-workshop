@@ -30,6 +30,10 @@ as a restarted server is, so a workshop with progress that is not marked
 `resumable` asks whether to restart or continue when it is reopened;
 see [Progress events](analytics.md#resuming-after-a-restart). A Lite
 workshop that keeps nothing live between pages sets `resumable: true`.
+The flag says the workshop does not need the kernel to have survived,
+not that it never does: a workshop whose pages share one notebook's
+kernel, with later pages using what earlier pages defined, leaves it
+unset, since a reload would continue it into an empty kernel.
 
 ## Writing for JupyterLite
 
@@ -93,3 +97,10 @@ in a headless browser and runs every action, exactly as the server
 self-test does. The first run downloads the terminal's WebAssembly
 packages into the build directory; Pyodide loads from the CDN on every
 run. `just selftest-lite` runs it on the example.
+
+The terminal's build step needs `node`, `npm` and `micromamba` on the
+path. A workshop that has nothing to run in a shell is tested on a site
+built without the terminal, so it needs none of them: one that does not
+declare the `terminal` capability and has no `execute-capture` action
+or `shell` check, both of which use the terminal extension's shell
+without showing a terminal.

@@ -527,12 +527,28 @@ test.describe('workshop browser', () => {
       0
     );
 
-    // Continue opens without the reopen dialog, only the trust dialog,
-    // at the saved page.
+    // Continue on the card is no way round the question: after the
+    // trust dialog the reopen dialog still asks, saying that the rest of
+    // the workshop may not work, and its Continue opens at the saved page.
     await installed.getByRole('button', { name: 'Continue' }).click();
-    await trustWorkshop(page, 'Git from the command line');
+
+    const asked = page.locator('.jp-Dialog');
+
+    await expect(asked.locator('.jp-WorkshopTrust')).toBeVisible({
+      timeout: 60000
+    });
+    await asked.getByRole('button', { name: 'Trust', exact: true }).click();
+    await expect(asked).toContainText(
+      'Restart workshop "Git from the command line"?'
+    );
+    await expect(asked).toContainText('does not say it can be resumed');
+    await asked.getByRole('button', { name: 'Continue', exact: true }).click();
 
     const panel = page.locator('#jupyterlab-workshop-panel');
+
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText(
+      'Git from the command line'
+    );
 
     await expect(panel.locator('.jp-WorkshopPanel-pageSelect')).toHaveValue(
       '1'

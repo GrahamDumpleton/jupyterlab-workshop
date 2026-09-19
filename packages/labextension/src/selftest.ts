@@ -5,6 +5,7 @@ import {
 } from '@jupyterlab-workshop/core';
 import { ReadonlyPartialJSONObject } from '@lumino/coreutils';
 
+import { IOpeningLayout } from './layout';
 import { IActionResult, IWorkshopManager } from './tokens';
 import { parseDuration, sleep, visibleDirectives } from './util';
 
@@ -58,7 +59,16 @@ export interface ISelfTestOptions {
   pageDelayMs?: number;
   /** Called after every action, and when an action starts. */
   onProgress?: (progress: ISelfTestProgress) => void;
+
+  /**
+   * What the layout applied as the workshop opened left out, for the
+   * report to say: a widget it names that could not be opened.
+   */
+  openingLayout?: () => Promise<IOpeningLayout | null>;
 }
+
+/** Page name of results that belong to the workshop rather than a page. */
+export const WORKSHOP_RESULTS_PAGE = '(workshop)';
 
 /** Default per-action limit: long enough for an environment to be created. */
 export const DEFAULT_ACTION_TIMEOUT_MS = 300000;
@@ -122,6 +132,23 @@ export async function runAll(
 
   const results: ISelfTestResult[] = [];
   let index = 0;
+
+  // The layout the workshop opens with is applied before any page runs,
+  // so a widget it could not open is reported by nothing else. It is a
+  // note rather than a failure: the file may be one a page creates, and
+  // the run says so either way, where a typo would otherwise stay unseen.
+  const opening = await options.openingLayout?.();
+
+  if (opening && opening.missing.length > 0) {
+    results.push({
+      page: WORKSHOP_RESULTS_PAGE,
+      id: 'layout',
+      type: 'layout',
+      status: 'skipped',
+      message: `The opening layout "${opening.name}" left out ${opening.missing.join(', ')}: nothing was there to open when the workshop opened`,
+      seconds: 0
+    });
+  }
 
   // A paced run gives the audience a moment to see the panel before
   // anything happens, and then a moment on each new page before its

@@ -113,11 +113,21 @@ JupyterLite page has none of them. Unless the manifest says the
 workshop can be continued regardless, with `resumable: true`, reopening
 a workshop under a new instance asks first: Restart, the default, puts
 the files back and forgets the progress; Continue carries on where the
-learner left off. The workshop browser's card shows the same choice,
-with Restart first and a "needs restart" chip, so the learner sees it
-before opening. A workshop whose steps leave nothing live behind, one
-that only edits files say, sets `resumable: true` and continues
-silently.
+learner left off, and the dialog says plainly that the rest of the
+workshop may then not work. The workshop browser's card shows the same
+choice, with Restart first and a "needs restart" chip, so the learner
+sees it before opening; its Continue leads to the dialog rather than
+round it. A workshop whose steps leave nothing live behind, one that
+only edits files say, sets `resumable: true` and continues silently.
+
+Resuming is something a workshop opts into, and the test is whether a
+later page relies on anything an earlier page left running or in
+memory. A workshop whose pages build up one notebook, with later cells
+using names that earlier cells defined, is not resumable however
+little it writes to disk: the notebook file survives a restart and the
+kernel it ran in does not. `jupyter workshop lint` warns when a
+manifest sets `resumable: true` and more than one page runs or checks
+code in the same notebook's kernel.
 
 ## Local file and export
 

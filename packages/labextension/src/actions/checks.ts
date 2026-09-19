@@ -351,16 +351,32 @@ export class VerifyAction implements IActionImplementation {
       return { status: 'error', message: failureMessage(output.error) };
     }
 
-    // The last expression's value, or printed text, decides the result.
+    // The value of the last expression decides when the body ends in
+    // one, whatever was printed on the way: a check that calls the
+    // learner's code would otherwise pass on that code's own output.
+    // Printed text decides only for a body with no closing expression.
+    const result = output.result?.trim();
     const text = output.text.trim();
+    const verdict = result ?? text;
     const falsy = ['', 'False', 'None', '0', 'false'];
 
-    return falsy.includes(text)
-      ? {
-          status: 'error',
-          message: text ? `Got ${text}` : 'The check produced no result'
-        }
-      : { status: 'ok', message: text };
+    // What was printed says more than the bare value does, so it is the
+    // message either way when there is any.
+    const printed =
+      result !== undefined && text.endsWith(result)
+        ? text.slice(0, text.length - result.length).trim()
+        : text;
+
+    if (falsy.includes(verdict)) {
+      return {
+        status: 'error',
+        message:
+          printed ||
+          (verdict ? `Got ${verdict}` : 'The check produced no result')
+      };
+    }
+
+    return { status: 'ok', message: printed || verdict };
   }
 
   private _context: ICheckActionContext;

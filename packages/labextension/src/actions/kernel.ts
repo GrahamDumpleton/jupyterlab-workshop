@@ -11,6 +11,12 @@ export interface IKernelOutput {
   /** Text written to stdout plus the text form of any result. */
   text: string;
 
+  /**
+   * The text form of the value of the last expression, when the code
+   * ended in one and the run was not silent.
+   */
+  result?: string;
+
   /** Text written to stderr. */
   stderr: string;
 
@@ -36,11 +42,16 @@ export async function executeInKernel(
   silent = true
 ): Promise<IKernelOutput> {
   const output: IKernelOutput = { text: '', stderr: '' };
+
+  // Not stop_on_error: with it, code that raises makes the kernel abort
+  // every execute request queued behind it. In a notebook's kernel that
+  // is the learner's next cell, dropped because a check ran too early;
+  // in the hidden kernel it is another check or capture.
   const future = kernel.requestExecute({
     code,
     silent,
     store_history: false,
-    stop_on_error: true
+    stop_on_error: false
   });
 
   future.onIOPub = (message: KernelMessage.IIOPubMessage): void => {
@@ -61,6 +72,10 @@ export async function executeInKernel(
 
       if (typeof text === 'string') {
         output.text += text;
+
+        if (type === 'execute_result') {
+          output.result = text;
+        }
       }
     } else if (type === 'error') {
       const content = message.content as KernelMessage.IErrorMsg['content'];

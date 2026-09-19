@@ -155,14 +155,24 @@ start at the workspace, so a shipped README needs the `../`),
 `columns` into `areas`; `size` is the fraction of the parent split, so a
 terminal row at `0.4` leaves three fifths above it; `tabs: []` is the
 placeholder for whatever else is open; `name` lets an action's `area`
-option open into that area; a layout never closes anything; built-ins are
-`default` and `terminal-only`),
+option open into that area; a layout never closes anything; layouts are
+not substituted, so write paths out rather than as `{{ }}` variables,
+which would silently match no file; the built-ins both open a terminal:
+`default` puts one named `workshop` below whatever is open and
+`terminal-only` fills the main area with it, so a workshop without the
+`terminal` capability names neither and either declares its own layout
+or has no `layout` field, and lint reports `layout-terminal` otherwise),
 `tracks` (alternative paths chosen with `choice` or a form field), `defaults` (`actions: { delay: 1s }`),
 `environment` (`requirements`, `kernel`, `terminals`), `analytics`
 (`sink`, `token`, `labels`), `frontends` (`jupyterlab`, `jupyterlite`;
 none means JupyterLab only), `resumable` (`true` when the workshop can
 be continued after JupyterLab restarts, since it keeps nothing live
-between pages). A workshop with an `environment` puts an `environment-create`
+between pages; leave it unset otherwise, and always for a workshop
+whose pages share one notebook's kernel, where later pages use names
+earlier pages defined: the notebook file survives a restart or a
+JupyterLite reload and the kernel does not, so continuing lands the
+learner on cells that raise `NameError`. Unset, the learner is asked
+whether to restart. Lint reports `resumable-kernel-state`). A workshop with an `environment` puts an `environment-create`
 action on its first page, before any notebook: the self-test runs only
 what pages carry, and the action is a no-op once the environment
 exists. Once created, the environment is first on `PATH` in workshop
@@ -252,7 +262,7 @@ use `;`.
 | `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`), or copy a shipped file with `:from:` (`:substitute: true` to fill in variables).                                                                                                                                                                        |
 | `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:` with `:line:` or `:match:`, plus `:regex:` and `:occurrence:`; `editor-replace` alone takes `:expand: true`, to expand regex group references in its body; a highlight with context is a `:line:` range); edits are saved unless `:save: false`; `file-close` closes a file's tabs. |
 | `file-delete`, `file-rename`, `file-copy`, `directory-create`      | Manage files without a terminal, the same on every platform (`:path:`, `:to:` for the new path, `:recursive: true` to delete a directory, `:missing: ignore`).                                                                                                                                                                  |
-| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`.                                                                                                                                                                                                                           |
+| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`. It replaces a notebook already there, the learner's work included, unless `:existing: keep`, which opens the existing one instead.                                                                                        |
 | `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).                                                                                                                                                                                                                                   |
 | `hint`                                                             | Collapsible Markdown help.                                                                                                                                                                                                                                                                                                      |
 | `verify`                                                           | A check; see below.                                                                                                                                                                                                                                                                                                             |
@@ -302,8 +312,15 @@ assert out.strip(), "No commits yet: run git commit"
 - `ui`: `terminal-open <session>`, `file-open <path>`, `notebook-open
 <path>`, `panel-open <id>`, `kernel-idle <notebook>`.
 
-- `learner-kernel`: an expression evaluated in the learner's notebook
-  kernel (`:path:` names the notebook); falsy fails.
+- `learner-kernel`: Python run in the learner's notebook kernel
+  (`:path:` names the notebook). The value of the last expression
+  decides, and `False`, `None` or `0` fails; anything printed becomes
+  the message, so `print("Decorate greet first")` then `False` says
+  why. Only a body with no closing expression is judged on what it
+  printed. Read names the cells assigned rather than calling the
+  learner's functions again, and do not rely on a name that may not
+  exist yet raising: a check that raises fails, with the error as its
+  message.
 
 `:trigger:` lists events that re-run it, separated by `;`: `page-enter`,
 `after:<action id>`, `action`, `terminal-output "text"` or `/regex/`,
@@ -311,18 +328,25 @@ assert out.strip(), "No commits yet: run git commit"
 Check always works. Prefer a trigger tied to the action the learner is
 expected to run.
 
-Quiz (`:type: single` or `multi`, `:attempts:`, `:shuffle:`):
+Quiz (`:type: single` or `multi`, `:attempts:`, `:shuffle: false` to
+show the options as written):
 
 ````markdown
 ```{quiz}
 :id: staging
 question: Which command stages changes?
 options:
-  - { text: git add, correct: true }
   - { text: git commit, explanation: "git commit records what is staged." }
+  - { text: git add, correct: true }
 explanation: git add stages, git commit records.
 ```
 ````
+
+Options are shuffled unless the quiz says `:shuffle: false`, because
+the correct answer tends to be written first. The shuffle is one fixed
+order per quiz id, the same for every learner, so also vary where the
+correct option sits in the source. Grading and the self-test go by the
+options as written.
 
 The quiz body is YAML: quote any `question`, `text` or `explanation`
 that contains `: `, `{`, `}` or, inside the one-line `{ ... }` option
@@ -408,7 +432,20 @@ pass, `soft` only shows what is missing.
   avoid `subprocess` in kernel checks and `script` verifies, and keep
   `execute-capture` bodies to shell commands. `jupyter workshop lint
 --frontend jupyterlite` checks; `jupyter workshop test --frontend
-jupyterlite` runs the workshop in a JupyterLite build.
+jupyterlite` runs the workshop in a JupyterLite build. That build needs
+  `node`, `npm` and `micromamba` on the path only when the workshop uses
+  the terminal (the `terminal` capability, an `execute-capture` or a
+  `shell` check); a notebook workshop is tested on a site without one. A
+  reload is routine there and empties the kernel, so the `resumable` rule
+  above matters most in JupyterLite. `references/gotchas.md` lists what
+  Pyodide cannot do.
+
+- A notebook workshop that should open with its notebook showing puts
+  `:auto: page-enter` and `:existing: keep` on the `notebook-create` of
+  its first page (with the `auto-run` capability). Do not name the
+  notebook in the opening layout instead: the layout is applied before
+  any page runs, finds no file and silently leaves it out, which the
+  self-test only notes as a skipped `(workshop)/layout` line.
 
 ## Reading test output
 
@@ -444,7 +481,14 @@ published list of workshops. Build and update it with
 manifest under the directories given and gives each entry a git source
 with the path relative to the checkout (`--repo` and `--ref` default to
 the git origin and branch, so pass `--ref` a tag to pin a release). The
-order of the file is the order the browser shows and is kept on update;
+order of the file is the order the browser shows and is kept on update.
+A directory that is searched lists its workshops in path order, which
+is rarely the teaching order, so for a course name the workshop
+directories themselves in sequence (`jupyter workshop index
+workshops/first workshops/second workshops/third --ordered`): named one
+by one and covering everything already listed, they are written in the
+order given, which is also how a new workshop goes into the middle of a
+course;
 `--title`, `--description`, `--publisher`, `--icon` and `--tag` describe
 the collection itself, and `--ordered` says the workshops form a
 sequence, which numbers them in the browser. Commit the index. Learners subscribe to the raw

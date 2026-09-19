@@ -137,6 +137,17 @@ explanation: git add stages.
     expect(gradeQuiz(quiz!, [0, 1])).toBe(false);
   });
 
+  it('shuffles the options unless told not to', () => {
+    // The correct answer tends to be written first, so showing the
+    // options as written is what a quiz has to ask for.
+    expect(parseQuiz(BODY, {}).quiz?.shuffle).toBe(true);
+    expect(parseQuiz(BODY, { shuffle: 'true' }).quiz?.shuffle).toBe(true);
+    expect(parseQuiz(BODY, { shuffle: 'false' }).quiz?.shuffle).toBe(false);
+    expect(parseQuiz(BODY, { shuffle: 'no' }).errors).toEqual([
+      'Shuffle must be true or false, not "no"'
+    ]);
+  });
+
   it('reports problems', () => {
     expect(parseQuiz('question: x\noptions: [a, b]', {}).errors).toEqual([
       'No option is marked correct'

@@ -594,13 +594,6 @@ export interface IOpenOptions {
   launch?: boolean;
 
   /**
-   * Continue a workshop whose progress was made under a JupyterLab that
-   * has since restarted without asking, as the browser card's Continue
-   * button does once the learner has seen the choice.
-   */
-  continue?: boolean;
-
-  /**
    * The session id of the open the learner chose to restart rather than
    * continue, carried onto the start event so the journey chains.
    */

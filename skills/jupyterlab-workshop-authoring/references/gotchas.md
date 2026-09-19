@@ -33,6 +33,45 @@ once a workshop does a particular kind of thing.
   notebook's. Check the notebook's state with the `learner-kernel`
   substrate and `:path:`, or check what the notebook wrote to disk.
 
+## Notebooks the pages build up
+
+- **A `learner-kernel` check passes whatever the learner did.** A body
+  that ends in no expression is judged on what it printed, so a check
+  that only calls the learner's function passes as soon as that function
+  prints. End the check in the expression that decides
+  (`result == "Hello, Bob!"`): the last expression wins over anything
+  printed. Better still, have the cell assign its result to a name and
+  have the check read the name, so the check does not run the learner's
+  code again.
+
+- **Coming back to page one wipes the notebook.** `notebook-create`
+  replaces a notebook that is already there, and an action with
+  `:auto: page-enter` runs on every visit to its page. Put
+  `:existing: keep` on any `notebook-create` that runs on its own; lint
+  reports `notebook-overwrite` when it is missing.
+
+- **The main area is empty until the learner clicks the first action.**
+  Naming the notebook in the opening layout does not help when a page
+  creates it: the layout is applied first, finds no file and leaves it
+  out without a word. Use `:auto: page-enter` with `:existing: keep` on
+  the `notebook-create` instead. Shipping the notebook in `files/` works
+  only if its `kernelspec` names a kernel the frontend has, and the name
+  differs (`python3` in JupyterLab, `python` in JupyterLite), so a
+  shipped notebook is not portable between them; `notebook-create` asks
+  the frontend for its kernel when it runs.
+
+- **After a restart or a JupyterLite reload, the next cell raises
+  `NameError`.** The notebook file is still there and the kernel that
+  ran it is not. A workshop whose later pages use what earlier pages
+  defined must not set `resumable: true`; left unset, the learner is
+  asked whether to restart. Do not write a page that tells them how to
+  rebuild the session: running the notebook again is not safe in
+  general, since pages may also have changed files the cells read.
+
+- **A cell shows no output.** A result of `None` and a trailing
+  assignment both show nothing, which looks like a cell that failed to
+  run. Print what the prose talks about.
+
 ## Python packages and virtual environments
 
 - **A check or a captured command cannot find a package the learner
@@ -137,7 +176,35 @@ trace.jsonl && ...`) when the page's check should see only what the
 
 ## Windows and JupyterLite
 
-Both are covered by the rules in `SKILL.md`: add `:windows:` variants
-for commands using `&&`, `export`, `ls`, `cat` or `/` paths, and
+The command rules are in `SKILL.md`: add `:windows:` variants for
+commands using `&&`, `export`, `ls`, `cat` or `/` paths, and
 `:jupyterlite:` variants where there is no server, `python` or `git`,
 then lint with `--platform windows` or `--frontend jupyterlite`.
+
+What follows is about the Python a JupyterLite notebook runs, which is
+Pyodide in the browser. Know it before choosing examples, not after the
+self-test fails, and try anything unusual in the JupyterLite build
+first, since the details move between Pyodide releases.
+
+- **Threads, processes and sockets do not exist.** `threading` imports,
+  and locks can be made and taken, but starting a thread raises
+  `RuntimeError: can't start new thread`, so a race cannot be shown.
+  `multiprocessing` and `socket` are no use either: no worker processes
+  and no network connections from Python.
+
+- **`asyncio.run()` cannot be used.** The browser's event loop is
+  already running the kernel. Notebook cells allow `await` at the top
+  level, so write `await main()`.
+
+- **`time.sleep()` holds up the kernel's only thread.** Keep sleeps to
+  tens of milliseconds, enough to show a timing difference.
+
+- **There is no pip and no `environment`.** Packages come from the
+  Pyodide distribution or from `micropip` in a cell
+  (`await micropip.install("x")`). `micropip` looks in the Pyodide
+  distribution before PyPI, so an unpinned name can install an older
+  version than PyPI has; pin the version to get the one the page
+  describes.
+
+- **A reload is routine.** The files survive and the kernel does not;
+  see the `resumable` entry under notebooks above.

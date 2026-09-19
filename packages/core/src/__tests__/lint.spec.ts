@@ -902,3 +902,127 @@ hello
     expect(rules(page('../scratch/notes.txt'))).toContain('write-refused');
   });
 });
+
+const NOTEBOOK_MANIFEST = `
+apiVersion: jupyterlab-workshop/v1alpha1
+name: demo
+title: Demo
+capabilities:
+  - write-files
+  - kernel-exec
+  - auto-run
+pages: [pages/01.md, pages/02.md]
+`;
+
+describe('notebook-create', () => {
+  const create = (options: string) =>
+    `\`\`\`{notebook-create}\n:id: create\n:path: work.ipynb\n${options}- code: x = 1\n\`\`\`\n`;
+
+  it('warns when one that replaces the notebook runs on its own', () => {
+    // Entering the page again would put the starting notebook back over
+    // the learner's work, which keeping an existing one avoids.
+    expect(rules(create(':auto: page-enter\n'), NOTEBOOK_MANIFEST)).toContain(
+      'notebook-overwrite'
+    );
+    expect(
+      rules(create(':auto: page-enter\n:existing: keep\n'), NOTEBOOK_MANIFEST)
+    ).not.toContain('notebook-overwrite');
+
+    // Clicked, replacing is the learner's own doing.
+    expect(rules(create(''), NOTEBOOK_MANIFEST)).not.toContain(
+      'notebook-overwrite'
+    );
+  });
+
+  it('accepts keep and replace for existing and nothing else', () => {
+    const found = lint(create(':existing: sometimes\n'), NOTEBOOK_MANIFEST);
+
+    expect(found.map(message => message.rule)).toContain(
+      'invalid-notebook-create'
+    );
+    expect(
+      rules(create(':existing: replace\n'), NOTEBOOK_MANIFEST).filter(
+        rule => rule === 'invalid-notebook-create' || rule === 'unknown-option'
+      )
+    ).toEqual([]);
+  });
+});
+
+describe('a layout that opens a terminal', () => {
+  const page = '```{cell-run}\n:path: work.ipynb\n:cell: one\n```\n';
+
+  it('is reported when the manifest declares no terminal capability', () => {
+    // The built-in layouts both open one, which is what a notebook
+    // workshop given "layout: default" ends up showing.
+    const found = lint(page, `${NOTEBOOK_MANIFEST}layout: default\n`).filter(
+      message => message.rule === 'layout-terminal'
+    );
+
+    expect(found).toHaveLength(1);
+    expect(found[0].level).toBe('warning');
+    expect(found[0].message).toContain('"default"');
+
+    // A layout a page applies counts as well, once however often it is
+    // named; one that is only declared does not.
+    const declared = `${NOTEBOOK_MANIFEST}layouts:\n  shell:\n    main: { tabs: ["terminal:demo"] }\n`;
+
+    expect(rules(page, declared)).not.toContain('layout-terminal');
+    expect(
+      rules(
+        `${page}\`\`\`{layout}\n:name: shell\n\`\`\`\n\`\`\`{layout}\n:name: shell\n\`\`\`\n`,
+        declared
+      ).filter(rule => rule === 'layout-terminal')
+    ).toHaveLength(1);
+  });
+
+  it('is fine with the capability, or with no terminal in the layout', () => {
+    expect(rules('', `${MANIFEST}layout: default\n`)).not.toContain(
+      'layout-terminal'
+    );
+    expect(
+      rules(
+        page,
+        `${NOTEBOOK_MANIFEST}layout: plain\nlayouts:\n  plain:\n    main: { tabs: [] }\n`
+      )
+    ).not.toContain('layout-terminal');
+  });
+});
+
+describe('resumable', () => {
+  const lintPages = (manifest: string, pages: string[]) =>
+    lintWorkshop({
+      manifest: parseManifest(manifest),
+      pages: pages.map((page, index) =>
+        parsePage(page, { path: `pages/0${index + 1}.md`, variables: {} })
+      )
+    }).map(message => message.rule);
+
+  const define =
+    '```{cell-insert}\n:path: work.ipynb\n:tags: [one]\n:run: true\ntimer = 1\n```\n';
+  const use =
+    '```{verify}\n:substrate: learner-kernel\n:path: work.ipynb\ntimer == 1\n```\n';
+
+  it('is questioned when pages share the kernel of one notebook', () => {
+    // What the first page defined is gone after a restart, so the second
+    // cannot be continued into.
+    expect(
+      lintPages(`${NOTEBOOK_MANIFEST}resumable: true\n`, [define, use])
+    ).toContain('resumable-kernel-state');
+  });
+
+  it('is left alone otherwise', () => {
+    // Not resumable, all on one page, or cells that are only inserted.
+    expect(lintPages(NOTEBOOK_MANIFEST, [define, use])).not.toContain(
+      'resumable-kernel-state'
+    );
+    expect(
+      lintPages(`${NOTEBOOK_MANIFEST}resumable: true\n`, [define + use, ''])
+    ).not.toContain('resumable-kernel-state');
+    expect(
+      lintPages(`${NOTEBOOK_MANIFEST}resumable: true\n`, [
+        define.replace(':run: true\n', ''),
+        define.replace(':run: true\n', '')
+      ])
+    ).not.toContain('resumable-kernel-state');
+  });
+});

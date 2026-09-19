@@ -1,7 +1,8 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { IDocumentManager } from '@jupyterlab/docmanager';
-import { Cell } from '@jupyterlab/cells';
+import { Cell, isCodeCellModel } from '@jupyterlab/cells';
 import { NotebookActions, NotebookPanel } from '@jupyterlab/notebook';
+import { Contents } from '@jupyterlab/services';
 import { Widget } from '@lumino/widgets';
 import { load } from 'js-yaml';
 
@@ -362,8 +363,25 @@ export class NotebookOpenAction implements IActionImplementation {
 }
 
 /**
+ * Whether a file exists at a server path, asked without its content.
+ */
+async function notebookExists(
+  contents: Contents.IManager,
+  serverPath: string
+): Promise<boolean> {
+  try {
+    await contents.get(serverPath, { content: false });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The `notebook-create` action: create a notebook from a YAML list of
- * cells in the body and open it.
+ * cells in the body and open it. A notebook already at the path is
+ * replaced, unless `existing` is `keep`, when it is opened as it is.
  */
 export class NotebookCreateAction implements IActionImplementation {
   readonly type = 'notebook-create';
@@ -382,6 +400,26 @@ export class NotebookCreateAction implements IActionImplementation {
     const contents = this._context.app.serviceManager.contents;
     const kernel =
       request.options.kernel || (await defaultKernel(this._context));
+
+    // Asked to keep a notebook that is already there, the action only
+    // shows it. That is what makes it safe to run on entering a page: a
+    // learner who comes back to the page keeps the cells they have added
+    // and run rather than getting the starting notebook again.
+    if (
+      request.options.existing === 'keep' &&
+      (await notebookExists(contents, serverPath))
+    ) {
+      if (request.options.open !== 'false') {
+        await openNotebook(
+          this._context,
+          serverPath,
+          undefined,
+          request.options.area
+        );
+      }
+
+      return { status: 'ok', message: 'Kept the notebook already there' };
+    }
 
     // Close any open view so it reloads with the new content.
     const existing = this._context.docManager.findWidget(
@@ -507,16 +545,41 @@ export class CellInsertAction implements IActionImplementation {
     // Scrolled again after the run, since the output the run added is
     // what the learner is waiting to see.
 
+    let dropped = false;
+
     if (request.options.run === 'true') {
+      // A notebook only just created or opened may still be starting its
+      // kernel, and a run asked for before the session is ready is
+      // dropped rather than queued.
+      await panel.sessionContext.ready;
       await NotebookActions.run(panel.content, panel.sessionContext);
       await revealCell(panel, index, request);
+
+      // A cell the kernel never ran has no execution count: the request
+      // was aborted, as happens when code queued ahead of it raised. A
+      // cell that ran and raised has one, and showing an error can be
+      // the point of the cell, so that still counts as inserted and run.
+      const model = panel.content.widgets[index]?.model;
+
+      dropped =
+        model !== undefined &&
+        isCodeCellModel(model) &&
+        model.sharedModel.getSource().trim() !== '' &&
+        model.executionCount === null;
     }
 
     // Saved after the run, so the file holds the cell's output as well as
     // the cell.
     await saveNotebook(panel);
 
-    return { status: 'ok' };
+    // The cell is in the notebook, but what it defines is not in the
+    // kernel for the next step to use.
+    return dropped
+      ? {
+          status: 'error',
+          message: 'The cell was inserted but the kernel did not run it'
+        }
+      : { status: 'ok' };
   }
 
   private _context: INotebookActionContext;

@@ -394,9 +394,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
     ).then(() => setVersion(value => value + 1));
   };
 
-  const open = (path: string, carryOn = false): void => {
+  const open = (path: string): void => {
     void whileBusy(`open:${path}`, () =>
-      commands.execute(CommandIDs.open, { path, continue: carryOn })
+      commands.execute(CommandIDs.open, { path })
     );
   };
 
@@ -563,7 +563,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
                 busy={busy === `open:${item.path}`}
                 stale={isStale(item)}
                 onOpen={() => open(item.path)}
-                onContinue={() => open(item.path, true)}
+                onContinue={() => open(item.path)}
                 onRestart={() => void restart(item)}
                 onRemove={
                   features.enabled('remove')
@@ -1343,7 +1343,7 @@ function InstalledCard({
               type="button"
               className="jp-Button jp-mod-styled"
               disabled={busy}
-              title="Carry on where you left off; terminals, running programs and notebook kernels from earlier pages are gone"
+              title="Asks before carrying on where you left off: terminals, running programs and notebook kernels from earlier pages are gone, so the rest of the workshop may not work"
               onClick={onContinue}
             >
               {busy ? 'Opening…' : 'Continue'}

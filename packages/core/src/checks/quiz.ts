@@ -14,6 +14,12 @@ export interface IQuizSpec {
   question: string;
   options: IQuizOption[];
   type: 'single' | 'multi';
+
+  /**
+   * Whether the options are shown in an order other than the one
+   * written, which they are unless the quiz says `shuffle: false`: the
+   * correct answer tends to be written first.
+   */
   shuffle: boolean;
 
   /** Attempts allowed, or 0 for unlimited. */
@@ -91,6 +97,14 @@ export function parseQuiz(
     errors.push('A single answer quiz has more than one correct option');
   }
 
+  if (
+    options.shuffle !== undefined &&
+    options.shuffle !== 'true' &&
+    options.shuffle !== 'false'
+  ) {
+    errors.push(`Shuffle must be true or false, not "${options.shuffle}"`);
+  }
+
   const attempts =
     options.attempts === undefined ? 0 : Number(options.attempts);
 
@@ -107,7 +121,7 @@ export function parseQuiz(
       question,
       options: quizOptions,
       type: type as 'single' | 'multi',
-      shuffle: options.shuffle === 'true',
+      shuffle: options.shuffle !== 'false',
       attempts,
       explanation:
         typeof data.explanation === 'string' ? data.explanation : undefined
