@@ -6,8 +6,17 @@ import {
   evaluateExpression
 } from '@jupyterlab-workshop/core';
 
+/** Milliseconds in each unit a duration may name. */
+const DURATION_UNITS: Readonly<Record<string, number>> = {
+  ms: 1,
+  s: 1000,
+  m: 60000,
+  h: 3600000
+};
+
 /**
- * Parse a duration such as `1500ms`, `2s` or `3` (seconds) into milliseconds.
+ * Parse a duration such as `1500ms`, `2s`, `5m`, `1h` or `3` (seconds)
+ * into milliseconds.
  */
 export function parseDuration(
   value: string | undefined,
@@ -17,15 +26,13 @@ export function parseDuration(
     return fallbackMs;
   }
 
-  const match = /^(\d+(?:\.\d+)?)\s*(ms|s)?$/.exec(value.trim());
+  const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(value.trim());
 
   if (!match) {
     return fallbackMs;
   }
 
-  const amount = Number(match[1]);
-
-  return match[2] === 'ms' ? amount : amount * 1000;
+  return Number(match[1]) * DURATION_UNITS[match[2] ?? 's'];
 }
 
 /**
