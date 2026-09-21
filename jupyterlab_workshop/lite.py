@@ -4,10 +4,11 @@ A JupyterLite site is a directory of static files: the JupyterLab
 frontend, the extensions installed in the current environment (including
 this one), the Pyodide kernel, the terminal, and the contents the site
 starts with. ``build_lite_site`` stages the workshops as those contents,
-writes the site configuration that makes the extension open a workshop on
-start, and runs ``jupyter lite build``. The result can be served by any
-static web server, such as GitHub Pages, or by ``serve_directory`` for a
-local look or a self-test.
+along with any collection index and welcome message the site carries,
+writes the site configuration that makes the extension open a workshop or
+the workshop browser on start, and runs ``jupyter lite build``. The result
+can be served by any static web server, such as GitHub Pages, or by
+``serve_directory`` for a local look or a self-test.
 """
 
 from __future__ import annotations
@@ -16,21 +17,26 @@ import functools
 import http.server
 import importlib.util
 import json
+import posixpath
 import re
 import shutil
 import subprocess
 import sys
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 import yaml
 
+from .catalog import CATALOG_FILE, is_http_url
 from .publish import WORKSPACE_DIR
 
 MANIFEST_FILE = "workshop.yaml"
+
+#: Name of the index file in a directory laid out as a collection.
+COLLECTION_FILE = "collection.json"
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
@@ -71,11 +77,22 @@ class LiteBuildOptions:
     #: Whether to include the terminal extension.
     terminal: bool = True
 
-    #: Collection index locations the workshop browser lists.
+    #: Collections the workshop browser lists: URLs of their index files,
+    #: or local index files (or directories holding a ``collection.json``)
+    #: that are carried in the site.
     collections: tuple[str, ...] = ()
 
-    #: Catalog locations the workshop browser offers collections from.
+    #: Catalogs the workshop browser offers collections from: URLs, or
+    #: local catalog files (or directories holding a ``catalog.json``)
+    #: that are carried in the site with what they name by relative path.
     catalogs: tuple[str, ...] = ()
+
+    #: Settings file in the form of ``overrides.json``, which the settings
+    #: the build works out are laid over.
+    settings: Path | None = None
+
+    #: Markdown file carried in the site and shown as its welcome message.
+    welcome: Path | None = None
 
     #: Rebuild everything rather than what changed.
     force: bool = True
@@ -214,6 +231,192 @@ def stage_contents(workshops: Sequence[Path], staging: Path) -> list[str]:
     return names
 
 
+def stage_collections(
+    collections: Sequence[str], staging: Path, carried: dict[Path, str] | None = None
+) -> list[str]:
+    """Carry the local collection indexes in the site, and return where
+    the workshop browser finds every collection.
+
+    A URL is returned as it is. A local index file, or a directory holding
+    a ``collection.json``, is copied to the root of the site's contents
+    under its own name, along with an icon it names by a relative path,
+    and returned as that path. A site built this way subscribes to its
+    collection without knowing the address it will be served from.
+
+    ``carried`` records what is already in the contents, by source file.
+    An index a carried catalog names is subscribed to where the catalog
+    put it, so the browser sees the catalog's entry as the subscribed one.
+    """
+
+    carried = {} if carried is None else carried
+    locations: list[str] = []
+
+    for location in collections:
+        if is_http_url(location):
+            locations.append(location)
+            continue
+
+        source = _index_file(location, COLLECTION_FILE)
+
+        locations.append(_stage_index(source, staging, source.name, carried))
+
+    return locations
+
+
+def stage_catalogs(
+    catalogs: Sequence[str], staging: Path, carried: dict[Path, str] | None = None
+) -> list[str]:
+    """Carry the local catalogs in the site, and return where the workshop
+    browser finds every catalog.
+
+    A URL is returned as it is. A local catalog file, or a directory
+    holding a ``catalog.json``, is copied to the root of the site's
+    contents under its own name and returned as that path. The browser
+    resolves what a catalog names by a relative path against the catalog,
+    so each collection index and icon named that way is carried at the
+    same place beside it, a collection's own icon included. Collections
+    named by URL stay where they are.
+    """
+
+    carried = {} if carried is None else carried
+    locations: list[str] = []
+
+    for location in catalogs:
+        if is_http_url(location):
+            locations.append(location)
+            continue
+
+        source = _index_file(location, CATALOG_FILE)
+        staged = _stage_index(source, staging, source.name, carried)
+        entries = _read_index(source).get("collections")
+
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict):
+                continue
+
+            url, icon = entry.get("url"), entry.get("icon")
+
+            if _is_relative(url):
+                _stage_index(
+                    source.parent / url, staging, _beside(staged, url), carried
+                )
+
+            if _is_relative(icon):
+                _stage_file(
+                    source.parent / icon, staging, _beside(staged, icon), carried
+                )
+
+        locations.append(staged)
+
+    return locations
+
+
+def stage_welcome(welcome: Path | None, staging: Path) -> str:
+    """Carry the welcome message in the site, at the root of its contents,
+    and return its path there; empty when there is none."""
+
+    if welcome is None:
+        return ""
+
+    return _stage_file(welcome, staging, welcome.name, {})
+
+
+def _index_file(location: str, filename: str) -> Path:
+    source = Path(location)
+
+    # A directory laid out as a collection or catalog holds its index
+    # under a fixed name, so naming the directory is enough.
+    if source.is_dir():
+        source = source / filename
+
+    if not source.is_file():
+        raise LiteError(f"{location} is not a URL or a {filename} file")
+
+    return source
+
+
+def _read_index(index: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(index.read_text("utf-8"))
+    except (OSError, ValueError) as error:
+        raise LiteError(f"{index} cannot be read as JSON: {error}") from error
+
+    return data if isinstance(data, dict) else {}
+
+
+def _is_relative(location: Any) -> TypeGuard[str]:
+    if not isinstance(location, str) or not location:
+        return False
+
+    return not is_http_url(location) and not location.lower().startswith("data:")
+
+
+def _beside(staged: str, relative: str) -> str:
+    return posixpath.join(posixpath.dirname(staged), relative)
+
+
+def _stage_index(
+    source: Path, staging: Path, relative: str, carried: dict[Path, str]
+) -> str:
+    """Carry a collection or catalog file at a path in the contents, and
+    beside it the icon it names by a relative path."""
+
+    known = carried.get(source.resolve())
+
+    if known is not None:
+        return known
+
+    staged = _stage_file(source, staging, relative, carried)
+    icon = _read_index(source).get("icon")
+
+    if _is_relative(icon):
+        _stage_file(source.parent / icon, staging, _beside(staged, icon), carried)
+
+    return staged
+
+
+def _stage_file(
+    source: Path, staging: Path, relative: str, carried: dict[Path, str]
+) -> str:
+    root = staging.resolve()
+    target = (root / relative).resolve()
+
+    if not target.is_relative_to(root):
+        raise LiteError(f"{relative} would land outside the site's contents")
+
+    staged = target.relative_to(root).as_posix()
+
+    # A file named twice at the same place, such as an icon a catalog and
+    # its collection share, is carried once.
+    if carried.get(source.resolve()) == staged:
+        return staged
+
+    if not source.is_file():
+        raise LiteError(f"{source} does not exist")
+
+    # Everything staged shares the root of the contents with the
+    # workshops, so a name can only be used once, and nothing is put
+    # inside a workshop, where it would become part of it.
+    if target.exists():
+        raise LiteError(
+            f"{source} would overwrite {relative} in the site's contents; "
+            "rename one of the two"
+        )
+
+    for parent in target.relative_to(root).parents:
+        if parent != Path(".") and (root / parent / MANIFEST_FILE).is_file():
+            raise LiteError(
+                f"{source} would land inside the workshop {parent} as "
+                f"{relative}; rename one of the two"
+            )
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    carried.setdefault(source.resolve(), staged)
+
+    return staged
+
+
 def site_config(terminal: bool = True) -> dict[str, Any]:
     """The ``jupyter-lite.json`` settings a workshop site needs.
 
@@ -246,31 +449,147 @@ def _package_version() -> str:
     return str(__version__)
 
 
-def settings_overrides(
-    options: LiteBuildOptions, names: Sequence[str]
-) -> dict[str, Any]:
-    """The extension settings baked into the site.
+def load_settings(path: Path | None) -> dict[str, Any]:
+    """Read a settings file in the form of ``overrides.json``: an object
+    holding the settings of each plugin under the plugin's id. Without a
+    file there are no settings."""
 
-    The workshops live at the root of the site's contents, so the browser
-    lists them from there, and the chosen workshop opens on start.
+    if path is None:
+        return {}
+
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError) as error:
+        raise LiteError(f"{path} cannot be read as JSON: {error}") from error
+
+    # Settings written without the plugin's id around them are the likely
+    # mistake, and would otherwise be carried into the site and ignored.
+    if not isinstance(data, dict) or not all(
+        ":" in key and isinstance(value, dict) for key, value in data.items()
+    ):
+        raise LiteError(
+            f"{path} must hold the settings of each plugin under its id, as "
+            f'overrides.json does: {{"{PANEL_PLUGIN}": {{...}}}}'
+        )
+
+    return data
+
+
+def settings_schema() -> dict[str, Any] | None:
+    """The extension's settings schema, from where JupyterLab finds the
+    installed extension, or None when it is not there to be read."""
+
+    from jupyter_core.paths import jupyter_path
+
+    package, _, plugin = PANEL_PLUGIN.partition(":")
+
+    for directory in jupyter_path("labextensions"):
+        path = Path(directory) / package / "schemas" / package / f"{plugin}.json"
+
+        if path.is_file():
+            schema: dict[str, Any] = json.loads(path.read_text("utf-8"))
+
+            return schema
+
+    return None
+
+
+def check_settings(settings: Mapping[str, Any], source: Path) -> None:
+    """Hold the extension's settings from a file to the settings schema.
+
+    A static site has nobody to report a misspelt setting to, so the
+    build refuses one. Nothing is checked when the schema cannot be found.
     """
 
-    default = options.default_workshop or (names[0] if len(names) == 1 else "")
+    import jsonschema
+
+    schema = settings_schema()
+
+    if schema is None:
+        return
+
+    validator = jsonschema.Draft7Validator(schema)
+    errors = sorted(validator.iter_errors(settings), key=lambda item: list(item.path))
+
+    if errors:
+        where = "/".join(str(part) for part in errors[0].path)
+        prefix = f"{where}: " if where else ""
+
+        raise LiteError(f"{source}: {prefix}{errors[0].message}")
+
+
+def settings_overrides(
+    options: LiteBuildOptions,
+    names: Sequence[str],
+    collections: Sequence[str] | None = None,
+    welcome: str = "",
+    catalogs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """The settings baked into the site.
+
+    The settings file, when there is one, is the base, and what the build
+    works out is laid over it. The workshops live at the root of the
+    site's contents, so the browser lists them from there, and the chosen
+    workshop opens on start. A site with no workshop to open starts in
+    the workshop browser rather than at the launcher, unless the settings
+    file says otherwise.
+
+    ``collections``, ``catalogs`` and ``welcome`` are where staging put
+    them in the contents; left out, the collections and catalogs are used
+    as the options give them.
+    """
+
+    overrides = load_settings(options.settings)
+    panel = dict(overrides.get(PANEL_PLUGIN) or {})
+
+    if options.settings is not None:
+        check_settings(panel, options.settings)
+
+    if options.default_workshop:
+        default = options.default_workshop
+    elif isinstance(panel.get("defaultWorkshop"), str):
+        default = str(panel["defaultWorkshop"])
+    else:
+        default = names[0] if len(names) == 1 else ""
 
     if default and default not in names:
         raise LiteError(f"There is no workshop named {default} to open by default")
 
-    settings: dict[str, Any] = {
-        "defaultWorkshop": default,
-        "workshopsDirectory": "",
-        "collections": list(options.collections),
-        "catalogs": list(options.catalogs),
-    }
+    if collections is None:
+        collections = options.collections
+
+    if catalogs is None:
+        catalogs = options.catalogs
+
+    panel["defaultWorkshop"] = default
+    panel["workshopsDirectory"] = ""
+    panel["collections"] = _merged(panel.get("collections"), collections)
+    panel["catalogs"] = _merged(panel.get("catalogs"), catalogs)
+
+    if not default:
+        panel.setdefault("browseOnStart", True)
 
     if options.trust:
-        settings["trustPolicy"] = {"forcedLevel": options.trust}
+        policy = dict(panel.get("trustPolicy") or {})
+        policy["forcedLevel"] = options.trust
+        panel["trustPolicy"] = policy
 
-    return {PANEL_PLUGIN: settings}
+    if welcome:
+        panel["welcome"] = welcome
+
+    overrides[PANEL_PLUGIN] = panel
+
+    return overrides
+
+
+def _merged(existing: Any, added: Sequence[str]) -> list[str]:
+    merged: list[str] = list(existing) if isinstance(existing, list) else []
+
+    for item in added:
+        if item not in merged:
+            merged.append(item)
+
+    return merged
 
 
 def build_command(
@@ -325,11 +644,22 @@ def build_lite_site(
 
     names = stage_contents(options.workshops, staging)
 
+    # Catalogs go first: a collection given on its own as well is then
+    # subscribed to where its catalog put it, not carried a second time.
+    carried: dict[Path, str] = {}
+    catalogs = stage_catalogs(options.catalogs, staging, carried)
+    collections = stage_collections(options.collections, staging, carried)
+    welcome = stage_welcome(options.welcome, staging)
+
     (lite_dir / "jupyter-lite.json").write_text(
         json.dumps(site_config(options.terminal), indent=2) + "\n", encoding="utf-8"
     )
     overrides.write_text(
-        json.dumps(settings_overrides(options, names), indent=2) + "\n",
+        json.dumps(
+            settings_overrides(options, names, collections, welcome, catalogs),
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 

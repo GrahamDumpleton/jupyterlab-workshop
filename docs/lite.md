@@ -21,7 +21,7 @@ would do, it does in the browser instead:
 | `verify` with `script`, `environment-create` | Not available; the actions report why.                                                                                                    |
 | Checkpoints                                  | Copies of the files under `_workshop/snapshots/`.                                                                                         |
 | Preflight                                    | Python is always found; other tools must be commands of the shell. Versions are not checked.                                              |
-| Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to from the browser, with the token in the `Authorization` header, and needs CORS. |
+| Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to by the browser, with the token as a header and as `?token=`, and so needs CORS. |
 
 Files written by actions, notebooks and progress live in the browser's
 storage for the site, so they survive a reload but stay on that machine.
@@ -87,6 +87,11 @@ the site builder is where a collection is bundled.
 workshops, with the extension, the Pyodide kernel and the terminal, that
 any web host can serve; [Publishing workshops](publishing.md#a-jupyterlite-site)
 covers the command, what the build needs, and deploying to GitHub Pages.
+A site with one workshop opens it on start, and a site with several
+starts in the workshop browser. The build can also carry a collection
+index, a catalog, a welcome message and a settings file, such as an
+analytics block, so that the site's own address is all a link to it
+needs.
 
 ## Testing
 

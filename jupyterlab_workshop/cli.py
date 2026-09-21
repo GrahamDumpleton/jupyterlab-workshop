@@ -539,13 +539,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--collection",
         action="append",
         default=[],
-        help="collection index URL to subscribe to in the workshop browser",
+        help="collection to subscribe to in the workshop browser: the URL of "
+        "its index, or a local collection.json (or the directory holding "
+        "one), which is carried in the site",
     )
     lite.add_argument(
         "--catalog",
         action="append",
         default=[],
-        help="catalog URL to subscribe to in the workshop browser",
+        help="catalog to subscribe to in the workshop browser: its URL, or a "
+        "local catalog.json (or the directory holding one), which is carried "
+        "in the site with the collections it names by relative path",
+    )
+    lite.add_argument(
+        "--settings",
+        type=Path,
+        help="settings file in the form of overrides.json to build into the "
+        "site, such as an analytics block; the other options are laid over it",
+    )
+    lite.add_argument(
+        "--welcome",
+        type=Path,
+        help="Markdown file to carry in the site and show as its welcome message",
     )
     lite.add_argument(
         "--no-terminal",
@@ -1127,6 +1142,8 @@ def command_lite(args: argparse.Namespace) -> int:
         terminal=args.terminal,
         collections=tuple(args.collection),
         catalogs=tuple(args.catalog),
+        settings=args.settings,
+        welcome=args.welcome,
     )
 
     try:

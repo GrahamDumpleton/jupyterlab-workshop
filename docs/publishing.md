@@ -152,7 +152,8 @@ or `pip install "jupyterlab-workshop[lite]"`.
 ```
 jupyter workshop lite my-workshop [other-workshop ...] [--out lite-site]
                                   [--default NAME] [--trust LEVEL]
-                                  [--collection URL] [--catalog URL]
+                                  [--collection URL|FILE] [--catalog URL|FILE]
+                                  [--settings FILE] [--welcome FILE]
                                   [--no-terminal] [--lite-dir DIR]
                                   [--serve] [--port PORT]
 ```
@@ -164,6 +165,58 @@ workshop on start (`--default`, or the only workshop given) and, with
 build`. The site includes whatever JupyterLab extensions are installed in
 the environment, this one among them. `--serve` serves the result on a
 local port, under a sub-path as GitHub Pages would, to try it out.
+
+A site with several workshops and no `--default` has no workshop to
+open, so it starts in the workshop browser in place of the launcher,
+the build having set [`browseOnStart`](settings.md). The site's own
+address is then all a link needs. A visitor who left a workshop open is
+returned to it, as in any JupyterLab; add JupyterLab's own `reset`
+parameter to a link, as in `.../lab/index.html?reset`, for one that
+always lands in the browser.
+
+`--collection` subscribes the site to a collection, so the browser
+lists the workshops under the collection's title, numbered in its order
+when it is ordered, and the Finish dialog of each offers the next. Give
+it the local `collection.json`, or the directory holding one, and the
+file is carried in the site's contents, with an icon it names by a
+relative path, and subscribed to by that path. The workshops in the
+site are matched to the entries of the index by name. A URL is
+subscribed to as it is, which suits an index published elsewhere, whose
+host must then send CORS headers.
+
+`--catalog` works the same way for a catalog, from which the browser
+offers collections to subscribe to: a URL is subscribed to as it is, and
+a local `catalog.json`, or the directory holding one, is carried in the
+site. A catalog may name its collections and icons by paths relative to
+itself, as in the one-repository layout of
+[catalogs](collections.md#catalogs), so each of those is carried at the
+same place beside the catalog, a collection's own icon included, while
+collections it names by URL stay where they are. A relative path has to
+stay within the catalog's directory, and may not fall inside a workshop
+of the same name. A collection named by both `--catalog` and
+`--collection` is carried once, where the catalog puts it, so that the
+browser shows the catalog's entry as the subscribed one.
+
+`--settings FILE` takes a file in the form of `overrides.json`, the
+settings of each plugin under the plugin's id, and builds it into the
+site. This is how a site is given an
+[analytics block](deploying.md#reporting-progress), disabled features,
+or the settings of any other JupyterLab plugin. The file is the base
+and the build's own settings are laid over it: `workshopsDirectory` is
+always the root of the contents, `--default` and `--trust` win over the
+file, and `--collection` and `--catalog` add to the lists in it. A file
+can set `browseOnStart` to `false` to keep a site at the launcher. The
+extension's settings in the file are checked against the settings
+schema, since a static site has nobody to report a misspelt setting to.
+
+`--welcome FILE` carries a Markdown file in the site and sets it as the
+[welcome message](deploying.md#a-welcome-message), shown once per browser. A site built
+with `--trust trusted` shows no trust dialog, so when it also reports
+progress the welcome message is the place to say so.
+
+A collection index, a catalog and a welcome message each sit at the
+root of the site's contents beside the workshops, under their own file
+names, so the names have to differ.
 
 The terminal needs `node`, `npm` and `micromamba` on the path when
 building, because the terminal extension fetches its WebAssembly

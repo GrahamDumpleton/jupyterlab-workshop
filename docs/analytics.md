@@ -202,9 +202,14 @@ Batches are posted by the server, not the browser, as
 needs no CORS headers. In [JupyterLite](lite.md) there is no server: the
 browser posts the same bodies itself, so a sink used from there must
 allow cross-origin requests from the site, including the `Authorization`
-header when a token is set. A sink is any endpoint that accepts a POST;
-a few lines of any web framework that appends the body to a file is
-enough, and `jupyter workshop schema --events` prints the schema to
-validate against. Delivery is best effort: a sink that is down loses the
-batch, the sequence numbers show the gap, and the local file remains the
-record.
+header when a token is set. The browser asks first, with a preflight
+request that carries no `Authorization` header, so from a site the token
+is also added to the sink's address as a `token` query parameter, unless
+the address already has one. A sink that allows origins token by token
+reads it from there to answer the preflight; one that allows the same
+origins for every token can ignore it. A sink is any endpoint that
+accepts a POST; a few lines of any web framework that appends the body
+to a file is enough, and `jupyter workshop schema --events` prints the
+schema to validate against. Delivery is best effort: a sink that is down
+loses the batch, the sequence numbers show the gap, and the local file
+remains the record.

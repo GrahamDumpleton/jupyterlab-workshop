@@ -214,7 +214,8 @@ administrator sets it for everyone through `overrides.json`:
 The server reads the index and hands it to the browser, so the host
 serving it needs no CORS headers. In [JupyterLite](lite.md) the browser
 reads it directly, so the host must send them, or the index can be a
-file shipped inside the site and named by a relative path.
+file shipped inside the site and named by a relative path, which is
+what `jupyter workshop lite --collection collection.json` does.
 
 Subscribing to a collection never trusts its workshops: each still shows the
 trust dialog when opened, unless a policy settles it. Fetching an index

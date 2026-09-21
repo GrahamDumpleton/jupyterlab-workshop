@@ -255,10 +255,16 @@ host:
   `codespaces`, and a stopped and resumed codespace is a new instance,
   so a workshop in progress asks whether to restart or continue.
 
-- **JupyterLite.** Bake the setting into the site at build time. There
-  is no server, so the browser posts the batches and the sink must
-  allow cross-origin requests from the site's origin, including the
-  `Authorization` header; the token is public with the site.
+- **JupyterLite.** Build the setting into the site, from a settings
+  file given to `jupyter workshop lite --settings`. There is no server,
+  so the browser posts the batches and the sink must allow cross-origin
+  requests from the site's origin, including the `Authorization`
+  header. The browser's preflight carries no header, so the token is
+  also sent on the sink's address as `?token=`, which is where a sink
+  that ties origins to tokens looks for it. The token is public with
+  the site. Such a site is usually built with `--trust trusted` and so
+  shows no trust dialog; say that progress is reported in its welcome
+  message (`--welcome`).
 
 - **A standalone JupyterLab.** The setting lives in the user's own
   settings or an install's `overrides.json`, with whatever secrecy the
@@ -269,7 +275,8 @@ host:
 
 Where no server can be run at all, a JupyterLite site carries the
 workshops and runs in the browser, with the trust level, the default
-workshop and the subscribed collections and catalogs set at build time;
-see [Publishing
+workshop or the workshop browser to start in, the subscribed
+collections and catalogs, a welcome message and any other settings
+fixed at build time; see [Publishing
 workshops](publishing.md#a-jupyterlite-site) for building and hosting
 one and [JupyterLite](lite.md) for what workshops can do there.

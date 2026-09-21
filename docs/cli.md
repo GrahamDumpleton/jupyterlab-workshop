@@ -304,7 +304,8 @@ jupyter workshop launch workshops/git-basics --restart=force --trust trusted --f
 ```
 jupyter workshop lite my-workshop [other-workshop ...] [--out DIR]
                                   [--default NAME] [--trust LEVEL]
-                                  [--collection URL] [--catalog URL]
+                                  [--collection URL|FILE] [--catalog URL|FILE]
+                                  [--settings FILE] [--welcome FILE]
                                   [--no-terminal] [--lite-dir DIR]
                                   [--serve] [--port PORT]
 ```
@@ -314,6 +315,20 @@ the extension, the Pyodide kernel and the terminal, that any web host can
 serve. Needs the `lite` extra; the terminal's build step needs `node`,
 `npm` and `micromamba` unless `--no-terminal` is given. `--serve` serves
 the result locally to try it out.
+
+A site with one workshop, or with `--default NAME`, opens that workshop
+on start; any other site starts in the workshop browser. `--collection`
+takes the URL of a collection index, or a local `collection.json` (or
+the directory holding one) that is carried in the site, so the browser
+lists the workshops under the collection's title and in its order
+without the build knowing where the site will be served from.
+`--catalog` takes a URL or a local `catalog.json` in the same way, and
+carries the collections the catalog names by relative path with it.
+`--settings FILE` builds a settings file in the form of `overrides.json`
+into the site, for an analytics block, disabled features and the like,
+and `--welcome FILE` carries a Markdown file in the site and shows it as
+the welcome message. [Publishing
+workshops](publishing.md#a-jupyterlite-site) has the detail.
 
 ## test
 
