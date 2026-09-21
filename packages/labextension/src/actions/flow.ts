@@ -15,10 +15,6 @@ import { requireOption } from './registry';
 export class ChoiceAction implements IActionImplementation {
   readonly type = 'choice';
 
-  constructor(manager: IWorkshopManager) {
-    this._manager = manager;
-  }
-
   describe(request: IActionRequest): string {
     return `Choose ${request.options.variable ?? (request.options.track === 'true' ? 'track' : 'a value')}`;
   }
@@ -41,18 +37,22 @@ export class ChoiceAction implements IActionImplementation {
       };
     }
 
-    const store = this._manager.variables;
+    // The manager stores what an action reports as captured and holds
+    // the action until open terminals have the values, so the next
+    // command never runs against the old ones.
+    const captured: Record<string, string> = { [variable]: value };
 
-    store.set(variable, value, 'form');
-
-    if (request.options.track === 'true' && variable !== 'track') {
-      store.set('track', value, 'form');
+    if (request.options.track === 'true') {
+      captured.track = value;
     }
 
-    return { status: 'ok', message: value };
+    return {
+      status: 'ok',
+      message: value,
+      captured,
+      captureSource: 'form'
+    };
   }
-
-  private _manager: IWorkshopManager;
 }
 
 /**
@@ -60,10 +60,6 @@ export class ChoiceAction implements IActionImplementation {
  */
 export class EnvSetAction implements IActionImplementation {
   readonly type = 'env-set';
-
-  constructor(manager: IWorkshopManager) {
-    this._manager = manager;
-  }
 
   describe(request: IActionRequest): string {
     return `Set ${request.options.name ?? '?'}`;
@@ -73,12 +69,10 @@ export class EnvSetAction implements IActionImplementation {
     const name = requireOption(request, 'name');
     const value = request.options.value ?? request.body.replace(/\n$/, '');
 
-    this._manager.variables.set(name, value, 'capture');
-
-    return { status: 'ok', message: value };
+    // Reported as captured, not stored here, so that the manager holds
+    // the action until open terminals have loaded the value.
+    return { status: 'ok', message: value, captured: { [name]: value } };
   }
-
-  private _manager: IWorkshopManager;
 }
 
 /**

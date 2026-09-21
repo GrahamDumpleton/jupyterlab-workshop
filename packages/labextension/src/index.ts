@@ -421,8 +421,8 @@ const actionsPlugin: JupyterFrontEndPlugin<IActionRegistry> = {
       new FormAction(),
       new CheckpointAction(manager),
       new RestoreAction(manager),
-      new ChoiceAction(manager),
-      new EnvSetAction(manager),
+      new ChoiceAction(),
+      new EnvSetAction(),
       new NextPageAction(manager),
       new EnvironmentCreateAction(manager)
     ];

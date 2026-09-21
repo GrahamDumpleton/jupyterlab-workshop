@@ -57,6 +57,15 @@ const PROMPT_PROBE_MS = 5000;
  */
 const PROMPT_RELOAD_MS = 60000;
 
+/**
+ * How long a terminal must print nothing, once the marker a command was
+ * followed by has appeared, for its shell to be taken as back at the
+ * prompt, and the longest that is waited for.
+ */
+const SETTLE_QUIET_MS = 200;
+const SETTLE_WAIT_MS = 2000;
+const SETTLE_POLL_MS = 50;
+
 /** Shells whose environment file installs the marked prompt. */
 const PROMPT_HOOK_SHELLS: ReadonlySet<string> = new Set([
   'bash',
@@ -276,7 +285,6 @@ export class TerminalSessions {
     // pick out the prompts it draws. The scanner lives as long as the
     // terminal so that a prompt drawn again, as on a resize, is known
     // for one already counted whether or not anything was waiting.
-    let lastOutputAt = 0;
     const scanner = new PromptScanner();
     const onMessage = (
       _: TerminalService.ITerminalConnection,
@@ -285,7 +293,7 @@ export class TerminalSessions {
       if (message.type === 'stdout' && message.content) {
         const text = message.content.map(String).join('');
 
-        lastOutputAt = Date.now();
+        this._lastOutput.set(name, Date.now());
         this._output.emit({ name, text });
 
         for (const marker of scanner.feed(text)) {
@@ -334,6 +342,7 @@ export class TerminalSessions {
         this._widgets.delete(name);
         this._hooked.delete(name);
         this._queue.delete(name);
+        this._lastOutput.delete(name);
       }
 
       if (this._first === widget) {
@@ -351,6 +360,8 @@ export class TerminalSessions {
 
     while (Date.now() - started < PROMPT_WAIT_MS) {
       await sleep(PROMPT_POLL_MS);
+
+      const lastOutputAt = this._lastOutput.get(name) ?? 0;
 
       if (lastOutputAt > 0 && Date.now() - lastOutputAt >= PROMPT_QUIET_MS) {
         break;
@@ -376,7 +387,13 @@ export class TerminalSessions {
       this._hooked.set(name, Promise.resolve(false));
     }
 
-    if (source) {
+    // A shell that can never have the marked prompt is waited for here,
+    // by the marker its commands are followed by: the first command sent
+    // to the terminal would otherwise arrive while the shell is still
+    // working through this line, which the JupyterLite shell cannot take.
+    if (source && !PROMPT_HOOK_SHELLS.has(shell)) {
+      await this._echoed(name, session, `${source}\n`, PROMPT_PROBE_MS);
+    } else if (source) {
       this._write(session, `${source}\n`);
     }
 
@@ -514,8 +531,7 @@ export class TerminalSessions {
     timeoutMs: number,
     options: { cwd?: string; activate?: boolean } = {}
   ): Promise<IPromptMarker | null> {
-    const previous = this._queue.get(name) ?? Promise.resolve();
-    const run = previous.then(async () => {
+    return this._serial(name, async () => {
       const widget = await this.get(name, { cwd: options.cwd });
       const lines = text.split('\n').length - 1;
       const done = this.waitForPrompts(name, lines, timeoutMs);
@@ -528,6 +544,84 @@ export class TerminalSessions {
 
       return done;
     });
+  }
+
+  /**
+   * Send lines to a terminal whose prompt is not marked, followed by a
+   * command that prints a marker, and resolve to whether the marker
+   * appeared within the timeout, or null when the shell has no such
+   * command. These exchanges wait their turn as the ones with a marked
+   * prompt do, and for the same reason with more at stake: the
+   * JupyterLite shell runs input that arrives while it is still working
+   * through earlier lines alongside them, and a prompt drawn by one in
+   * the middle of another's marker leaves the marker never seen.
+   */
+  exchangeEchoed(
+    name: string,
+    text: string,
+    timeoutMs: number,
+    options: { cwd?: string; activate?: boolean } = {}
+  ): Promise<boolean | null> {
+    return this._serial(name, async () => {
+      const widget = await this.get(name, { cwd: options.cwd });
+
+      if (options.activate) {
+        this._shell.activateById(widget.id);
+      }
+
+      return this._echoed(name, widget.content.session, text, timeoutMs);
+    });
+  }
+
+  /**
+   * Write lines followed by the marker command and wait for the marker,
+   * then for the terminal to go quiet, which is the shell drawing its
+   * prompt: the marker is printed by the last command of the line, not
+   * by the shell on its return.
+   */
+  private async _echoed(
+    name: string,
+    session: TerminalService.ITerminalConnection,
+    text: string,
+    timeoutMs: number
+  ): Promise<boolean | null> {
+    this._markers += 1;
+
+    const marker = `__WORKSHOP_DONE_${Date.now().toString(36)}${this._markers.toString(36)}__`;
+    const echo = markerCommand(this._manager, marker);
+
+    if (!echo) {
+      return null;
+    }
+
+    const seen = this.waitForOutput(name, marker, timeoutMs);
+
+    this._write(session, `${text}${echo}\n`);
+
+    if (!(await seen)) {
+      return false;
+    }
+
+    const started = Date.now();
+
+    while (Date.now() - started < SETTLE_WAIT_MS) {
+      await sleep(SETTLE_POLL_MS);
+
+      if (Date.now() - (this._lastOutput.get(name) ?? 0) >= SETTLE_QUIET_MS) {
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Run a task once everything queued for a terminal before it is done,
+   * whatever became of it.
+   */
+  private _serial<T>(name: string, task: () => Promise<T>): Promise<T> {
+    const previous = this._queue.get(name) ?? Promise.resolve();
+    const run = previous.then(task);
     const settled = run.then(
       () => undefined,
       () => undefined
@@ -576,9 +670,11 @@ export class TerminalSessions {
   }
 
   /**
-   * Load the environment file again in one terminal: as an exchange where
-   * the prompt is marked, so the prompt it draws is not mistaken for the
-   * end of a command, and as plain input otherwise.
+   * Load the environment file again in one terminal, as an exchange, so
+   * that it waits for a command still running and the next command waits
+   * for it: by the prompt it draws where the prompt is marked, which is
+   * then not mistaken for the end of a command, and by an echoed marker
+   * otherwise.
    */
   private async _reload(name: string, text: string): Promise<void> {
     if (await this.promptHooked(name)) {
@@ -587,11 +683,7 @@ export class TerminalSessions {
       return;
     }
 
-    const widget = this._widgets.get(name);
-
-    if (widget && !widget.isDisposed) {
-      this._write(widget.content.session, text);
-    }
+    await this.exchangeEchoed(name, text, PROMPT_RELOAD_MS);
   }
 
   private _app: JupyterFrontEnd;
@@ -602,6 +694,8 @@ export class TerminalSessions {
   private _first: MainAreaWidget<Terminal> | null = null;
   private _hooked = new Map<string, Promise<boolean>>();
   private _queue = new Map<string, Promise<void>>();
+  private _lastOutput = new Map<string, number>();
+  private _markers = 0;
   private _prompts = new Signal<this, { name: string; marker: IPromptMarker }>(
     this
   );
@@ -813,25 +907,19 @@ export class ExecuteAction implements IActionImplementation {
             };
       }
 
-      const marker = `__WORKSHOP_DONE_${Date.now().toString(36)}__`;
-      const echo = markerCommand(this._manager, marker);
+      const seen = await this._terminals.exchangeEchoed(name, text, timeout, {
+        cwd,
+        activate: true
+      });
 
-      if (!echo) {
+      if (seen === null) {
         return {
           status: 'error',
           message: 'Waiting for the prompt is not supported by this shell'
         };
       }
 
-      const seen = this._terminals.waitForOutput(name, marker, timeout);
-
-      await this._terminals.send(name, `${text}${echo}\n`, cwd);
-
-      if (!(await seen)) {
-        return timedOut;
-      }
-
-      return { status: 'ok' };
+      return seen ? { status: 'ok' } : timedOut;
     }
 
     await this._terminals.send(
