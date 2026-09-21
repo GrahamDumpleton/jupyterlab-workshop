@@ -564,6 +564,10 @@
 
 /* Trust dialog. */
 
+.jp-WorkshopTrustDialog .jp-Dialog-content {
+  max-height: 85vh;
+}
+
 .jp-WorkshopTrust {
   max-width: 560px;
   font-size: var(--jp-ui-font-size1);
@@ -591,6 +595,11 @@
 .jp-WorkshopTrust-heading {
   margin: 12px 0 4px;
   font-weight: 600;
+}
+
+.jp-WorkshopTrust-host {
+  margin: 0;
+  color: var(--jp-ui-font-color2);
 }
 
 .jp-WorkshopTrust-capabilities {

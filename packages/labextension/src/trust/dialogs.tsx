@@ -60,7 +60,11 @@ class TrustBody extends ReactWidget implements Dialog.IBodyWidget<boolean> {
           </dd>
           <dt>Automatic actions</dt>
           <dd>{summary.automatic}</dd>
+          <dt>Runs on</dt>
+          <dd>{summary.host.label}</dd>
         </dl>
+        <p className="jp-WorkshopTrust-heading">Where it runs</p>
+        <p className="jp-WorkshopTrust-host">{summary.host.description}</p>
         <p className="jp-WorkshopTrust-heading">Capabilities</p>
         {summary.capabilities.length === 0 ? (
           <p>The workshop declares no capabilities.</p>
@@ -240,7 +244,7 @@ export async function showTrustDialog(
   const levels: (TrustLevel | null)[] = [null, 'ask', 'restricted', 'trusted'];
   const defaultButton = levels.indexOf(defaultLevel);
 
-  const result = await showDialog<boolean>({
+  const dialog = new Dialog<boolean>({
     title: preview
       ? `Preview: Open workshop "${summary.title}"?`
       : `Open workshop "${summary.title}"?`,
@@ -249,6 +253,12 @@ export async function showTrustDialog(
     defaultButton: defaultButton < 0 ? 2 : defaultButton,
     hasClose: true
   });
+
+  // The class lifts JupyterLab's cap on the height of a dialog, so the
+  // levels the buttons choose between are not scrolled out of sight.
+  dialog.addClass('jp-WorkshopTrustDialog');
+
+  const result = await dialog.launch();
 
   const index = buttons.findIndex(
     button => button.label === result.button.label

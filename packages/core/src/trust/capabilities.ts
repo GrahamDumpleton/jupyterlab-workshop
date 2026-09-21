@@ -23,7 +23,7 @@ export const CAPABILITY_NAMES: readonly Capability[] = [
 export const CAPABILITY_DESCRIPTIONS: Readonly<Record<Capability, string>> = {
   none: 'No special access.',
   terminal:
-    'Run commands in terminals, which can reach anything the machine can.',
+    'Run commands in terminals, which can reach anything the host they run on can.',
   'write-files': 'Create and change files in the workspace.',
   'install-packages': 'Install packages.',
   'kernel-exec': 'Run code in kernels, including in the background.',

@@ -42,6 +42,13 @@ async function openWorkshop(
   const dialog = page.locator('.jp-Dialog');
 
   await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+
+  // The dialog says where the workshop runs before what it may do. The
+  // test server is a local one, in a container or not depending on CI.
+  await expect(dialog.locator('.jp-WorkshopTrust-host')).toContainText(
+    'the computer JupyterLab was started on'
+  );
+
   await dialog.getByRole('button', { name: level, exact: true }).click();
   await expect(dialog).toHaveCount(0);
 

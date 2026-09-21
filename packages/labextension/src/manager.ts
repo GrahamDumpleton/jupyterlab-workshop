@@ -434,6 +434,7 @@ export class WorkshopManager implements IWorkshopManager {
         sources,
         source,
         hash: record?.sha256,
+        platform,
         analytics: offer
       });
       // While the learner is asked, the panel shows the first page they
@@ -731,7 +732,9 @@ export class WorkshopManager implements IWorkshopManager {
         pages: preview,
         sources,
         source: workshop.source,
-        hash: workshop.source.kind === 'local' ? undefined : workshop.trust.hash
+        hash:
+          workshop.source.kind === 'local' ? undefined : workshop.trust.hash,
+        platform
       });
 
       const state = this._state.state;

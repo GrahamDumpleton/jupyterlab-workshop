@@ -3,6 +3,7 @@ import {
   Capability,
   GatingPolicy,
   IDirectiveNode,
+  IHostDescription,
   ILintMessage,
   IPage,
   IVenvExports,
@@ -87,6 +88,9 @@ export interface ITrustSummary {
 
   /** Content hash (local) or archive hash (downloaded). */
   hash: string;
+
+  /** Where the workshop will run, and what running there can reach. */
+  host: IHostDescription;
 
   capabilities: ICapabilitySummary[];
 

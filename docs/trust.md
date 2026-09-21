@@ -84,11 +84,32 @@ Opening a workshop shows a dialog with the source, the content hash (the
 archive's SHA-256 for downloads, a hash of the manifest and pages for local
 directories and for downloads made by [JupyterLite](lite.md), which
 fetches files one by one and so cannot check a collection's archive hash),
-the capabilities it declares and how many actions use each,
-the number of automatic actions, and any lint findings, including the
-danger heuristics: piping downloads into a shell, `sudo`, recursive
+where it will run, the capabilities it declares and how many actions use
+each, the number of automatic actions, and any lint findings, including
+the danger heuristics: piping downloads into a shell, `sudo`, recursive
 deletes outside the workshop, `eval`, executing base64-decoded content,
 home directory paths, and absolute paths in file actions.
+
+The capabilities say what a workshop may do; where it runs decides how
+far that reaches. So above the capabilities the dialog names the host
+the session was [detected](platforms.md) to be on and says, in the same
+order each time, where commands and code execute, where files go and
+what the network reaches:
+
+| Host                            | What the dialog says                                                                                                                                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The computer running JupyterLab | Commands and code run directly on it, as the account JupyterLab was started by, with all of that account's files, credentials and networks, and what they change outside the workshop folder stays changed.                        |
+| A container                     | Commands and code see the container's files and the folders shared into it, with the network the container was given; whether files outlive it depends on how it was started.                                                      |
+| Binder                          | A temporary container on a public service: files are deleted when the session ends or sits idle, the network is the public internet within the operator's limits, and passwords or tokens should not be entered.                   |
+| GitHub Codespaces               | A container on a virtual machine hosted by GitHub: files stay until the codespace is deleted, the internet is fully reachable, the codespace's GitHub token lets commands act on its repository, and running time counts as usage. |
+| JupyterHub                      | A server run by someone else, as the hub user: files go to that user's storage on the hub, which may hold other work, and the network is whatever the operator allows, which can include an internal one.                          |
+| This browser (JupyterLite)      | Everything stays in the browser tab: files are in the browser's storage for the site, and code runs in the browser's sandbox with no more reach than a web page.                                                                   |
+
+The first of these is never called the learner's own computer. With no
+hosting service detected, all the extension knows is that code runs
+where JupyterLab was started, which is as true of a server reached over
+a tunnel as of a laptop. When the page was loaded from anything but the
+loopback address, the dialog shows that host name beside the host.
 
 A workshop opened in author mode (see [Writing workshops in
 JupyterLab](authoring.md)) is marked as the learner's own and is trusted

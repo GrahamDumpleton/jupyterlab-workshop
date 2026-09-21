@@ -62,7 +62,10 @@ no way to carry on without having been told what is lost.
 ## The trust dialog
 
 Before a workshop runs anything it shows a dialog with where it came
-from, a hash of its content, the capabilities it declares with how many
+from, a hash of its content, where it will run (the computer JupyterLab
+was started on, a container, Binder, Codespaces, a JupyterHub or the
+browser alone) with what running there means for your files and the
+network, the capabilities it declares with how many
 actions use each (a terminal, writing files, running code in kernels,
 changing settings, and so on), the number of actions that run without a
 click, and any warnings the linter found in it. Three buttons choose

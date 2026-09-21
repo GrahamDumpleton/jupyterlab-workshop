@@ -5,6 +5,7 @@ import {
   capabilityUses,
   countAutomatic,
   declaredCapabilities,
+  describeHost,
   hashFiles,
   lintWorkshop
 } from '@jupyterlab-workshop/core';
@@ -16,6 +17,7 @@ import { WORKSHOP_STATE_DIR } from '../state';
 import {
   IAnalyticsOffer,
   ICapabilitySummary,
+  IPlatformInfo,
   ITrustSummary,
   IWorkshopSource
 } from '../tokens';
@@ -122,10 +124,13 @@ export function buildTrustSummary(options: {
   source: IWorkshopSource;
   hash?: string;
 
+  /** The platform the workshop will run on, which the dialog describes. */
+  platform: IPlatformInfo;
+
   /** The sink to offer an opt-in for, when a collection or the manifest names one. */
   analytics?: IAnalyticsOffer;
 }): ITrustSummary {
-  const { manifest, pages, source } = options;
+  const { manifest, pages, source, platform } = options;
   const declared = declaredCapabilities(manifest);
   const uses = new Map(
     capabilityUses(manifest, pages).map(use => [use.capability, use])
@@ -158,6 +163,13 @@ export function buildTrustSummary(options: {
     source,
     sourceKey: sourceKey(source),
     hash,
+    host: describeHost({
+      host: platform.host,
+      container: platform.container,
+      user: platform.user,
+      hubUser: platform.hub_user,
+      address: window.location.hostname
+    }),
     capabilities,
     automatic: countAutomatic(pages),
     lint: lintWorkshop({ manifest, pages }),
