@@ -21,6 +21,13 @@ and the linter uses the lists to check that every command has a version
 for each listed platform and frontend and that no listed frontend lacks
 an action the pages use.
 
+In JupyterLite the platform is always `emscripten`, which no workshop
+lists, since the `platforms` are the operating systems of the other
+frontend. So there the `platforms` list is not consulted at all, by the
+browser, the Install all dialog, the banner or `jupyter workshop
+install --frontend jupyterlite`, and listing `jupyterlite` in
+`frontends` is what says a workshop runs there.
+
 ## Built-in variables
 
 [Variables](variables.md) describes the syntax, where values come from

@@ -205,6 +205,29 @@ describe('searching and tags', () => {
     expect(supportsPlatform(entries[1], 'windows')).toBe(true);
   });
 
+  it('does not hold the platforms list against JupyterLite', () => {
+    // The first entry lists linux and macos with both frontends, which
+    // is how a workshop declares JupyterLite, whose platform is
+    // emscripten whatever the browser runs on.
+    expect(supportsPlatform(entries[0], 'emscripten')).toBe(false);
+    expect(supportsPlatform(entries[0], 'emscripten', 'jupyterlite')).toBe(
+      true
+    );
+    expect(supportsPlatform(entries[0], 'windows', 'jupyterlab')).toBe(false);
+
+    // The frontend still decides: the second entry lists no frontends,
+    // so it is JupyterLab only and stays unticked in a site.
+    const plan = planInstallAll(
+      entries,
+      'emscripten',
+      () => false,
+      'jupyterlite'
+    );
+
+    expect(plan.map(item => item.supported)).toEqual([true, false]);
+    expect(plan.map(item => item.selected)).toEqual([true, false]);
+  });
+
   it('treats no frontends as JupyterLab only', () => {
     expect(supportsFrontend(entries[0], 'jupyterlite')).toBe(true);
     expect(supportsFrontend(entries[1], 'jupyterlite')).toBe(false);

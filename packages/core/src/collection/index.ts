@@ -252,11 +252,23 @@ export function collectionTags(entries: readonly ICollectionEntry[]): string[] {
 
 /**
  * Whether an entry lists a platform, or lists none and so runs anywhere.
+ *
+ * JupyterLite is a frontend rather than an operating system: it runs on
+ * Pyodide, whose platform is `emscripten` whatever the browser's own is,
+ * and a workshop declares its support by listing the frontend. So with
+ * the `jupyterlite` frontend the platforms list is not held against an
+ * entry, and `supportsFrontend` alone decides, as it does for the banner
+ * the panel shows over a workshop opened where it was not written for.
  */
 export function supportsPlatform(
   entry: ICollectionEntry,
-  platform: string
+  platform: string,
+  frontend = ''
 ): boolean {
+  if (frontend === 'jupyterlite') {
+    return true;
+  }
+
   return entry.platforms.length === 0 || entry.platforms.includes(platform);
 }
 
@@ -303,7 +315,7 @@ export function planInstallAll(
   return entries.map(entry => {
     const installed = isInstalled(entry);
     const supported =
-      (platform === '' || supportsPlatform(entry, platform)) &&
+      (platform === '' || supportsPlatform(entry, platform, frontend)) &&
       (frontend === '' || supportsFrontend(entry, frontend));
 
     return { entry, installed, supported, selected: !installed && supported };

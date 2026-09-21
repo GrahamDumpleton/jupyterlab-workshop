@@ -171,6 +171,40 @@ def test_install_collection_downloads_what_is_missing_and_records_it(
         install_collection(str(index), tmp_path, only=["delta"], downloader=downloader)
 
 
+def test_install_collection_does_not_hold_platforms_against_jupyterlite(
+    tmp_path: Path,
+) -> None:
+    # A workshop declares JupyterLite by listing the frontend; its
+    # platforms are the operating systems of the other frontend.
+    index = write_collection(
+        tmp_path,
+        [
+            entry(
+                "alpha",
+                "Alpha",
+                "https://h/alpha.tgz",
+                platforms=["linux", "macos", "windows"],
+                frontends=["jupyterlab", "jupyterlite"],
+            ),
+            entry("beta", "Beta", "https://h/beta.tgz", platforms=["linux"]),
+        ],
+    )
+    archives = {"https://h/alpha.tgz": archive_for("alpha", "Alpha")}
+
+    outcomes = install_collection(
+        str(index),
+        tmp_path,
+        platform="emscripten",
+        frontend="jupyterlite",
+        downloader=archives.__getitem__,
+    )
+
+    assert [(item.name, item.status, item.detail) for item in outcomes] == [
+        ("alpha", "installed", "workshops/alpha"),
+        ("beta", "skipped", "not for jupyterlite"),
+    ]
+
+
 def test_install_collection_suffixes_a_clash_with_another_collection(
     tmp_path: Path,
 ) -> None:

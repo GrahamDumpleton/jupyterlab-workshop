@@ -77,9 +77,14 @@ The `frontend` built-in variable is `jupyterlite` and `platform` is
 chosen there. Prose can adapt with ` ```{when} frontend == "jupyterlite" `
 blocks, and `:when: frontend != "jupyterlite"` hides an action.
 
-A Lite site ships its workshops prebuilt and has no server to unpack a
-download into, so the browser's "Install all" does not appear there;
-the site builder is where a collection is bundled.
+A site built by `jupyter workshop lite` ships its workshops prebuilt,
+so the collection it carries has nothing left to install and the
+browser's "Install all" has nothing to offer there; the site builder is
+where a collection is bundled. Installing still works in JupyterLite,
+one workshop or a whole collection, for a collection whose workshops
+are not all in the site: each is downloaded file by file from its
+repository, as the table above says, which takes longer than a server
+unpacking an archive.
 
 ## Building a site
 

@@ -1136,7 +1136,8 @@ function CollectionCard({
   onInstall: () => void;
 }): JSX.Element {
   const version = latestVersion(entry);
-  const onPlatform = platform === '' || supportsPlatform(entry, platform);
+  const onPlatform =
+    platform === '' || supportsPlatform(entry, platform, frontend);
   const onFrontend = frontend === '' || supportsFrontend(entry, frontend);
   const supported = onPlatform && onFrontend;
 

@@ -146,7 +146,9 @@ def install_collection(
     run to the named workshops, ``platform`` skips entries that list
     platforms without it, and ``frontend`` skips entries that do not
     support it, where an entry listing no frontends supports JupyterLab
-    only. Each outcome is reported as it happens through
+    only. JupyterLite is a frontend rather than an operating system, so
+    for it the platforms list is not consulted and the frontends list
+    alone decides. Each outcome is reported as it happens through
     ``report`` when given, and the list of outcomes is returned; the
     caller decides what a failure means.
     """
@@ -188,7 +190,15 @@ def install_collection(
 
         platforms = [str(item) for item in entry.get("platforms") or []]
 
-        if platform and platforms and platform not in platforms:
+        # JupyterLite is a frontend rather than an operating system, so
+        # the platforms list is not held against an entry there and the
+        # frontends list below decides.
+        if (
+            platform
+            and platforms
+            and platform not in platforms
+            and frontend != "jupyterlite"
+        ):
             note(InstallOutcome(name, title, "skipped", f"not for {platform}"))
 
             continue
