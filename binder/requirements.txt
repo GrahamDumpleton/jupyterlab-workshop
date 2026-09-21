@@ -9,5 +9,5 @@
 # request for JupyterLab's own assets (tornadoweb/tornado#3724); drop
 # the bound once a fixed tornado ships.
 jupyterlab>=4.6,<5
-jupyterlab-workshop==0.7.0
+jupyterlab-workshop==0.8.0
 tornado<6.5.9
