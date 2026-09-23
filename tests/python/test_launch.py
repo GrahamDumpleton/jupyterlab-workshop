@@ -168,7 +168,13 @@ def test_launch_overrides_merge_into_the_deployment_settings() -> None:
         "@jupyterlab/apputils-extension:themes": {"theme": "JupyterLab Dark"},
     }
 
-    assert launch_overrides(existing, LaunchOptions(), browse=False) is None
+    # A launch that asks for nothing still turns the news prompt off.
+    plain = launch_overrides(existing, LaunchOptions(), browse=False)
+
+    assert plain == {
+        **existing,
+        "@jupyterlab/apputils-extension:notification": {"fetchNews": "false"},
+    }
 
     merged = launch_overrides(existing, LaunchOptions(trust="trusted"), browse=True)
 
@@ -182,7 +188,18 @@ def test_launch_overrides_merge_into_the_deployment_settings() -> None:
             "browseOnStart": True,
         },
         "@jupyterlab/apputils-extension:themes": {"theme": "JupyterLab Dark"},
+        "@jupyterlab/apputils-extension:notification": {"fetchNews": "false"},
     }
+
+    # A deployment that has settled the prompt is left alone.
+    settled = {
+        **existing,
+        "@jupyterlab/apputils-extension:notification": {"fetchNews": "true"},
+    }
+
+    assert launch_overrides(settled, LaunchOptions(), browse=False)[
+        "@jupyterlab/apputils-extension:notification"
+    ] == {"fetchNews": "true"}
 
     # The deployment's own settings are not changed in place.
     assert "forcedLevel" not in existing[PANEL_PLUGIN]["trustPolicy"]
@@ -232,24 +249,39 @@ def test_server_command_pins_the_port_and_isolates_when_fresh(
         "trustPolicy": {"forcedLevel": "restricted"},
         "browseOnStart": True,
     }
+    assert written["@jupyterlab/apputils-extension:notification"] == {
+        "fetchNews": "false"
+    }
     assert (work / "settings" / "page_config.json").read_text() == (
         '{"exposeAppInBrowser": true}'
     )
 
 
-def test_server_command_leaves_the_installed_settings_alone_by_default(
+def test_server_command_writes_only_the_news_setting_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
         "jupyterlab_workshop.launch.installed_settings_dir", lambda: None
     )
 
+    work = tmp_path / "work"
     command = server_command(
-        tmp_path, 8899, "tok", LaunchOptions(root=tmp_path), tmp_path / "work", False
+        tmp_path, 8899, "tok", LaunchOptions(root=tmp_path), work, False
     )
 
-    assert not any(item.startswith("--LabApp.") for item in command)
-    assert not (tmp_path / "work").exists()
+    # A launch that asks for nothing still gives JupyterLab a settings
+    # directory, holding only the block that turns the news prompt off,
+    # and leaves the workspaces and user settings where they are.
+    assert f"--LabApp.app_settings_dir={work / 'settings'}" in command
+    assert not any(item.startswith("--LabApp.workspaces_dir") for item in command)
+    assert not any(item.startswith("--LabApp.user_settings_dir") for item in command)
+
+    written = json.loads((work / "settings" / "overrides.json").read_text())
+
+    assert written == {
+        "@jupyterlab/apputils-extension:notification": {"fetchNews": "false"}
+    }
+    assert not (work / "settings" / "page_config.json").exists()
 
 
 def test_wait_for_server_reports_an_early_exit() -> None:

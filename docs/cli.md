@@ -287,7 +287,11 @@ the session only, so a Binder image's other settings still apply.
 `--fresh` gives the server JupyterLab workspaces and user settings of its
 own, as [test](#test) does, so a demo is not shaped by the tabs and
 preferences of other sessions. Anything after `--` is passed to
-`jupyter lab` unchanged, for options such as `--ip`.
+`jupyter lab` unchanged, for options such as `--ip`. The session's
+overrides also turn off JupyterLab's question about fetching Jupyter
+news, unless the installed overrides settle it, so the first thing shown
+is the workshop and not that prompt; see [the Jupyter news
+prompt](deploying.md#the-jupyter-news-prompt).
 
 Installed as a uv tool with the `lab` extra, `uv tool install
 "jupyterlab-workshop[lab]"`, the command runs as `jupyter-workshop
@@ -328,7 +332,8 @@ carries the collections the catalog names by relative path with it.
 `--settings FILE` builds a settings file in the form of `overrides.json`
 into the site, for an analytics block, disabled features and the like,
 and `--welcome FILE` carries a Markdown file in the site and shows it as
-the welcome message. [Publishing
+the welcome message. The site's settings turn off JupyterLab's Jupyter
+news prompt unless the file settles it. [Publishing
 workshops](publishing.md#a-jupyterlite-site) has the detail.
 
 ## test
@@ -346,8 +351,9 @@ jupyter workshop test my-workshop [--junit FILE] [--json FILE] [--in-place]
 
 Runs the workshop in a real JupyterLab: it copies the workshop to a
 temporary directory (unless `--in-place`), starts a JupyterLab server on a
-free port with trust forced to the chosen level, opens it in a headless
-Chromium through Playwright, and runs the extension's self-test command.
+free port with trust forced to the chosen level and the Jupyter news
+prompt off, opens it in a headless Chromium through Playwright, and runs
+the extension's self-test command.
 That command walks every page, runs every action in order, waits for
 each terminal command to finish, answers quizzes correctly, submits forms
 with their defaults, and runs every check. Each action is reported as

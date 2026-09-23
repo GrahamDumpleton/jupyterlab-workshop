@@ -31,6 +31,7 @@ from typing import Any, TypeGuard
 import yaml
 
 from .catalog import CATALOG_FILE, is_http_url
+from .overrides import quiet_news
 from .publish import WORKSPACE_DIR
 
 MANIFEST_FILE = "workshop.yaml"
@@ -532,7 +533,8 @@ def settings_overrides(
     site's contents, so the browser lists them from there, and the chosen
     workshop opens on start. A site with no workshop to open starts in
     the workshop browser rather than at the launcher, unless the settings
-    file says otherwise.
+    file says otherwise. The Jupyter news prompt is off unless the file
+    settles it.
 
     ``collections``, ``catalogs`` and ``welcome`` are where staging put
     them in the contents; left out, the collections and catalogs are used
@@ -579,7 +581,7 @@ def settings_overrides(
 
     overrides[PANEL_PLUGIN] = panel
 
-    return overrides
+    return quiet_news(overrides)
 
 
 def _merged(existing: Any, added: Sequence[str]) -> list[str]:

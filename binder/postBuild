@@ -6,6 +6,9 @@
 # The disabled features keep visitors to the supplied workshops: no
 # other directories or URLs, no subscribing to collections or catalogs, no
 # editing and no removing; Restart puts a workshop back as it started.
+# The second block is JupyterLab's own: it turns off the question about
+# fetching Jupyter news, which a fresh container would otherwise put in
+# front of every visitor first.
 set -euo pipefail
 
 settings="${NB_PYTHON_PREFIX}/share/jupyter/lab/settings"
@@ -27,6 +30,9 @@ cat > "$settings/overrides.json" <<'JSON'
       "remove",
       "author"
     ]
+  },
+  "@jupyterlab/apputils-extension:notification": {
+    "fetchNews": "false"
   }
 }
 JSON

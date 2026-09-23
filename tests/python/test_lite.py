@@ -321,6 +321,11 @@ def test_settings_overrides_lay_the_build_over_a_settings_file(
         "theme": "JupyterLab Dark"
     }
 
+    # The news prompt is off unless the file settles it.
+    assert overrides["@jupyterlab/apputils-extension:notification"] == {
+        "fetchNews": "false"
+    }
+
     # What the build decides wins, and its lists add to the file's.
     assert settings["workshopsDirectory"] == ""
     assert settings["collections"] == [

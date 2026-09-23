@@ -41,6 +41,7 @@ from .lite import (
     serve_directory,
     uses_terminal,
 )
+from .overrides import quiet_news
 from .publish import WORKSPACE_DIR
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
@@ -724,12 +725,14 @@ def _write_overrides(work: Path, trust: str) -> Path:
 
     settings.mkdir(parents=True, exist_ok=True)
 
-    overrides = {
-        PANEL_PLUGIN: {
-            "defaultWorkshop": "",
-            "trustPolicy": {"forcedLevel": trust},
+    overrides = quiet_news(
+        {
+            PANEL_PLUGIN: {
+                "defaultWorkshop": "",
+                "trustPolicy": {"forcedLevel": trust},
+            }
         }
-    }
+    )
 
     (settings / "overrides.json").write_text(json.dumps(overrides, indent=2))
 

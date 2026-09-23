@@ -32,6 +32,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .catalog import is_http_url
+from .overrides import quiet_news
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
@@ -219,17 +220,14 @@ def launch_url(base: str, token: str, params: Sequence[tuple[str, str | None]]) 
 
 def launch_overrides(
     existing: Mapping[str, Any], options: LaunchOptions, browse: bool
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Settings overrides for the session: the deployment's, with the
-    trust level forced when asked and the workshop browser opened on
-    start for a launch that names nothing. None when the launch needs
-    no overrides of its own.
+    trust level forced when asked, the workshop browser opened on start
+    for a launch that names nothing, and the Jupyter news prompt off
+    unless the deployment has settled it.
     """
 
-    if options.trust is None and not browse:
-        return None
-
-    overrides: dict[str, Any] = {key: value for key, value in existing.items()}
+    overrides = quiet_news(existing)
     panel = dict(overrides.get(PANEL_PLUGIN) or {})
 
     if options.trust is not None:
@@ -240,7 +238,8 @@ def launch_overrides(
     if browse:
         panel["browseOnStart"] = True
 
-    overrides[PANEL_PLUGIN] = panel
+    if panel:
+        overrides[PANEL_PLUGIN] = panel
 
     return overrides
 
@@ -318,8 +317,7 @@ def server_command(
 
     settings = write_settings(work, options, browse)
 
-    if settings is not None:
-        command.append(f"--LabApp.app_settings_dir={settings}")
+    command.append(f"--LabApp.app_settings_dir={settings}")
 
     # Private workspaces and user settings, as the self-test uses, so a
     # demo is not shaped by the layout and settings of other sessions.
@@ -338,9 +336,9 @@ def server_command(
     return command
 
 
-def write_settings(work: Path, options: LaunchOptions, browse: bool) -> Path | None:
+def write_settings(work: Path, options: LaunchOptions, browse: bool) -> Path:
     """Write the session's application settings directory under ``work``
-    and return it, or None when the installed one serves as it is.
+    and return it.
 
     JupyterLab reads ``overrides.json`` and ``page_config.json`` from a
     single directory, so pointing it at a new one would drop the
@@ -363,10 +361,6 @@ def write_settings(work: Path, options: LaunchOptions, browse: bool) -> Path | N
             existing = loaded
 
     overrides = launch_overrides(existing, options, browse)
-
-    if overrides is None:
-        return None
-
     settings = work / "settings"
     settings.mkdir(parents=True, exist_ok=True)
     (settings / "overrides.json").write_text(json.dumps(overrides, indent=2), "utf-8")

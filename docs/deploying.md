@@ -161,13 +161,18 @@ JupyterLab with the workshops installed and trusted. It needs:
       "remove",
       "author"
     ]
+  },
+  "@jupyterlab/apputils-extension:notification": {
+    "fetchNews": "false"
   }
 }
 ```
 
 The session then starts in the browser with every workshop in the
 checkout listed as installed and ready to open, with no download and no
-trust dialog, since the visitor chose the repository. An image built
+trust dialog, since the visitor chose the repository. The second block
+is not the extension's; see [the Jupyter news
+prompt](#the-jupyter-news-prompt). An image built
 from a published collection rather than a checkout can fetch the
 workshops at build time instead, with
 `jupyter workshop install https://example.org/collection.json --root .`
@@ -193,6 +198,33 @@ subscribe to and install what they like.
 The Finish dialog offers to shut the session down when the host is
 Binder, which the extension recognises from the environment variables
 Binder sets.
+
+## The Jupyter news prompt
+
+JupyterLab asks, the first time it starts for a user, whether to fetch
+official Jupyter news. On a Binder launch, where every session is a
+fresh container, that question is the first thing a visitor sees, ahead
+of the welcome message and the workshop browser. The setting behind it
+belongs to JupyterLab's notification plugin, not to the extension, and
+an override turns it off:
+
+```json
+{
+  "@jupyterlab/apputils-extension:notification": {
+    "fetchNews": "false"
+  }
+}
+```
+
+The value is the string `"false"`; `"true"` fetches the news without
+asking, and the default `"none"` asks. An override is a default, not a
+user setting, so someone who has already answered in their own
+JupyterLab keeps their answer. `jupyter workshop launch`, `lite` and
+`test` write this block into the overrides they produce, since each is
+a deliberate workshop run; a deployment that starts JupyterLab some
+other way, as Binder, a dev container or a JupyterHub image does, adds
+the block to its own `overrides.json` beside the extension's settings,
+as the Binder example above does.
 
 ## JupyterHub
 
