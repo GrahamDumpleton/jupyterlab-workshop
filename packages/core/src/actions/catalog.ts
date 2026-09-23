@@ -465,6 +465,14 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'none',
         ['area']
       ),
+      spec(
+        'url-open',
+        'ui',
+        'Open a web page in a new browser tab, or in a named pane in the main area.',
+        'none',
+        'none',
+        ['url', 'pane', 'area', 'label']
+      ),
 
       // Guidance.
       spec(

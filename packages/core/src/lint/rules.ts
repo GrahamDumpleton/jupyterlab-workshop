@@ -107,6 +107,7 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintResumable(input, manifestPath, messages);
   lintCapabilities(input, manifestPath, messages);
   lintLinks(input, manifestPath, messages);
+  lintUrlOpen(input, messages);
 
   return messages;
 }
@@ -133,6 +134,57 @@ function lintLinks(
         message: `Field "${field}" must be an http or https URL, not "${value}"`,
         path: manifestPath
       });
+    }
+  }
+}
+
+/**
+ * A `url-open` needs a web URL, and a page served over https cannot show
+ * an http page in a pane, so that goes to a new tab instead. A new tab
+ * is only allowed by the browser on a click, so an automatic run with no
+ * pane to open in has nothing it can do.
+ */
+function lintUrlOpen(input: ILintInput, messages: ILintMessage[]): void {
+  for (const page of input.pages) {
+    for (const node of allDirectives([page])) {
+      if (node.name !== 'url-open') {
+        continue;
+      }
+
+      const where = { path: page.path, line: node.line };
+      const url = node.options.url;
+
+      if (url === undefined || url.trim() === '') {
+        messages.push({
+          level: 'error',
+          rule: 'invalid-url-open',
+          message: 'The url-open action needs a "url" option',
+          ...where
+        });
+      } else if (!url.startsWith('{{') && !isWebLink(url)) {
+        messages.push({
+          level: 'error',
+          rule: 'invalid-url-open',
+          message: `The url-open action needs an http or https URL, not "${url}"`,
+          ...where
+        });
+      } else if (/^http:/i.test(url)) {
+        messages.push({
+          level: 'warning',
+          rule: 'insecure-url',
+          message: `"${url}" is an http URL, which a JupyterLab served over https cannot show in a pane; it opens in a new tab there`,
+          ...where
+        });
+      }
+
+      if (node.options.auto !== undefined && node.options.pane === undefined) {
+        messages.push({
+          level: 'warning',
+          rule: 'auto-new-tab',
+          message: `"${node.id}" opens a new browser tab, which the browser only allows on a click, so it cannot run automatically; give it a pane`,
+          ...where
+        });
+      }
     }
   }
 }

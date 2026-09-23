@@ -1655,7 +1655,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _toRequest(node: IDirectiveNode, argument?: string): IActionRequest {
     const defaults = this._workshop?.manifest.defaults ?? {};
 
-    return {
+    const request: IActionRequest = {
       type: node.name,
       id: node.id,
       argument: argument ?? node.argument,
@@ -1663,6 +1663,12 @@ export class WorkshopManager implements IWorkshopManager {
       body: node.body,
       page: this._currentPageId
     };
+
+    if (node.unset) {
+      request.unset = node.unset;
+    }
+
+    return request;
   }
 
   private _record(

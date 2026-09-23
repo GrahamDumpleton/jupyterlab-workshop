@@ -218,8 +218,8 @@ that says nothing about `sidebar` leaves that sidebar as it is.
 
 Actions that open something, `file-open`, `file-write` with `open`,
 `notebook-open`, `notebook-create` with `open`, `terminal-open`,
-`console-open` and `launcher-open`, take an `area` option saying where
-it goes. Its value is the `name` of an area declared in a layout:
+`console-open`, `launcher-open` and `url-open`, take an `area` option
+saying where it goes. Its value is the `name` of an area declared in a layout:
 
 ```yaml
 layouts:

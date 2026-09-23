@@ -63,6 +63,12 @@ export interface IDirectiveMeta {
 
   /** Which alternative `body` holds: a marker name or `default`. */
   variant?: string;
+
+  /**
+   * Declared variables the options or body referenced that had no value
+   * when the page was rendered, so the directive is not ready to run.
+   */
+  unset?: string[];
 }
 
 let parser: MarkdownIt | undefined;
@@ -243,6 +249,10 @@ function roleRule(state: MarkdownIt.StateInline, silent: boolean): boolean {
 function substituteRule(state: MarkdownIt.StateCore): void {
   const env = state.env as IRenderEnv;
 
+  // The declared names without a value are collected per directive, so
+  // an action can refuse to run until they are set.
+  let unset: string[] = [];
+
   const apply = (text: string): string => {
     const result = substitute(text, env.variables, {
       pathSep: env.pathSep,
@@ -250,6 +260,7 @@ function substituteRule(state: MarkdownIt.StateCore): void {
     });
 
     env.warnings.push(...result.warnings);
+    unset.push(...result.unset);
 
     return result.text;
   };
@@ -284,6 +295,8 @@ function substituteRule(state: MarkdownIt.StateCore): void {
         continue;
       }
 
+      unset = [];
+
       for (const key of Object.keys(meta.options)) {
         meta.options[key] = apply(meta.options[key]);
       }
@@ -297,6 +310,10 @@ function substituteRule(state: MarkdownIt.StateCore): void {
         for (const key of Object.keys(meta.variants)) {
           meta.variants[key] = apply(meta.variants[key]);
         }
+      }
+
+      if (unset.length > 0) {
+        meta.unset = [...new Set(unset)];
       }
     }
   }

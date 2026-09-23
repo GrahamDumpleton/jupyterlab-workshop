@@ -32,6 +32,12 @@ export interface ISubstituteResult {
 
   /** Problems found, such as unknown variables or filters. */
   warnings: string[];
+
+  /**
+   * Declared names that were referenced but had no value yet, each once,
+   * in order of first use. They rendered as empty text.
+   */
+  unset: string[];
 }
 
 interface IFilterCall {
@@ -56,6 +62,7 @@ export function substitute(
   options: ISubstituteOptions = {}
 ): ISubstituteResult {
   const warnings: string[] = [];
+  const unset: string[] = [];
   const pathSep = options.pathSep ?? '/';
 
   // The path helper takes a literal, so it is handled before references.
@@ -77,6 +84,10 @@ export function substitute(
 
       if (!(name in variables)) {
         if (options.declared?.has(name)) {
+          if (!unset.includes(name)) {
+            unset.push(name);
+          }
+
           return '';
         }
 
@@ -102,7 +113,7 @@ export function substitute(
     }
   );
 
-  return { text: result, warnings };
+  return { text: result, warnings, unset };
 }
 
 /**

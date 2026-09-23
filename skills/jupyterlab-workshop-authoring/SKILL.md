@@ -269,10 +269,38 @@ use `;`.
 | `quiz`, `form`, `choice`                                           | Questions, value entry and track selection.                                                                                                                                                                                                                                                                                     |
 | `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                                                                                                                                                                                        |
 | `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                                                                                                                                                                                             |
+| `url-open`                                                         | Open a web page in a new browser tab, or with `:pane:` in a named pane in the main area (`:url:` takes variables, `:label:` names the tab, `:area:` places a new pane).                                                                                                                                                         |
 
 The full table with every option is in `references/actions.md`, and
 `references/pages.md` covers the page syntax, the common options and how
 the editor actions point at text.
+
+### Links and web pages
+
+Four ways to point the learner at a web page, and when each fits:
+
+- A plain Markdown link, `[the docs](https://...)`, for a page the
+  learner reads once. It opens in a new browser tab and JupyterLab stays
+  where it is.
+
+- `url-open` with `:pane:` for a page the learner keeps beside the
+  work: their own running app, a dashboard, reference documentation.
+  The pane is reused by name, so a later action can send it a new page,
+  and sending it the same page again starts the page over, which is how
+  to restart an app that would otherwise resume from its cache. Only
+  for sites that allow framing: one that forbids it shows a blank pane
+  and nothing can detect that, so try each URL once. Build the URL from
+  variables where a host or port can differ, `https://{{ app_host }}/`;
+  the action waits until every variable in it has a value.
+
+- `url-open` without `:pane:` when an action, rather than a link, should
+  open the tab: once a variable is known, or as a step in a sequence.
+  The browser only allows a new tab on a click, so this cannot run with
+  `:auto:`; lint warns.
+
+- `command` with `docmanager:open` and `"factory": "HTML Viewer"` for an
+  HTML file the workshop ships. Do not reach for `help:open` through
+  `command`: `url-open` does the same with a reusable pane.
 
 ## Checks
 

@@ -322,6 +322,12 @@ export interface IActionRequest {
 
   /** Id of the page the action is on, when it comes from a page. */
   page?: string;
+
+  /**
+   * Declared variables the options or body referenced that had no value
+   * when the page was rendered; see `IDirectiveNode.unset`.
+   */
+  unset?: string[];
 }
 
 /** A setting an action changed, kept so it can be put back. */
@@ -1070,6 +1076,7 @@ export namespace CommandIDs {
   export const openPath = 'workshop:open-path';
   export const openSelected = 'workshop:open-selected';
   export const openUrl = 'workshop:open-url';
+  export const urlPane = 'workshop:url-pane';
   export const trust = 'workshop:trust';
   export const uninstall = 'workshop:uninstall';
   export const reset = 'workshop:reset';

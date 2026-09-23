@@ -2,8 +2,8 @@
 
 A page is a MyST Markdown file: YAML front matter, prose, and fenced
 blocks named in braces that are the actions. This page describes the
-syntax, the options every action accepts, the inline roles, conditional
-content, and how the editor actions point at text. The
+syntax, the options every action accepts, the inline roles, links,
+conditional content, and how the editor actions point at text. The
 [action reference](actions.md) lists the actions themselves.
 
 ## Front matter
@@ -134,6 +134,16 @@ Your repository is in {var}`repo_dir`.
 `{copy}` copies its text to the clipboard, `{open}` opens the named
 file in the editor, `{highlight}` highlights the element matching a
 selector, and `{var}` shows the value of a variable.
+
+## Links
+
+Prose is ordinary Markdown, so a page links with the usual syntax, and a
+bare `https://` address becomes a link on its own. A link to another
+site, or a `mailto:` address, opens in a new browser tab, so that the
+JupyterLab session stays where it is; the instructions panel is part of
+the JupyterLab page, and a link that navigated it would take the whole
+session with it. A link to a heading on the same page, such as
+`[notes](#notes)`, stays in the panel.
 
 ## Conditional content
 

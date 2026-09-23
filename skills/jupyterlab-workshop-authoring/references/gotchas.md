@@ -145,6 +145,23 @@ GIT_PAGER: cat }`; a workshop that teaches `less` leaves it unset and
   are exported to terminals in upper case, and a bare `PORT` is read by
   some servers and tools on its own.
 
+- **The app the workshop started shows as a blank pane.** The site sends
+  a header that forbids framing, and nothing in JupyterLab can tell.
+  Open it in a new tab instead (`url-open` without `:pane:`, or a plain
+  link) or serve it from somewhere that allows framing. A page served
+  over http cannot be framed at all when JupyterLab itself is served
+  over https; the action opens a new tab then, and lint warns.
+
+- **A `url-open` that should run on its own does nothing.** A new
+  browser tab is only allowed on a click, so an action with `:auto:`
+  and no `:pane:` is refused by the browser. Give it a pane.
+
+- **The app in a pane does not pick up a restart.** Sending the pane the
+  same URL again replaces the frame, so the page starts from scratch,
+  but a service worker or the HTTP cache can still hand it the old
+  files. Add a cache-busting query parameter to the URL if the app
+  needs it.
+
 - **The next page cannot start the server: the port is in use.** The
   earlier page's server is still running in its terminal. Stop it with
   an `interrupt` action on that session before starting it again, and

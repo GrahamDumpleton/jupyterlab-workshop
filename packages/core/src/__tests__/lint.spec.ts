@@ -1026,3 +1026,51 @@ describe('resumable', () => {
     ).not.toContain('resumable-kernel-state');
   });
 });
+
+describe('url-open', () => {
+  it('accepts a web URL, a variable URL and a pane', () => {
+    expect(
+      rules(
+        '```{url-open}\n:url: https://example.com/docs/\n:pane: docs\n```\n\n```{url-open}\n:url: {{ app_url }}\n```\n'
+      ).filter(rule => rule.includes('url'))
+    ).toEqual([]);
+  });
+
+  it('reports a missing or non-web URL', () => {
+    const missing = lint('```{url-open}\n:pane: docs\n```\n').filter(
+      message => message.rule === 'invalid-url-open'
+    );
+
+    expect(missing).toHaveLength(1);
+    expect(missing[0].message).toContain('"url" option');
+
+    const bad = lint('```{url-open}\n:url: ftp://example.com/\n```\n').filter(
+      message => message.rule === 'invalid-url-open'
+    );
+
+    expect(bad).toHaveLength(1);
+    expect(bad[0].message).toContain('ftp://example.com/');
+  });
+
+  it('warns about an http URL', () => {
+    const findings = lint(
+      '```{url-open}\n:url: http://localhost:8000/\n:pane: app\n```\n'
+    ).filter(message => message.rule === 'insecure-url');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].level).toBe('warning');
+  });
+
+  it('warns about an automatic run with no pane', () => {
+    expect(
+      rules(
+        '```{url-open}\n:id: docs\n:url: https://example.com/\n:auto: true\n```\n'
+      )
+    ).toContain('auto-new-tab');
+    expect(
+      rules(
+        '```{url-open}\n:id: docs\n:url: https://example.com/\n:pane: docs\n:auto: true\n```\n'
+      )
+    ).not.toContain('auto-new-tab');
+  });
+});

@@ -48,6 +48,12 @@ export interface IDirectiveNode {
   /** Which alternative `body` holds: a platform or frontend name, or `default`. */
   variant?: string;
 
+  /**
+   * Declared variables the options or body referenced that had no value
+   * when the page was rendered, each once.
+   */
+  unset?: string[];
+
   /** One-based line of the directive within the page source. */
   line: number;
 
@@ -248,6 +254,10 @@ function tokensToNodes(
     if (meta.variants) {
       node.variants = meta.variants;
       node.variant = meta.variant;
+    }
+
+    if (meta.unset) {
+      node.unset = meta.unset;
     }
 
     if (ACTION_TYPES[meta.name]?.body === 'markdown') {

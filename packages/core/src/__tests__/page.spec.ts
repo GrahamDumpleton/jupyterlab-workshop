@@ -150,3 +150,41 @@ describe('links', () => {
     expect(anchors).toHaveLength(5);
   });
 });
+
+describe('unset variables', () => {
+  const page = parsePage(
+    [
+      '```{url-open}',
+      ':url: https://{{ host }}/{{ path }}',
+      '```',
+      '',
+      '```{url-open}',
+      ':url: https://{{ host }}/',
+      ':pane: {{ pane }}',
+      '```'
+    ].join('\n'),
+    {
+      path: 'p.md',
+      variables: { host: 'example.com' },
+      declared: new Set(['path', 'pane'])
+    }
+  );
+
+  it('records which declared names a directive needs', () => {
+    const [first, second] = page.nodes as IDirectiveNode[];
+
+    expect(first.options.url).toBe('https://example.com/');
+    expect(first.unset).toEqual(['path']);
+    expect(second.unset).toEqual(['pane']);
+  });
+
+  it('leaves the field off a directive whose names all have values', () => {
+    const ready = parsePage('```{url-open}\n:url: https://{{ host }}/\n```', {
+      path: 'p.md',
+      variables: { host: 'example.com' },
+      declared: new Set(['path'])
+    });
+
+    expect((ready.nodes[0] as IDirectiveNode).unset).toBeUndefined();
+  });
+});

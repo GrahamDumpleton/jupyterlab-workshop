@@ -108,15 +108,31 @@ can be the point of the cell.
 
 ## Interface and layout
 
-| Directive       | Capability  | Body     | Options         | Description                                                      |
-| --------------- | ----------- | -------- | --------------- | ---------------------------------------------------------------- |
-| `command`       | none        | optional | `command`       | Run a JupyterLab command, with JSON arguments in the body.       |
-| `layout`        | none        | none     | `name`          | Arrange the JupyterLab panels using a named layout.              |
-| `panel-open`    | none        | none     | `id`            | Show a JupyterLab panel or widget by id.                         |
-| `panel-close`   | none        | none     | `id`, `side`    | Collapse a sidebar, by default the one beside the instructions.  |
-| `focus`         | none        | none     | `id`            | Give a widget focus.                                             |
-| `settings-set`  | ui-settings | required | `plugin`, `key` | Change a setting of the editor, with the JSON value in the body. |
-| `launcher-open` | none        | none     | `area`          | Open the launcher, or show the open one.                         |
+| Directive       | Capability  | Body     | Options                        | Description                                                                |
+| --------------- | ----------- | -------- | ------------------------------ | -------------------------------------------------------------------------- |
+| `command`       | none        | optional | `command`                      | Run a JupyterLab command, with JSON arguments in the body.                 |
+| `layout`        | none        | none     | `name`                         | Arrange the JupyterLab panels using a named layout.                        |
+| `panel-open`    | none        | none     | `id`                           | Show a JupyterLab panel or widget by id.                                   |
+| `panel-close`   | none        | none     | `id`, `side`                   | Collapse a sidebar, by default the one beside the instructions.            |
+| `focus`         | none        | none     | `id`                           | Give a widget focus.                                                       |
+| `settings-set`  | ui-settings | required | `plugin`, `key`                | Change a setting of the editor, with the JSON value in the body.           |
+| `launcher-open` | none        | none     | `area`                         | Open the launcher, or show the open one.                                   |
+| `url-open`      | none        | none     | `url`, `pane`, `area`, `label` | Open a web page in a new browser tab, or in a named pane in the main area. |
+
+`url-open` opens the web page its `url` option names. Without `pane`
+it opens a new browser tab, which the browser only allows on a click,
+so it cannot run automatically. With `pane` it opens the page in an
+iframe in a main area tab of that name, creating the pane if there is
+none and loading the page afresh into it if there is, even when the
+URL is the same, so an application in the page starts over. `area`
+places a new pane like the other opening actions; `label` names the
+tab, and defaults to the pane name. The URL is substituted like any
+option, and the action waits until every variable in it has a value.
+A site that forbids being framed shows as an empty pane, and nothing
+can detect that, so try each URL once. A JupyterLab served over https
+cannot show an http page in a pane and opens it in a new tab instead.
+Panes come back after the browser page reloads, at the last URL they
+were sent, and close with the workshop.
 
 ## Guidance
 

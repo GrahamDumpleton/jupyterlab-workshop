@@ -2084,6 +2084,161 @@ test.describe('external links', () => {
   });
 });
 
+test.describe('url panes', () => {
+  const MANIFEST = [
+    'apiVersion: jupyterlab-workshop/v1alpha1',
+    'name: paned',
+    'title: Paned',
+    'version: 0.1.0',
+    'description: Web pages in panes.',
+    'variables:',
+    '  - name: app_host',
+    '    description: Host of the app, set later',
+    'pages:',
+    '  - pages/01-panes.md',
+    ''
+  ].join('\n');
+
+  const PAGE = [
+    '---',
+    'title: Panes',
+    '---',
+    '',
+    '```{url-open}',
+    ':id: open-docs',
+    ':url: https://example.com/',
+    ':pane: docs',
+    ':label: Docs',
+    '```',
+    '',
+    '```{url-open}',
+    ':id: open-again',
+    ':url: https://example.org/',
+    ':pane: docs',
+    '```',
+    '',
+    '```{url-open}',
+    ':id: open-tab',
+    ':url: https://example.com/',
+    '```',
+    '',
+    '```{url-open}',
+    ':id: open-unset',
+    ':url: https://{{ app_host }}/',
+    ':pane: app',
+    '```',
+    ''
+  ].join('\n');
+
+  const PANE = '#jupyterlab-workshop-url-docs';
+
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const paned = `${tmpPath}/paned`;
+
+    await page.contents.uploadContent(
+      MANIFEST,
+      'text',
+      `${paned}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      PAGE,
+      'text',
+      `${paned}/pages/01-panes.md`
+    );
+    await openWorkshop(page, paned);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+  });
+
+  test('shows a page in a named pane and starts it over on a reload', async ({
+    page,
+    context
+  }) => {
+    const panel = page.locator(PANEL);
+    const before = page.url();
+
+    // The first open makes the pane, named by its label.
+    const openDocs = panel.locator('[data-action-id="open-docs"]');
+
+    await openDocs.click();
+    await expect(openDocs).toHaveClass(/jp-mod-status-ok/);
+
+    const frame = page.locator(`${PANE} iframe`);
+
+    await expect(frame).toHaveAttribute('src', 'https://example.com/');
+    await expect(
+      page.locator('#jp-main-dock-panel .lm-TabBar-tabLabel', {
+        hasText: 'Docs'
+      })
+    ).toHaveCount(1);
+    expect(page.url()).toBe(before);
+
+    // A second open into the same pane replaces the frame element rather
+    // than changing its address, and makes no second pane.
+    await frame.evaluate(el => el.setAttribute('data-first', 'yes'));
+
+    const openAgain = panel.locator('[data-action-id="open-again"]');
+
+    await openAgain.click();
+    await expect(openAgain).toHaveClass(/jp-mod-status-ok/);
+    await expect(frame).toHaveAttribute('src', 'https://example.org/');
+    await expect(page.locator(`${PANE} iframe[data-first]`)).toHaveCount(0);
+    await expect(page.locator('.jp-WorkshopUrlPane-widget')).toHaveCount(1);
+
+    // Without a pane the page opens in a new browser tab and JupyterLab
+    // stays where it was. The tab is closed before it loads anything.
+    const opened = context.waitForEvent('page');
+    const openTab = panel.locator('[data-action-id="open-tab"]');
+
+    await openTab.click();
+
+    const popup = await opened;
+
+    await popup.close();
+    await expect(openTab).toHaveClass(/jp-mod-status-ok/);
+    expect(page.url()).toBe(before);
+
+    // A URL built from a variable with no value yet is refused, and the
+    // message says which variable.
+    const openUnset = panel.locator('[data-action-id="open-unset"]');
+
+    await openUnset.click();
+    await expect(openUnset).toHaveClass(/jp-mod-status-error/);
+    await expect(openUnset).toContainText('"app_host"');
+    await expect(page.locator('#jupyterlab-workshop-url-app')).toHaveCount(0);
+  });
+
+  test('brings a pane back after the browser page reloads', async ({
+    page
+  }) => {
+    const panel = page.locator(PANEL);
+
+    await panel.locator('[data-action-id="open-docs"]').click();
+    await expect(page.locator(`${PANE} iframe`)).toHaveAttribute(
+      'src',
+      'https://example.com/'
+    );
+
+    // The layout restorer saves after a short debounce.
+    await page.waitForTimeout(2000);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+
+    await expect(page.locator(`${PANE} iframe`)).toHaveAttribute(
+      'src',
+      'https://example.com/'
+    );
+    await expect(
+      page.locator('#jp-main-dock-panel .lm-TabBar-tabLabel', {
+        hasText: 'Docs'
+      })
+    ).toHaveCount(1);
+  });
+});
+
 test.describe('workshop prompt', () => {
   test('waits for the marked prompt and reports the exit status', async ({
     page,

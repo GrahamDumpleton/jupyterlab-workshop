@@ -88,3 +88,28 @@ describe('shellQuote', () => {
     expect(shellQuote("it's here")).toBe("'it'\\''s here'");
   });
 });
+
+describe('substitute unset names', () => {
+  it('lists declared names that had no value, once each', () => {
+    const result = substitute(
+      'http://{{ host }}:{{ port }}/{{ host }}',
+      { port: '8000' },
+      { declared: new Set(['host']) }
+    );
+
+    expect(result.text).toBe('http://:8000/');
+    expect(result.unset).toEqual(['host']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('does not count unknown or valued names as unset', () => {
+    const result = substitute(
+      '{{ a }} {{ b }}',
+      { a: '1' },
+      { declared: new Set(['a']) }
+    );
+
+    expect(result.unset).toEqual([]);
+    expect(result.warnings).toEqual(['Unknown variable "b"']);
+  });
+});

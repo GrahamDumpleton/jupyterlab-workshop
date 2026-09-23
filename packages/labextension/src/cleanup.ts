@@ -3,20 +3,23 @@ import { IDocumentManager } from '@jupyterlab/docmanager';
 import { FileBrowser } from '@jupyterlab/filebrowser';
 
 import { TerminalSessions } from './actions/terminal';
+import { UrlPanes } from './actions/url';
 
 /** What closing a workshop's widgets needs. */
 export interface ICleanupContext {
   shell: ILabShell;
   docManager: IDocumentManager;
   terminals: TerminalSessions;
+  panes: UrlPanes;
 }
 
 /**
  * Take a workshop off the screen: close every main-area document whose
  * file lives under the workshop directory (the README preview and
- * editors a layout or an action opened, notebooks it created) and shut
- * down every workshop terminal. A document with unsaved changes asks
- * first, as closing its tab would. Files opened from elsewhere stay.
+ * editors a layout or an action opened, notebooks it created), shut
+ * down every workshop terminal and close every URL pane. A document
+ * with unsaved changes asks first, as closing its tab would. Files
+ * opened from elsewhere stay.
  */
 export async function closeWorkshopWidgets(
   context: ICleanupContext,
@@ -43,6 +46,8 @@ export async function closeWorkshopWidgets(
   for (const name of context.terminals.names()) {
     await context.terminals.close(name);
   }
+
+  context.panes.closeAll();
 }
 
 /**

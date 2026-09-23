@@ -100,6 +100,7 @@ import {
   PanelCloseAction,
   SettingsSetAction
 } from './actions/ui';
+import { UrlOpenAction, UrlPanes } from './actions/url';
 import { AnalyticsRecorder, HeartbeatTimer } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
@@ -538,9 +539,51 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     // Disabling a feature greys out its commands everywhere at once.
     features.changed.connect(() => app.commands.notifyCommandChanged());
 
-    // Leaving a workshop takes its documents and terminals off the screen
-    // too, so the next thing opened does not land among them.
-    const cleanup = { shell, docManager, terminals };
+    // Pages open web pages in main-area panes; the panes live here rather
+    // than with the other actions so that they can be restored after a
+    // browser reload and closed with the workshop.
+    const panes = new UrlPanes({ app, layouts });
+
+    registry.register(new UrlOpenAction(panes));
+
+    app.commands.addCommand(CommandIDs.urlPane, {
+      label: 'Workshop: URL Pane',
+      caption: 'Show a web page in a named main-area pane',
+      execute: (args): Widget | undefined => {
+        const name = typeof args.pane === 'string' ? args.pane : '';
+        const url = typeof args.url === 'string' ? args.url : '';
+        const label = typeof args.label === 'string' ? args.label : undefined;
+
+        if (name === '' || url === '') {
+          return undefined;
+        }
+
+        let pane = panes.get(name);
+
+        if (!pane) {
+          pane = panes.create(name, url, label);
+          shell.add(pane, 'main');
+        }
+
+        return pane;
+      }
+    });
+
+    if (restorer) {
+      void restorer.restore(panes.tracker, {
+        command: CommandIDs.urlPane,
+        args: pane => ({
+          pane: pane.content.name,
+          url: pane.content.url,
+          label: pane.title.label
+        }),
+        name: pane => pane.content.name
+      });
+    }
+
+    // Leaving a workshop takes its documents, terminals and panes off the
+    // screen too, so the next thing opened does not land among them.
+    const cleanup = { shell, docManager, terminals, panes };
     const closeWorkshop = async (): Promise<void> => {
       const path = manager.workshop?.path;
 
@@ -1561,6 +1604,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
       if (restored) {
         return;
       }
+
+      // The panes came back with the layout, but their workshop did not.
+      panes.closeAll();
 
       const defaultWorkshop = await readDefaultWorkshop(settingRegistry);
 
