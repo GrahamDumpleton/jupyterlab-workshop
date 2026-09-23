@@ -28,8 +28,11 @@ with two sections:
   `workshopsDirectory` setting (default `workshops`), with its source,
   the collection it came from, how many pages are done, and buttons to
   Open or Resume it, Restart it once started, Update it when its
-  collection lists another version, and Remove it. The workshop that is
-  open is marked. Workshops are listed in their collection's own order,
+  collection lists another version, and Remove it. Remove deletes a
+  directory the browser downloaded; a directory that was put there by
+  other means, such as a checkout, keeps its files and loses only the
+  progress in its `_workshop` state, since the browser cannot know what
+  else the directory holds. The workshop that is open is marked. Workshops are listed in their collection's own order,
   so a course reads top to bottom: the collection recorded when a
   workshop was installed or, for a directory with no record, the one
   subscribed collection that lists its name. The rest follow by title.

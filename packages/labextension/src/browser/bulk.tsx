@@ -255,7 +255,7 @@ export async function removeAll(
 
   for (const item of targets) {
     try {
-      await manager.removeInstalled(item.path);
+      await manager.removeInstalled(item);
     } catch (error) {
       failures.push({
         entry: entryFor(item),

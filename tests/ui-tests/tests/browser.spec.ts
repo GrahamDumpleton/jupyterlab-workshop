@@ -723,19 +723,53 @@ test.describe('workshop browser', () => {
         .locator('.jp-WorkshopBrowser-cardTitle')
     ).toHaveText([/Git from the command line/, /Pandas for beginners/]);
 
-    // Replace the uploaded git-basics, which no collection is recorded
-    // for, with the first collection's own, so the second collection's
-    // git-basics is a real clash: it stays listed, and installing it
-    // lands in a directory with the collection's hash appended.
+    // The uploaded git-basics was not downloaded by the browser, so
+    // Remove on its card takes only its progress: the state directory
+    // goes, the files stay, and the card stays listed.
+    const uploadedDir = `${WORKSHOPS_DIR}/${WORKSHOP}`;
+    const uploadedState = `${uploadedDir}/_workshop/state.json`;
+
+    await page.contents.uploadContent(
+      JSON.stringify({
+        version: 1,
+        workshop: { name: WORKSHOP, version: '0.1.0' },
+        installed: { settings: [] },
+        currentPage: '01-create-a-repository',
+        pages: {}
+      }),
+      'text',
+      uploadedState
+    );
     await cards
       .filter({ hasText: WORKSHOPS_DIR })
       .filter({ hasText: 'Git from the command line' })
       .getByRole('button', { name: 'Remove' })
       .click();
-    await page
-      .locator('.jp-Dialog')
-      .getByRole('button', { name: 'Remove' })
-      .click();
+
+    const removeDialog = page.locator('.jp-Dialog');
+
+    await expect(removeDialog).toContainText(
+      'The directory and its files stay'
+    );
+    await removeDialog.getByRole('button', { name: 'Remove' }).click();
+    await expect
+      .poll(() => page.contents.fileExists(uploadedState))
+      .toBe(false);
+    expect(await page.contents.fileExists(`${uploadedDir}/workshop.yaml`)).toBe(
+      true
+    );
+    await expect(
+      cards
+        .filter({ hasText: WORKSHOPS_DIR })
+        .filter({ hasText: 'Git from the command line' })
+    ).toHaveCount(1);
+
+    // Replace the uploaded git-basics, which no collection is recorded
+    // for, with the first collection's own, so the second collection's
+    // git-basics is a real clash: it stays listed, and installing it
+    // lands in a directory with the collection's hash appended.
+    await page.contents.deleteDirectory(uploadedDir);
+    await browser.getByRole('button', { name: 'Refresh' }).click();
     await expect(
       cards.filter({ hasText: 'Git from the command line' })
     ).toHaveCount(1);

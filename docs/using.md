@@ -216,7 +216,10 @@ deal with it:
   `_workshop` state is removed), restore any settings the workshop
   changed, unregister the kernel of an [isolated
   environment](environment.md) it created, and forget the trust
-  decision.
+  decision. Remove on a card follows the same rule for a workshop that
+  is not open: a directory the browser downloaded is deleted, while one
+  that was put there by other means, such as a checkout's own
+  directory, keeps its files and loses only its `_workshop` state.
 
 Closing a workshop, from the header button or the Finish dialog, closes
 the documents it put on screen and shuts down its terminals, so the next

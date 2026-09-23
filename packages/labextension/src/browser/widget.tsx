@@ -28,7 +28,8 @@ import {
   IFeaturePolicy,
   IInstalledWorkshop,
   IWorkshopManager,
-  errorMessage
+  errorMessage,
+  isDownloaded
 } from '../tokens';
 import { describeSource } from '../trust/summary';
 import { installAll, removeAll } from './bulk';
@@ -436,9 +437,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
   };
 
   const remove = async (item: IInstalledWorkshop): Promise<void> => {
+    // A directory the browser did not download may hold work that is
+    // nowhere else, so only its progress goes and the dialog says so.
+    const body = isDownloaded(item)
+      ? `The directory ${item.path} and any progress recorded in it will be deleted.`
+      : `The progress recorded in ${item.path} will be deleted. The directory and its files stay, since the browser did not download them.`;
     const result = await showDialog({
       title: `Remove workshop "${item.title}"?`,
-      body: `The directory ${item.path} and any progress recorded in it will be deleted.`,
+      body,
       buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Remove' })]
     });
 
@@ -447,7 +453,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
 
     try {
-      await manager.removeInstalled(item.path);
+      await manager.removeInstalled(item);
       setVersion(value => value + 1);
     } catch (error) {
       await showErrorMessage(

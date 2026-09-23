@@ -553,6 +553,15 @@ export interface IInstalledWorkshop {
   instanceId: string;
 }
 
+/**
+ * Whether the extension downloaded an installed workshop, as opposed to
+ * finding a directory that was put there by other means, such as a
+ * checkout. Only a downloaded directory is safe to delete whole.
+ */
+export function isDownloaded(item: IInstalledWorkshop): boolean {
+  return item.source !== null && item.source.kind !== 'local';
+}
+
 /** Features an administrator can remove for a locked-down deployment. */
 export const FEATURES = [
   'open-directory',
@@ -746,8 +755,12 @@ export interface IWorkshopManager {
   /** List the workshops under a directory relative to the JupyterLab root. */
   installed(directory: string): Promise<IInstalledWorkshop[]>;
 
-  /** Delete a downloaded workshop that is not open. */
-  removeInstalled(path: string): Promise<void>;
+  /**
+   * Remove a workshop that is not open: the whole directory when it was
+   * downloaded, or only its `_workshop` state when the directory was put
+   * there by other means, such as a checkout, so its files are kept.
+   */
+  removeInstalled(item: IInstalledWorkshop): Promise<void>;
 
   /** Read and validate a collection index, by URL or root-relative path. */
   fetchCollection(url: string): Promise<ICollectionIndex>;

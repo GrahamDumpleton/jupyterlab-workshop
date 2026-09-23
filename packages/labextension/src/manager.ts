@@ -86,7 +86,8 @@ import {
   IWorkshopPreview,
   PathBase,
   IWorkshopSource,
-  errorMessage
+  errorMessage,
+  isDownloaded
 } from './tokens';
 import { fetchForServer, saveForServer } from './statedb';
 import { buildTrustSummary, readSourceRecord } from './trust/summary';
@@ -915,8 +916,8 @@ export class WorkshopManager implements IWorkshopManager {
     return this._backend.installed(directory);
   }
 
-  async removeInstalled(path: string): Promise<void> {
-    const target = normalizeWorkshopPath(path);
+  async removeInstalled(item: IInstalledWorkshop): Promise<void> {
+    const target = normalizeWorkshopPath(item.path);
 
     if (this._workshop?.path === target) {
       await this.uninstall();
@@ -924,8 +925,21 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
-    await leaveDirectory(this._fileBrowser, target, PathExt.dirname(target));
-    await this._backend.removeInstalled(target);
+    // Only a directory the extension downloaded is deleted whole. One
+    // with no download record, such as a checkout's own directory, may
+    // hold work that exists nowhere else, so it loses only its state,
+    // as removing it while open does.
+    if (isDownloaded(item)) {
+      await leaveDirectory(this._fileBrowser, target, PathExt.dirname(target));
+      await this._backend.removeInstalled(target);
+
+      return;
+    }
+
+    const stateDir = PathExt.join(target, WORKSHOP_STATE_DIR);
+
+    await leaveDirectory(this._fileBrowser, stateDir, target);
+    await deleteTree(this._contents, stateDir);
   }
 
   async fetchCollection(url: string): Promise<ICollectionIndex> {
