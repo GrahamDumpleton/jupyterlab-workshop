@@ -18,7 +18,7 @@ same three as buttons once one is open:
 
 - **Browse workshops** opens a tab listing the workshops already
   installed and, under Available, those the subscribed collections offer,
-  grouped by collection. Install downloads one into the `workshops`
+  both grouped by collection. Install downloads one into the `workshops`
   directory under the JupyterLab root and lists it under Installed, and
   a collection's heading offers "Install all…" for the rest of a course
   at once, or Subscribe for a collection a launch link added for the

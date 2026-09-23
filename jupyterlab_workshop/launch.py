@@ -50,7 +50,7 @@ class LaunchError(Exception):
 class LaunchOptions:
     """What ``jupyter workshop launch`` was asked to do."""
 
-    #: A workshop directory, a URL, or a name in ``collection``; None
+    #: A workshop directory, a URL, or a name in ``collections``; None
     #: starts in the workshop browser.
     target: str | None = None
 
@@ -60,7 +60,9 @@ class LaunchOptions:
     ref: str | None = None
     subdir: str | None = None
     sha256: str | None = None
-    collection: str | None = None
+    #: Collections to add for the session, in the order the browser lists
+    #: them; a name target is looked up in each in turn.
+    collections: Sequence[str] = ()
     catalog: str | None = None
     variables: Mapping[str, str] = field(default_factory=dict)
 
@@ -106,12 +108,9 @@ def launch_query(options: LaunchOptions) -> list[tuple[str, str | None]]:
             if value:
                 params.append((key, value))
 
-    if options.collection:
+    for collection in options.collections:
         params.append(
-            (
-                "collection",
-                _index_parameter(options.collection, root, "collection.json"),
-            )
+            ("collection", _index_parameter(collection, root, "collection.json"))
         )
 
     if options.catalog:
@@ -145,7 +144,7 @@ def _workshop_parameter(options: LaunchOptions, root: Path) -> str:
     # workshops, which is how the extension reads the link too; a
     # directory of that name under the root cannot be told apart, so it
     # is refused rather than silently installed over.
-    if options.collection and WORKSHOP_NAME.match(target):
+    if options.collections and WORKSHOP_NAME.match(target):
         if (root / target).is_dir():
             raise LaunchError(
                 f"{target!r} is both a directory under the root and a name a "
@@ -256,7 +255,7 @@ def run_launch(options: LaunchOptions) -> int:
         raise LaunchError(f"root {options.root} is not a directory")
 
     params = launch_query(options)
-    browse = options.target is None and not options.collection and not options.catalog
+    browse = options.target is None and not options.collections and not options.catalog
 
     port = options.port if options.port is not None else free_port()
     token = secrets.token_hex(16)

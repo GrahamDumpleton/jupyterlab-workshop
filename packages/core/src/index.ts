@@ -15,6 +15,7 @@ export * from './format/manifest';
 export * from './format/page';
 export * from './format/variants';
 export * from './hash';
+export * from './launch/link';
 export * from './lint';
 export * from './lite';
 export * from './markdown/parser';

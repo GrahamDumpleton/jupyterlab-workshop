@@ -70,13 +70,17 @@ def test_launch_query_keeps_a_name_with_a_collection(tmp_path: Path) -> None:
         LaunchOptions(
             target="lesson-three",
             root=tmp_path,
-            collection="https://example.org/course/collection.json",
+            collections=[
+                "https://example.org/course/collection.json",
+                "https://example.org/extra/collection.json",
+            ],
         )
     )
 
     assert params == [
         ("workshop", "lesson-three"),
         ("collection", "https://example.org/course/collection.json"),
+        ("collection", "https://example.org/extra/collection.json"),
     ]
 
 
@@ -90,7 +94,7 @@ def test_launch_query_resolves_local_indexes_and_welcome(tmp_path: Path) -> None
     params = launch_query(
         LaunchOptions(
             root=tmp_path,
-            collection=str(course),
+            collections=[str(course)],
             catalog=str(tmp_path / "catalog.json"),
             welcome=str(tmp_path / "hello.md"),
         )
@@ -130,12 +134,12 @@ def test_launch_query_refuses_what_a_link_cannot_say(tmp_path: Path) -> None:
             LaunchOptions(
                 target="git-basics",
                 root=root,
-                collection="https://example.org/collection.json",
+                collections=["https://example.org/collection.json"],
             )
         )
 
     with pytest.raises(LaunchError, match="collection.json"):
-        launch_query(LaunchOptions(root=root, collection=str(root / "nowhere")))
+        launch_query(LaunchOptions(root=root, collections=[str(root / "nowhere")]))
 
 
 def test_launch_url_puts_the_token_first_and_keeps_bare_keys() -> None:

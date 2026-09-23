@@ -290,12 +290,57 @@ function BrowserContent(props: IContentProps): JSX.Element {
       }),
     [collections, installed, query, tags]
   );
+  // The installed workshops of each subscribed collection, in the order
+  // `orderInstalled` already gave them, and the rest: those with no
+  // subscribed collection, an ambiguous name, or a recorded collection
+  // that is not subscribed. A collection with nothing installed has no
+  // group here, since Available lists it.
+  const { installedGroups, otherInstalled } = useMemo(() => {
+    const byCollection = new Map<ILoadedCollection, IInstalledWorkshop[]>();
+    const rest: IInstalledWorkshop[] = [];
+
+    for (const item of installed) {
+      const found = collectionOf(item, collections);
+
+      if (found) {
+        const items = byCollection.get(found.collection) ?? [];
+
+        items.push(item);
+        byCollection.set(found.collection, items);
+      } else {
+        rest.push(item);
+      }
+    }
+
+    return {
+      installedGroups: groups
+        .filter(group => byCollection.has(group.collection))
+        .map(group => ({
+          group,
+          items: byCollection.get(group.collection) ?? []
+        })),
+      otherInstalled: rest
+    };
+  }, [installed, collections, groups]);
+
   const allTags = useMemo(
     () => collectionTags(groups.flatMap(group => group.notInstalled)),
     [groups]
   );
   const filtering = query.trim() !== '' || tags.length > 0;
   const anyNotInstalled = groups.some(group => group.notInstalled.length > 0);
+  const installedUrls = useMemo(
+    () => new Set(installedGroups.map(({ group }) => group.collection.url)),
+    [installedGroups]
+  );
+  // A collection whose workshops are all installed but under no heading
+  // of its own, as when a name two collections list was matched to
+  // neither, is still shown under Available, or it would be nowhere.
+  const anyUnplaced = groups.some(
+    group =>
+      group.notInstalled.length === 0 &&
+      !installedUrls.has(group.collection.url)
+  );
   const anyProblem =
     collections.some(item => item.error) || catalogs.some(item => item.error);
   const canSubscribe =
@@ -313,6 +358,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const showAvailable =
     features.enabled('available') &&
     (anyNotInstalled ||
+      anyUnplaced ||
       filtering ||
       anyProblem ||
       suggestions.length > 0 ||
@@ -421,6 +467,37 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const collectionFor = (
     item: IInstalledWorkshop
   ): IMatchedCollection | undefined => collectionOf(item, collections);
+
+  const renderInstalledCard = (
+    item: IInstalledWorkshop,
+    showCollection: boolean
+  ): JSX.Element => {
+    const found = collectionFor(item);
+    const next = found
+      ? upNext(found.collection, installed, collections)
+      : undefined;
+
+    return (
+      <InstalledCard
+        key={item.path}
+        item={item}
+        collection={found?.collection}
+        showCollection={showCollection}
+        step={sequenceStep(found)}
+        upNext={found?.entry !== undefined && next === found.entry}
+        open={manager.workshop?.path === item.path}
+        busy={busy === `open:${item.path}`}
+        stale={isStale(item)}
+        onOpen={() => open(item.path)}
+        onContinue={() => open(item.path)}
+        onRestart={() => void restart(item)}
+        onRemove={
+          features.enabled('remove') ? () => void remove(item) : undefined
+        }
+        update={updateFor(item)}
+      />
+    );
+  };
 
   const updateFor = (
     item: IInstalledWorkshop
@@ -551,40 +628,32 @@ function BrowserContent(props: IContentProps): JSX.Element {
             : `No workshops are installed under ${directory || 'the JupyterLab root'} yet.${installHints}`}
         </p>
       ) : (
-        <div className="jp-WorkshopBrowser-cards">
-          {installed.map(item => {
-            const found = collectionFor(item);
-            const next = found
-              ? upNext(found.collection, installed, collections)
-              : undefined;
-
-            return (
-              <InstalledCard
-                key={item.path}
-                item={item}
-                collection={found?.collection}
-                step={sequenceStep(found)}
-                upNext={found?.entry !== undefined && next === found.entry}
-                open={manager.workshop?.path === item.path}
-                busy={busy === `open:${item.path}`}
-                stale={isStale(item)}
-                onOpen={() => open(item.path)}
-                onContinue={() => open(item.path)}
-                onRestart={() => void restart(item)}
-                onRemove={
-                  features.enabled('remove')
-                    ? () => void remove(item)
-                    : undefined
-                }
-                update={updateFor(item)}
-              />
-            );
-          })}
-        </div>
+        <>
+          {installedGroups.map(({ group, items }) => (
+            <InstalledGroup
+              key={group.collection.url}
+              group={group}
+              count={items.length}
+              onRemoveAll={
+                features.enabled('install-all') && features.enabled('remove')
+                  ? () => removeAllFor(group)
+                  : undefined
+              }
+            >
+              {items.map(item => renderInstalledCard(item, false))}
+            </InstalledGroup>
+          ))}
+          {otherInstalled.length > 0 ? (
+            <InstalledGroup count={otherInstalled.length}>
+              {otherInstalled.map(item => renderInstalledCard(item, true))}
+            </InstalledGroup>
+          ) : null}
+        </>
       )}
       {showAvailable ? (
         <AvailableSection
           groups={groups}
+          installedUrls={installedUrls}
           catalogs={catalogs}
           suggestions={suggestions}
           filtering={filtering}
@@ -597,11 +666,6 @@ function BrowserContent(props: IContentProps): JSX.Element {
           onInstall={install}
           onInstallAll={
             features.enabled('install-all') ? installAllFor : undefined
-          }
-          onRemoveAll={
-            features.enabled('install-all') && features.enabled('remove')
-              ? removeAllFor
-              : undefined
           }
           onManage={manage}
           onSubscribe={url => void subscribeSuggested(url)}
@@ -636,6 +700,7 @@ interface ISuggestion {
 
 function AvailableSection({
   groups,
+  installedUrls,
   catalogs,
   suggestions,
   filtering,
@@ -647,11 +712,13 @@ function AvailableSection({
   busy,
   onInstall,
   onInstallAll,
-  onRemoveAll,
   onManage,
   onSubscribe
 }: {
   groups: IGroup[];
+
+  /** The locations of the collections that have a heading under Installed. */
+  installedUrls: Set<string>;
   catalogs: ILoadedCatalog[];
   suggestions: ISuggestion[];
 
@@ -671,9 +738,6 @@ function AvailableSection({
 
   /** Install every workshop of a group, when the settings allow it. */
   onInstallAll?: (group: IGroup) => void;
-
-  /** Remove every installed workshop of a group, when the settings allow it. */
-  onRemoveAll?: (group: IGroup) => void;
   onManage: (tab: SourceKind) => void;
   onSubscribe: (url: string) => void;
 }): JSX.Element {
@@ -723,7 +787,13 @@ function AvailableSection({
         <p className="jp-WorkshopBrowser-note">No workshops match.</p>
       ) : null}
       {groups.map(group =>
-        !filtering || group.shown.length > 0 ? (
+        // A collection with nothing left to install has its heading under
+        // Installed, so here it would only repeat itself, unless it has
+        // no heading there either, or a read error to show.
+        (group.notInstalled.length > 0 ||
+          group.collection.error ||
+          !installedUrls.has(group.collection.url)) &&
+        (!filtering || group.shown.length > 0) ? (
           <CollectionGroup
             key={group.collection.url}
             group={group}
@@ -732,7 +802,6 @@ function AvailableSection({
             busy={busy}
             onInstall={entry => onInstall(group.collection.url, entry)}
             onInstallAll={onInstallAll ? () => onInstallAll(group) : undefined}
-            onRemoveAll={onRemoveAll ? () => onRemoveAll(group) : undefined}
             onSubscribe={
               group.collection.origin === 'session' && canSubscribeCollections
                 ? () => onSubscribe(group.collection.url)
@@ -815,7 +884,6 @@ function CollectionGroup({
   busy,
   onInstall,
   onInstallAll,
-  onRemoveAll,
   onSubscribe
 }: {
   group: IGroup;
@@ -824,7 +892,6 @@ function CollectionGroup({
   busy: string | null;
   onInstall: (entry: ICollectionEntry) => void;
   onInstallAll?: () => void;
-  onRemoveAll?: () => void;
 
   /**
    * Subscribe to the collection, given when a launch link added it for
@@ -835,20 +902,15 @@ function CollectionGroup({
 }): JSX.Element {
   const { collection } = group;
   const [collapsed, setCollapsed] = useState(() =>
-    readCollapsed(collection.url)
+    readCollapsed('available', collection.url)
   );
   const toggle = (): void => {
     setCollapsed(current => {
-      writeCollapsed(collection.url, !current);
+      writeCollapsed('available', collection.url, !current);
 
       return !current;
     });
   };
-  const index = collection.index;
-  const icon = index?.icon
-    ? resolveLocation(collection.url, index.icon)
-    : undefined;
-  const Caret = collapsed ? caretRightIcon : caretDownIcon;
   const count = group.notInstalled.length;
 
   // A bulk run holds the whole group: its cards' Install buttons wait
@@ -863,116 +925,46 @@ function CollectionGroup({
     onInstallAll !== undefined &&
     !collection.error &&
     count > 1;
-  const canRemoveAll =
-    onRemoveAll !== undefined && !collection.error && group.removable > 0;
 
   return (
     <section
-      className={`jp-WorkshopBrowser-group${collapsed ? ' jp-mod-collapsed' : ''}`}
+      className={`jp-WorkshopBrowser-group jp-mod-available${collapsed ? ' jp-mod-collapsed' : ''}`}
       data-collection={collection.url}
     >
-      <div className="jp-WorkshopBrowser-groupHeader">
-        <button
-          type="button"
-          className="jp-WorkshopBrowser-groupToggle"
-          aria-expanded={!collapsed}
-          title={collapsed ? 'Show the workshops' : 'Hide the workshops'}
-          onClick={toggle}
-        >
-          <Caret.react tag="span" width="16px" height="16px" />
-        </button>
-        <SourceIcon
-          icon={icon}
-          title={collection.title}
-          size={GROUP_ICON_SIZE}
-        />
-        <div className="jp-WorkshopBrowser-groupText">
-          <h3 className="jp-WorkshopBrowser-groupTitle">
-            {index?.homepage ? (
-              <a href={index.homepage} target="_blank" rel="noreferrer">
-                {collection.title}
-              </a>
-            ) : (
-              collection.title
-            )}
-            <span className="jp-WorkshopBrowser-groupCount">
-              {count === 1 ? '1 workshop' : `${count} workshops`}
-            </span>
-          </h3>
-          {index?.description ? (
-            <p className="jp-WorkshopBrowser-groupDescription">
-              {index.description}
-            </p>
-          ) : null}
-          <div className="jp-WorkshopBrowser-groupMeta">
-            {index?.publisher ? (
-              <span className="jp-WorkshopBrowser-groupPublisher">
-                by{' '}
-                {index.publisher.url ? (
-                  <a
-                    href={index.publisher.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {index.publisher.name}
-                  </a>
-                ) : (
-                  index.publisher.name
-                )}
-              </span>
-            ) : null}
-            <span
-              className="jp-WorkshopBrowser-groupUrl"
-              title={collection.url}
-            >
-              {collection.url}
-            </span>
-          </div>
-          {collection.error ? (
-            <p className="jp-WorkshopBrowser-error">
-              Unable to read this collection: {collection.error}
-            </p>
-          ) : null}
-        </div>
-        {canSubscribe || canInstallAll || canRemoveAll ? (
-          <div className="jp-WorkshopBrowser-groupActions">
-            {canSubscribe ? (
-              <button
-                type="button"
-                className="jp-Button jp-mod-styled jp-mod-accept"
-                title="Remember this collection for future sessions"
-                onClick={onSubscribe}
-              >
-                Subscribe
-              </button>
-            ) : null}
-            {canInstallAll ? (
-              <button
-                type="button"
-                className="jp-Button jp-mod-styled jp-mod-accept"
-                title="Download every workshop of this collection that is not installed yet, after choosing which"
-                disabled={groupBusy}
-                onClick={onInstallAll}
-              >
-                {groupBusy ? 'Installing…' : 'Install all…'}
-              </button>
-            ) : null}
-            {canRemoveAll ? (
-              <GroupMenu
-                items={[
-                  {
-                    label: `Remove all ${group.removable === 1 ? 'installed workshop' : `${group.removable} installed workshops`}…`,
-                    warn: true,
-                    disabled: groupBusy,
-                    run: onRemoveAll ?? ((): void => undefined)
-                  }
-                ]}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      {!collapsed && !collection.error && group.notInstalled.length === 0 ? (
+      <GroupHeader
+        collection={collection}
+        count={count === 1 ? '1 workshop' : `${count} workshops`}
+        collapsed={collapsed}
+        onToggle={toggle}
+        actions={
+          canSubscribe || canInstallAll ? (
+            <>
+              {canSubscribe ? (
+                <button
+                  type="button"
+                  className="jp-Button jp-mod-styled jp-mod-accept"
+                  title="Remember this collection for future sessions"
+                  onClick={onSubscribe}
+                >
+                  Subscribe
+                </button>
+              ) : null}
+              {canInstallAll ? (
+                <button
+                  type="button"
+                  className="jp-Button jp-mod-styled jp-mod-accept"
+                  title="Download every workshop of this collection that is not installed yet, after choosing which"
+                  disabled={groupBusy}
+                  onClick={onInstallAll}
+                >
+                  {groupBusy ? 'Installing…' : 'Install all…'}
+                </button>
+              ) : null}
+            </>
+          ) : null
+        }
+      />
+      {!collapsed && !collection.error && count === 0 ? (
         <p className="jp-WorkshopBrowser-note">
           Every workshop of this collection is installed.
         </p>
@@ -999,6 +991,195 @@ function CollectionGroup({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The installed workshops of one subscribed collection under its
+ * heading, or, with no group, the rest under a plain "Other workshops"
+ * heading. The cards are the children, rendered by the browser, which
+ * holds everything a card's buttons need.
+ */
+function InstalledGroup({
+  group,
+  count,
+  onRemoveAll,
+  children
+}: {
+  /** The collection the workshops belong to; none for the rest. */
+  group?: IGroup;
+
+  /** How many workshops the group holds. */
+  count: number;
+
+  /** Remove every workshop installed from the collection, when allowed. */
+  onRemoveAll?: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  const collection = group?.collection;
+  const location = collection?.url ?? '';
+  const [collapsed, setCollapsed] = useState(() =>
+    readCollapsed('installed', location)
+  );
+  const toggle = (): void => {
+    setCollapsed(current => {
+      writeCollapsed('installed', location, !current);
+
+      return !current;
+    });
+  };
+
+  // "n of m installed" tells a learner the collection has more; without
+  // a readable index there is no m to give.
+  const total = collection?.error
+    ? undefined
+    : collection?.index?.workshops.length;
+  const countText =
+    total !== undefined
+      ? `${count} of ${total} installed`
+      : count === 1
+        ? '1 installed'
+        : `${count} installed`;
+  const removable = group?.removable ?? 0;
+  const canRemoveAll = onRemoveAll !== undefined && removable > 0;
+
+  return (
+    <section
+      className={`jp-WorkshopBrowser-group jp-mod-installed${collapsed ? ' jp-mod-collapsed' : ''}`}
+      data-collection={collection ? collection.url : undefined}
+    >
+      <GroupHeader
+        collection={collection}
+        title="Other workshops"
+        count={countText}
+        collapsed={collapsed}
+        onToggle={toggle}
+        actions={
+          canRemoveAll ? (
+            <GroupMenu
+              items={[
+                {
+                  label: `Remove all ${removable === 1 ? 'installed workshop' : `${removable} installed workshops`}…`,
+                  warn: true,
+                  run: onRemoveAll ?? ((): void => undefined)
+                }
+              ]}
+            />
+          ) : null
+        }
+      />
+      {!collapsed ? (
+        <div className="jp-WorkshopBrowser-cards">{children}</div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * The heading of a group in either section: a collapse toggle, then the
+ * collection's icon, title, description, publisher and location, or a
+ * plain title when there is no collection, and the section's actions.
+ */
+function GroupHeader({
+  collection,
+  title,
+  count,
+  collapsed,
+  onToggle,
+  actions
+}: {
+  collection?: ILoadedCollection;
+
+  /** The title shown when there is no collection. */
+  title?: string;
+
+  /** The count shown beside the title. */
+  count: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  actions?: React.ReactNode;
+}): JSX.Element {
+  const index = collection?.index;
+  const icon =
+    collection && index?.icon
+      ? resolveLocation(collection.url, index.icon)
+      : undefined;
+  const Caret = collapsed ? caretRightIcon : caretDownIcon;
+
+  return (
+    <div className="jp-WorkshopBrowser-groupHeader">
+      <button
+        type="button"
+        className="jp-WorkshopBrowser-groupToggle"
+        aria-expanded={!collapsed}
+        title={collapsed ? 'Show the workshops' : 'Hide the workshops'}
+        onClick={onToggle}
+      >
+        <Caret.react tag="span" width="16px" height="16px" />
+      </button>
+      {collection ? (
+        <SourceIcon
+          icon={icon}
+          title={collection.title}
+          size={GROUP_ICON_SIZE}
+        />
+      ) : null}
+      <div className="jp-WorkshopBrowser-groupText">
+        <h3 className="jp-WorkshopBrowser-groupTitle">
+          {collection ? (
+            index?.homepage ? (
+              <a href={index.homepage} target="_blank" rel="noreferrer">
+                {collection.title}
+              </a>
+            ) : (
+              collection.title
+            )
+          ) : (
+            title
+          )}
+          <span className="jp-WorkshopBrowser-groupCount">{count}</span>
+        </h3>
+        {index?.description ? (
+          <p className="jp-WorkshopBrowser-groupDescription">
+            {index.description}
+          </p>
+        ) : null}
+        {collection ? (
+          <div className="jp-WorkshopBrowser-groupMeta">
+            {index?.publisher ? (
+              <span className="jp-WorkshopBrowser-groupPublisher">
+                by{' '}
+                {index.publisher.url ? (
+                  <a
+                    href={index.publisher.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {index.publisher.name}
+                  </a>
+                ) : (
+                  index.publisher.name
+                )}
+              </span>
+            ) : null}
+            <span
+              className="jp-WorkshopBrowser-groupUrl"
+              title={collection.url}
+            >
+              {collection.url}
+            </span>
+          </div>
+        ) : null}
+        {collection?.error ? (
+          <p className="jp-WorkshopBrowser-error">
+            Unable to read this collection: {collection.error}
+          </p>
+        ) : null}
+      </div>
+      {actions ? (
+        <div className="jp-WorkshopBrowser-groupActions">{actions}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1231,6 +1412,7 @@ function CollectionCard({
 function InstalledCard({
   item,
   collection,
+  showCollection,
   step,
   upNext,
   open,
@@ -1246,6 +1428,13 @@ function InstalledCard({
 
   /** The subscribed collection it came from, when known. */
   collection?: ILoadedCollection;
+
+  /**
+   * Whether to name the collection on the card: under a heading that
+   * already names it the chip is noise, among the rest it is the only
+   * sign of where a workshop came from.
+   */
+  showCollection: boolean;
 
   /** Its place in the sequence, when the collection is ordered. */
   step?: ISequenceStep;
@@ -1303,7 +1492,7 @@ function InstalledCard({
             {item.source.kind}
           </span>
         ) : null}
-        {collection ? (
+        {!showCollection ? null : collection ? (
           <span
             className="jp-WorkshopBrowser-chip jp-mod-source"
             title={collection.url}
@@ -1486,20 +1675,38 @@ function suggestedCollections(
   return suggestions;
 }
 
-function readCollapsed(url: string): boolean {
+/** Which section a group's collapse state belongs to. */
+type GroupSection = 'available' | 'installed';
+
+/**
+ * The storage key of a group's collapse state. The Available keys predate
+ * the Installed groups and keep their form; an Installed group, and the
+ * group of the rest with no location, have keys of their own, so
+ * collapsing one section's group leaves the other's open.
+ */
+function collapsedKey(section: GroupSection, url: string): string {
+  const location = url === '' ? '' : normalizeLocation(url);
+
+  return section === 'installed'
+    ? `${COLLAPSED_KEY}installed:${location}`
+    : COLLAPSED_KEY + location;
+}
+
+function readCollapsed(section: GroupSection, url: string): boolean {
   try {
-    return (
-      window.localStorage.getItem(COLLAPSED_KEY + normalizeLocation(url)) ===
-      '1'
-    );
+    return window.localStorage.getItem(collapsedKey(section, url)) === '1';
   } catch {
     return false;
   }
 }
 
-function writeCollapsed(url: string, collapsed: boolean): void {
+function writeCollapsed(
+  section: GroupSection,
+  url: string,
+  collapsed: boolean
+): void {
   try {
-    const key = COLLAPSED_KEY + normalizeLocation(url);
+    const key = collapsedKey(section, url);
 
     if (collapsed) {
       window.localStorage.setItem(key, '1');

@@ -245,7 +245,7 @@ where to start the client and JupyterLab.
 
 ```
 jupyter workshop launch [TARGET] [--ref REF] [--subdir DIR] [--sha256 HASH]
-                        [--collection URL] [--catalog URL]
+                        [--collection URL]... [--catalog URL]
                         [--var NAME=VALUE]... [--restart[=force]]
                         [--welcome FILE] [--trust trusted|restricted|ask]
                         [--root DIR] [--port PORT] [--no-browser] [--fresh]
@@ -256,21 +256,22 @@ Starts JupyterLab with a workshop, collection or catalog open, so the
 [launch link](collections.md#launch-links) that a learner would be
 handed does not have to be typed by hand. `TARGET` is a workshop
 directory under the root, a repository, forge tree or archive URL, or,
-with `--collection`, the name of one of that collection's workshops;
+with `--collection`, the name of one of the collections' workshops;
 left out, JupyterLab starts in the workshop browser. `--ref`, `--subdir`
 and `--sha256` select within a URL as the link parameters of the same
-names do, `--collection` and `--catalog` add sources for the session,
+names do, `--collection`, which can be repeated to list several in that
+order, and `--catalog` add sources for the session,
 `--var` sets workshop variables and `--restart` starts a workshop that
 is already there over first, asking when it has recorded progress unless
 `=force` is given. A collection, catalog or welcome file can be a URL or
 a file under the root; a directory holding a `collection.json` or
 `catalog.json` may be named in place of the file.
 
-A collection or catalog named this way is added for the session only,
-so a later launch without it lists the workshops installed from it in
-directory order rather than the collection's; Subscribe on the
-collection's heading in the browser keeps it, or give `--collection`
-each time.
+A collection or catalog named this way is added for the session, which
+the browser keeps in the workspace's saved state, so a later launch on
+the same root and workspace still lists it, in its order, until it is
+removed in the Collections dialog or promoted by Subscribe; `--fresh`
+starts without it.
 
 The server runs on a free port unless `--port` is given, with the current
 directory as its root unless `--root` names another; everything it opens

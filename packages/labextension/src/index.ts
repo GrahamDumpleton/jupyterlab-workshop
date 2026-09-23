@@ -1,4 +1,12 @@
-import { ICollectionIndex, toolApplies } from '@jupyterlab-workshop/core';
+import {
+  ICollectionEntry,
+  ICollectionIndex,
+  parseLaunchLink,
+  parseSourceLink,
+  parseWelcomeLink,
+  stripLaunchParams,
+  toolApplies
+} from '@jupyterlab-workshop/core';
 import {
   ILabShell,
   ILayoutRestorer,
@@ -15,7 +23,7 @@ import {
   showErrorMessage
 } from '@jupyterlab/apputils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
-import { PathExt, URLExt } from '@jupyterlab/coreutils';
+import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import {
   FileBrowser,
@@ -508,7 +516,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     ILayoutRestorer,
     IDefaultFileBrowser,
     ILauncher,
-    IRouter
+    IRouter,
+    IStateDB
   ],
   activate: (
     app: JupyterFrontEnd,
@@ -524,7 +533,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     restorer: ILayoutRestorer | null,
     fileBrowser: FileBrowser | null,
     launcher: ILauncher | null,
-    router: IRouter | null
+    router: IRouter | null,
+    stateDB: IStateDB | null
   ): void => {
     const panel = new WorkshopPanel({
       manager,
@@ -819,7 +829,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     // The browser lists the subscribed collections and the installed
     // workshops in the main area. A launch link can add a collection or
     // a catalog for the session.
-    const store = new SourceStore({ settingRegistry, features });
+    const store = new SourceStore({ settingRegistry, features, stateDB });
     const readBrowserSettings = async (): Promise<IBrowserSettings> => ({
       workshopsDirectory: await workshopsDirectory()
     });
@@ -995,7 +1005,10 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         const sources = parseSourceLink(search);
         const welcome = parseWelcomeLink(search) !== undefined;
 
-        if (!request && !sources.collection && !sources.catalog && !welcome) {
+        const anySource =
+          sources.collections.length > 0 || sources.catalogs.length > 0;
+
+        if (!request && !anySource && !welcome) {
           return;
         }
 
@@ -1014,36 +1027,38 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             });
           }
 
-          if (sources.collection) {
-            await store.addForSession('collection', sources.collection);
-          }
-
-          if (sources.catalog) {
-            await store.addForSession('catalog', sources.catalog);
-          }
+          // The link's collections come first, in its order, then its
+          // catalogs; each kind is added as one batch so the browser
+          // loads once.
+          await store.addForSession('collection', sources.collections);
+          await store.addForSession('catalog', sources.catalogs);
 
           // A link naming only a welcome message leaves the start as it
           // would otherwise be; the panel shows the message over it.
           if (!request) {
-            if (sources.collection || sources.catalog) {
+            if (anySource) {
               await startBrowsing();
             }
 
             return;
           }
 
-          // A bare name with a collection is looked up in that collection
-          // and installed from it, so the install records where it came
-          // from as the browser's Install button would.
-          if (request.collection !== undefined) {
-            const index = await manager.fetchCollection(request.collection);
-            const entry = index.workshops.find(
-              item => item.name === request.url
+          // A bare name with collections is looked up in each in turn and
+          // installed from the first that lists it, so the install
+          // records where it came from as the browser's Install button
+          // would.
+          if (request.collections !== undefined) {
+            const found = await findInCollections(
+              manager,
+              request.collections,
+              request.url
             );
 
-            if (!entry) {
+            if (!found) {
               Notification.error(
-                `The collection ${request.collection} has no workshop named ${request.url}.`
+                request.collections.length === 1
+                  ? `The collection ${request.collections[0]} has no workshop named ${request.url}.`
+                  : `None of the link's collections has a workshop named ${request.url}.`
               );
 
               return;
@@ -1055,8 +1070,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
             await installEntry(
               app.commands,
-              request.collection,
-              entry,
+              found.collection,
+              found.entry,
               installed,
               { variables: request.variables, launch: true }
             );
@@ -1595,7 +1610,11 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
 
       const sources = parseSourceLink(search);
 
-      if (parseLaunchLink(search) || sources.collection || sources.catalog) {
+      if (
+        parseLaunchLink(search) ||
+        sources.collections.length > 0 ||
+        sources.catalogs.length > 0
+      ) {
         return;
       }
 
@@ -1659,141 +1678,38 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 }
 
 /** What a launch link asks for. */
-interface ILaunchRequest {
-  /** A local directory to open, when the workshop parameter is not a URL. */
-  path?: string;
-
-  /**
-   * The collection to install from, when the workshop parameter is a
-   * bare name and the link also names a collection; `url` then holds
-   * the name.
-   */
-  collection?: string;
-  url: string;
-  ref?: string;
-  subdir?: string;
-  sha256?: string;
-  variables: Record<string, string>;
-
-  /**
-   * Whether to restart a workshop that is already present before opening
-   * it: `ask` confirms first when it has recorded progress, `force` never
-   * asks. Only a directory can be restarted; a download replaces its
-   * files anyway.
-   */
-  restart?: 'ask' | 'force';
-}
-
 /** JupyterLab's `reset` parameter, bare or with a value, as its router matches it. */
 const RESET_PARAM = /(\?|&)reset(=[^&#]*)?($|&|#)/;
 
-/** Query parameters a launch link uses. */
-const LAUNCH_PARAMS: ReadonlySet<string> = new Set([
-  'workshop',
-  'ref',
-  'subdir',
-  'sha256',
-  'collection',
-  'catalog',
-  'restart',
-  'welcome'
-]);
-
-/** The sources a launch link adds for the session. */
-export interface ISourceLink {
-  collection?: string;
-  catalog?: string;
-}
-
 /**
- * The collection and catalog a launch link names, from its `collection`
- * and `catalog` query parameters.
+ * The first of the collections, in order, that lists a workshop of the
+ * name, with its entry, or undefined when none does. A collection that
+ * cannot be read is skipped, since the others may still have it.
  */
-export function parseSourceLink(search: string): ISourceLink {
-  const params = URLExt.queryStringToObject(search);
-  const collection = params.collection?.trim() ?? '';
-  const catalog = params.catalog?.trim() ?? '';
+async function findInCollections(
+  manager: IWorkshopManager,
+  collections: string[],
+  name: string
+): Promise<{ collection: string; entry: ICollectionEntry } | undefined> {
+  for (const collection of collections) {
+    let index: ICollectionIndex;
 
-  return {
-    collection: collection === '' ? undefined : collection,
-    catalog: catalog === '' ? undefined : catalog
-  };
-}
+    try {
+      index = await manager.fetchCollection(collection);
+    } catch (error) {
+      console.warn(`Unable to read the collection ${collection}`, error);
 
-/**
- * The welcome file a launch link names with its `welcome` parameter, a
- * path relative to the JupyterLab root, or undefined when it names none.
- */
-export function parseWelcomeLink(search: string): string | undefined {
-  const welcome = URLExt.queryStringToObject(search).welcome?.trim() ?? '';
+      continue;
+    }
 
-  return welcome === '' ? undefined : welcome;
-}
+    const entry = index.workshops.find(item => item.name === name);
 
-/**
- * Parse the query string of a launch link, or return null when it has no
- * `workshop` parameter.
- */
-export function parseLaunchLink(search: string): ILaunchRequest | null {
-  const params = URLExt.queryStringToObject(search);
-  const workshop = params.workshop?.trim() ?? '';
-
-  if (workshop === '') {
-    return null;
-  }
-
-  const variables: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(params)) {
-    if (key.startsWith('var.') && key.length > 4 && value !== undefined) {
-      variables[key.slice(4)] = value;
+    if (entry) {
+      return { collection, entry };
     }
   }
 
-  const isUrl = /^https?:\/\//i.test(workshop);
-  const collection = params.collection?.trim() ?? '';
-
-  // A bare name alongside a collection is one of its workshops rather
-  // than a directory.
-  const fromCollection =
-    !isUrl && collection !== '' && /^[a-z0-9][a-z0-9-]*$/.test(workshop);
-
-  // A bare `restart` asks when there is progress; `restart=force` never
-  // does. The key is looked for in the raw string, since a bare key has
-  // no value for the parser to keep.
-  const restart = /(\?|&)restart(=|&|$)/.test(search)
-    ? params.restart === 'force'
-      ? 'force'
-      : 'ask'
-    : undefined;
-
-  return {
-    path: isUrl || fromCollection ? undefined : workshop,
-    collection: fromCollection ? collection : undefined,
-    url: workshop,
-    ref: params.ref || undefined,
-    subdir: params.subdir || undefined,
-    sha256: params.sha256 || undefined,
-    variables,
-    restart
-  };
-}
-
-function stripLaunchParams(search: string): string {
-  const params = URLExt.queryStringToObject(search);
-  const kept: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(params)) {
-    if (
-      !LAUNCH_PARAMS.has(key) &&
-      !key.startsWith('var.') &&
-      value !== undefined
-    ) {
-      kept[key] = value;
-    }
-  }
-
-  return Object.keys(kept).length > 0 ? URLExt.objectToQueryString(kept) : '';
+  return undefined;
 }
 
 /**

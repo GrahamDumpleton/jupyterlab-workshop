@@ -32,13 +32,22 @@ with two sections:
   directory the browser downloaded; a directory that was put there by
   other means, such as a checkout, keeps its files and loses only the
   progress in its `_workshop` state, since the browser cannot know what
-  else the directory holds. The workshop that is open is marked. Workshops are listed in their collection's own order,
-  so a course reads top to bottom: the collection recorded when a
-  workshop was installed or, for a directory with no record, the one
-  subscribed collection that lists its name. The rest follow by title.
-  A collection that declares its workshops a sequence, a course, has its
-  cards numbered, "2 of 5", in both sections, and the first one not yet
-  finished marked "Up next".
+  else the directory holds. The workshop that is open is marked.
+  Workshops are grouped under their collection's heading, the same
+  heading Available uses, with the collection's icon, title, description
+  and publisher and a count of how many of its workshops are installed,
+  and within a group they follow the collection's own order, so a course
+  reads top to bottom. A workshop belongs to the collection recorded
+  when it was installed or, for a directory with no record, the one
+  subscribed collection that lists its name. Workshops that belong to no
+  subscribed collection are listed last, by title, under "Other
+  workshops", where each card says what it knows about where it came
+  from. A collection that declares its workshops a sequence, a course,
+  has its cards numbered, "2 of 5", in both sections, and the first one
+  not yet finished marked "Up next". When more than one workshop was
+  installed from a collection, its Installed heading holds a "…" menu
+  with "Remove all"; see [Installing a whole
+  collection](#installing-a-whole-collection).
 
 - **Available** lists the workshops of every subscribed collection, one
   group per collection. A group is headed by the collection's icon,
@@ -57,19 +66,25 @@ with two sections:
   Cards for workshops that do not list the current platform are dimmed
   but can still be installed. A workshop that is already installed
   appears only under Installed, where its card offers an Update button
-  when its collection lists a different version. When every workshop
-  the collections list is installed, as in an image that ships the
-  workshops its collection lists, the Available section and its search
-  and tags are not shown at all; a single collection with everything
-  installed keeps its heading, with a note saying so.
+  when its collection lists a different version. A collection with
+  nothing left to install has no group under Available once its heading
+  is under Installed; one whose workshops could not be placed there,
+  such as a name two collections list, keeps its heading here with a
+  note saying everything is installed. When every workshop the
+  collections list is installed and placed, as in an image that ships
+  the workshops its collection lists, the Available section and its
+  search and tags are not shown at all. Subscribe for a collection a
+  launch link added is offered on its Available heading while that is
+  shown, and in the Collections dialog at any time.
 
 ```{figure} _static/browser.png
 :alt: The workshop browser with an installed ordered collection and another subscribed collection
 :width: 100%
 
 The workshop browser: the three workshops of the showcase collection
-installed, numbered and with the first marked up next, and another
-subscribed collection's workshops grouped under its heading.
+installed under the collection's heading, numbered and with the first
+marked up next, and another subscribed collection's workshops grouped
+under its heading below.
 ```
 
 "Add from URL…" and "Open a directory…" run the corresponding commands.
@@ -94,7 +109,7 @@ defaults an administrator set, or this session, for one a launch link
 added. A field subscribes to a collection by the URL or root-relative
 path of its `collection.json`; Unsubscribe drops one; a session's
 collection has Subscribe, which writes it into your settings so it
-stays, and Remove, which drops it for the session. Below, "From
+stays, and Remove, which drops it. Below, "From
 subscribed catalogs" lists every collection the subscribed catalogs
 offer, with Subscribe on those not yet subscribed to. **Catalogs** does
 the same for catalogs: the subscribed ones, subscribe by URL,
@@ -141,12 +156,13 @@ key of `disabledFeatures` removes the button on machines where a bulk
 download is unwelcome, leaving single installs; see
 [locking down a deployment](deploying.md#locking-down-a-deployment).
 
-The "…" menu beside a collection's heading holds "Remove all", which
-deletes every workshop that was installed from that collection, with
-their progress, after a confirmation listing the directories. It is
-there only when Remove is allowed, and it leaves alone workshops that
-merely share a name with the collection's entries, such as a checkout's
-own directories, since those were never installed from it.
+The "…" menu beside a collection's heading under Installed holds
+"Remove all", which deletes every workshop that was installed from that
+collection, with their progress, after a confirmation listing the
+directories. It is there only when Remove is allowed, and it leaves
+alone workshops that merely share a name with the collection's entries,
+such as a checkout's own directories, since those were never installed
+from it.
 
 For an image or a script, `jupyter workshop install <collection>` does
 the same from the command line; see [the CLI](cli.md#install).
@@ -460,18 +476,23 @@ browser when no workshop is named:
   shows its workshops alongside the subscribed ones, with Subscribe on
   its heading in place of "Install all…" until it is taken; single
   Install buttons work either way, and the Collections dialog offers
-  Subscribe too. The workshops installed from it stay, but their order
-  and their place in the collection are known only while the collection
-  is: subscribe, or give the link again at each start, to see them
-  grouped and numbered rather than listed in directory order.
-  With `workshop=<name>` as
-  well, where the name is one of the collection's workshops rather than
-  a URL or path, that workshop is installed from the collection,
+  Subscribe too. The parameter can be repeated, and the collections are
+  listed in the link's order after the subscribed ones, so one link
+  shows everything a repository with several collections holds, grouped
+  and numbered. The collections a link added are kept in the
+  workspace's saved state, so a reload of the page, whose address no
+  longer names them, lists them still; they go when they are removed in
+  the Collections dialog, promoted by Subscribe, or the workspace is
+  reset with JupyterLab's `reset` parameter. With `workshop=<name>` as
+  well, where the name is one of the collections' workshops rather than
+  a URL or path, the name is looked up in the collections in the link's
+  order and the workshop is installed from the first that lists it,
   recording where it came from, and opened: the "start lesson three"
   link for a course.
 
 - `catalog=<url>` adds a catalog for the session, so the browser
-  offers its collections under "Collections you can subscribe to".
+  offers its collections under "Collections you can subscribe to". It
+  is kept the same way.
 
 - `welcome=<path>` shows the Markdown file at that path, relative to
   the JupyterLab root, in a dialog once JupyterLab has started, on its

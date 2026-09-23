@@ -94,6 +94,31 @@ const SECOND = {
   ]
 };
 
+/** One more collection, uploaded only by the test that links to it. */
+const THIRD_FILE = 'third/collection.json';
+
+const THIRD = {
+  version: 1,
+  title: 'Third collection',
+  description: 'One more course, for a link that names several.',
+  workshops: [
+    {
+      name: 'extra-course',
+      title: 'Extra course',
+      description: 'A workshop only this collection lists.',
+      tags: ['extra'],
+      platforms: ['linux', 'macos', 'windows'],
+      capabilities: [],
+      versions: [
+        {
+          version: '1.0.0',
+          source: { archive: `<archive:${ARCHIVE_FILE}>` }
+        }
+      ]
+    }
+  ]
+};
+
 const CATALOG = {
   version: 1,
   title: 'Test catalog',
@@ -281,7 +306,7 @@ async function removeFixtures(page: Page): Promise<void> {
     }
   }
 
-  for (const directory of ['second', WORKSHOPS_DIR]) {
+  for (const directory of ['second', 'third', WORKSHOPS_DIR]) {
     if (await page.contents.directoryExists(directory)) {
       await page.contents.deleteDirectory(directory);
     }
@@ -376,7 +401,7 @@ test.describe('workshop browser', () => {
 
     // The collection is a group headed by its title and description, and
     // its entries show as cards with their metadata and a source label.
-    const group = browser.locator('.jp-WorkshopBrowser-group');
+    const group = browser.locator('.jp-WorkshopBrowser-group.jp-mod-available');
 
     await expect(group).toHaveCount(1);
     await expect(group.locator('.jp-WorkshopBrowser-groupTitle')).toContainText(
@@ -408,6 +433,27 @@ test.describe('workshop browser', () => {
     await expect(
       installed.getByRole('button', { name: 'Update to 0.2.0' })
     ).toHaveCount(1);
+
+    // Installed is grouped the same way: the card sits under the
+    // collection's heading, which counts it against the collection, so
+    // the card itself no longer carries the collection's name.
+    const installedGroup = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-installed'
+    );
+
+    await expect(installedGroup).toHaveCount(1);
+    await expect(
+      installedGroup.locator('.jp-WorkshopBrowser-groupTitle')
+    ).toContainText('Test collection');
+    await expect(
+      installedGroup.locator('.jp-WorkshopBrowser-groupCount')
+    ).toHaveText('1 of 2 installed');
+    await expect(
+      installedGroup.locator('.jp-WorkshopBrowser-card')
+    ).toHaveCount(1);
+    await expect(
+      installed.locator('.jp-WorkshopBrowser-chip.jp-mod-source')
+    ).toHaveCount(0);
 
     // The collection is ordered, so the cards carry their step in it, and
     // the uploaded git-basics, first and unfinished, is the one up next.
@@ -701,9 +747,12 @@ test.describe('workshop browser', () => {
         .filter({ hasText: 'Pandas for beginners' })
     ).toHaveCount(1);
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group .jp-WorkshopBrowser-card', {
-        hasText: 'Pandas for beginners'
-      })
+      browser.locator(
+        '.jp-WorkshopBrowser-group.jp-mod-available .jp-WorkshopBrowser-card',
+        {
+          hasText: 'Pandas for beginners'
+        }
+      )
     ).toHaveCount(0);
     await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
 
@@ -806,9 +855,12 @@ test.describe('workshop browser', () => {
     ).toHaveCount(1);
     await dialog.getByRole('button', { name: 'Close' }).click();
 
-    const second = browser.locator('.jp-WorkshopBrowser-group', {
-      hasText: 'Second collection'
-    });
+    const second = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-available',
+      {
+        hasText: 'Second collection'
+      }
+    );
 
     await expect(second).toHaveCount(1);
     await expect(second.locator('.jp-WorkshopSourceIcon img')).toHaveCount(1);
@@ -849,12 +901,23 @@ test.describe('workshop browser', () => {
     await expect(
       browser.locator('.jp-WorkshopBrowser-heading', { hasText: 'Available' })
     ).toHaveCount(0);
-    await expect(browser.locator('.jp-WorkshopBrowser-group')).toHaveCount(0);
     await expect(
-      installed
-        .filter({ hasText: 'Git, the other way' })
-        .locator('.jp-WorkshopBrowser-chip.jp-mod-source')
-    ).toHaveText('Second collection');
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available')
+    ).toHaveCount(0);
+
+    const installedGroups = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-installed'
+    );
+
+    await expect(installedGroups).toHaveCount(2);
+    await expect(
+      installedGroups.locator('.jp-WorkshopBrowser-groupTitle')
+    ).toContainText(['Test collection', 'Second collection']);
+    await expect(
+      installedGroups
+        .filter({ hasText: 'Second collection' })
+        .locator('.jp-WorkshopBrowser-card', { hasText: 'Git, the other way' })
+    ).toHaveCount(1);
 
     // Open starts the installed workshop from its card.
     await installed
@@ -876,8 +939,12 @@ test.describe('workshop browser', () => {
     // taken to be that collection's and offered its newer version.
     await expect(uploaded).toHaveCount(1);
     await expect(
-      uploaded.locator('.jp-WorkshopBrowser-chip.jp-mod-source')
-    ).toHaveText('Test collection');
+      browser
+        .locator('.jp-WorkshopBrowser-group.jp-mod-installed', {
+          hasText: 'Test collection'
+        })
+        .locator('.jp-WorkshopBrowser-card', { hasText: WORKSHOPS_DIR })
+    ).toHaveCount(1);
     await expect(
       uploaded.getByRole('button', { name: 'Update to 0.2.0' })
     ).toHaveCount(1);
@@ -907,11 +974,18 @@ test.describe('workshop browser', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
 
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group', {
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available', {
         hasText: 'Second collection'
       })
     ).toHaveCount(1);
     await expect(uploaded).toHaveCount(1);
+    await expect(
+      browser
+        .locator('.jp-WorkshopBrowser-group.jp-mod-installed', {
+          hasText: 'Other workshops'
+        })
+        .locator('.jp-WorkshopBrowser-card', { hasText: WORKSHOPS_DIR })
+    ).toHaveCount(1);
     await expect(
       uploaded.locator('.jp-WorkshopBrowser-chip.jp-mod-source')
     ).toHaveCount(0);
@@ -1209,12 +1283,12 @@ test.describe('workshop browser', () => {
 
     // Both the configured collection and the link's are grouped.
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group', {
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available', {
         hasText: 'Test collection'
       })
     ).toHaveCount(1);
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group', {
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available', {
         hasText: 'Second collection'
       })
     ).toHaveCount(1);
@@ -1228,12 +1302,18 @@ test.describe('workshop browser', () => {
     // The link's collection is here for the session only, so its heading
     // offers Subscribe where a subscribed collection has Install all; the
     // configured collection's heading has no such button.
-    const second = browser.locator('.jp-WorkshopBrowser-group', {
-      hasText: 'Second collection'
-    });
-    const first = browser.locator('.jp-WorkshopBrowser-group', {
-      hasText: 'Test collection'
-    });
+    const second = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-available',
+      {
+        hasText: 'Second collection'
+      }
+    );
+    const first = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-available',
+      {
+        hasText: 'Test collection'
+      }
+    );
 
     await expect(
       second.getByRole('button', { name: 'Subscribe', exact: true })
@@ -1271,7 +1351,7 @@ test.describe('workshop browser', () => {
     await expect(row).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group', {
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available', {
         hasText: 'Second collection'
       })
     ).toHaveCount(0);
@@ -1307,6 +1387,69 @@ test.describe('workshop browser', () => {
     expect(await rightShare()).toBeLessThan(0.27);
   });
 
+  test('lists the collections of a link in its order and keeps them over a reload', async ({
+    page
+  }) => {
+    await page.contents.uploadContent(
+      withArchives(page, THIRD),
+      'text',
+      THIRD_FILE
+    );
+
+    // The link names two collections under the root, the third before
+    // the second, in a workspace of its own.
+    await page
+      .evaluate((search: string) => {
+        const name = `links-${Date.now().toString(36)}`;
+        const path = window.location.pathname.replace(
+          /\/lab(\/workspaces\/[^/]+)?/,
+          `/lab/workspaces/${name}`
+        );
+
+        window.location.assign(`${path}${search}`);
+      }, `?collection=${THIRD_FILE}&collection=${SECOND_FILE}`)
+      .catch(() => undefined);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    await expect(browser).toBeVisible({ timeout: 60000 });
+
+    // The settings' collection comes first, then the link's in the
+    // link's order, each here for the session with Subscribe on offer.
+    const groups = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-available'
+    );
+    const titles = ['Test collection', 'Third collection', 'Second collection'];
+
+    await expect(
+      groups.locator('.jp-WorkshopBrowser-groupTitle')
+    ).toContainText(titles);
+    await expect(
+      groups.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(2);
+    expect(page.url()).not.toContain('collection=');
+
+    // The link's collections are kept in the workspace's saved state, so
+    // a reload, whose address no longer names them, lists them still, in
+    // the same order. The state database saves after a short debounce,
+    // so give it a moment first, and wait for the application to be
+    // restored rather than for a launcher the layout may not show.
+    await page.waitForTimeout(2000);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.restored;
+    });
+    await openBrowser(page);
+    await expect(
+      groups.locator('.jp-WorkshopBrowser-groupTitle')
+    ).toContainText(titles);
+    await expect(
+      groups.getByRole('button', { name: 'Subscribe', exact: true })
+    ).toHaveCount(2);
+  });
+
   test('offers the collections of a catalog from a launch link', async ({
     page
   }) => {
@@ -1333,7 +1476,7 @@ test.describe('workshop browser', () => {
       .click();
 
     await expect(
-      browser.locator('.jp-WorkshopBrowser-group', {
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-available', {
         hasText: 'Second collection'
       })
     ).toHaveCount(1);
@@ -1612,7 +1755,7 @@ test.describe('install all', () => {
     await openBrowser(page);
 
     const browser = page.locator('#jupyterlab-workshop-browser');
-    const group = browser.locator('.jp-WorkshopBrowser-group');
+    const group = browser.locator('.jp-WorkshopBrowser-group.jp-mod-available');
     const cards = browser.locator('.jp-WorkshopBrowser-card');
     const dialog = page.locator('.jp-Dialog');
 
@@ -1670,12 +1813,23 @@ test.describe('install all', () => {
     expect(record.ok()).toBe(true);
     expect(String((await record.json()).content)).toContain(BULK_FILE);
 
-    // Remove all sits behind the heading menu and asks first, listing
-    // the directories; confirming clears what the collection installed.
-    await group
+    // Remove all sits behind the Installed heading's menu and asks
+    // first, listing the directories; confirming clears what the
+    // collection installed, and the Installed group goes with it.
+    const installedGroup = browser.locator(
+      '.jp-WorkshopBrowser-group.jp-mod-installed'
+    );
+
+    await expect(
+      installedGroup.locator('.jp-WorkshopBrowser-groupCount')
+    ).toHaveText('2 of 4 installed');
+    await expect(
+      group.getByRole('button', { name: 'More actions for this collection' })
+    ).toHaveCount(0);
+    await installedGroup
       .getByRole('button', { name: 'More actions for this collection' })
       .click();
-    await group
+    await installedGroup
       .getByRole('menuitem', { name: /^Remove all 2 installed workshops/ })
       .click();
     await expect(dialog).toContainText(
@@ -1684,6 +1838,7 @@ test.describe('install all', () => {
     await expect(dialog).toContainText(`${WORKSHOPS_DIR}/pandas-intro`);
     await dialog.getByRole('button', { name: 'Remove all' }).click();
     await expect(installed).toHaveCount(0);
+    await expect(installedGroup).toHaveCount(0);
     await expect(group.locator('.jp-WorkshopBrowser-card')).toHaveCount(4);
   });
 
@@ -1706,7 +1861,9 @@ test.describe('install all', () => {
       await openBrowser(page);
 
       const browser = page.locator('#jupyterlab-workshop-browser');
-      const group = browser.locator('.jp-WorkshopBrowser-group');
+      const group = browser.locator(
+        '.jp-WorkshopBrowser-group.jp-mod-available'
+      );
 
       await expect(
         group.getByRole('button', { name: 'Install', exact: true })
@@ -1715,7 +1872,9 @@ test.describe('install all', () => {
         group.getByRole('button', { name: 'Install all…' })
       ).toHaveCount(0);
       await expect(
-        group.getByRole('button', { name: 'More actions for this collection' })
+        browser.getByRole('button', {
+          name: 'More actions for this collection'
+        })
       ).toHaveCount(0);
     });
   });

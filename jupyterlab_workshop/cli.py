@@ -460,7 +460,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     launch.add_argument("--sha256", help="expected hash, for an archive URL")
     launch.add_argument(
-        "--collection", help="collection URL or collection.json to add for the session"
+        "--collection",
+        action="append",
+        default=[],
+        help="collection URL or collection.json to add for the session, in "
+        "the order the browser lists them (repeatable)",
     )
     launch.add_argument(
         "--catalog", help="catalog URL or catalog.json to add for the session"
@@ -1112,7 +1116,7 @@ def command_launch(args: argparse.Namespace) -> int:
             ref=args.ref,
             subdir=args.subdir,
             sha256=args.sha256,
-            collection=args.collection,
+            collections=args.collection,
             catalog=args.catalog,
             variables=variables,
             restart=args.restart,
