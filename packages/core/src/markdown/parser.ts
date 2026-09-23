@@ -92,6 +92,7 @@ export function createMarkdownParser(): MarkdownIt {
   md.inline.ruler.before('backticks', 'workshop_role', roleRule);
   md.core.ruler.before('text_join', 'workshop_substitute', substituteRule);
   md.renderer.rules[ROLE_TOKEN] = renderRole;
+  md.renderer.rules.link_open = renderLinkOpen;
 
   return md;
 }
@@ -300,6 +301,38 @@ function substituteRule(state: MarkdownIt.StateCore): void {
     }
   }
 }
+
+/**
+ * Schemes whose links leave JupyterLab. Anything else, a fragment or a
+ * relative path, is left as the browser would treat it.
+ */
+const EXTERNAL_LINK = /^(https?:|mailto:)/i;
+
+/**
+ * Render a link, sending one that leaves JupyterLab to a new tab.
+ *
+ * The panel is part of the JupyterLab page, so a plain anchor would
+ * replace the whole session with the link target. `noopener` keeps the
+ * new tab from reaching this window and `noreferrer` keeps the session
+ * URL out of the request.
+ */
+const renderLinkOpen: MarkdownIt.Renderer.RenderRule = (
+  tokens,
+  idx,
+  options,
+  _env,
+  self
+) => {
+  const token = tokens[idx];
+  const href = token.attrGet('href') ?? '';
+
+  if (EXTERNAL_LINK.test(href)) {
+    token.attrSet('target', '_blank');
+    token.attrSet('rel', 'noopener noreferrer');
+  }
+
+  return self.renderToken(tokens, idx, options);
+};
 
 const renderRole: MarkdownIt.Renderer.RenderRule = (tokens, idx) => {
   const token = tokens[idx];

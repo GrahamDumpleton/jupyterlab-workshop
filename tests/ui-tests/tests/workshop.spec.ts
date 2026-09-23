@@ -2019,6 +2019,71 @@ test.describe('startup restore from another server', () => {
   });
 });
 
+test.describe('external links', () => {
+  test('opens a link to another site in a new tab', async ({
+    page,
+    context,
+    tmpPath
+  }) => {
+    // A workshop whose only page links to another site.
+    const linked = `${tmpPath}/linked`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: linked',
+        'title: Linked',
+        'version: 0.1.0',
+        'description: A link to another site.',
+        'pages:',
+        '  - pages/01-links.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${linked}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Links',
+        '---',
+        '',
+        'Read more at [example.com](https://example.com/).',
+        ''
+      ].join('\n'),
+      'text',
+      `${linked}/pages/01-links.md`
+    );
+
+    await openWorkshop(page, linked);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const link = page.locator(`${PANEL} .jp-WorkshopPanel-prose a`, {
+      hasText: 'example.com'
+    });
+
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // The click opens a new tab and leaves JupyterLab where it was. The
+    // new tab is closed before it loads anything, since the target is a
+    // real site that the test has no need to reach.
+    const before = page.url();
+    const opened = context.waitForEvent('page');
+
+    await link.click();
+
+    const popup = await opened;
+
+    await popup.close();
+
+    expect(page.url()).toBe(before);
+    await expect(page.locator(`${PANEL} .jp-WorkshopPanel-title`)).toHaveText(
+      'Linked'
+    );
+  });
+});
+
 test.describe('workshop prompt', () => {
   test('waits for the marked prompt and reports the exit status', async ({
     page,

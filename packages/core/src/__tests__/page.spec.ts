@@ -115,3 +115,38 @@ describe('parsePage', () => {
     expect(prose.html).toContain('&lt;script&gt;');
   });
 });
+
+describe('links', () => {
+  const html = (
+    parsePage(
+      [
+        'See [the site](https://example.com/docs) or http://example.org.',
+        'Write to [us](mailto:help@example.com), or jump to [notes](#notes).',
+        'The [readme](../README.md) is beside the page.',
+        '',
+        '## Notes'
+      ].join('\n'),
+      { path: 'p.md' }
+    ).nodes[0] as IProseNode
+  ).html;
+
+  const anchors = html.match(/<a [^>]*>/g) ?? [];
+
+  it('sends links that leave JupyterLab to a new tab', () => {
+    expect(anchors[0]).toBe(
+      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">'
+    );
+    expect(anchors[1]).toBe(
+      '<a href="http://example.org" target="_blank" rel="noopener noreferrer">'
+    );
+    expect(anchors[2]).toBe(
+      '<a href="mailto:help@example.com" target="_blank" rel="noopener noreferrer">'
+    );
+  });
+
+  it('leaves fragment and relative links alone', () => {
+    expect(anchors[3]).toBe('<a href="#notes">');
+    expect(anchors[4]).toBe('<a href="../README.md">');
+    expect(anchors).toHaveLength(5);
+  });
+});
