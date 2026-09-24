@@ -127,6 +127,10 @@ git init command above first"`.
 - One question per quiz, three or four options, an `explanation` for
   each wrong option that teaches something.
 
+- Quiz text is inline Markdown, so put commands, names and code in
+  backticks as in prose, quoting the YAML value when it starts with
+  one.
+
 - Do not write the correct option first out of habit. Options are
   shuffled by default, but the shuffle is one fixed order per quiz id,
   not a draw per learner, so about one quiz in four still shows its

@@ -69,7 +69,8 @@ jupyter workshop render my-workshop [PAGE] [--out FILE] [--platform NAME] [--fro
 
 Renders the pages to a standalone HTML document for previewing or for
 static hosting. Action blocks are shown as boxes with their type and
-body. Give a page id or path to render one page, and `--platform` or
+body, so a quiz, choice or form appears as its source rather than as
+the panel renders it. Give a page id or path to render one page, and `--platform` or
 `--frontend` to render another platform's or frontend's command
 variants.
 

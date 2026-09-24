@@ -1,18 +1,19 @@
 import {
   ACTION_TYPES,
   ActionDisposition,
+  describeRequirement,
   IDirectiveNode,
   IFormField,
   ILintMessage,
   IPage,
   IProseNode,
-  PageNode,
-  TRUST_LEVEL_DESCRIPTIONS,
-  describeRequirement,
   isActionType,
+  PageNode,
   parseForm,
   parseQuiz,
   parseTriggers,
+  renderInlineMarkdown,
+  TRUST_LEVEL_DESCRIPTIONS,
   validateForm
 } from '@jupyterlab-workshop/core';
 import {
@@ -908,14 +909,20 @@ function ChoiceBlock({
   const variable = node.options.variable ?? (isTrack ? 'track' : '');
 
   // Options come from the directive, the variable definition, or the tracks.
-  let options: { value: string; label: string }[] = [];
+  // Only the labels written on the page take inline Markdown; manifest
+  // labels are plain text.
+  let options: { value: string; label: string; html?: string }[] = [];
 
   if (node.options.options) {
     options = node.options.options
       .split(',')
       .map(item => item.trim())
       .filter(item => item !== '')
-      .map(value => ({ value, label: value }));
+      .map(value => ({
+        value,
+        label: value,
+        html: renderInlineMarkdown(value)
+      }));
   } else if (isTrack && manifest && manifest.tracks.length > 0) {
     options = manifest.tracks.map(track => ({
       value: track.id,
@@ -946,7 +953,10 @@ function ChoiceBlock({
         </span>
       </div>
       {node.body.trim() ? (
-        <div className="jp-WorkshopPanel-choiceText">{node.body}</div>
+        <div
+          className="jp-WorkshopPanel-choiceText"
+          dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(node.body) }}
+        />
       ) : null}
       <div className="jp-WorkshopPanel-choiceOptions">
         {options.map(option => (
@@ -956,7 +966,11 @@ function ChoiceBlock({
             className={`jp-Button jp-mod-styled${current === option.value ? ' jp-mod-accept' : ''}`}
             onClick={() => void manager.runAction(node, 'click', option.value)}
           >
-            {option.label}
+            {option.html !== undefined ? (
+              <span dangerouslySetInnerHTML={{ __html: option.html }} />
+            ) : (
+              option.label
+            )}
           </button>
         ))}
       </div>
@@ -1506,7 +1520,12 @@ function QuizBlock({
         </span>
       </div>
       <div className="jp-WorkshopPanel-quizBody">
-        <div className="jp-WorkshopPanel-quizQuestion">{quiz.question}</div>
+        <div
+          className="jp-WorkshopPanel-quizQuestion"
+          dangerouslySetInnerHTML={{
+            __html: renderInlineMarkdown(quiz.question)
+          }}
+        />
         <div className="jp-WorkshopPanel-quizOptions">
           {order.map(index => (
             <label key={index} className="jp-WorkshopPanel-quizOption">
@@ -1517,7 +1536,11 @@ function QuizBlock({
                 disabled={locked}
                 onChange={() => toggle(index)}
               />{' '}
-              {quiz.options[index].text}
+              <span
+                dangerouslySetInnerHTML={{
+                  __html: renderInlineMarkdown(quiz.options[index].text)
+                }}
+              />
             </label>
           ))}
         </div>
@@ -1541,9 +1564,10 @@ function QuizBlock({
         {status.message && status.status !== 'running' ? (
           <div
             className={`jp-WorkshopPanel-quizFeedback${passed ? ' jp-mod-pass' : ' jp-mod-fail'}`}
-          >
-            {status.message}
-          </div>
+            dangerouslySetInnerHTML={{
+              __html: renderInlineMarkdown(status.message)
+            }}
+          />
         ) : null}
       </div>
     </div>
@@ -1798,12 +1822,21 @@ function FormFieldInput({
       className={`jp-WorkshopPanel-formField${problem ? ' jp-mod-invalid' : ''}`}
     >
       <span className="jp-WorkshopPanel-formLabel">
-        {field.label}
+        <span
+          dangerouslySetInnerHTML={{
+            __html: renderInlineMarkdown(field.label)
+          }}
+        />
         {field.required ? <span aria-hidden="true"> *</span> : null}
       </span>
       {control}
       {field.description ? (
-        <span className="jp-WorkshopPanel-formHelp">{field.description}</span>
+        <span
+          className="jp-WorkshopPanel-formHelp"
+          dangerouslySetInnerHTML={{
+            __html: renderInlineMarkdown(field.description)
+          }}
+        />
       ) : null}
       {problem ? (
         <span className="jp-WorkshopPanel-formProblem">{problem}</span>

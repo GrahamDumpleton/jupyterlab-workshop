@@ -93,10 +93,10 @@ A quick question before moving on.
 :attempts: 3
 question: Which command moves changes into the staging area?
 options:
-  - { text: git add, correct: true }
-  - { text: git commit, explanation: "git commit records what is already staged." }
-  - { text: git stage-it }
-explanation: git add stages changes; git commit records what is staged.
+  - { text: "`git add`", correct: true }
+  - { text: "`git commit`", explanation: "`git commit` records what is already staged." }
+  - { text: "`git stage-it`" }
+explanation: "`git add` stages changes; `git commit` records what is staged. See [git add](https://git-scm.com/docs/git-add)."
 ```
 
 Once the check passes it saves a checkpoint of the repository, so a

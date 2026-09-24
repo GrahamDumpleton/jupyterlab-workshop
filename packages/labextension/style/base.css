@@ -131,6 +131,11 @@
 }
 
 .jp-WorkshopPanel-prose code,
+.jp-WorkshopPanel-quizBody code,
+.jp-WorkshopPanel-choiceText code,
+.jp-WorkshopPanel-choiceOptions code,
+.jp-WorkshopPanel-formLabel code,
+.jp-WorkshopPanel-formHelp code,
 .jp-WorkshopPanel-actionBody {
   font-family: var(--jp-code-font-family);
   font-size: var(--jp-code-font-size);

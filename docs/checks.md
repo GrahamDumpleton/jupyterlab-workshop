@@ -128,12 +128,22 @@ for the rest of the workshop.
 :attempts: 3
 question: Which command moves changes into the staging area?
 options:
-  - { text: git commit, explanation: "git commit records what is already staged." }
-  - { text: git add, correct: true }
-  - git stage-it
-explanation: git add stages changes; git commit records what is staged.
+  - { text: "`git commit`", explanation: "`git commit` records what is already staged." }
+  - { text: "`git add`", correct: true }
+  - "`git stage-it`"
+explanation: "`git add` stages changes; `git commit` records what is staged."
 ```
 ````
+
+The question, each option's `text` and the explanations take standard
+inline Markdown: code spans, emphasis, strikethrough and explicit links
+such as `[git add](https://git-scm.com/docs/git-add)`. Each stays on one
+line; there are no paragraphs, lists or other block content. Inline
+roles such as `{copy}` are not recognised here, a bare URL is shown as
+text rather than made a link, and raw HTML is escaped. Variables are
+substituted as in any directive body. The `:title:` shown in the
+header is plain text. The body is YAML, so a value that starts with a
+backtick or contains `: `, `{` or `}` must be quoted, as above.
 
 `:type:` is `single` (radio buttons, default) or `multi` (check boxes,
 every correct option and no others must be picked). `:attempts:` limits
@@ -172,6 +182,12 @@ field has a `name` (the variable it sets) and optionally `type` (`text`,
 `pattern` (a regular expression the value must match), `min` and `max`
 (bounds for numbers, lengths for text), `options` for selects, and
 `set_track: true` to make the chosen value the workshop track as well.
+
+A field's `label` and `description` take standard inline Markdown on
+one line, as quiz text does: code spans, emphasis and explicit links,
+with roles unrecognised, bare URLs left as text and raw HTML escaped.
+The `:title:` shown in the header, and the `placeholder`, are plain
+text.
 
 Values are validated in the panel before submission and again by the
 action. Submitting stores the values with the `form` source, re-renders

@@ -103,6 +103,36 @@ export function createMarkdownParser(): MarkdownIt {
   return md;
 }
 
+let inlineParser: MarkdownIt | undefined;
+
+/**
+ * Render one line of standard inline Markdown to HTML.
+ *
+ * This is for the short texts a directive carries that are not page
+ * prose: a quiz question, its options and explanations, the body and
+ * options of a choice, and the labels and descriptions of form fields.
+ * They get the stock inline rules only, on an instance of their own:
+ * emphasis, code spans, strikethrough, escapes and explicit links. The
+ * workshop rules of the page parser do not apply, so a `{copy}` role
+ * stays literal, and variables are not substituted again, since a
+ * directive's text was substituted when the page was parsed. Bare URLs
+ * are not auto-linked. Raw HTML is escaped, as on pages, and a link that
+ * leaves JupyterLab opens in a new tab, as on pages. The inline rules
+ * never produce block structure, so the result is always a single line.
+ */
+export function renderInlineMarkdown(text: string): string {
+  if (!inlineParser) {
+    inlineParser = new MarkdownIt({
+      html: false,
+      linkify: false,
+      typographer: false
+    });
+    inlineParser.renderer.rules.link_open = renderLinkOpen;
+  }
+
+  return inlineParser.renderInline(text);
+}
+
 /**
  * Create a fresh render environment for a page.
  */

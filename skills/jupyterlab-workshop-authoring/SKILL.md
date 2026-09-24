@@ -364,9 +364,9 @@ show the options as written):
 :id: staging
 question: Which command stages changes?
 options:
-  - { text: git commit, explanation: "git commit records what is staged." }
-  - { text: git add, correct: true }
-explanation: git add stages, git commit records.
+  - { text: "`git commit`", explanation: "`git commit` records what is staged." }
+  - { text: "`git add`", correct: true }
+explanation: "`git add` stages, `git commit` records."
 ```
 ````
 
@@ -376,9 +376,16 @@ order per quiz id, the same for every learner, so also vary where the
 correct option sits in the source. Grading and the self-test go by the
 options as written.
 
+The question, option `text` and explanations take standard inline
+Markdown on one line: write `` `git add` `` for a command or a name,
+and `[text](url)` for a link. Inline roles, bare URLs and raw HTML are
+not rendered there. Choice bodies and options, and form labels and
+descriptions, render the same way.
+
 The quiz body is YAML: quote any `question`, `text` or `explanation`
-that contains `: `, `{`, `}` or, inside the one-line `{ ... }` option
-form, a comma; lint reports the parse error, not the cause.
+that starts with a backtick or contains `: `, `{`, `}` or, inside the
+one-line `{ ... }` option form, a comma; lint reports the parse error,
+not the cause.
 
 Form (fields become variables; `set_track: true` also picks the track):
 

@@ -1755,18 +1755,35 @@ test.describe('workshop panel', () => {
 
     const quiz = panel.locator('.jp-WorkshopPanel-quiz');
 
+    // Option text and explanations are inline Markdown: the code spans
+    // render as code elements and the explicit link as a link that opens
+    // in a new tab.
+    await expect(
+      quiz.locator('.jp-WorkshopPanel-quizOption code', { hasText: 'git add' })
+    ).toHaveCount(1);
     await quiz.getByLabel('git commit').check();
     await quiz.getByRole('button', { name: 'Submit' }).click();
     await expect(quiz.locator('.jp-WorkshopPanel-quizFeedback')).toHaveText(
       'git commit records what is already staged.'
     );
+    await expect(
+      quiz.locator('.jp-WorkshopPanel-quizFeedback code')
+    ).toHaveText('git commit');
     await expect(quiz).toContainText('2 attempts left');
     await quiz.getByLabel('git add').check();
     await quiz.getByRole('button', { name: 'Submit' }).click();
     await expect(quiz).toHaveClass(/jp-mod-status-ok/);
     await expect(quiz.locator('.jp-WorkshopPanel-quizFeedback')).toHaveText(
-      'git add stages changes; git commit records what is staged.'
+      'git add stages changes; git commit records what is staged. See git add.'
     );
+
+    const feedbackLink = quiz.locator('.jp-WorkshopPanel-quizFeedback a');
+
+    await expect(feedbackLink).toHaveAttribute(
+      'href',
+      'https://git-scm.com/docs/git-add'
+    );
+    await expect(feedbackLink).toHaveAttribute('target', '_blank');
     await expect(gate).toHaveCount(0);
 
     // Leaving the page with its requirements met marks it done. Inline

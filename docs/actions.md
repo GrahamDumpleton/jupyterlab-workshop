@@ -153,6 +153,16 @@ were sent, and close with the workshop.
 | `env-set`   | none       | required | `name`, `value`                         | Set a variable, with the value in the body.                |
 | `next-page` | none       | none     | (none)                                  | Go to the next page.                                       |
 
+The body of a `choice` is shown above its buttons, and the values in
+its `:options:` are the buttons' labels. Both take standard inline
+Markdown on one line: code spans, emphasis and explicit links, with
+inline roles unrecognised, bare URLs left as text and raw HTML escaped.
+The buttons of a `:track: true` choice, or of one whose options come
+from the manifest variable's `options`, show the manifest's labels as
+plain text, as does the `:label:` in the header. The value a choice
+stores is the option as written, so Markdown in an option ends up in
+the variable too.
+
 ## Checks, forms and checkpoints
 
 | Directive    | Capability  | Body     | Options                                                      | Description                                                                   |

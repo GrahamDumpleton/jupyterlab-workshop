@@ -60,12 +60,12 @@ Set your name and email once with `git config user.name` and
 
 ```{quiz}
 :id: staging
-question: What does git add do?
+question: What does `git add` do?
 options:
   - { text: Chooses the changes the next commit will contain, correct: true }
-  - { text: Records a commit, explanation: "That is git commit." }
-  - { text: Uploads to a server, explanation: "That is git push." }
-explanation: git add stages changes; git commit records what is staged.
+  - { text: Records a commit, explanation: "That is `git commit`." }
+  - { text: Uploads to a server, explanation: "That is `git push`." }
+explanation: "`git add` stages changes; `git commit` records what is staged."
 ```
 ````
 
