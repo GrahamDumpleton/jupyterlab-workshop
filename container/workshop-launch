@@ -14,6 +14,9 @@
 #   WORKSHOP_INSTALL      install the collections' workshops before
 #                         starting, when 1, true, yes or on
 #   WORKSHOP_TRUST        trusted, restricted or ask (default: trusted)
+#   WORKSHOP_ANALYTICS    always, never or ask: whether the sink the
+#                         collection declares is reported to without
+#                         asking (default: the image's setting, ask)
 #   WORKSHOP_WELCOME      Markdown file to show once started
 #   WORKSHOP_URL          base URL to print the link against
 #   WORKSHOP_VAR_<name>   a workshop variable
@@ -37,6 +40,10 @@ esac
 
 if [ -n "${WORKSHOP_TRUST:-}" ]; then
     args+=(--trust "${WORKSHOP_TRUST}")
+fi
+
+if [ -n "${WORKSHOP_ANALYTICS:-}" ]; then
+    args+=(--analytics "${WORKSHOP_ANALYTICS}")
 fi
 
 if [ -n "${WORKSHOP_WELCOME:-}" ]; then

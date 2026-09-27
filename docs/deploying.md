@@ -232,6 +232,7 @@ mode:
 | `WORKSHOP_WORKSHOP`   | the target: a workshop directory, a URL, or a name in the collection |
 | `WORKSHOP_INSTALL`    | `--install`, when `1`, `true`, `yes` or `on`                         |
 | `WORKSHOP_TRUST`      | `--trust`; the default in a container is `trusted`                   |
+| `WORKSHOP_ANALYTICS`  | `--analytics`: `always`, `never` or `ask`, for the collection's sink |
 | `WORKSHOP_WELCOME`    | `--welcome`, a Markdown file under the home directory                |
 | `WORKSHOP_URL`        | `--url`, the address the link is printed against                     |
 | `WORKSHOP_VAR_<name>` | `--var <name>=<value>`                                               |
@@ -242,6 +243,12 @@ variables, so `docker run -p 8888:8888 ghcr.io/grahamdumpleton/jupyterlab-worksh
 workshop-launch --collection https://example.org/collection.json --install`
 is the same launch. Anything the launch command takes can be given
 either way, and `--` still passes options to `jupyter lab`.
+
+A collection whose index declares an analytics block is reported to
+only when the learner opts in, as anywhere else, unless
+`WORKSHOP_ANALYTICS=always` says the container reports without asking;
+events from the container carry `container` as their `host`. See
+[reporting progress](#reporting-progress).
 
 The server's root is the home directory, `/home/jovyan`, and the
 workshops are installed under `workshops` there, each with its own
@@ -388,6 +395,30 @@ precedence over any `analytics` block a subscribed collection or a
 workshop manifest declares. Delivery is best effort. [Progress
 events](analytics.md) lists the events, the block's rules and what
 events never contain.
+
+A deployment of a collection whose index already declares a block
+need not repeat the sink and token. Setting `report` to `always`
+instead reports to the collection's sink without asking, so the block
+and its token live once, in the collection, and every deployment of it
+sets one line:
+
+```json
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "analytics": { "report": "always" }
+  }
+}
+```
+
+The same collection subscribed to on a learner's own machine keeps
+asking in the trust dialog, since nothing sets the policy there.
+`report` is `ask` by default, and `never` stops reporting to any
+collection's or workshop's sink, for a hub whose learners' progress
+should not leave it; a sink named here applies whatever `report` says.
+Every event carries the `host` and `frontend` it came from, `binder`,
+`codespaces`, `jupyterhub`, `container` or `local`, and `jupyterlab`
+or `jupyterlite`, so a service can tell the deployments apart without
+a token or a label for each.
 
 Where the setting goes, and what identity it can carry, depends on the
 host:

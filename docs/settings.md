@@ -57,13 +57,15 @@ declare, plus `identity`, which only a deployment may set:
 
 | Key        | Type   | Default | Meaning                                                                                                                                                                                             |
 | ---------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sink`     | string | `""`    | URL that receives every workshop's events as JSON lines by POST, without asking the learner. Empty reports only to sinks the learner opts in to.                                                    |
+| `sink`     | string | `""`    | URL that receives every workshop's events as JSON lines by POST, without asking the learner. Empty reports to the sink a collection or a workshop declares, as `report` says.                       |
+| `report`   | string | `ask`   | How a collection's or a workshop's sink applies when `sink` is empty: `ask` offers it in the trust dialog, `always` reports to it without asking, `never` reports to no such sink.                  |
 | `token`    | string | `""`    | Token sent as a bearer credential in the `Authorization` header of every batch, issued by the sink's operator.                                                                                      |
 | `labels`   | object | `{}`    | Key and value pairs stamped on every event for slicing reports, such as a course or a term. At most 16; keys of lower case letters, digits, `_`, `.` and `-` up to 63 characters, values up to 128. |
 | `identity` | string | `none`  | Whether events carry the JupyterHub user name (`hub`) or no identity (`none`).                                                                                                                      |
 
 When `sink` is set here it applies to every workshop, without asking,
 and ahead of any `analytics` block a subscribed collection or a workshop
-manifest declares; those are used only when this setting names no sink.
+manifest declares; those are used only when this setting names no sink,
+and then as `report` says.
 Events are always written to `_workshop/events.jsonl` in the workshop
 directory whatever these say; see [Progress events](analytics.md).

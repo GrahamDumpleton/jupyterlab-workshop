@@ -166,7 +166,8 @@ analytics:
    index](collections.md#index-format) applies to every workshop the
    collection lists, with the learner's opt-in. This is the level for an
    author who wants to know how their workshops fare on other people's
-   machines.
+   machines, and the level to declare a block at once rather than in
+   every deployment of the collection; see below.
 
 3. **The workshop.** A block in the manifest applies to that workshop,
    with opt-in, for a standalone workshop that belongs to no collection.
@@ -178,6 +179,20 @@ collection's sink. Nothing is sent unless it is ticked; the choice is
 stored with the trust decision and can be changed from "Workshop: Change
 Trust Level…". Blocks are never merged: the effective sink, token and
 labels all come from one level.
+
+A deployment that names no sink of its own can still settle how the
+collection's or the workshop's block applies, with `report` in the same
+setting. Its default, `ask`, is the opt-in above. `always` reports to
+the block's sink without asking, so the trust dialog shows no checkbox
+and the deployment's welcome message is where the learner is told; this
+is how a Binder repository, a JupyterLite site or a container image
+reports to the sink its collection declares with one line of settings,
+`"analytics": {"report": "always"}`, while the same collection on a
+learner's own machine still asks. `never` reports to no such sink, for
+a hub that does not want its learners' progress leaving it. The block
+itself is unchanged by the policy: the sink, token and labels are still
+the collection's or the workshop's, and a deployment that also names a
+sink reports there instead, whatever `report` says.
 
 `sink` is the URL that receives batches of events. `token`, when set, is
 sent with every batch as a bearer credential in the `Authorization`

@@ -209,6 +209,24 @@ def test_launch_overrides_merge_into_the_deployment_settings() -> None:
     # The deployment's own settings are not changed in place.
     assert "forcedLevel" not in existing[PANEL_PLUGIN]["trustPolicy"]
 
+    # The analytics report policy joins the deployment's analytics block
+    # without disturbing the rest of it.
+    reporting = {
+        PANEL_PLUGIN: {"analytics": {"sink": "https://sink.example.org/events"}}
+    }
+    adopted = launch_overrides(reporting, LaunchOptions(analytics="always"), False)
+
+    assert adopted[PANEL_PLUGIN]["analytics"] == {
+        "sink": "https://sink.example.org/events",
+        "report": "always",
+    }
+    assert reporting[PANEL_PLUGIN]["analytics"] == {
+        "sink": "https://sink.example.org/events"
+    }
+    assert launch_overrides({}, LaunchOptions(analytics="never"), False)[
+        PANEL_PLUGIN
+    ] == {"analytics": {"report": "never"}}
+
 
 def test_server_command_pins_the_port_and_isolates_when_fresh(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -487,6 +505,8 @@ def test_launch_command_builds_options_and_passes_arguments_through(
                 "--restart=force",
                 "--trust",
                 "trusted",
+                "--analytics",
+                "always",
                 "--no-browser",
                 "--fresh",
                 "--collection",
@@ -512,6 +532,7 @@ def test_launch_command_builds_options_and_passes_arguments_through(
     assert options.variables == {"a": "1", "b": "2"}
     assert options.restart == "force"
     assert options.trust == "trusted"
+    assert options.analytics == "always"
     assert options.open_browser is False
     assert options.fresh is True
     assert options.collections == ["https://example.org/collection.json"]

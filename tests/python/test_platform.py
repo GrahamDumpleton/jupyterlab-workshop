@@ -125,6 +125,16 @@ def test_container_flag_is_passed_through() -> None:
     assert detect(container=True).container is True
 
 
+def test_a_container_with_no_service_reports_container_as_the_host() -> None:
+    assert detect(container=True).host == "container"
+
+    # A hosting service still names itself from inside its container.
+    assert detect(container=True, environ={"BINDER_REPO_URL": "x"}).host == "binder"
+    assert detect(container=True, environ={"JUPYTERHUB_USER": "ada"}).host == (
+        "jupyterhub"
+    )
+
+
 def test_detect_container_looks_for_runtime_markers(tmp_path: Path) -> None:
     assert detect_container({}, tmp_path) is False
     assert detect_container({"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, tmp_path)

@@ -129,14 +129,21 @@
     "analytics": {
       "type": "object",
       "title": "Analytics",
-      "description": "Administrator reporting of progress events, typically set through overrides.json. When a sink is set here it applies to every workshop without asking, ahead of any analytics block a subscribed collection or a workshop manifest declares. Events are always written to _workshop/events.jsonl in the workshop directory.",
+      "description": "Administrator reporting of progress events, typically set through overrides.json. When a sink is set here it applies to every workshop without asking, ahead of any analytics block a subscribed collection or a workshop manifest declares; otherwise report says whether those blocks apply with the learner's opt-in, always, or never. Events are always written to _workshop/events.jsonl in the workshop directory.",
       "additionalProperties": false,
       "properties": {
         "sink": {
           "type": "string",
           "title": "Sink URL",
-          "description": "URL that receives batches of events as JSON lines by POST. Leave empty to report only to sinks the learner opts in to.",
+          "description": "URL that receives batches of events as JSON lines by POST. Leave empty to report to the sink a collection or a workshop declares, as report says.",
           "default": ""
+        },
+        "report": {
+          "type": "string",
+          "title": "Report",
+          "description": "How the sink a subscribed collection or a workshop manifest declares applies when none is set here: \"ask\" offers it in the trust dialog and reports only when the learner opts in, \"always\" reports to it without asking, and \"never\" reports to no such sink.",
+          "enum": ["ask", "always", "never"],
+          "default": "ask"
         },
         "token": {
           "type": "string",

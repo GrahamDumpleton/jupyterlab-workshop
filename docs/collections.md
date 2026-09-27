@@ -306,8 +306,11 @@ block asks that the progress events of every workshop the collection
 lists be reported to its `sink`, with the learner's opt-in from the
 trust dialog, sent with its `token` and stamped with its `labels`; it is
 the same block a manifest may carry, and a deployment's own setting
-takes precedence over both. See [Progress events](analytics.md) for
-the block, its rules and where events go.
+takes precedence over both. A deployment of the collection that wants
+the events without asking sets `report` to `always` in its settings
+rather than repeating the block, so the block and its token are
+declared once, here. See [Progress events](analytics.md) for the
+block, its rules and where events go.
 
 Each entry's `platforms` and `frontends` are the manifest's lists: the
 operating systems and the frontends (`jupyterlab`, `jupyterlite`) the

@@ -68,6 +68,7 @@ api /jupyterlab-workshop/platform | python3 -c '
 import json, sys
 info = json.load(sys.stdin)
 assert info["container"] is True, info
+assert info["host"] == "container", info
 assert info["os"] == "linux", info
 print("container:", info["container"], "version:", info["frontend_version"])
 '

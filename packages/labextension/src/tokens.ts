@@ -32,8 +32,9 @@ export interface IPlatformInfo {
   hub_user: string;
 
   /**
-   * The service hosting the session: local, binder, codespaces or
-   * jupyterhub from a server, and static for a JupyterLite site.
+   * The service hosting the session: binder, codespaces or jupyterhub
+   * from a server, container inside one with no such service, local
+   * otherwise, and static for a JupyterLite site.
    */
   host: string;
 
@@ -163,9 +164,26 @@ export interface ITrustPolicy {
    */
   analytics: IAnalyticsBlock | null;
 
+  /**
+   * How the block a collection or a manifest declares applies when the
+   * administrator names no sink: offered in the trust dialog and used
+   * on the learner's opt-in, used without asking, or never used.
+   */
+  analyticsReport: AnalyticsReport;
+
   /** Whether events carry the JupyterHub user name. */
   analyticsIdentity: 'none' | 'hub';
 }
+
+/** The ways a deployment lets a collection's or a workshop's sink apply. */
+export type AnalyticsReport = 'ask' | 'always' | 'never';
+
+/** Every value of {@link AnalyticsReport}, for checking a setting. */
+export const ANALYTICS_REPORTS: readonly AnalyticsReport[] = [
+  'ask',
+  'always',
+  'never'
+];
 
 /** A workshop that has been read and parsed. */
 export interface ILoadedWorkshop {

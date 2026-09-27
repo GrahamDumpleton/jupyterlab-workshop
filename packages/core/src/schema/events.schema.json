@@ -98,7 +98,7 @@
     },
     "host": {
       "type": "string",
-      "description": "The service hosting the session: local, binder, jupyterhub, codespaces, or static for a JupyterLite site. Open: a later release may detect more."
+      "description": "The service hosting the session: local, binder, jupyterhub, codespaces, container for a container with no such service behind it, or static for a JupyterLite site. Open: a later release may detect more."
     },
     "platform": {
       "type": "string",

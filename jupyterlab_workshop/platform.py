@@ -59,8 +59,9 @@ class PlatformInfo:
     #: The JupyterHub user name, when running under a hub; else empty.
     hub_user: str = ""
 
-    #: The service hosting the session: binder, codespaces, jupyterhub or
-    #: local. A JupyterLite site reports static, from the browser.
+    #: The service hosting the session: binder, codespaces or jupyterhub,
+    #: else container inside one or local. A JupyterLite site reports
+    #: static, from the browser.
     host: str = "local"
 
     #: Whether the server runs inside a container.
@@ -101,7 +102,9 @@ def detect_platform(
     otherwise the ``SHELL`` environment variable is consulted, and failing
     that a platform default is assumed. ``container`` is the result of
     :func:`detect_container`. The hosting service is read from the
-    environment variables Binder, Codespaces and JupyterHub set.
+    environment variables Binder, Codespaces and JupyterHub set; with
+    none of them, a container reports ``container`` as its host so that
+    sessions in one are told apart from those on a learner's own machine.
     ``instance_id`` identifies the running server; see :func:`instance_id`.
     """
 
@@ -117,7 +120,7 @@ def detect_platform(
         path_sep=path_sep,
         root_dir=root_dir,
         hub_user=environ.get("JUPYTERHUB_USER", ""),
-        host=_host_name(environ),
+        host=_host_name(environ, container),
         container=container,
         instance_id=instance_id,
     )
@@ -194,7 +197,7 @@ def instance_id() -> str:
     return _INSTANCE_ID
 
 
-def _host_name(environ: Mapping[str, str]) -> str:
+def _host_name(environ: Mapping[str, str], container: bool = False) -> str:
     # A Binder container also carries the JupyterHub variables, so Binder
     # is checked first; a codespace carries neither.
     if any(name in environ for name in BINDER_VARIABLES):
@@ -207,6 +210,11 @@ def _host_name(environ: Mapping[str, str]) -> str:
 
     if any(name in environ for name in JUPYTERHUB_VARIABLES):
         return "jupyterhub"
+
+    # A container with no service behind it is still not the learner's
+    # own machine, and the two are told apart by the host.
+    if container:
+        return "container"
 
     return "local"
 

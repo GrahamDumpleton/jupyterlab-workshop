@@ -101,6 +101,11 @@ class LaunchOptions:
     #: dialog to the learner.
     trust: str | None = None
 
+    #: How the sink a collection or a workshop declares applies for the
+    #: session: ``always``, ``never`` or ``ask``, or None to leave the
+    #: installed setting as it is.
+    analytics: str | None = None
+
     port: int | None = None
     open_browser: bool = True
 
@@ -322,9 +327,10 @@ def launch_overrides(
     existing: Mapping[str, Any], options: LaunchOptions, browse: bool
 ) -> dict[str, Any]:
     """Settings overrides for the session: the deployment's, with the
-    trust level forced when asked, the workshop browser opened on start
-    for a launch that names nothing, and the Jupyter news prompt off
-    unless the deployment has settled it.
+    trust level forced and the analytics report policy set when asked,
+    the workshop browser opened on start for a launch that names
+    nothing, and the Jupyter news prompt off unless the deployment has
+    settled it.
     """
 
     overrides = quiet_news(existing)
@@ -334,6 +340,11 @@ def launch_overrides(
         policy = dict(panel.get("trustPolicy") or {})
         policy["forcedLevel"] = options.trust
         panel["trustPolicy"] = policy
+
+    if options.analytics is not None:
+        analytics = dict(panel.get("analytics") or {})
+        analytics["report"] = options.analytics
+        panel["analytics"] = analytics
 
     if browse:
         panel["browseOnStart"] = True

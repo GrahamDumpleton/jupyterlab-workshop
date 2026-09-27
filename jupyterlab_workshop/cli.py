@@ -500,6 +500,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="force the trust level for the session instead of asking",
     )
     launch.add_argument(
+        "--analytics",
+        choices=["always", "never", "ask"],
+        help="report progress to the sink a collection or workshop declares "
+        "without asking, never, or with the learner's opt-in (default: the "
+        "installed setting, which asks unless changed)",
+    )
+    launch.add_argument(
         "--root",
         type=Path,
         default=Path.cwd(),
@@ -1155,6 +1162,7 @@ def command_launch(args: argparse.Namespace) -> int:
             restart=args.restart,
             welcome=args.welcome,
             trust=args.trust,
+            analytics=args.analytics,
             port=args.port,
             open_browser=not args.no_browser,
             fresh=args.fresh,

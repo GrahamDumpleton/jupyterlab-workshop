@@ -54,10 +54,12 @@ There is no git here; the repository is shown already cloned.
 Two more describe where the session is hosted rather than what it runs
 on. `host` is `binder` under BinderHub, `codespaces` in a GitHub
 codespace, `jupyterhub` under any other JupyterHub, `static` for a
-JupyterLite site, which has no service behind it, and `local`
-otherwise; Binder is recognised by the `BINDER_*` environment variables
-it sets, Codespaces by `CODESPACES` and `CODESPACE_NAME`, and JupyterHub
-by `JUPYTERHUB_USER` or `JUPYTERHUB_API_URL`. `container` is `true` when
+JupyterLite site, which has no service behind it, `container` inside a
+container none of those services stands behind, such as the published
+image run on a desktop, and `local` otherwise; Binder is recognised by
+the `BINDER_*` environment variables it sets, Codespaces by `CODESPACES`
+and `CODESPACE_NAME`, and JupyterHub by `JUPYTERHUB_USER` or
+`JUPYTERHUB_API_URL`. `container` is `true` when
 the server runs inside a container, found from the Docker and Podman
 marker files, the Kubernetes service variable or the cgroup of process
 1, and is what to test for advice about disposable filesystems or

@@ -8,7 +8,13 @@ import { IStateDB } from '@jupyterlab/statedb';
 import { ReadonlyPartialJSONValue } from '@lumino/coreutils';
 
 import { fetchForServer, saveForServer } from '../statedb';
-import { ITrustDecision, ITrustPolicy, ITrustStore } from '../tokens';
+import {
+  ANALYTICS_REPORTS,
+  AnalyticsReport,
+  ITrustDecision,
+  ITrustPolicy,
+  ITrustStore
+} from '../tokens';
 
 const DECISIONS_KEY = '@jupyterlab-workshop/labextension:trust';
 
@@ -21,6 +27,7 @@ export const DEFAULT_POLICY: ITrustPolicy = {
   trustedSources: [],
   disabledCapabilities: [],
   analytics: null,
+  analyticsReport: 'ask',
   analyticsIdentity: 'none'
 };
 
@@ -230,8 +237,16 @@ export function policyFromSettings(values: {
     trustedSources: strings(raw.trustedSources),
     disabledCapabilities: strings(raw.disabledCapabilities),
     analytics: analyticsFromSettings(analytics),
+    analyticsReport: asAnalyticsReport(analytics.report),
     analyticsIdentity: analytics.identity === 'hub' ? 'hub' : 'none'
   };
+}
+
+function asAnalyticsReport(value: unknown): AnalyticsReport {
+  return typeof value === 'string' &&
+    (ANALYTICS_REPORTS as string[]).includes(value)
+    ? (value as AnalyticsReport)
+    : DEFAULT_POLICY.analyticsReport;
 }
 
 /**

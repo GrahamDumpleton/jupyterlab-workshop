@@ -171,7 +171,7 @@ describe('the shared analytics definition', () => {
     expect(collection).toEqual(definition);
   });
 
-  it('is what the settings schema declares, plus identity', () => {
+  it('is what the settings schema declares, plus report and identity', () => {
     const panel = JSON.parse(fs.readFileSync(PANEL_SETTINGS, 'utf8')) as {
       properties: {
         analytics: { properties: Record<string, Record<string, unknown>> };
@@ -183,6 +183,7 @@ describe('the shared analytics definition', () => {
 
     expect(Object.keys(settings)).toEqual([
       'sink',
+      'report',
       'token',
       'labels',
       'identity'

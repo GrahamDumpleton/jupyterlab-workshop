@@ -246,19 +246,27 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   get analytics(): IAnalyticsBlock | null {
-    // The administrator's block applies to every workshop without asking;
-    // a collection's or the manifest's needs the learner's opt-in.
-    const policy = this._trustStore.policy.analytics;
+    // The administrator's block applies to every workshop without asking.
+    // A collection's or the manifest's applies as the administrator's
+    // report policy says: with the learner's opt-in, always, or never.
+    const policy = this._trustStore.policy;
 
-    if (policy) {
-      return policy;
+    if (policy.analytics) {
+      return policy.analytics;
     }
 
-    if (this._offered && this._decision?.analytics) {
-      return this._offered;
+    if (!this._offered) {
+      return null;
     }
 
-    return null;
+    switch (policy.analyticsReport) {
+      case 'always':
+        return this._offered;
+      case 'never':
+        return null;
+      default:
+        return this._decision?.analytics ? this._offered : null;
+    }
   }
 
   get frontend(): string {
@@ -390,14 +398,16 @@ export class WorkshopManager implements IWorkshopManager {
       // The collection that lists the workshop is what its events name
       // and what may supply its analytics block. The manifest's own block
       // counts only when no collection declares one, and neither is
-      // offered when the administrator's setting decides.
+      // offered when the administrator's setting decides, by naming a
+      // sink of its own or by a report policy other than asking.
       const membership = await this._findCollection(
         manifest.name,
         record?.collection
       );
       const offered = membership?.index.analytics ?? manifest.analytics ?? null;
+      const policy = this._trustStore.policy;
       const offer: IAnalyticsOffer | undefined =
-        offered?.sink && !this._trustStore.policy.analytics
+        offered?.sink && !policy.analytics && policy.analyticsReport === 'ask'
           ? {
               sink: offered.sink,
               level: membership?.index.analytics ? 'collection' : 'workshop',

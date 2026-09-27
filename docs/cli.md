@@ -249,6 +249,7 @@ jupyter workshop launch [TARGET] [--ref REF] [--subdir DIR] [--sha256 HASH]
                         [--collection URL]... [--catalog URL] [--install]
                         [--var NAME=VALUE]... [--restart[=force]]
                         [--welcome FILE] [--trust trusted|restricted|ask]
+                        [--analytics always|never|ask]
                         [--root DIR] [--port PORT] [--no-browser] [--fresh]
                         [--container | --no-container] [--token TOKEN]
                         [--url URL] [-- jupyter lab options]
@@ -289,10 +290,15 @@ message saying so. Once the server answers, the link is printed and
 opened in the browser, or only printed with `--no-browser`. JupyterLab's
 log and its Ctrl-C handling are as for `jupyter lab`.
 
-Two options settle the session rather than the link. `--trust` forces
+Three options settle the session rather than the link. `--trust` forces
 the trust level, skipping the dialog, the way a deployment's
 `trustPolicy` does; it is merged into the installed `overrides.json` for
 the session only, so a Binder image's other settings still apply.
+`--analytics` sets the `report` key of the analytics setting the same
+way: `always` reports to the sink a collection or a workshop declares
+without asking, `never` reports to none, and `ask` offers the opt-in in
+the trust dialog, which is the installed default; see [reporting to a
+sink](analytics.md#reporting-to-a-sink).
 `--fresh` gives the server JupyterLab workspaces and user settings of its
 own, as [test](#test) does, so a demo is not shaped by the tabs and
 preferences of other sessions. Anything after `--` is passed to
