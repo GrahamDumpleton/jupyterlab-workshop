@@ -40,26 +40,28 @@ docker run -d --name "${name}" -p "${port}:8888" \
     -e "WORKSHOP_INSTALL=1" \
     "${image}" > /dev/null
 
-# Installing the collection happens before the server starts, so allow
-# for the downloads as well as the start.
+# The launch prints the link once the server answers, so the link in
+# the log is the sign that everything is up; waiting on the status
+# endpoint instead would race the print. Installing the collection
+# happens before the server starts, so allow for the downloads too.
 for _ in $(seq 1 180); do
-    if curl -sf -H "Authorization: token ${token}" "${base}/api/status" > /dev/null; then
+    if docker logs "${name}" 2>&1 | grep -qF "/lab?token=${token}"; then
         break
     fi
 
     if [ -z "$(docker ps -q -f "name=${name}")" ]; then
-        echo "the container exited before the server answered" >&2
+        echo "the container exited before it printed the link" >&2
         exit 1
     fi
 
     sleep 1
 done
 
+echo "== launch link"
+docker logs "${name}" 2>&1 | grep -F "/lab?token=${token}" | head -1 | grep .
+
 echo "== server status"
 api /api/status | python3 -c 'import json, sys; json.load(sys.stdin); print("ok")'
-
-echo "== launch link"
-docker logs "${name}" 2>&1 | grep -F "/lab?token=${token}" | head -1
 
 echo "== platform"
 api /jupyterlab-workshop/platform | python3 -c '
