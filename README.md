@@ -19,8 +19,8 @@ JupyterLab itself.
 A workshop is a directory with a `workshop.yaml` manifest and Markdown
 pages. The format is text based and git friendly. A workshop runs
 wherever JupyterLab runs, and can be handed to learners through a
-published collection, a Binder link, or a static JupyterLite site that
-runs entirely in the browser.
+published collection, a Binder link, a container image, or a static
+JupyterLite site that runs entirely in the browser.
 
 ## Install
 
@@ -55,7 +55,7 @@ edits them in place.
 - [Using workshops](https://jupyterlab-workshop.readthedocs.io/en/latest/using.html)
   for learners and
   [Deploying workshops](https://jupyterlab-workshop.readthedocs.io/en/latest/deploying.html)
-  for Binder, JupyterHub and locked-down images.
+  for Binder, containers, JupyterHub and locked-down images.
 
 - [The documentation](https://jupyterlab-workshop.readthedocs.io/) for
   the rest: every action a page can use, checks and forms, variables,

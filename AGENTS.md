@@ -30,6 +30,11 @@ The repository is a monorepo with three main parts:
   `jupyter_server` extension (platform detection, fetching, script
   verifies, checkpoints) and the `jupyter workshop` CLI.
 
+- `container/` is the container image: a Dockerfile on the Jupyter
+  docker-stacks base-notebook image, the launch command the image
+  starts with, and the hook that seeds a derived image's workshops into
+  the home directory. The release workflow publishes it to GHCR.
+
 README.md is the long description shown on PyPI, so it stays short and
 user facing and links to the documentation site; development setup and
 workflow belong in CONTRIBUTING.md, and the full documentation is under
@@ -118,6 +123,11 @@ underlying commands yourself; run `just --list` to see everything.
 - `just pages` assembles the GitHub Pages site into `site/`: the landing
   page from `github-pages/`, the JSON schemas under `schemas/v1alpha1/`,
   and the example workshop as a JupyterLite site under `demo/`.
+
+- `just container` builds the container image from a fresh wheel as
+  `jupyterlab-workshop:dev`; `just container-test` starts it with the
+  showcase collection and checks it over HTTP (needs Docker and the
+  network; slow, run after changing the image or the launch command).
 
 - `just clean` removes build outputs only. `just clean-examples` removes
   what running the example workshops leaves behind (`_workshop` state,

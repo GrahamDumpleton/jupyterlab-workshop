@@ -1,0 +1,5 @@
+# The container build takes only the built wheel and the container files;
+# see container/Dockerfile.
+*
+!dist/*.whl
+!container/

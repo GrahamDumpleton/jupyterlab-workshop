@@ -1,0 +1,58 @@
+#!/bin/bash
+# The container's default command: start JupyterLab on a launch link
+# built from the environment and the arguments. Compose files, Kubernetes
+# and JupyterHub set environment rather than command lines, so each
+# option has a variable; the arguments are passed on to `jupyter workshop
+# launch` after the variables, so they win. The server is the home
+# directory's, which is where the seeding hook puts the image's
+# workshops and where a volume is mounted for the learner's files.
+#
+#   WORKSHOP_COLLECTION   collection URL or file; several, separated by spaces
+#   WORKSHOP_CATALOG      catalog URL or file
+#   WORKSHOP_WORKSHOP     a workshop to open: a directory, a URL, or a
+#                         name in the collection
+#   WORKSHOP_INSTALL      install the collections' workshops before
+#                         starting, when 1, true, yes or on
+#   WORKSHOP_TRUST        trusted, restricted or ask (default: trusted)
+#   WORKSHOP_WELCOME      Markdown file to show once started
+#   WORKSHOP_URL          base URL to print the link against
+#   WORKSHOP_VAR_<name>   a workshop variable
+#   JUPYTER_TOKEN         the token to serve with (default: generated)
+
+set -euo pipefail
+
+args=()
+
+for collection in ${WORKSHOP_COLLECTION:-}; do
+    args+=(--collection "${collection}")
+done
+
+if [ -n "${WORKSHOP_CATALOG:-}" ]; then
+    args+=(--catalog "${WORKSHOP_CATALOG}")
+fi
+
+case "${WORKSHOP_INSTALL:-}" in
+    1 | true | yes | on) args+=(--install) ;;
+esac
+
+if [ -n "${WORKSHOP_TRUST:-}" ]; then
+    args+=(--trust "${WORKSHOP_TRUST}")
+fi
+
+if [ -n "${WORKSHOP_WELCOME:-}" ]; then
+    args+=(--welcome "${WORKSHOP_WELCOME}")
+fi
+
+if [ -n "${WORKSHOP_URL:-}" ]; then
+    args+=(--url "${WORKSHOP_URL}")
+fi
+
+for variable in $(compgen -v WORKSHOP_VAR_ || true); do
+    args+=(--var "${variable#WORKSHOP_VAR_}=${!variable}")
+done
+
+if [ -n "${WORKSHOP_WORKSHOP:-}" ]; then
+    set -- "${WORKSHOP_WORKSHOP}" "$@"
+fi
+
+exec jupyter workshop launch --container --root "${HOME}" "${args[@]}" "$@"

@@ -444,8 +444,9 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Start JupyterLab on a launch link built from the options: a "
             "workshop directory, a workshop URL, or a name in a collection, "
-            "or with nothing named, the workshop browser. Arguments after "
-            "-- are passed to jupyter lab."
+            "or with nothing named, the workshop browser. Inside a container "
+            "the server is set up to be reached from outside; see --container. "
+            "Arguments after -- are passed to jupyter lab."
         ),
     )
     launch.add_argument(
@@ -468,6 +469,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     launch.add_argument(
         "--catalog", help="catalog URL or catalog.json to add for the session"
+    )
+    launch.add_argument(
+        "--install",
+        action="store_true",
+        help="install every workshop of the collections named with --collection "
+        "before starting, skipping those installed already",
     )
     launch.add_argument(
         "--var",
@@ -499,7 +506,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="JupyterLab root directory (default: the current directory)",
     )
     launch.add_argument(
-        "--port", type=int, help="port to serve on (default: a free one)"
+        "--port",
+        type=int,
+        help="port to serve on (default: a free one, or 8888 in a container)",
     )
     launch.add_argument(
         "--no-browser", action="store_true", help="print the link without opening it"
@@ -508,6 +517,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--fresh",
         action="store_true",
         help="use private JupyterLab workspaces and user settings, as test does",
+    )
+    launch.add_argument(
+        "--container",
+        dest="container",
+        action="store_true",
+        default=None,
+        help="serve for a container: listen on every interface on port 8888, "
+        "keep the token in JUPYTER_TOKEN, trust the workshops and open no "
+        "browser (default: on when running inside a container)",
+    )
+    launch.add_argument(
+        "--no-container",
+        dest="container",
+        action="store_false",
+        help="serve as on a desktop even inside a container",
+    )
+    launch.add_argument(
+        "--token",
+        help="serve with this token instead of a generated one",
+    )
+    launch.add_argument(
+        "--url",
+        help="base URL to print the link against, for a container reached at "
+        "an address other than the one it listens on",
     )
     launch.set_defaults(func=command_launch)
 
@@ -1125,6 +1158,10 @@ def command_launch(args: argparse.Namespace) -> int:
             port=args.port,
             open_browser=not args.no_browser,
             fresh=args.fresh,
+            container=args.container,
+            url=args.url,
+            token=args.token,
+            install=args.install,
             lab_args=tuple(args.passthrough),
         )
 

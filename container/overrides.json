@@ -1,0 +1,9 @@
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "browseOnStart": true,
+    "workshopsDirectory": "workshops"
+  },
+  "@jupyterlab/apputils-extension:notification": {
+    "fetchNews": "false"
+  }
+}

@@ -42,8 +42,8 @@ a command line tool such as git, a data workflow, or JupyterLab itself.
 - **Run workshops.** [Getting started](getting-started.md) installs the
   extension on your machine and walks through a showcase workshop,
   [Using workshops](using.md) is the learner's guide, and
-  [Deploying workshops](deploying.md) covers Binder, JupyterHub and
-  locked-down images.
+  [Deploying workshops](deploying.md) covers Binder, containers,
+  JupyterHub and locked-down images.
 
 - **Write workshops.** [How workshops work](concepts.md) explains the
   pieces, the [tutorial](tutorial.md) builds a small workshop from

@@ -199,6 +199,128 @@ The Finish dialog offers to shut the session down when the host is
 Binder, which the extension recognises from the environment variables
 Binder sets.
 
+## A container image
+
+Every release is also published as a container image,
+`ghcr.io/grahamdumpleton/jupyterlab-workshop:<version>`, with `latest`
+naming the newest. It holds JupyterLab and the extension on the Jupyter
+[docker-stacks](https://jupyter-docker-stacks.readthedocs.io/)
+`base-notebook` image, and no workshops. Run it with a collection and
+it installs the collection's workshops, starts JupyterLab and prints
+the launch link:
+
+```
+docker run --rm -p 8888:8888 \
+    -e WORKSHOP_COLLECTION=https://example.org/collection.json \
+    -e WORKSHOP_INSTALL=1 \
+    ghcr.io/grahamdumpleton/jupyterlab-workshop
+```
+
+The link opens the workshop browser with the collection's workshops
+listed as installed and trusted, so the first one is a click away.
+Without `WORKSHOP_INSTALL` the collection is subscribed for the session
+instead, and each workshop is installed when the learner clicks
+Install, which needs the network then. The container starts with
+`workshop-launch`, a small script that turns these variables into
+options of [`jupyter workshop launch`](cli.md#launch) in its container
+mode:
+
+| Variable              | Option                                                               |
+| --------------------- | -------------------------------------------------------------------- |
+| `WORKSHOP_COLLECTION` | `--collection`, for each URL or file, separated by spaces            |
+| `WORKSHOP_CATALOG`    | `--catalog`                                                          |
+| `WORKSHOP_WORKSHOP`   | the target: a workshop directory, a URL, or a name in the collection |
+| `WORKSHOP_INSTALL`    | `--install`, when `1`, `true`, `yes` or `on`                         |
+| `WORKSHOP_TRUST`      | `--trust`; the default in a container is `trusted`                   |
+| `WORKSHOP_WELCOME`    | `--welcome`, a Markdown file under the home directory                |
+| `WORKSHOP_URL`        | `--url`, the address the link is printed against                     |
+| `WORKSHOP_VAR_<name>` | `--var <name>=<value>`                                               |
+| `JUPYTER_TOKEN`       | the token to serve with; generated and printed when unset            |
+
+Arguments after the image name go to the same command, after the
+variables, so `docker run -p 8888:8888 ghcr.io/grahamdumpleton/jupyterlab-workshop
+workshop-launch --collection https://example.org/collection.json --install`
+is the same launch. Anything the launch command takes can be given
+either way, and `--` still passes options to `jupyter lab`.
+
+The server's root is the home directory, `/home/jovyan`, and the
+workshops are installed under `workshops` there, each with its own
+`work` directory and `_workshop` state. Mount a volume on the home
+directory to keep them between runs, `-v decorators:/home/jovyan`; a
+returning learner then finds their files and their progress where they
+left them, and Restart and Remove act on that copy. The image is a
+docker-stacks image, so running as another user id, `--user root -e
+NB_UID=1001`, and the other start-up options of those images work as
+[their documentation](https://jupyter-docker-stacks.readthedocs.io/en/latest/using/common.html)
+describes.
+
+### An image with the workshops inside
+
+A repository that publishes a collection can build an image with the
+workshops already installed, which needs no network to start and lists
+everything as installed from the first page. Its Dockerfile installs
+the collection into the image's staging tree, `/opt/workshops`, which
+is laid out as the home directory is, and writes the same overrides a
+Binder image writes:
+
+```dockerfile
+FROM ghcr.io/grahamdumpleton/jupyterlab-workshop:0.12.0
+
+COPY collection.json /opt/workshops/collection.json
+RUN jupyter workshop install /opt/workshops/collection.json --root /opt/workshops
+
+COPY overrides.json /opt/conda/share/jupyter/lab/settings/overrides.json
+```
+
+with `overrides.json` listing the collection so the browser groups and
+numbers the workshops under its heading, and keeping the learner to
+them:
+
+```json
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "browseOnStart": true,
+    "workshopsDirectory": "workshops",
+    "collections": ["collection.json"],
+    "trustPolicy": { "forcedLevel": "trusted" },
+    "disabledFeatures": [
+      "open-directory",
+      "open-url",
+      "collections",
+      "catalogs",
+      "remove",
+      "author"
+    ]
+  },
+  "@jupyterlab/apputils-extension:notification": {
+    "fetchNews": "false"
+  }
+}
+```
+
+The staging tree is outside the home directory because a volume
+mounted on the home directory hides whatever the image put there. A
+hook that runs before the server starts copies each staged workshop the
+home directory does not have yet, and the collection index beside them,
+and leaves alone whatever is there already, so a fresh volume gets
+everything, a returning learner keeps their work, and a newer image adds
+its new workshops without touching the ones in progress. The install
+records the collection with each workshop, so the browser matches them
+to its entries and offers Update when the collection lists a newer
+version. Then `docker run --rm -p 8888:8888 <image>` is the whole
+launch, with nothing to name; the overrides settle trust, so the
+forced level applies under JupyterHub too, where the launch command is
+not what starts the server.
+
+### Under JupyterHub
+
+The image can be a JupyterHub single-user image as it is: the hub's own
+command replaces the launch, the hook still seeds the workshops into
+the user's home directory, and the overrides in the image still apply.
+A collection to offer is then named in the overrides, in `collections`,
+rather than by the launch, and trust is settled there as above; see
+[JupyterHub](#jupyterhub).
+
 ## The Jupyter news prompt
 
 JupyterLab asks, the first time it starts for a user, whether to fetch

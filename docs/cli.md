@@ -246,11 +246,12 @@ where to start the client and JupyterLab.
 
 ```
 jupyter workshop launch [TARGET] [--ref REF] [--subdir DIR] [--sha256 HASH]
-                        [--collection URL]... [--catalog URL]
+                        [--collection URL]... [--catalog URL] [--install]
                         [--var NAME=VALUE]... [--restart[=force]]
                         [--welcome FILE] [--trust trusted|restricted|ask]
                         [--root DIR] [--port PORT] [--no-browser] [--fresh]
-                        [-- jupyter lab options]
+                        [--container | --no-container] [--token TOKEN]
+                        [--url URL] [-- jupyter lab options]
 ```
 
 Starts JupyterLab with a workshop, collection or catalog open, so the
@@ -272,7 +273,14 @@ A collection or catalog named this way is added for the session, which
 the browser keeps in the workspace's saved state, so a later launch on
 the same root and workspace still lists it, in its order, until it is
 removed in the Collections dialog or promoted by Subscribe; `--fresh`
-starts without it.
+starts without it. With `--install`, every workshop of the collections
+named that is not installed yet is installed before the server starts,
+as [install](#install) does, into the workshops directory the installed
+overrides name, taking only the entries for this operating system and
+for JupyterLab, so the learner finds them under Installed rather than
+installing each on click; a workshop that cannot be downloaded stops the
+launch. A catalog is added for the session only, since one can list far
+more than a learner wants.
 
 The server runs on a free port unless `--port` is given, with the current
 directory as its root unless `--root` names another; everything it opens
@@ -293,6 +301,21 @@ overrides also turn off JupyterLab's question about fetching Jupyter
 news, unless the installed overrides settle it, so the first thing shown
 is the workshop and not that prompt; see [the Jupyter news
 prompt](deploying.md#the-jupyter-news-prompt).
+
+Inside a container the command serves the container instead of a
+desktop. Container mode is on when the platform detection finds a
+container, or with `--container` anywhere, and `--no-container` turns
+it off. In that mode the server listens on every interface on port
+8888, the port Jupyter images publish, unless `--port` says otherwise;
+the token is `--token`, or the `JUPYTER_TOKEN` variable when set, so a
+restarted container keeps its link, and only otherwise generated; the
+trust level is forced to `trusted` unless `--trust` chooses another,
+since whoever ran the image or named the collection chose the
+workshops; and no browser is opened. The link is printed against
+`http://127.0.0.1:8888`, which is right when the container publishes
+that port on the same machine, or against `--url` when it is reached at
+another address, such as behind a proxy. The published image starts
+with this command; see [a container image](deploying.md#a-container-image).
 
 Installed as a uv tool with the `lab` extra, `uv tool install
 "jupyterlab-workshop[lab]"`, the command runs as `jupyter-workshop

@@ -6,14 +6,19 @@ from typing import Any
 import pytest
 
 from jupyterlab_workshop import cli
+from jupyterlab_workshop.install import InstallOutcome
 from jupyterlab_workshop.launch import (
+    CONTAINER_PORT,
     PANEL_PLUGIN,
     LaunchError,
     LaunchOptions,
+    install_collections,
     launch_overrides,
     launch_query,
     launch_url,
+    link_base,
     parse_variable,
+    resolve_container,
     server_command,
     wait_for_server,
 )
@@ -284,6 +289,146 @@ def test_server_command_writes_only_the_news_setting_by_default(
     assert not (work / "settings" / "page_config.json").exists()
 
 
+def test_resolve_container_applies_the_container_defaults() -> None:
+    environ = {"JUPYTER_TOKEN": "kept"}
+
+    # Detected, with nothing asked for: the container defaults apply.
+    resolved = resolve_container(LaunchOptions(), environ, detected=True)
+
+    assert resolved.container is True
+    assert resolved.port == CONTAINER_PORT
+    assert resolved.token == "kept"
+    assert resolved.trust == "trusted"
+    assert resolved.open_browser is False
+
+    # Anything given explicitly wins over the defaults.
+    chosen = resolve_container(
+        LaunchOptions(port=9000, token="mine", trust="ask"), environ, detected=True
+    )
+
+    assert (chosen.port, chosen.token, chosen.trust) == (9000, "mine", "ask")
+
+    # Without the variable the token is left for the launch to generate.
+    assert resolve_container(LaunchOptions(), {}, detected=True).token is None
+
+
+def test_resolve_container_is_decided_by_the_flag_before_detection() -> None:
+    environ = {"JUPYTER_TOKEN": "kept"}
+
+    # Not detected and not asked for: the options come back unchanged
+    # apart from the mode being settled.
+    plain = resolve_container(LaunchOptions(), environ, detected=False)
+
+    assert plain == LaunchOptions(container=False)
+
+    # --container on a desktop, and --no-container in a container.
+    forced = resolve_container(LaunchOptions(container=True), environ, detected=False)
+
+    assert forced.container is True
+    assert forced.port == CONTAINER_PORT
+
+    declined = resolve_container(LaunchOptions(container=False), environ, detected=True)
+
+    assert declined.container is False
+    assert declined.port is None
+    assert declined.open_browser is True
+
+
+def test_link_base_prefers_the_url_option() -> None:
+    assert link_base(LaunchOptions(), 8899) == "http://127.0.0.1:8899"
+    assert (
+        link_base(LaunchOptions(url="https://lab.example.org/"), 8888)
+        == "https://lab.example.org"
+    )
+
+
+def test_server_command_listens_on_every_interface_in_a_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "jupyterlab_workshop.launch.installed_settings_dir", lambda: None
+    )
+
+    inside = server_command(
+        tmp_path, 8888, "tok", LaunchOptions(container=True), tmp_path / "a", False
+    )
+    outside = server_command(
+        tmp_path, 8888, "tok", LaunchOptions(container=False), tmp_path / "b", False
+    )
+
+    assert "--ServerApp.ip=0.0.0.0" in inside
+    assert "--ServerApp.ip=0.0.0.0" not in outside
+
+
+def test_install_collections_installs_each_collection_into_the_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installed = tmp_path / "installed"
+    installed.mkdir()
+    (installed / "overrides.json").write_text(
+        json.dumps({PANEL_PLUGIN: {"workshopsDirectory": "lessons"}})
+    )
+    monkeypatch.setattr(
+        "jupyterlab_workshop.launch.installed_settings_dir", lambda: installed
+    )
+
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "collection.json").write_text("{}")
+
+    calls: list[tuple[Any, ...]] = []
+
+    def fake_install(
+        location: str, root: Path, directory: str, **kwargs: Any
+    ) -> list[InstallOutcome]:
+        calls.append((location, root, directory, kwargs["platform"]))
+
+        return [InstallOutcome("one", "One", "installed", "lessons/one")]
+
+    monkeypatch.setattr("jupyterlab_workshop.launch.install_collection", fake_install)
+    monkeypatch.setattr("jupyterlab_workshop.launch.current_os", lambda: "linux")
+
+    lines: list[str] = []
+    install_collections(
+        LaunchOptions(collections=["https://example.org/collection.json", str(course)]),
+        tmp_path,
+        report=lines.append,
+    )
+
+    assert calls == [
+        ("https://example.org/collection.json", tmp_path, "lessons", "linux"),
+        (str(course / "collection.json"), tmp_path, "lessons", "linux"),
+    ]
+
+
+def test_install_collections_refuses_a_failure_and_an_empty_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "jupyterlab_workshop.launch.installed_settings_dir", lambda: None
+    )
+
+    def failing_install(*args: Any, **kwargs: Any) -> list[InstallOutcome]:
+        return [
+            InstallOutcome("one", "One", "installed", "workshops/one"),
+            InstallOutcome("two", "Two", "failed", "404"),
+        ]
+
+    monkeypatch.setattr(
+        "jupyterlab_workshop.launch.install_collection", failing_install
+    )
+
+    with pytest.raises(LaunchError, match="unable to install two"):
+        install_collections(
+            LaunchOptions(collections=["https://example.org/collection.json"]),
+            tmp_path,
+            report=lambda line: None,
+        )
+
+    with pytest.raises(LaunchError, match="--collection"):
+        install_collections(LaunchOptions(), tmp_path, report=lambda line: None)
+
+
 def test_wait_for_server_reports_an_early_exit() -> None:
     class Exited:
         returncode = 3
@@ -344,6 +489,14 @@ def test_launch_command_builds_options_and_passes_arguments_through(
                 "trusted",
                 "--no-browser",
                 "--fresh",
+                "--collection",
+                "https://example.org/collection.json",
+                "--install",
+                "--container",
+                "--token",
+                "tok",
+                "--url",
+                "https://lab.example.org",
                 "--",
                 "--ip=0.0.0.0",
                 "--debug",
@@ -361,8 +514,20 @@ def test_launch_command_builds_options_and_passes_arguments_through(
     assert options.trust == "trusted"
     assert options.open_browser is False
     assert options.fresh is True
+    assert options.collections == ["https://example.org/collection.json"]
+    assert options.install is True
+    assert options.container is True
+    assert options.token == "tok"
+    assert options.url == "https://lab.example.org"
     assert options.lab_args == ("--ip=0.0.0.0", "--debug")
     assert options.root == tmp_path
+
+    # Container mode is left to detection unless a flag settles it.
+    assert cli.main(["launch", "--no-browser"]) == 0
+    assert captured["options"].container is None
+
+    assert cli.main(["launch", "--no-browser", "--no-container"]) == 0
+    assert captured["options"].container is False
 
 
 def test_launch_command_reports_a_bad_target(

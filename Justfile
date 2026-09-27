@@ -109,6 +109,16 @@ selftest-lite *args:
 lite *args:
     uv run jupyter workshop lite examples/hello-jupyterlab --out lite-site --serve "$@"
 
+# Build the container image from a fresh wheel, as jupyterlab-workshop:dev (see container/Dockerfile).
+container *args:
+    rm -rf dist
+    uv build
+    docker build -f container/Dockerfile -t jupyterlab-workshop:dev "$@" .
+
+# Start the container image with a collection and check it over HTTP (needs Docker and the network; slow).
+container-test *args:
+    scripts/container-smoke.sh jupyterlab-workshop:dev "$@"
+
 # Remove build outputs (compiled TypeScript, the labextension bundle, lint caches).
 clean:
     uv run jlpm clean

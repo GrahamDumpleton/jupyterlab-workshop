@@ -118,6 +118,18 @@ page, the JSON schemas and the example workshop built as a JupyterLite
 site under `demo/`. Building the JupyterLite terminal needs `node`, `npm`
 and `micromamba` on the path; pass `--no-terminal` to leave it out.
 
+## The container image
+
+`just container` builds the container image described in
+`container/Dockerfile` as `jupyterlab-workshop:dev`, from a wheel it
+builds first, so the image holds the working tree's code.
+`just container-test` starts that image with the showcase collection and
+checks it over HTTP with `scripts/container-smoke.sh`; both need Docker,
+and the test needs the network. CI builds and tests the image on every
+push, and the release workflow publishes it to GHCR under the version
+tag and `latest`. Changes to the launch command's container mode, to the
+Dockerfile or to the scripts beside it are the reason to run the test.
+
 ## Releases
 
 The version is read from the root `package.json` by the Python build, so

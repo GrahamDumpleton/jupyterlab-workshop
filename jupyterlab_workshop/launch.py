@@ -8,11 +8,22 @@ command line options, starts the server on a free port with the options
 it needs, waits until it answers, prints the link and opens it in the
 browser. JupyterLab itself is left in charge of the terminal: its log
 goes to the console as usual and Ctrl-C reaches it as usual.
+
+Inside a container the same command serves the container: it listens on
+every interface on the port Jupyter images publish, keeps a token given
+to it so a restarted container keeps its link, prints the link against
+whatever address the container is reached by, and trusts the workshops,
+since whoever ran the image chose them. That mode is switched on by
+``--container``, or on its own when the platform detection finds a
+container. With ``--install`` the workshops of the collections named are
+installed before the server starts, so they are listed as installed
+rather than left for the learner to install one by one.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import shutil
@@ -25,14 +36,17 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from .catalog import is_http_url
+from .fetch import FetchError
+from .install import DEFAULT_DIRECTORY, install_collection
 from .overrides import quiet_news
+from .platform import current_os, detect_container
 
 PANEL_PLUGIN = "@jupyterlab-workshop/labextension:panel"
 
@@ -41,6 +55,17 @@ WORKSHOP_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 #: Seconds to allow the server to start answering.
 START_TIMEOUT = 120.0
+
+#: The port a container mode launch serves on, the one Jupyter images
+#: conventionally publish.
+CONTAINER_PORT = 8888
+
+#: The environment variable Jupyter reads a fixed token from, which a
+#: container mode launch honours so a restarted container keeps its link.
+TOKEN_VARIABLE = "JUPYTER_TOKEN"
+
+#: The trust level a container mode launch forces when none is asked for.
+CONTAINER_TRUST = "trusted"
 
 
 class LaunchError(Exception):
@@ -82,8 +107,61 @@ class LaunchOptions:
     #: Give the server workspaces and user settings of its own.
     fresh: bool = False
 
+    #: Serve for a container: every interface, a fixed port, no browser,
+    #: a kept token and forced trust; None decides from the platform.
+    container: bool | None = None
+
+    #: The base URL to print the link against, for a container reached
+    #: at an address other than the one it listens on.
+    url: str | None = None
+
+    #: The token to serve with, or None to generate one.
+    token: str | None = None
+
+    #: Install every workshop of ``collections`` before starting.
+    install: bool = False
+
     #: Further arguments for ``jupyter lab``.
     lab_args: Sequence[str] = ()
+
+
+def resolve_container(
+    options: LaunchOptions,
+    environ: Mapping[str, str] | None = None,
+    detected: bool | None = None,
+) -> LaunchOptions:
+    """The options with container mode settled and its defaults applied.
+
+    ``container`` left as None is decided by ``detected``, or by the
+    platform detection when that is None too. In container mode the
+    port defaults to the one Jupyter images publish, the token to the
+    ``JUPYTER_TOKEN`` variable when set, and the trust level to trusted,
+    and the browser is never opened; an option given explicitly wins.
+    Outside container mode the options come back with ``container``
+    False and nothing else changed.
+    """
+
+    if environ is None:
+        environ = os.environ
+
+    container = options.container
+
+    if container is None:
+        container = (
+            detected if detected is not None else detect_container(environ, Path("/"))
+        )
+
+    if not container:
+        return replace(options, container=False)
+
+    return replace(
+        options,
+        container=True,
+        port=options.port if options.port is not None else CONTAINER_PORT,
+        token=options.token or environ.get(TOKEN_VARIABLE) or None,
+        trust=options.trust or CONTAINER_TRUST,
+        open_browser=False,
+    )
 
 
 def launch_query(options: LaunchOptions) -> list[tuple[str, str | None]]:
@@ -171,6 +249,18 @@ def _workshop_parameter(options: LaunchOptions, root: Path) -> str:
 
 
 def _index_parameter(location: str, root: Path, filename: str) -> str:
+    resolved = _index_location(location, filename)
+
+    if is_http_url(resolved):
+        return resolved
+
+    return _relative_to_root(resolved, root, filename)
+
+
+def _index_location(location: str, filename: str) -> str:
+    """A collection or catalog location as a URL or the path of its
+    index file, raising LaunchError when it is neither."""
+
     if is_http_url(location):
         return location
 
@@ -184,7 +274,7 @@ def _index_parameter(location: str, root: Path, filename: str) -> str:
     if not path.is_file():
         raise LaunchError(f"{location} is not a URL or a {filename} file")
 
-    return _relative_to_root(str(path), root, filename)
+    return str(path)
 
 
 def _relative_to_root(location: str, root: Path, what: str) -> str:
@@ -201,6 +291,16 @@ def _relative_to_root(location: str, root: Path, what: str) -> str:
             "JupyterLab can only reach files under its root, so start it "
             "from a directory above the file or name one with --root"
         ) from None
+
+
+def link_base(options: LaunchOptions, port: int) -> str:
+    """The address the printed link is built on: the ``url`` option when
+    given, else the loopback address and the port served on."""
+
+    if options.url:
+        return options.url.rstrip("/")
+
+    return f"http://127.0.0.1:{port}"
 
 
 def launch_url(base: str, token: str, params: Sequence[tuple[str, str | None]]) -> str:
@@ -244,10 +344,55 @@ def launch_overrides(
     return overrides
 
 
+def install_collections(
+    options: LaunchOptions, root: Path, report: Callable[[str], None] = print
+) -> None:
+    """Install every workshop of the launch's collections that is not
+    installed yet, into the workshops directory the installed overrides
+    name, raising LaunchError when there is no collection to install
+    from or a workshop could not be installed.
+
+    Only entries for this operating system and for JupyterLab are taken,
+    since the launch serves this machine and no other.
+    """
+
+    if not options.collections:
+        raise LaunchError("--install needs a collection named with --collection")
+
+    panel = installed_overrides().get(PANEL_PLUGIN)
+    directory = DEFAULT_DIRECTORY
+
+    if isinstance(panel, Mapping) and panel.get("workshopsDirectory"):
+        directory = str(panel["workshopsDirectory"])
+
+    for collection in options.collections:
+        location = _index_location(collection, "collection.json")
+
+        try:
+            outcomes = install_collection(
+                location,
+                root,
+                directory,
+                platform=current_os(),
+                frontend="jupyterlab",
+                report=report,
+            )
+        except FetchError as error:
+            raise LaunchError(str(error)) from error
+
+        failed = [outcome.name for outcome in outcomes if outcome.status == "failed"]
+
+        if failed:
+            raise LaunchError(
+                f"unable to install {', '.join(failed)} from {collection}"
+            )
+
+
 def run_launch(options: LaunchOptions) -> int:
     """Start JupyterLab as the options ask, open the launch link, and
     return JupyterLab's exit code once it has stopped."""
 
+    options = resolve_container(options)
     root = options.root.resolve()
 
     if not root.is_dir():
@@ -256,8 +401,11 @@ def run_launch(options: LaunchOptions) -> int:
     params = launch_query(options)
     browse = options.target is None and not options.collections and not options.catalog
 
+    if options.install:
+        install_collections(options, root)
+
     port = options.port if options.port is not None else free_port()
-    token = secrets.token_hex(16)
+    token = options.token or secrets.token_hex(16)
     work = Path(tempfile.mkdtemp(prefix="workshop-launch-"))
 
     try:
@@ -275,7 +423,7 @@ def run_launch(options: LaunchOptions) -> int:
 
             raise error
 
-        url = launch_url(f"http://127.0.0.1:{port}", token, params)
+        url = launch_url(link_base(options, port), token, params)
 
         print(f"\nWorkshop launch link:\n\n    {url}\n", flush=True)
 
@@ -300,8 +448,10 @@ def server_command(
 
     The port is pinned so the link printed is the one the server
     answers on, and the browser is opened here rather than by
-    JupyterLab, whose own link would lack the launch parameters. The
-    caller's extra arguments go last so they take precedence.
+    JupyterLab, whose own link would lack the launch parameters. In
+    container mode the server listens on every interface, since the
+    container is reached from outside. The caller's extra arguments go
+    last so they take precedence.
     """
 
     command = [
@@ -314,6 +464,9 @@ def server_command(
         f"--ServerApp.root_dir={root}",
         f"--IdentityProvider.token={token}",
     ]
+
+    if options.container:
+        command.append("--ServerApp.ip=0.0.0.0")
 
     settings = write_settings(work, options, browse)
 
@@ -347,20 +500,7 @@ def write_settings(work: Path, options: LaunchOptions, browse: bool) -> Path:
     """
 
     installed = installed_settings_dir()
-    existing: dict[str, Any] = {}
-
-    if installed is not None and (installed / "overrides.json").is_file():
-        try:
-            loaded = json.loads((installed / "overrides.json").read_text("utf-8"))
-        except (OSError, ValueError) as error:
-            raise LaunchError(
-                f"unable to read {installed / 'overrides.json'}: {error}"
-            ) from error
-
-        if isinstance(loaded, dict):
-            existing = loaded
-
-    overrides = launch_overrides(existing, options, browse)
+    overrides = launch_overrides(installed_overrides(), options, browse)
     settings = work / "settings"
     settings.mkdir(parents=True, exist_ok=True)
     (settings / "overrides.json").write_text(json.dumps(overrides, indent=2), "utf-8")
@@ -369,6 +509,25 @@ def write_settings(work: Path, options: LaunchOptions, browse: bool) -> Path:
         shutil.copy(installed / "page_config.json", settings / "page_config.json")
 
     return settings
+
+
+def installed_overrides() -> dict[str, Any]:
+    """The deployment's own ``overrides.json`` from the installed
+    JupyterLab, or an empty mapping when there is none."""
+
+    installed = installed_settings_dir()
+
+    if installed is None or not (installed / "overrides.json").is_file():
+        return {}
+
+    try:
+        loaded = json.loads((installed / "overrides.json").read_text("utf-8"))
+    except (OSError, ValueError) as error:
+        raise LaunchError(
+            f"unable to read {installed / 'overrides.json'}: {error}"
+        ) from error
+
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def installed_settings_dir() -> Path | None:

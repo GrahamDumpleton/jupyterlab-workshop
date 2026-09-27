@@ -166,6 +166,13 @@ def current_platform(
     )
 
 
+def current_os() -> str:
+    """The operating system name of the running process, as the workshop
+    format names platforms: linux, macos or windows."""
+
+    return _os_name(platform_module.system())
+
+
 _INSTANCE_ID = ""
 
 
