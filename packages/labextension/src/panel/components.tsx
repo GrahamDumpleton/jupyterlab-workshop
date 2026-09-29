@@ -35,13 +35,14 @@ import {
 import { CommandRegistry } from '@lumino/commands';
 import React, {
   useCallback,
+  useContext,
   useEffect,
   useReducer,
   useRef,
   useState
 } from 'react';
 
-import { infoIcon } from '../icons';
+import { clickIcon, infoIcon } from '../icons';
 import {
   CommandIDs,
   IActionRequest,
@@ -51,6 +52,7 @@ import {
   IWorkshopPreview
 } from '../tokens';
 import { visibleDirectives } from '../util';
+import { ClickHintContext, clickHintTarget, useClickHint } from './clickhint';
 import { revealBelow } from './reveal';
 
 /** Props shared by the panel components. */
@@ -275,6 +277,7 @@ function PanelContent({
         page={page}
         manager={manager}
         commands={commands}
+        features={features}
       />
       {gate.unmet.length > 0 ? (
         <div
@@ -473,14 +476,23 @@ function TrustBadge({
 function PageBody({
   page,
   manager,
-  commands
+  commands,
+  features
 }: {
   page: IPage;
   manager: IWorkshopManager;
   commands: CommandRegistry;
+  features: IFeaturePolicy;
 }): JSX.Element {
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   const container = useRef<HTMLDivElement>(null);
+
+  // Show a learner who has clicked nothing that the first action of the
+  // workshop can be clicked, when that action is on this page.
+  const target = features.enabled('click-hint')
+    ? clickHintTarget(manager)
+    : null;
+  const hinted = useClickHint(container, target) ? target : null;
 
   // Re-render on action status changes, and scroll to automatic runs.
   useEffect(() => {
@@ -543,12 +555,14 @@ function PageBody({
           ))}
         </div>
       ) : null}
-      <Nodes
-        nodes={page.nodes}
-        manager={manager}
-        commands={commands}
-        onProseClick={onProseClick}
-      />
+      <ClickHintContext.Provider value={hinted}>
+        <Nodes
+          nodes={page.nodes}
+          manager={manager}
+          commands={commands}
+          onProseClick={onProseClick}
+        />
+      </ClickHintContext.Provider>
     </div>
   );
 }
@@ -1003,6 +1017,7 @@ function ActionBlock({
   const disposition = manager.disposition(node);
   const trustBadge = dispositionBadge(disposition, node);
   const onRun = (): void => void manager.runAction(node, 'click');
+  const hinted = useContext(ClickHintContext) === node.id;
 
   useRevealOnMessage(root, status);
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -1015,7 +1030,7 @@ function ActionBlock({
   return (
     <div
       ref={root}
-      className={`jp-WorkshopPanel-action jp-mod-${node.name} jp-mod-status-${status.status}`}
+      className={`jp-WorkshopPanel-action jp-mod-${node.name} jp-mod-status-${status.status}${hinted ? ' jp-mod-clickHint' : ''}`}
       data-action-id={node.id}
       role="button"
       tabIndex={0}
@@ -1023,6 +1038,12 @@ function ActionBlock({
       onClick={onRun}
       onKeyDown={onKeyDown}
     >
+      {hinted ? (
+        <span className="jp-WorkshopPanel-clickHint" aria-hidden="true">
+          <clickIcon.react tag="span" width="14px" height="14px" />
+          Click to run
+        </span>
+      ) : null}
       <div className="jp-WorkshopPanel-actionHeader">
         <runIcon.react tag="span" width="14px" height="14px" />
         <span className="jp-WorkshopPanel-actionLabel">{title}</span>

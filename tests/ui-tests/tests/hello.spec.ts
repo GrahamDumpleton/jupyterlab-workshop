@@ -1,4 +1,4 @@
-import { expect, test } from '@jupyterlab/galata';
+import { expect, galata, test } from '@jupyterlab/galata';
 import * as path from 'path';
 
 const WORKSHOP = 'hello-jupyterlab';
@@ -6,6 +6,8 @@ const WORKSHOP = 'hello-jupyterlab';
 const EXAMPLE_DIR = path.resolve(__dirname, '../../../examples', WORKSHOP);
 
 const PANEL = '#jupyterlab-workshop-panel';
+
+const PLUGIN = '@jupyterlab-workshop/labextension:panel';
 
 interface IExposedApp {
   jupyterapp: {
@@ -59,21 +61,94 @@ async function openWorkshop(
   ).toBeAttached();
 }
 
+/** Upload the example as a workshop nobody has started, and open it. */
+async function startWorkshop(
+  page: import('@jupyterlab/galata').IJupyterLabPageFixture,
+  tmpPath: string
+): Promise<void> {
+  await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+
+  // A development session may have left runtime directories in the
+  // example; they must not leak into the test.
+  for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
+    const directory = `${tmpPath}/${WORKSHOP}/${name}`;
+
+    if (await page.contents.directoryExists(directory)) {
+      await page.contents.deleteDirectory(directory);
+    }
+  }
+
+  await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
+  await page.sidebar.openTab('jupyterlab-workshop-panel');
+}
+
+test.describe('hint that the first action can be clicked', () => {
+  test('shows on the first action only, until an action is clicked', async ({
+    page,
+    tmpPath
+  }) => {
+    await startWorkshop(page, tmpPath);
+
+    const panel = page.locator(PANEL);
+    const hint = panel.locator('.jp-WorkshopPanel-clickHint');
+    const first = panel.locator('.jp-WorkshopPanel-action').first();
+
+    // It waits for the learner to have had the page in front of them.
+    await expect(hint).toHaveCount(0);
+    await expect(first).toHaveClass(/jp-mod-clickHint/, { timeout: 15000 });
+    await expect(hint).toHaveCount(1);
+    await expect(hint).toHaveText('Click to run');
+
+    // No action of a later page is pointed out, and the hint is back on
+    // returning to the first page.
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Next' })
+      .click();
+    await expect(panel.locator('.jp-WorkshopPanel-pageTitle')).not.toHaveText(
+      'Welcome'
+    );
+    await page.waitForTimeout(6000);
+    await expect(hint).toHaveCount(0);
+
+    await panel
+      .locator('.jp-WorkshopPanel-footer button', { hasText: 'Previous' })
+      .click();
+    await expect(first).toHaveClass(/jp-mod-clickHint/, { timeout: 15000 });
+
+    // A click on any action, not only the one pointed out, ends it.
+    await panel.locator('.jp-WorkshopPanel-action.jp-mod-toast').nth(0).click();
+    await expect(hint).toHaveCount(0);
+    await page.waitForTimeout(6000);
+    await expect(hint).toHaveCount(0);
+  });
+
+  test.describe('with click-hint disabled', () => {
+    test.use({
+      mockSettings: {
+        ...galata.DEFAULT_SETTINGS,
+        [PLUGIN]: {
+          disabledFeatures: ['click-hint']
+        }
+      }
+    });
+
+    test('never shows', async ({ page, tmpPath }) => {
+      await startWorkshop(page, tmpPath);
+
+      const panel = page.locator(PANEL);
+
+      await expect(
+        panel.locator('.jp-WorkshopPanel-action').first()
+      ).toBeVisible();
+      await page.waitForTimeout(6000);
+      await expect(panel.locator('.jp-WorkshopPanel-clickHint')).toHaveCount(0);
+    });
+  });
+});
+
 test.describe('hello-jupyterlab workshop', () => {
   test.beforeEach(async ({ page, tmpPath }) => {
-    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
-
-    // A development session may have left runtime directories in the
-    // example; they must not leak into the test.
-    for (const name of ['_workshop', 'scratch', 'demo', 'work']) {
-      const directory = `${tmpPath}/${WORKSHOP}/${name}`;
-
-      if (await page.contents.directoryExists(directory)) {
-        await page.contents.deleteDirectory(directory);
-      }
-    }
-    await openWorkshop(page, `${tmpPath}/${WORKSHOP}`);
-    await page.sidebar.openTab('jupyterlab-workshop-panel');
+    await startWorkshop(page, tmpPath);
   });
 
   test('drives notebooks, kernels, variables, tracks and cascades', async ({

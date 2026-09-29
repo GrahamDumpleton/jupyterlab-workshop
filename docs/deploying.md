@@ -87,6 +87,7 @@ palette and the matching launch link parameter.
 | `close`          | The close button and "Close Workshop".                                                                                                                                                                                       |
 | `browse`         | The browse button, the launcher card and "Browse Workshops", for an image that runs a single workshop.                                                                                                                       |
 | `author`         | The edit button, author mode and its commands, and the "New Workshop" launcher card. A workshop marked as the learner's own opens as a learner would see it.                                                                 |
+| `click-hint`     | The hint that the first action of a workshop can be clicked, shown to a learner who has clicked nothing: a pulsing ring and a "Click to run" label on that action.                                                           |
 
 The workshops under `workshopsDirectory` stay openable with
 `open-directory` disabled, from the browser or a `workshop=<path>` launch

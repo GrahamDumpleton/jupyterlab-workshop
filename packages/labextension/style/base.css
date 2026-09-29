@@ -370,6 +370,72 @@
   }
 }
 
+/* The hint that the first action of a workshop can be clicked: a ring
+   that pulses twice and rests, a few times over, and a label that stays
+   once the ring has stopped. The label sits on the bottom edge of the
+   action, so the raised finger of its hand points into the action. */
+
+.jp-WorkshopPanel-action.jp-mod-clickHint {
+  position: relative;
+  animation: jp-workshop-click-hint 4s ease-out 5;
+}
+
+.jp-WorkshopPanel-clickHint {
+  display: flex;
+  position: absolute;
+  right: 8px;
+  bottom: -10px;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px 1px 5px;
+  border-radius: 10px;
+  background: var(--jp-brand-color1);
+  color: var(--jp-ui-inverse-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size0);
+  line-height: 16px;
+  box-shadow: var(--jp-elevation-z2);
+  pointer-events: none;
+}
+
+.jp-WorkshopPanel-clickHint > span {
+  display: flex;
+}
+
+.jp-WorkshopPanel-clickHint .jp-icon3[fill] {
+  fill: var(--jp-ui-inverse-font-color1);
+}
+
+@keyframes jp-workshop-click-hint {
+  0% {
+    box-shadow: 0 0 0 0 var(--jp-brand-color1);
+  }
+
+  20% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+
+  20.01% {
+    box-shadow: 0 0 0 0 var(--jp-brand-color1);
+  }
+
+  40%,
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-WorkshopPanel-action.jp-mod-pulse {
+    animation: none;
+  }
+
+  .jp-WorkshopPanel-action.jp-mod-clickHint {
+    box-shadow: 0 0 0 2px var(--jp-brand-color1);
+    animation: none;
+  }
+}
+
 .jp-WorkshopPanel-actionOutput {
   margin: 0;
   padding: 6px 8px;

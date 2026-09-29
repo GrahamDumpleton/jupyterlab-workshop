@@ -1,5 +1,6 @@
 import { LabIcon } from '@jupyterlab/ui-components';
 
+import clickSvg from '../style/icons/click.svg';
 import infoSvg from '../style/icons/info.svg';
 import newWorkshopSvg from '../style/icons/workshop-new.svg';
 import workshopSvg from '../style/icons/workshop.svg';
@@ -31,4 +32,13 @@ export const newWorkshopIcon = new LabIcon({
 export const infoIcon = new LabIcon({
   name: 'jupyterlab-workshop:info',
   svgstr: infoSvg
+});
+
+/**
+ * A hand with its index finger raised, for the hint that the first
+ * action of a workshop can be clicked.
+ */
+export const clickIcon = new LabIcon({
+  name: 'jupyterlab-workshop:click',
+  svgstr: clickSvg
 });

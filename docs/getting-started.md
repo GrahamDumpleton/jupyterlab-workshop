@@ -151,7 +151,9 @@ window: a rendered README, a terminal, whatever the workshop asked for.
 Read the first page and click an action. Each one is a box showing
 exactly what it will do, and it runs in the session beside you: a
 command in the terminal, a notebook created and run, a file written and
-opened. Move on with Next at the foot of the panel. A page with checks
+opened. Until an action has been clicked, the first action of the
+workshop is pointed out after a few seconds with a pulsing ring and a
+"Click to run" label. Move on with Next at the foot of the panel. A page with checks
 shows what is still to do, and the last page ends with Finish and a
 dialog offering what to do next: in a collection that declares its
 workshops a sequence, as the showcase does, that includes the next one.

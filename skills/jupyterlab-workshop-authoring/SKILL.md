@@ -553,7 +553,8 @@ to them: no other directories or URLs, no editing, no removing, with
 Restart to put a workshop back as it started. Other keys are
 `available`, `install-all` (the browser's Install all and Remove all
 for a collection), `close` and `browse` (for an image running one
-workshop). An image built from a published collection rather than a
+workshop), and `click-hint` (the hint shown on the first action of a
+workshop to a learner who has clicked nothing). An image built from a published collection rather than a
 checkout can run `jupyter workshop install <collection-url> --root .`
 in postBuild to fetch the workshops at build time.
 The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;

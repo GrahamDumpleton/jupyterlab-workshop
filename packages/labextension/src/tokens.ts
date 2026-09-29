@@ -591,7 +591,8 @@ export const FEATURES = [
   'remove',
   'close',
   'browse',
-  'author'
+  'author',
+  'click-hint'
 ] as const;
 
 /** One of the removable features. */
