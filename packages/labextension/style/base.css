@@ -130,17 +130,6 @@
   margin: 0 0 10px;
 }
 
-.jp-WorkshopPanel-prose code,
-.jp-WorkshopPanel-quizBody code,
-.jp-WorkshopPanel-choiceText code,
-.jp-WorkshopPanel-choiceOptions code,
-.jp-WorkshopPanel-formLabel code,
-.jp-WorkshopPanel-formHelp code,
-.jp-WorkshopPanel-actionBody {
-  font-family: var(--jp-code-font-family);
-  font-size: var(--jp-code-font-size);
-}
-
 .jp-WorkshopPanel-warnings {
   margin: 0 0 10px;
   padding: 6px 8px;
@@ -168,6 +157,45 @@
 
 .jp-Workshop-role:hover code {
   background: var(--jp-layout-color3);
+}
+
+/* Inline code is sized from the text around it, not at the fixed code
+   size, so it stays in proportion inside smaller text such as quiz
+   feedback and form help. It sits a little under the surrounding size
+   because a monospace face looks larger than the interface face at the
+   same size. The theme sets the code size on every code element, and
+   the rendered Markdown styles set it to inherit, so the selectors carry
+   enough specificity to win over both. */
+.jp-ThemedContainer .jp-WorkshopPanel-prose.jp-RenderedHTMLCommon code,
+.jp-ThemedContainer .jp-WorkshopPanel .jp-WorkshopPanel-quizBody code,
+.jp-ThemedContainer .jp-WorkshopPanel .jp-WorkshopPanel-choiceText code,
+.jp-ThemedContainer .jp-WorkshopPanel .jp-WorkshopPanel-choiceOptions code,
+.jp-ThemedContainer .jp-WorkshopPanel .jp-WorkshopPanel-formLabel code,
+.jp-ThemedContainer .jp-WorkshopPanel .jp-WorkshopPanel-formHelp code,
+.jp-ThemedContainer .jp-WorkshopWelcome .jp-WorkshopWelcome-message code,
+.jp-ThemedContainer .jp-WorkshopFinish .jp-WorkshopFinish-message code {
+  font-family: var(--jp-code-font-family);
+  font-size: 0.92em;
+}
+
+/* Block code keeps the fixed code size. The :where() keeps these
+   selectors at the specificity of the inline rule above, so the order of
+   the two rules decides. */
+.jp-ThemedContainer
+  .jp-WorkshopPanel-prose.jp-RenderedHTMLCommon
+  :where(pre)
+  code,
+.jp-ThemedContainer
+  .jp-WorkshopWelcome
+  .jp-WorkshopWelcome-message
+  :where(pre)
+  code,
+.jp-ThemedContainer
+  .jp-WorkshopFinish
+  .jp-WorkshopFinish-message
+  :where(pre)
+  code {
+  font-size: var(--jp-code-font-size);
 }
 
 /* Action blocks. */
@@ -228,6 +256,8 @@
 
 .jp-WorkshopPanel-actionBody {
   margin: 0;
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
   padding: 6px 8px;
   white-space: pre-wrap;
   word-break: break-word;
