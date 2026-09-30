@@ -1774,6 +1774,10 @@ test.describe('install all', () => {
     await expect(dialog.locator('.jp-WorkshopBulk-count')).toHaveText(
       '3 workshops to install, 1 not for this platform or frontend.'
     );
+    // The dialog focuses its default button only once the browser is
+    // idle after rendering the body, so on a busy machine the Enter can
+    // otherwise land on the disabled Install all button and be dropped.
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
     await expect(cards.filter({ hasText: WORKSHOPS_DIR })).toHaveCount(0);

@@ -2601,11 +2601,24 @@ test.describe('terminal scroll', () => {
         element =>
           element.scrollHeight - element.clientHeight - element.scrollTop
       );
+    // xterm ignores the scroll event that follows its own scroll to the
+    // bottom, and the browser coalesces a scroll set in the same frame
+    // into that event, so a scroll set straight after an action's can be
+    // undone on the next refresh. Set it, give the browser two frames to
+    // undo it, and set it again if it did not hold.
     const scrollUp = async (): Promise<void> => {
-      await viewport.evaluate(element => {
-        element.scrollTop = 0;
-      });
-      await expect.poll(fromBottom).toBeGreaterThan(1000);
+      await expect
+        .poll(async () => {
+          await viewport.evaluate(async element => {
+            element.scrollTop = 0;
+            await new Promise(resolve =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve))
+            );
+          });
+
+          return fromBottom();
+        })
+        .toBeGreaterThan(1000);
     };
 
     // A command sent without waiting for it.
