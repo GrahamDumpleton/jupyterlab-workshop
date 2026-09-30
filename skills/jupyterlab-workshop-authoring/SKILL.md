@@ -259,21 +259,21 @@ use `;`.
 
 ## Actions you will use most
 
-| Directive                                                          | Purpose                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execute`                                                          | Run a command in a terminal (`:session:`, `:cwd:`, `:wait: prompt` to wait for it to finish).                                                                                                                                                                                                                                   |
-| `execute-capture`                                                  | Run a command in the background and store its output in a variable (`:capture:`).                                                                                                                                                                                                                                               |
-| `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`), or copy a shipped file with `:from:` (`:substitute: true` to fill in variables).                                                                                                                                                                        |
-| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:` with `:line:` or `:match:`, plus `:regex:` and `:occurrence:`; `editor-replace` alone takes `:expand: true`, to expand regex group references in its body; a highlight with context is a `:line:` range); edits are saved unless `:save: false`; `file-close` closes a file's tabs. |
-| `file-delete`, `file-rename`, `file-copy`, `directory-create`      | Manage files without a terminal, the same on every platform (`:path:`, `:to:` for the new path, `:recursive: true` to delete a directory, `:missing: ignore`).                                                                                                                                                                  |
-| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`. It replaces a notebook already there, the learner's work included, unless `:existing: keep`, which opens the existing one instead.                                                                                        |
-| `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).                                                                                                                                                                                                                                   |
-| `hint`                                                             | Collapsible Markdown help.                                                                                                                                                                                                                                                                                                      |
-| `verify`                                                           | A check; see below.                                                                                                                                                                                                                                                                                                             |
-| `quiz`, `form`, `choice`                                           | Questions, value entry and track selection.                                                                                                                                                                                                                                                                                     |
-| `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                                                                                                                                                                                        |
-| `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                                                                                                                                                                                             |
-| `url-open`                                                         | Open a web page in a new browser tab, or with `:pane:` in a named pane in the main area (`:url:` takes variables, `:label:` names the tab, `:area:` places a new pane).                                                                                                                                                         |
+| Directive                                                          | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `execute`                                                          | Run a command in a terminal (`:session:`, `:cwd:`, `:wait: prompt` to wait for it to finish).                                                                                                                                                                                                                                                                                                                            |
+| `execute-capture`                                                  | Run a command in the background and store its output in a variable (`:capture:`).                                                                                                                                                                                                                                                                                                                                        |
+| `file-write`                                                       | Write the body to `:path:` (`:open: true` to show it, `:mode: append`), or copy a shipped file with `:from:` (`:substitute: true` to fill in variables).                                                                                                                                                                                                                                                                 |
+| `file-open`, `editor-insert`, `editor-replace`, `editor-highlight` | Open and edit files in the editor (`:path:` with `:line:` or `:match:`, plus `:regex:` and `:occurrence:`; `editor-replace` alone takes `:expand: true`, to expand regex group references in its body; a highlight with context is a `:line:` range); edits are saved unless `:save: false`; `file-close` closes a file's tabs. `file-open` with `:factory:` opens a file in another viewer, `HTML Viewer` for a report. |
+| `file-delete`, `file-rename`, `file-copy`, `directory-create`      | Manage files without a terminal, the same on every platform (`:path:`, `:to:` for the new path, `:recursive: true` to delete a directory, `:missing: ignore`).                                                                                                                                                                                                                                                           |
+| `notebook-create`                                                  | Create a notebook from a YAML list of `- markdown: ...` and `- code: ...` cells with optional `tags`. It replaces a notebook already there, the learner's work included, unless `:existing: keep`, which opens the existing one instead.                                                                                                                                                                                 |
+| `cell-insert`, `cell-run`, `cell-run-all`, `kernel-execute`        | Add cells, run them, run code (`:path:` names the notebook; cells are found by tag or index).                                                                                                                                                                                                                                                                                                                            |
+| `hint`                                                             | Collapsible Markdown help.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `verify`                                                           | A check; see below.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `quiz`, `form`, `choice`                                           | Questions, value entry and track selection.                                                                                                                                                                                                                                                                                                                                                                              |
+| `checkpoint`, `restore`                                            | Snapshot and restore the workshop files.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `layout`, `panel-open`, `highlight`, `toast`, `tour`               | Arrange and point at the interface.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `url-open`                                                         | Open a web page in a new browser tab, or with `:pane:` in a named pane in the main area (`:url:` takes variables, `:label:` names the tab, `:area:` places a new pane).                                                                                                                                                                                                                                                  |
 
 The full table with every option is in `references/actions.md`, and
 `references/pages.md` covers the page syntax, the common options and how
@@ -302,41 +302,51 @@ Four ways to point the learner at a web page, and when each fits:
   The browser only allows a new tab on a click, so this cannot run with
   `:auto:`; lint warns.
 
-- `command` with `docmanager:open` and `"factory": "HTML Viewer"` for an
-  HTML file the workshop ships or a command has written, such as a
-  report or a profiler's output. Do not reach for `help:open` through
-  `command`: `url-open` does the same with a reusable pane.
+- `file-open` with `:factory: HTML Viewer` for an HTML file the workshop
+  ships or a command has written, such as a report or a profiler's
+  output. It goes where `:area:` says like any other file, and a
+  re-run that rewrites the file shows the new one on the next click.
+  Do not reach for `help:open` through `command`: `url-open` does the
+  same with a reusable pane.
 
 JupyterLab's HTML viewer loads its file again every time its tab is
 brought back into view, so the page is back at the top and anything
 the learner did in it, a section they expanded or a panel they opened,
 is gone. Never ask the learner to go back and forth between two HTML
 files open as tabs of one area. Open the second one split below the
-first, so both stay in view, with the `options` argument of
-`docmanager:open`:
+first, so both stay in view:
 
 ````markdown
-```{command}
-:title: Open the second report below the first
-:command: docmanager:open
-{ "path": "{{ workspace }}/after/index.html", "factory": "HTML Viewer", "options": { "mode": "split-bottom" } }
+```{file-open}
+:title: Open the report from before
+:path: before/index.html
+:factory: HTML Viewer
+```
+
+```{file-open}
+:title: Open the report from after below it
+:path: after/index.html
+:factory: HTML Viewer
+:area: bottom
 ```
 ````
 
-`mode` places the new tab relative to the current one: `split-bottom`
-or `split-top` stacks them, `split-left` or `split-right` puts them
-side by side, and `tab-after` makes an ordinary tab. Prefer a
-top-and-bottom split for HTML pages: the instructions panel already
-takes about a third of the window, and two pages side by side in the
-rest are each too narrow to read. Run the action for the first file
-before the one for the second, since the split is made from whatever
-tab is current when the action runs. Placement applies only when the
-file is first opened: `docmanager:open` on a file that is already open
-brings its existing tab forward wherever it is, so where a learner may
-have opened the file already, or a restart may have left it open, run
-`file-close` on it first. A single HTML file in an area of its own,
-with the terminal elsewhere, has no such problem; it reloads only when
-another tab in its area covers it.
+`:area: bottom` splits off below the current tab, `:area: right`
+beside it, and a layout area name puts the file in that area. Prefer
+below for HTML pages: the instructions panel already takes about a
+third of the window, and two pages side by side in the rest are each
+too narrow to read. Run the action for the first file before the one
+for the second, since the split is made from whatever tab is current
+when the action runs. A file that is already open is moved to the area
+asked for, so this works whether or not the learner opened the file
+earlier. A single HTML file in an area of its own, with the terminal
+elsewhere, has no such problem; it reloads only when another tab in
+its area covers it.
+
+`command` with `docmanager:open` still serves the arguments `file-open`
+does not have, such as `"options": { "ref": ... }` to place a tab
+beside a widget by id, but it knows nothing of layout areas and leaves
+an already open file where it is.
 
 ## Checks
 

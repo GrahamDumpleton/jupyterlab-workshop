@@ -82,6 +82,17 @@ ls -la
 Get-ChildItem
 ```
 
+A file opens in the editor unless the action names another of
+JupyterLab's viewers, here the rendered preview of the notes, placed
+below the editor.
+
+```{file-open}
+:id: preview-notes
+:path: notes.md
+:factory: Markdown Preview
+:area: bottom
+```
+
 When a file is no longer needed on screen, an action can close its tabs,
 whether the editor, a preview or both.
 

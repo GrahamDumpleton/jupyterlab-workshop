@@ -246,6 +246,10 @@ file for one step without declaring a layout for it.
 
 Three keywords place relative to the current widget instead: `tab` puts
 the widget beside it, `right` and `bottom` split it off to that side.
+The placement does not depend on what the file opens in: `file-open`
+with `factory` puts an HTML report, or any other viewer, in an area the
+same way as the editor, so two reports a learner compares can be opened
+one below the other with `bottom` on the second.
 
 Without `area`, a document goes beside the first document the layout
 holds, or into the placeholder when there is none, and a terminal goes

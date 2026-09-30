@@ -28,7 +28,7 @@ something names the layout area it goes in; see
 | Directive             | Capability  | Body     | Options                                                             | Description                                                                              |
 | --------------------- | ----------- | -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `file-write`          | write-files | optional | `path`, `open`, `mode`, `from`, `area`                              | Write the body, or a file shipped with the workshop, to a file.                          |
-| `file-open`           | none        | none     | `path`, `line`, `area`                                              | Open a file in the editor, optionally at a line.                                         |
+| `file-open`           | none        | none     | `path`, `line`, `area`, `factory`                                   | Open a file in the editor, optionally at a line, or in another viewer.                   |
 | `file-close`          | none        | none     | `path`                                                              | Close every editor and preview showing a file.                                           |
 | `file-delete`         | write-files | none     | `path`, `recursive`, `missing`                                      | Delete a file, or a directory and its contents, closing its tabs.                        |
 | `file-rename`         | write-files | none     | `path`, `to`                                                        | Rename or move a file or directory, following it in open tabs.                           |
@@ -60,6 +60,19 @@ centred, so it has context on both sides. Either way a position that is
 already in view is left where it is, and the ends of the file limit
 the scroll, so a match near the top sits as far down as the lines
 before it allow.
+
+`file-open` opens a file in the text editor unless `factory` names
+another of JupyterLab's widget factories, as `docmanager:open` takes
+it: `HTML Viewer` for an HTML report a command has written, `Markdown
+Preview`, `CSVTable`, `JSON` and so on, whatever the JupyterLab in use
+registers, with the name's case not mattering. The file goes where
+`area` says either way (see [layouts](layouts.md#where-actions-open-things)),
+and a file already open with that factory is brought forward, reloaded
+from disk when it has no unsaved changes, and moved only when `area`
+asks. An unknown factory name is reported when the action runs, since
+the factories a deployment has are only known then; `line` goes with
+the editor alone, and the linter reports `invalid-file-open` for a line
+with any other factory.
 
 `file-delete` refuses the workshop directory and its `_workshop` state
 directory however the path is spelt, and refuses a directory unless

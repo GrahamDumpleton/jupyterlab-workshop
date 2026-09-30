@@ -195,6 +195,47 @@ ls
     ]);
   });
 
+  it('allows a line only with the text editor factory of file-open', () => {
+    expect(
+      rules(`
+\`\`\`{file-open}
+:path: report.html
+:factory: HTML Viewer
+\`\`\`
+
+\`\`\`{file-open}
+:path: main.py
+:factory: editor
+:line: 3
+\`\`\`
+
+\`\`\`{file-open}
+:path: main.py
+:factory: {{ viewer }}
+:line: 3
+\`\`\`
+`).filter(rule => rule === 'invalid-file-open')
+    ).toEqual([]);
+
+    const messages = lint(`
+\`\`\`{file-open}
+:path: report.html
+:factory: HTML Viewer
+:line: 3
+\`\`\`
+
+\`\`\`{file-open}
+:path: report.html
+:factory:
+\`\`\`
+`).filter(message => message.rule === 'invalid-file-open');
+
+    expect(messages.map(message => message.message)).toEqual([
+      expect.stringContaining('only be opened in the text editor'),
+      expect.stringContaining('A factory needs a name')
+    ]);
+  });
+
   it('checks chain targets exist', () => {
     const messages = lint(
       `---

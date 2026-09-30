@@ -10,7 +10,11 @@ import {
   actionSupportsFrontend,
   isActionType
 } from '../actions/catalog';
-import { EDITOR_ACTIONS, editorTargetProblems } from '../actions/editor';
+import {
+  EDITOR_ACTIONS,
+  EDITOR_FACTORY,
+  editorTargetProblems
+} from '../actions/editor';
 import { parseForm } from '../checks/form';
 import { parseRequirement } from '../checks/gating';
 import { parseQuiz } from '../checks/quiz';
@@ -222,6 +226,10 @@ function lintChecks(input: ILintInput, messages: ILintMessage[]): void {
 
         case 'file-delete':
           problems.push(...fileDeleteProblems(node.options));
+          break;
+
+        case 'file-open':
+          problems.push(...fileOpenProblems(node.options));
           break;
 
         case 'notebook-create':
@@ -795,6 +803,36 @@ export function fileDeleteProblems(options: Record<string, string>): string[] {
     !['ignore', 'error'].includes(options.missing)
   ) {
     return [`Unknown missing "${options.missing}", expected ignore or error`];
+  }
+
+  return [];
+}
+
+/**
+ * Problems with the options of a `file-open` action: a `factory` that
+ * names nothing, or a `line` with a factory other than the text editor,
+ * since only the editor has lines to go to. A substituted factory is
+ * not judged; the action reports it at run time.
+ */
+export function fileOpenProblems(options: Record<string, string>): string[] {
+  if (options.factory === undefined) {
+    return [];
+  }
+
+  const factory = options.factory.trim();
+
+  if (factory === '') {
+    return ['A factory needs a name, such as "HTML Viewer"'];
+  }
+
+  if (
+    options.line !== undefined &&
+    !factory.includes('{{') &&
+    factory.toLowerCase() !== EDITOR_FACTORY.toLowerCase()
+  ) {
+    return [
+      `A line can only be opened in the text editor, not with factory "${factory}"`
+    ];
   }
 
   return [];

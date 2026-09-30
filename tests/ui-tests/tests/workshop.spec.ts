@@ -710,6 +710,147 @@ test.describe('workshop panel', () => {
       );
   });
 
+  test('opens a file in the viewer its factory names, where the area says', async ({
+    page,
+    tmpPath
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    const viewed = `${tmpPath}/viewed`;
+
+    await page.contents.uploadDirectory(EXAMPLE_DIR, viewed);
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: viewed',
+        'title: Viewed',
+        'capabilities: [terminal, write-files]',
+        'layout: default',
+        'layouts:',
+        '  default:',
+        '    main:',
+        '      areas:',
+        '        - { tabs: ["file:../pages/01-create-a-repository.md"] }',
+        '        - { size: 0.4, tabs: ["terminal:shell"] }',
+        'pages:',
+        '  - pages/viewed.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${viewed}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '---',
+        'title: Viewed',
+        '---',
+        '',
+        '```{file-write}',
+        ':id: write-before',
+        ':path: before.html',
+        '<h1>Before, first run</h1>',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: write-after',
+        ':path: after.html',
+        '<h1>After</h1>',
+        '```',
+        '',
+        '```{file-open}',
+        ':id: open-before',
+        ':path: before.html',
+        ':factory: html viewer',
+        '```',
+        '',
+        '```{file-open}',
+        ':id: open-after',
+        ':path: after.html',
+        ':factory: HTML Viewer',
+        ':area: bottom',
+        '```',
+        '',
+        '```{file-write}',
+        ':id: rewrite-before',
+        ':path: before.html',
+        '<h1>Before, second run</h1>',
+        '```',
+        '',
+        '```{file-open}',
+        ':id: open-unknown',
+        ':path: before.html',
+        ':factory: No Such Viewer',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${viewed}/pages/viewed.md`
+    );
+    await openWorkshop(page, viewed);
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([01-create-a-repository.md] [jupyterlab-workshop-terminal-shell])'
+      );
+
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const run = async (id: string): Promise<void> => {
+      const action = panel.locator(`[data-action-id="${id}"]`);
+
+      await action.click();
+      await expect(action).toHaveClass(/jp-mod-status-ok/);
+    };
+    const viewers = page.locator('.jp-HTMLViewer');
+    const heading = (index: number): import('@playwright/test').Locator =>
+      viewers.nth(index).frameLocator('iframe').locator('h1');
+
+    await run('write-before');
+    await run('write-after');
+
+    // With no area, the viewer joins the layout's first document as a
+    // tab, and the factory name is matched whatever its case.
+    await run('open-before');
+    await expect(viewers).toHaveCount(1);
+    await expect(heading(0)).toHaveText('Before, first run');
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([01-create-a-repository.md,before.html] [jupyterlab-workshop-terminal-shell])'
+      );
+
+    // A second click finds the viewer that is open rather than adding
+    // another, which the exact-case lookup alone would not.
+    await run('open-before');
+    await expect(viewers).toHaveCount(1);
+
+    // The area keyword splits below the current tab, the first viewer.
+    await run('open-after');
+    await expect(viewers).toHaveCount(2);
+    await expect(heading(1)).toHaveText('After');
+    await expect
+      .poll(() => dockShape(page))
+      .toBe(
+        'rows([01-create-a-repository.md,before.html] [after.html] [jupyterlab-workshop-terminal-shell])'
+      );
+
+    // A file rewritten since it was opened is reloaded on the next open,
+    // so the viewer shows the new content.
+    await run('rewrite-before');
+    await run('open-before');
+    await expect(heading(0)).toHaveText('Before, second run');
+    await expect(viewers).toHaveCount(2);
+
+    // A factory the deployment does not have is an action error.
+    const unknown = panel.locator('[data-action-id="open-unknown"]');
+
+    await unknown.click();
+    await expect(unknown).toHaveClass(/jp-mod-status-error/);
+    await expect(unknown).toContainText('Unknown widget factory');
+  });
+
   test('lists missing tools in a banner and in missing_tools', async ({
     page,
     tmpPath

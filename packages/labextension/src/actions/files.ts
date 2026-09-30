@@ -6,6 +6,7 @@ import { IDocumentManager } from '@jupyterlab/docmanager';
 import { DocumentRegistry, IDocumentWidget } from '@jupyterlab/docregistry';
 import { FileEditor, IEditorTracker } from '@jupyterlab/fileeditor';
 import {
+  EDITOR_FACTORY,
   EditorTarget,
   IOffsetSpan,
   expandReplacement,
@@ -34,9 +35,6 @@ import {
 import { LayoutManager } from '../layout';
 import { requireOption } from './registry';
 import { TerminalSessions } from './terminal';
-
-/** Widget factory name of the JupyterLab text editor. */
-const EDITOR_FACTORY = 'Editor';
 
 /** Services the file actions need. */
 export interface IFileActionContext {
@@ -149,7 +147,8 @@ export class FileWriteAction implements IActionImplementation {
 }
 
 /**
- * The `file-open` action: open a file in the editor, optionally at a line.
+ * The `file-open` action: open a file in the editor, optionally at a
+ * line, or in the viewer whose widget factory `factory` names.
  */
 export class FileOpenAction implements IActionImplementation {
   readonly type = 'file-open';
@@ -160,15 +159,19 @@ export class FileOpenAction implements IActionImplementation {
 
   describe(request: IActionRequest): string {
     const line = request.options.line ? ` at line ${request.options.line}` : '';
+    const factory = request.options.factory
+      ? ` in the ${request.options.factory}`
+      : '';
 
-    return `Open ${request.options.path ?? '(no path)'}${line}`;
+    return `Open ${request.options.path ?? '(no path)'}${line}${factory}`;
   }
 
   async run(request: IActionRequest): Promise<IActionResult> {
     const path = requireOption(request, 'path');
-    const widget = await openEditor(
+    const widget = await openDocument(
       this._context,
       this._context.manager.resolvePath(path),
+      request.options.factory ?? EDITOR_FACTORY,
       request.options.area
     );
 
@@ -179,6 +182,13 @@ export class FileOpenAction implements IActionImplementation {
         return {
           status: 'error',
           message: `Invalid line "${request.options.line}"`
+        };
+      }
+
+      if (!isFileEditor(widget)) {
+        return {
+          status: 'error',
+          message: `A line can only be opened in the text editor, not with factory "${request.options.factory}"`
         };
       }
 
@@ -795,11 +805,31 @@ export async function openEditor(
   serverPath: string,
   area?: string
 ): Promise<IDocumentWidget<FileEditor>> {
-  const existing = findEditor(context.docManager, serverPath) !== undefined;
+  const widget = await openDocument(context, serverPath, EDITOR_FACTORY, area);
+
+  return asFileEditor(widget, serverPath);
+}
+
+/**
+ * Open a file with the widget factory named, the text editor or a
+ * viewer, where its `area`, or the workshop's layout, says, and wait
+ * until it is ready. A file already open with that factory is revealed
+ * and, when unmodified, reloaded from disk; it is moved only when an
+ * area is asked for.
+ */
+export async function openDocument(
+  context: IFileActionContext,
+  serverPath: string,
+  factory: string,
+  area?: string
+): Promise<IDocumentWidget> {
+  const name = factoryName(context.app, factory);
+  const existing =
+    context.docManager.findWidget(serverPath, name) !== undefined;
   const options = existing
     ? undefined
     : context.layouts.placement('document', area);
-  const widget = await openEditorWidget(context, serverPath, options);
+  const widget = await openDocumentWidget(context, serverPath, name, options);
 
   await context.layouts.place(widget, 'document', area, {
     existed: existing,
@@ -816,15 +846,43 @@ export async function openEditor(
  */
 export async function openEditorWidget(
   context: {
+    app: JupyterFrontEnd;
     docManager: IDocumentManager;
   },
   serverPath: string,
   options?: DocumentRegistry.IOpenOptions
 ): Promise<IDocumentWidget<FileEditor>> {
-  const existing = findEditor(context.docManager, serverPath);
-  const widget = context.docManager.openOrReveal(
+  const widget = await openDocumentWidget(
+    context,
     serverPath,
     EDITOR_FACTORY,
+    options
+  );
+
+  return asFileEditor(widget, serverPath);
+}
+
+/**
+ * Open a file with a widget factory and the shell options given, or
+ * where JupyterLab puts it, and wait until it is ready. A file already
+ * open with that factory is revealed where it is and, when unmodified,
+ * reloaded from disk, so a viewer shows what a command has since
+ * written; the shell options apply only to a widget being opened.
+ */
+export async function openDocumentWidget(
+  context: {
+    app: JupyterFrontEnd;
+    docManager: IDocumentManager;
+  },
+  serverPath: string,
+  factory: string,
+  options?: DocumentRegistry.IOpenOptions
+): Promise<IDocumentWidget> {
+  const name = factoryName(context.app, factory);
+  const existing = context.docManager.findWidget(serverPath, name);
+  const widget = context.docManager.openOrReveal(
+    serverPath,
+    name,
     undefined,
     existing ? undefined : options
   );
@@ -835,15 +893,27 @@ export async function openEditorWidget(
 
   await widget.context.ready;
 
-  if (!isFileEditor(widget)) {
-    throw new Error(`${serverPath} did not open in the text editor`);
-  }
-
   if (existing && !widget.context.model.dirty) {
     await widget.context.revert();
   }
 
   return widget;
+}
+
+/**
+ * The registered name of a widget factory, however the author spelt its
+ * case: the document manager opens a factory by its lowercased name but
+ * finds an open widget only by the exact one, so a name written in the
+ * wrong case would open a second widget every time.
+ */
+function factoryName(app: JupyterFrontEnd, factory: string): string {
+  const registered = app.docRegistry.getWidgetFactory(factory.trim());
+
+  if (!registered) {
+    throw new Error(`Unknown widget factory "${factory}"`);
+  }
+
+  return registered.name;
 }
 
 function findEditor(
@@ -853,6 +923,17 @@ function findEditor(
   const widget = docManager.findWidget(serverPath, EDITOR_FACTORY);
 
   return widget && isFileEditor(widget) ? widget : undefined;
+}
+
+function asFileEditor(
+  widget: IDocumentWidget,
+  serverPath: string
+): IDocumentWidget<FileEditor> {
+  if (!isFileEditor(widget)) {
+    throw new Error(`${serverPath} did not open in the text editor`);
+  }
+
+  return widget;
 }
 
 function isFileEditor(

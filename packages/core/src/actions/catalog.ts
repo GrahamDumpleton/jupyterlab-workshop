@@ -199,10 +199,10 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       spec(
         'file-open',
         'files',
-        'Open a file in the editor, optionally at a line.',
+        'Open a file in the editor, optionally at a line, or in another viewer.',
         'none',
         'none',
-        ['path', 'line', 'area']
+        ['path', 'line', 'area', 'factory']
       ),
       spec(
         'file-close',

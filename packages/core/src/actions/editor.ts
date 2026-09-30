@@ -9,6 +9,12 @@
  * and the extension agree on what an option means.
  */
 
+/**
+ * JupyterLab's name for the widget factory of its text editor, the
+ * factory `file-open` uses unless told another.
+ */
+export const EDITOR_FACTORY = 'Editor';
+
 /** The editor actions that share the targeting options. */
 export const EDITOR_ACTIONS: readonly string[] = [
   'editor-select',
