@@ -435,9 +435,21 @@ export class TerminalSessions {
    * so an empty paste is made for the scroll that comes with it, and
    * what that paste sends, which is nothing or the markers of a
    * bracketed paste, is dropped where the connection's send is wrapped.
+   *
+   * A terminal that has not yet been opened on the page needs no scroll,
+   * and cannot take a paste: the widget opens its xterm in a later
+   * update once it is visible, and pasting before then throws, since
+   * the text area the paste clears does not exist yet. That is the case
+   * for a terminal an action has just started, once a first terminal
+   * has loaded xterm and a second is ready as soon as it is built. The
+   * text area is the sign the terminal has opened.
    */
   private _reveal(widget: MainAreaWidget<Terminal>): void {
     this._shell.activateById(widget.id);
+
+    if (!widget.content.node.querySelector('textarea')) {
+      return;
+    }
 
     this._scrolling = true;
 
