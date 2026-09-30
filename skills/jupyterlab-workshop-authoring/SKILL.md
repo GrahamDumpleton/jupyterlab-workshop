@@ -303,8 +303,40 @@ Four ways to point the learner at a web page, and when each fits:
   `:auto:`; lint warns.
 
 - `command` with `docmanager:open` and `"factory": "HTML Viewer"` for an
-  HTML file the workshop ships. Do not reach for `help:open` through
+  HTML file the workshop ships or a command has written, such as a
+  report or a profiler's output. Do not reach for `help:open` through
   `command`: `url-open` does the same with a reusable pane.
+
+JupyterLab's HTML viewer loads its file again every time its tab is
+brought back into view, so the page is back at the top and anything
+the learner did in it, a section they expanded or a panel they opened,
+is gone. Never ask the learner to go back and forth between two HTML
+files open as tabs of one area. Open the second one split below the
+first, so both stay in view, with the `options` argument of
+`docmanager:open`:
+
+````markdown
+```{command}
+:title: Open the second report below the first
+:command: docmanager:open
+{ "path": "{{ workspace }}/after/index.html", "factory": "HTML Viewer", "options": { "mode": "split-bottom" } }
+```
+````
+
+`mode` places the new tab relative to the current one: `split-bottom`
+or `split-top` stacks them, `split-left` or `split-right` puts them
+side by side, and `tab-after` makes an ordinary tab. Prefer a
+top-and-bottom split for HTML pages: the instructions panel already
+takes about a third of the window, and two pages side by side in the
+rest are each too narrow to read. Run the action for the first file
+before the one for the second, since the split is made from whatever
+tab is current when the action runs. Placement applies only when the
+file is first opened: `docmanager:open` on a file that is already open
+brings its existing tab forward wherever it is, so where a learner may
+have opened the file already, or a restart may have left it open, run
+`file-close` on it first. A single HTML file in an area of its own,
+with the terminal elsewhere, has no such problem; it reloads only when
+another tab in its area covers it.
 
 ## Checks
 
