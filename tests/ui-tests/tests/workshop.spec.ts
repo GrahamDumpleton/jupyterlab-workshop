@@ -2391,3 +2391,110 @@ test.describe('workshop prompt', () => {
     expect(output).not.toContain('WORKSHOP_DONE');
   });
 });
+
+test.describe('terminal scroll', () => {
+  test('scrolls a terminal to its prompt before an action types into it', async ({
+    page,
+    tmpPath
+  }) => {
+    // A workshop that prints more than a screen, then runs commands by
+    // both ways an action has of sending one.
+    const scrolled = `${tmpPath}/scrolled`;
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: scrolled',
+        'title: Scrolled',
+        'version: 0.1.0',
+        'description: Terminal scroll.',
+        'capabilities: [terminal]',
+        'pages:',
+        '  - pages/01-scroll.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${scrolled}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      [
+        '# Scroll',
+        '',
+        '```{execute}',
+        ':id: fill',
+        ':wait: prompt',
+        'seq 1 300',
+        '```',
+        '',
+        '```{execute}',
+        ':id: sent',
+        'echo sent',
+        '```',
+        '',
+        '```{execute}',
+        ':id: waited',
+        ':wait: prompt',
+        'echo waited',
+        '```',
+        ''
+      ].join('\n'),
+      'text',
+      `${scrolled}/pages/01-scroll.md`
+    );
+    await openWorkshop(page, scrolled);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const fill = panel.locator('[data-action-id="fill"]');
+
+    await fill.click();
+    await expect(fill).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+
+    // How far the terminal is from its last line, read from the element
+    // that scrolls it, and the same element used to scroll it away.
+    const viewport = page.locator(
+      '#jupyterlab-workshop-terminal-workshop .xterm-viewport'
+    );
+    const fromBottom = (): Promise<number> =>
+      viewport.evaluate(
+        element =>
+          element.scrollHeight - element.clientHeight - element.scrollTop
+      );
+    const scrollUp = async (): Promise<void> => {
+      await viewport.evaluate(element => {
+        element.scrollTop = 0;
+      });
+      await expect.poll(fromBottom).toBeGreaterThan(1000);
+    };
+
+    // A command sent without waiting for it.
+    const sent = panel.locator('[data-action-id="sent"]');
+
+    await scrollUp();
+    await sent.click();
+    await expect(sent).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await expect.poll(fromBottom).toBeLessThan(1);
+
+    // A command whose prompt is waited for.
+    const waited = panel.locator('[data-action-id="waited"]');
+
+    await scrollUp();
+    await waited.click();
+    await expect(waited).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await expect.poll(fromBottom).toBeLessThan(1);
+
+    // A terminal scrolled up and then left behind another tab.
+    await scrollUp();
+    await page.evaluate(async () => {
+      const exposed = window as unknown as IExposedApp;
+
+      await exposed.jupyterapp.commands.execute('launcher:create', {});
+    });
+    await expect(viewport).toBeHidden();
+
+    await sent.click();
+    await expect(sent).toHaveClass(/jp-mod-status-ok/, { timeout: 30000 });
+    await expect(viewport).toBeVisible();
+    await expect.poll(fromBottom).toBeLessThan(1);
+  });
+});

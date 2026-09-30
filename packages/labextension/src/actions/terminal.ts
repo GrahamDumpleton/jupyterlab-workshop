@@ -315,6 +315,12 @@ export class TerminalSessions {
     session.messageReceived.connect(onMessage);
 
     session.send = (message: TerminalService.IMessage): void => {
+      // The empty paste that scrolls the terminal is not input, so it
+      // goes no further: not to the shell and not to the recorder.
+      if (this._scrolling) {
+        return;
+      }
+
       if (message.type === 'stdin' && message.content) {
         const text = message.content.map(String).join('');
 
@@ -420,13 +426,36 @@ export class TerminalSessions {
   }
 
   /**
+   * Bring a terminal into view, scrolled to its prompt, as it would be
+   * had the learner typed what an action is about to send.
+   *
+   * The terminal scrolls to the bottom by itself only for input that
+   * passes through it, which typing and pasting do and text sent on the
+   * connection does not. The terminal widget has no method that scrolls,
+   * so an empty paste is made for the scroll that comes with it, and
+   * what that paste sends, which is nothing or the markers of a
+   * bracketed paste, is dropped where the connection's send is wrapped.
+   */
+  private _reveal(widget: MainAreaWidget<Terminal>): void {
+    this._shell.activateById(widget.id);
+
+    this._scrolling = true;
+
+    try {
+      widget.content.paste('');
+    } finally {
+      this._scrolling = false;
+    }
+  }
+
+  /**
    * Send text to the terminal for a session name, starting it if needed,
-   * and bring the terminal into view.
+   * and bring the terminal into view, scrolled to its prompt.
    */
   async send(name: string, text: string, cwd?: string): Promise<void> {
     const widget = await this.get(name, { cwd });
 
-    this._shell.activateById(widget.id);
+    this._reveal(widget);
     this._write(widget.content.session, text);
   }
 
@@ -537,7 +566,7 @@ export class TerminalSessions {
       const done = this.waitForPrompts(name, lines, timeoutMs);
 
       if (options.activate) {
-        this._shell.activateById(widget.id);
+        this._reveal(widget);
       }
 
       this._write(widget.content.session, text);
@@ -566,7 +595,7 @@ export class TerminalSessions {
       const widget = await this.get(name, { cwd: options.cwd });
 
       if (options.activate) {
-        this._shell.activateById(widget.id);
+        this._reveal(widget);
       }
 
       return this._echoed(name, widget.content.session, text, timeoutMs);
@@ -696,6 +725,7 @@ export class TerminalSessions {
   private _queue = new Map<string, Promise<void>>();
   private _lastOutput = new Map<string, number>();
   private _markers = 0;
+  private _scrolling = false;
   private _prompts = new Signal<this, { name: string; marker: IPromptMarker }>(
     this
   );
