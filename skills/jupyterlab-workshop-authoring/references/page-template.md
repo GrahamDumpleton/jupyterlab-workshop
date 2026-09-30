@@ -3,7 +3,7 @@
 A complete page showing the usual shape: context, an action, a file, a
 check and a question. Copy it and replace the specifics.
 
-````markdown
+`````markdown
 ---
 title: Your first commit
 requires: [verify:first-commit, quiz:staging]
@@ -52,11 +52,17 @@ out = subprocess.run(
 assert out.strip(), "No commits yet: run the git commit command above"
 ```
 
-```{hint}
+````{hint}
 :title: If git asks who you are
+Git refuses the commit with:
+
+```
+Author identity unknown
+```
+
 Set your name and email once with `git config user.name` and
 `git config user.email`, then run the commit again.
-```
+````
 
 ```{quiz}
 :id: staging
@@ -67,7 +73,7 @@ options:
   - { text: Uploads to a server, explanation: "That is `git push`." }
 explanation: "`git add` stages changes; `git commit` records what is staged."
 ```
-````
+`````
 
 Notes on the template:
 
@@ -80,3 +86,7 @@ Notes on the template:
 
 - The verify uses the default `kernel` substrate because `.git` is hidden
   from the `contents` substrate.
+
+- The `hint` quotes a code block, so it is fenced with four backticks
+  against the block's three; with three, the block's fence would close
+  the hint.

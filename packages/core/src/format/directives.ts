@@ -20,6 +20,13 @@ export interface IDirectiveContent {
 
   /** The body text following the options, without a trailing newline. */
   body: string;
+
+  /**
+   * Zero-based line of the block's content at which the body starts: the
+   * number of option lines, plus one for the blank line that may follow
+   * them.
+   */
+  bodyStart: number;
 }
 
 import { MARKER_NAMES } from './variants';
@@ -67,5 +74,5 @@ export function parseDirectiveContent(content: string): IDirectiveContent {
     index += 1;
   }
 
-  return { options, body: lines.slice(index).join('\n') };
+  return { options, body: lines.slice(index).join('\n'), bodyStart: index };
 }

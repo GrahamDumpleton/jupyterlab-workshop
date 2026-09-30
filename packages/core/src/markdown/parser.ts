@@ -46,8 +46,26 @@ export interface IRenderEnv {
   /** Problems found while parsing, in page order. */
   warnings: string[];
 
+  /**
+   * Mistakes the parser is sure of, in page order. Unlike `warnings`,
+   * which are shown on the page, these are reported by lint as errors
+   * under the rule each names.
+   */
+  problems: IPageProblem[];
+
   /** Number of directives seen so far on the page. */
   directiveCount: number;
+}
+
+/** A mistake in a page's source that lint reports as an error. */
+export interface IPageProblem {
+  /** The lint rule the problem is reported under. */
+  rule: string;
+
+  message: string;
+
+  /** One-based line within the page source. */
+  line: number;
 }
 
 /** Metadata attached to a directive token. */
@@ -57,6 +75,9 @@ export interface IDirectiveMeta {
   id: string;
   options: Record<string, string>;
   body: string;
+
+  /** Zero-based line of the fence's content at which the body starts. */
+  bodyStart: number;
 
   /** Every platform and frontend alternative of the body, when it has any. */
   variants?: Record<string, string>;
@@ -152,6 +173,7 @@ export function createRenderEnv(
     platform,
     frontend,
     warnings: [],
+    problems: [],
     directiveCount: 0
   };
 }
@@ -178,7 +200,7 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       continue;
     }
 
-    const { options, body } = parseDirectiveContent(token.content);
+    const { options, body, bodyStart } = parseDirectiveContent(token.content);
 
     // Ids are assigned later, in document order, once nested content has
     // been parsed; see `assignDirectiveId`.
@@ -187,7 +209,8 @@ function directiveRule(state: MarkdownIt.StateCore): void {
       argument: info.argument,
       id: options.id ?? '',
       options,
-      body
+      body,
+      bodyStart
     };
 
     // Command and text bodies may carry platform and frontend variants;

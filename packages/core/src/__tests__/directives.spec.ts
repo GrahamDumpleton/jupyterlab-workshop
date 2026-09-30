@@ -31,14 +31,16 @@ describe('parseDirectiveContent', () => {
 
     expect(parseDirectiveContent(content)).toEqual({
       options: { session: 'git', cwd: 'demo', flag: '' },
-      body: 'git status'
+      body: 'git status',
+      bodyStart: 4
     });
   });
 
   it('treats a block without options as all body', () => {
     expect(parseDirectiveContent('echo one\necho two\n')).toEqual({
       options: {},
-      body: 'echo one\necho two'
+      body: 'echo one\necho two',
+      bodyStart: 0
     });
   });
 
@@ -47,7 +49,8 @@ describe('parseDirectiveContent', () => {
       parseDirectiveContent(':path: a.txt\nline: not an option\n:x: y\n')
     ).toEqual({
       options: { path: 'a.txt' },
-      body: 'line: not an option\n:x: y'
+      body: 'line: not an option\n:x: y',
+      bodyStart: 1
     });
   });
 });

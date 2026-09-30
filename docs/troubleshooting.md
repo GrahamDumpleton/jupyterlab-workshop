@@ -125,6 +125,13 @@ open keeps its directory. Run `cd` as a step, or name a new session.
 unsaved changes.** A document with unsaved edits asks before it is
 closed, as closing its tab would. Save or discard it and try again.
 
+**Prose after a `hint` or `when` shows as a code block, or a `{when}`
+line and its options show as text.** The directive holds a fenced code
+block and is fenced with the same three backticks, so the inner fence
+closed it early. Fence the directive with four backticks. `jupyter
+workshop lint` reports it as `nested-fence` with the lines involved.
+See [directives](pages.md#directives).
+
 **A notebook opens on Python 3 instead of the workshop's kernel, and
 imports fail.** The notebook was created before the environment was
 ready, or on a JupyterLab whose kernel list did not yet have the

@@ -5,6 +5,7 @@ import { WorkshopFormatError } from '../errors';
 import {
   DIRECTIVE_TOKEN,
   IDirectiveMeta,
+  IPageProblem,
   IRenderEnv,
   assignDirectiveId,
   createRenderEnv,
@@ -12,6 +13,8 @@ import {
 } from '../markdown/parser';
 import { pathStem } from '../util';
 import { Variables } from '../variables/substitute';
+import { parseDirectiveInfo } from './directives';
+import { closesFence, fenceLine, unclosedFence } from './fences';
 import { splitFrontmatter } from './frontmatter';
 
 /** Recognised page front matter fields. */
@@ -84,6 +87,9 @@ export interface IPage {
   frontmatter: IPageFrontmatter;
   nodes: PageNode[];
   warnings: string[];
+
+  /** Mistakes in the source that lint reports as errors; see `IPageProblem`. */
+  problems: IPageProblem[];
 }
 
 /** Inputs to page parsing. */
@@ -125,7 +131,7 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     options.frontend
   );
   const tokens = md.parse(body, env);
-  const nodes = tokensToNodes(tokens, md, env, bodyLine);
+  const nodes = tokensToNodes(tokens, md, env, body, bodyLine);
 
   return {
     path,
@@ -133,7 +139,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     title: frontmatter.title ?? firstHeading(tokens) ?? pathStem(path),
     frontmatter,
     nodes,
-    warnings: env.warnings
+    warnings: env.warnings,
+    problems: env.problems
   };
 }
 
@@ -202,14 +209,22 @@ function parseFrontmatter(
   };
 }
 
+/**
+ * Split a token stream at its top-level directives, rendering the prose
+ * between them to HTML. The tokens were parsed from `source`, whose first
+ * line is line `lineOffset + 1` of the page; a `when` body is parsed on
+ * its own, so its tokens come through here with the body as the source
+ * and `nested` set.
+ */
 function tokensToNodes(
   tokens: MarkdownIt.Token[],
   md: MarkdownIt,
   env: IRenderEnv,
-  lineOffset: number
+  source: string,
+  lineOffset: number,
+  nested = false
 ): PageNode[] {
-  // Split the token stream at top-level directives, rendering the prose
-  // between them to HTML.
+  const lines = source.split('\n');
   const nodes: PageNode[] = [];
   let segment: MarkdownIt.Token[] = [];
 
@@ -224,6 +239,10 @@ function tokensToNodes(
   };
 
   for (const token of tokens) {
+    if (token.type === 'fence' || token.type === DIRECTIVE_TOKEN) {
+      checkFences(token, lines, lineOffset, nested, env);
+    }
+
     if (token.type !== DIRECTIVE_TOKEN) {
       segment.push(token);
       continue;
@@ -285,15 +304,144 @@ function whenNode(
   }
 
   // The body is a Markdown document of its own, so nested directives are
-  // top-level fences within it and parse normally.
+  // top-level fences within it and parse normally. Its first line is the
+  // one after the opening fence and the options.
   const tokens = md.parse(meta.body, env);
 
   return {
     kind: 'when',
     condition,
-    nodes: tokensToNodes(tokens, md, env, line),
+    nodes: tokensToNodes(
+      tokens,
+      md,
+      env,
+      meta.body,
+      line + meta.bodyStart,
+      true
+    ),
     line
   };
+}
+
+/**
+ * The advice every fence problem ends with.
+ */
+const FENCE_ADVICE =
+  'A directive that holds a fenced block needs a longer fence: four backticks for the directive, three for the block.';
+
+/**
+ * Record what a directive closed early by the fence of a block inside it
+ * leaves behind, since the source reads correctly and only the rendered
+ * page shows the damage.
+ *
+ * The directive's content then ends with a fence that is never closed,
+ * which is certain. The directive's own closing fence then opens a code
+ * block, which may swallow the next directive, also certain, or be empty,
+ * which is probable. A fence still open at the end of the page is
+ * reported as well; a body parsed on its own is skipped there, since its
+ * open fence was already reported on the directive holding it.
+ */
+function checkFences(
+  token: MarkdownIt.Token,
+  lines: string[],
+  lineOffset: number,
+  nested: boolean,
+  env: IRenderEnv
+): void {
+  if (!token.map) {
+    return;
+  }
+
+  const start = token.map[0] + lineOffset + 1;
+  const end = token.map[1] + lineOffset;
+  const meta =
+    token.type === DIRECTIVE_TOKEN ? (token.meta as IDirectiveMeta) : null;
+  const what = meta ? `"${meta.name}" directive` : 'code block';
+
+  const report = (rule: string, line: number, message: string): void => {
+    env.problems.push({ rule, line, message });
+  };
+
+  // A fence with no closing line runs to the end of the source.
+  const last = fenceLine(lines[token.map[1] - 1] ?? '');
+
+  if (!nested && !(last && closesFence(last, token.markup))) {
+    report(
+      'unclosed-fence',
+      start,
+      `The ${what} at line ${start} has no closing fence`
+    );
+  }
+
+  if (meta) {
+    const inner = unclosedFence(token.content);
+
+    if (!inner) {
+      return;
+    }
+
+    const innerLine = start + 1 + inner.line;
+
+    if (
+      inner.marker[0] === token.markup[0] &&
+      inner.marker.length >= token.markup.length
+    ) {
+      report(
+        'nested-fence',
+        start,
+        `The ${what} at line ${start} ends at line ${end}, at the fence meant to close the block opened at line ${innerLine}. ${FENCE_ADVICE}`
+      );
+    } else {
+      report(
+        'unclosed-fence',
+        innerLine,
+        `The block opened at line ${innerLine} inside the ${what} at line ${start} has no closing fence`
+      );
+    }
+
+    return;
+  }
+
+  // The remains of a directive's closing fence are a plain backtick block.
+  if (token.markup[0] !== '`' || token.info.trim() !== '') {
+    return;
+  }
+
+  const content = token.content.split('\n');
+
+  for (let index = 0; index < content.length; index += 1) {
+    const fence = fenceLine(content[index]);
+
+    if (
+      !fence ||
+      fence.marker[0] !== '`' ||
+      fence.marker.length < token.markup.length
+    ) {
+      continue;
+    }
+
+    const info = parseDirectiveInfo(fence.info);
+
+    if (info) {
+      const line = start + 1 + index;
+
+      report(
+        'nested-fence',
+        line,
+        `The "${info.name}" directive at line ${line} is inside the code block opened at line ${start}, so it is shown as text. The block is probably the closing fence of a directive that ended early. ${FENCE_ADVICE}`
+      );
+
+      return;
+    }
+  }
+
+  if (token.content.trim() === '') {
+    report(
+      'nested-fence',
+      start,
+      `The empty code block at line ${start} is probably the closing fence of a directive that ended at the fence of a block inside it. ${FENCE_ADVICE} Remove the block if it is meant to be empty.`
+    );
+  }
 }
 
 function firstHeading(tokens: MarkdownIt.Token[]): string | undefined {

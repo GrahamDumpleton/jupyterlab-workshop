@@ -68,10 +68,27 @@ marked by a line holding only `:windows:`, `:linux:`, `:macos:`,
 A directive whose body holds a fenced code block, such as a `hint` that
 quotes some output or a `when` with a command in it, must itself be
 fenced with more backticks than the block inside: four for the
-directive, three for the code, as the examples on this page are. Lint
-cannot see the mistake, since the result is valid Markdown: the inner
-fence closes the directive, its body stops there, and the prose after
-it renders as a code block.
+directive, three for the code, as the examples on this page are. The
+source reads correctly either way, but a fence closes at the first line
+holding at least as many of its backticks, so with three against three
+the inner block's fence closes the directive:
+
+`````markdown
+````{hint}
+The output looks like this:
+
+```
+Hello
+```
+````
+`````
+
+Fenced with three backticks, that `hint` would end at the fence above
+`Hello`; the line `Hello` would then be prose, and the two fences after
+it an empty code block. A `when` cut short the same way leaves the rest
+of its body, and often the next directive, showing as text. Lint reports
+this as `nested-fence`, and a fence that is never closed at all as
+`unclosed-fence`.
 
 Blank lines in a body follow two rules. A single blank line straight
 after the options is taken as the separator between options and body

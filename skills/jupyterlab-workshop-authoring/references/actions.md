@@ -145,6 +145,10 @@ were sent, and close with the workshop.
 | `dialog`    | none       | required | `title`, `buttons`, `capture` | Ask a question and store the answer in a variable.  |
 | `hint`      | none       | markdown | `title`, `open`               | Collapsible help text.                              |
 
+A `hint` that quotes a fenced code block must be fenced with four
+backticks, so that the block's three do not close it; see
+[directives](pages.md#directives).
+
 ## Flow and variables
 
 | Directive   | Capability | Body     | Options                                 | Description                                                |
@@ -194,7 +198,9 @@ the variable too.
 The `{when}` directive takes a condition as its argument and shows its body only
 when the condition holds, for example ` ```{when} track == "pip" `.
 Conditions use `==`, `!=`, `in`, `not in`, `and`, `or`, `not` and parentheses
-over variables, quoted strings and `[lists]`.
+over variables, quoted strings and `[lists]`. A `when` holding an action or
+a code block is fenced with four backticks, so that the block's three do not
+close it; see [directives](pages.md#directives).
 
 The `verify`, `quiz`, `form`, `checkpoint` and `restore` directives are described
 in [checks.md](checks.md).

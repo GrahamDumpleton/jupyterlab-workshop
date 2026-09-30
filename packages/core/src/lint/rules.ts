@@ -85,7 +85,9 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   const messages: ILintMessage[] = [];
   const manifestPath = input.manifestPath ?? 'workshop.yaml';
 
-  // Warnings the parser itself produced while rendering pages.
+  // Warnings the parser itself produced while rendering pages, and the
+  // mistakes it is sure of, such as a directive closed early by the fence
+  // of a block inside it.
   for (const page of input.pages) {
     for (const warning of page.warnings) {
       messages.push({
@@ -93,6 +95,16 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
         rule: 'page-warning',
         message: warning,
         path: page.path
+      });
+    }
+
+    for (const problem of page.problems) {
+      messages.push({
+        level: 'error',
+        rule: problem.rule,
+        message: problem.message,
+        path: page.path,
+        line: problem.line
       });
     }
   }

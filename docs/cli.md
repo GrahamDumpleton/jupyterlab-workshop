@@ -42,7 +42,8 @@ jupyter workshop lint catalog.json [--json]
 
 Given a workshop directory, parses the manifest and every page and
 reports problems: unknown
-directives and options, missing bodies, capabilities used but not
+directives and options, missing bodies, a directive closed early by the
+fence of a block inside it, capabilities used but not
 declared (or declared but unused), invalid checks, quizzes and forms,
 requirements that name nothing, variables used before the form that sets
 them, danger heuristics such as piping a download into a shell,

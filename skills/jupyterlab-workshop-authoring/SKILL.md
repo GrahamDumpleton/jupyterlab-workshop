@@ -75,7 +75,9 @@ So, before running any of them:
    schema (`jupyter workshop schema`).
 
 3. Write pages: prose that says why, then an action that does it, then a
-   `verify` that checks it. Keep one idea per action. First read the
+   `verify` that checks it. Keep one idea per action. Any `hint`, `when`
+   or other directive that holds a fenced block is fenced with four
+   backticks. First read the
    sections of `references/gotchas.md` that match what the workshop
    does (Python code that is edited and re-run, packages, git, servers,
    notebooks): each names a trap that only shows up in that kind of
@@ -214,9 +216,11 @@ git commit -m "Add README"
 A directive whose body holds a fenced code block, such as a `hint` that
 quotes output or a `when` with a command in it, must itself be fenced
 with more backticks than the block inside: four for the directive,
-three for the code. Lint cannot see this mistake: the inner fence
-closes the directive, its body is cut short and the prose after it
-renders as code. A blank line straight after the options is a separator
+three for the code. Fenced with three, the inner fence closes the
+directive, its body is cut short and the prose after it renders as
+code; lint reports it as `nested-fence`, with an example under "Rules
+that keep lint and the self-test green". A blank line straight after
+the options is a separator
 and is dropped, the line break before the closing fence ends the last
 line, and every other blank line, leading or trailing, is kept; so a
 `file-write` append that must leave two blank lines above a Python
@@ -404,6 +408,25 @@ pass, `soft` only shows what is missing.
 ## Rules that keep lint and the self-test green
 
 - Declare every capability the pages use and no others.
+
+- A directive that holds a fenced block, a `hint` quoting output or a
+  `when` with an `execute` inside it, is fenced with four backticks
+  against the block's three. With three against three the inner fence
+  closes the directive: the rest of its body, and often the next
+  directive, shows in the panel as text or as a code block, while the
+  source reads correctly. Lint reports it as `nested-fence`, naming the
+  lines; the self-test does not notice.
+
+  `````markdown
+  ````{hint}
+  :title: What you should see
+  The output looks like this:
+
+  ```
+  Hello
+  ```
+  ````
+  `````
 
 - Every `execute` body is a real command the learner could paste. Commands
   must not wait for input: no pagers, editors or prompts (`git commit -m`,
