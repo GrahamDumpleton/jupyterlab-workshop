@@ -323,7 +323,7 @@ workshops in sequence and says so with `ordered: true`, which numbers
 the cards in the browser, marks the next one to take, and has the
 Finish dialog offer it; an unrelated set lists them however its author
 likes and leaves the flag out. Each version names a source: a git repository (`git`, `ref`,
-`subdir`) on a forge that serves archives, or a direct `archive` URL.
+`subdir`) on a forge that serves archives, a GitHub gist as `git`, or a direct `archive` URL.
 Versions are listed newest first and the first is what Install fetches.
 A `sha256` is optional but recommended: the download is refused when the
 archive's hash differs. `jupyter workshop schema --collection` prints

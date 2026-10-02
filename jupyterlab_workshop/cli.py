@@ -40,6 +40,14 @@ from .collection import (
     load_collection as _load_collection_index,
 )
 from .fetch import FetchError
+from .gist import (
+    GistError,
+    create_gist,
+    flatten_workshop,
+    resolve_token,
+    update_gist,
+    write_flat,
+)
 from .install import DEFAULT_DIRECTORY, install_collection
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
@@ -353,6 +361,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="URL the archive will be published at, for the collection entry",
     )
     publish.set_defaults(func=command_publish)
+
+    gist = commands.add_parser(
+        "gist", help="lay a workshop out flat and publish it as a GitHub gist"
+    )
+    gist.add_argument("directory", type=Path)
+    gist.add_argument(
+        "--out",
+        type=Path,
+        default=Path("dist/gist"),
+        help="directory the flat copy is written under (default dist/gist)",
+    )
+    gist_target = gist.add_mutually_exclusive_group()
+    gist_target.add_argument(
+        "--create", action="store_true", help="create a gist from the flat copy"
+    )
+    gist_target.add_argument(
+        "--update",
+        metavar="GIST",
+        help="replace the files of an existing gist, given by URL or id",
+    )
+    gist.add_argument(
+        "--public",
+        action="store_true",
+        help="with --create, make the gist public (default secret)",
+    )
+    gist.add_argument(
+        "--token",
+        default="",
+        help="GitHub token with the gist scope "
+        "(default GH_TOKEN, GITHUB_TOKEN, then gh auth token)",
+    )
+    gist.add_argument(
+        "--frontend",
+        choices=FRONTENDS,
+        help="frontend to lint for (default jupyterlab)",
+    )
+    gist.set_defaults(func=command_gist)
 
     test = commands.add_parser(
         "test",
@@ -1106,6 +1151,71 @@ def command_publish(args: argparse.Namespace) -> int:
     print(f"wrote {result.entry_path}")
 
     return 0
+
+
+def command_gist(args: argparse.Namespace) -> int:
+    """Lay a workshop out flat for a gist and, when asked, send it to GitHub."""
+
+    directory = _workshop_dir(args.directory)
+    lint_options = ["--frontend", args.frontend] if args.frontend else []
+
+    # The source is linted first, so what goes out has been checked, and
+    # the core bundle lists the files the pages refer to, which ride along.
+    if (status := _lint(directory, lint_options)) != 0:
+        return status
+
+    listed = run_node(["files", str(directory)])
+
+    if listed.returncode != 0:
+        sys.stderr.write(listed.stderr or listed.stdout)
+
+        return listed.returncode
+
+    try:
+        flat = flatten_workshop(directory, json.loads(listed.stdout)["files"])
+        target = write_flat(flat, args.out)
+    except GistError as error:
+        raise CliError(str(error)) from error
+
+    for path, name in flat.renames.items():
+        print(f"renamed {path} -> {name}")
+
+    for path in flat.left_out:
+        print(f"left out {path}")
+
+    print(f"wrote {target}")
+
+    # The flat copy is linted as well, since the rewrite is what is published.
+    if (status := _lint(target, lint_options)) != 0:
+        raise CliError("The flat copy does not lint clean; see above")
+
+    if not args.create and not args.update:
+        return 0
+
+    try:
+        token = resolve_token(args.token)
+        result = (
+            create_gist(flat, token, public=args.public)
+            if args.create
+            else update_gist(args.update, flat, token)
+        )
+    except GistError as error:
+        raise CliError(str(error)) from error
+
+    print(f"{'created' if result.created else 'updated'} {result.url}")
+
+    return 0
+
+
+def _lint(directory: Path, options: list[str]) -> int:
+    """Lint a directory through the Node bundle, showing its report."""
+
+    completed = run_node(["lint", str(directory), *options])
+
+    sys.stdout.write(completed.stdout)
+    sys.stderr.write(completed.stderr)
+
+    return completed.returncode
 
 
 def command_test(args: argparse.Namespace) -> int:

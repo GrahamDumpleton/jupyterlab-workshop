@@ -151,6 +151,35 @@ def test_publish_builds_a_stable_archive(
     assert f"sha256 {digest}" in capsys.readouterr().out
 
 
+@needs_node
+def test_gist_writes_a_flat_copy_that_lints(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "flat-me"
+
+    cli.main(["init", str(target)])
+    capsys.readouterr()
+
+    out = tmp_path / "dist"
+
+    assert cli.main(["gist", str(target), "--out", str(out)]) == 0
+
+    output = capsys.readouterr().out
+    copy = out / "flat-me"
+
+    assert "renamed pages/01-welcome.md -> pages--01-welcome.md" in output
+    assert f"wrote {copy}" in output
+    assert sorted(path.name for path in copy.iterdir()) == [
+        "pages--01-welcome.md",
+        "pages--02-first-steps.md",
+        "workshop.yaml",
+    ]
+    assert "pages--01-welcome.md" in (copy / "workshop.yaml").read_text()
+
+    assert cli.main(["lint", str(copy)]) == 0
+    assert "0 error(s)" in capsys.readouterr().out
+
+
 def test_junit_report_marks_failures_and_skips() -> None:
     report = SelfTestReport(
         workshop="demo",

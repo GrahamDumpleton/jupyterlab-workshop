@@ -26,6 +26,14 @@ A workshop is opened from one of these sources:
   `workshopsDirectory` setting (default `workshops`) in a directory named
   after the manifest's `name`.
 
+- A GitHub gist, through the same command. A gist is a repository whose
+  name is its id, so its page URL
+  `https://gist.github.com/owner/fee514f3051b532e3f790c2ae7068ed7` is
+  the source, and the permalink of one of its revisions, with the commit
+  after the id, pins that revision. Gists hold no directories, so the
+  pages sit beside the manifest; see [A workshop in a
+  gist](publishing.md#a-workshop-in-a-gist).
+
 - A direct `.zip` or `.tar.gz` URL, handled the same way.
 
 - A collection entry chosen in the workshop browser, or a launch link in

@@ -108,6 +108,37 @@ the hash and, when given, the URL the archive will be published at. The
 archive is built with fixed ownership and timestamps so the hash is the
 same on every machine.
 
+## gist
+
+```
+jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update GIST]
+                                  [--token TOKEN] [--frontend NAME]
+```
+
+Lays a workshop out as a [GitHub gist](https://gist.github.com) holds
+it and, with `--create` or `--update`, sends it there. A gist is a git
+repository with no directories, so every file is renamed with its
+directory separators turned into `--`: `pages/01-welcome.md` becomes
+`pages--01-welcome.md`, and the manifest and the directive options that
+named the file are rewritten to match. The manifest, the pages, the
+files the pages refer to with `from`, `script` or `path`, and the
+requirements file are carried; other files are reported as left out.
+The workshop is linted before and the flat copy after, with
+`--frontend jupyterlite` selecting the JupyterLite rules for a gist
+meant for the [demo site](demo.md), and the flat copy is written under
+`dist/gist/<name>/`.
+
+`--create` makes a new gist, secret unless `--public` is given, and
+`--update` replaces the files of an existing one, given by URL or id,
+removing any the flat copy no longer has. Both need a GitHub token with
+the `gist` scope, from `--token`, else `GH_TOKEN` or `GITHUB_TOKEN`,
+else `gh auth token` for someone signed in to the `gh` command. The
+gists API carries text files only.
+
+A workshop that seeds the workspace from `files/` cannot be a gist,
+since the files are copied as a directory, and is refused. See [A
+workshop in a gist](publishing.md#a-workshop-in-a-gist).
+
 ## collection
 
 ```

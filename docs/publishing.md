@@ -102,6 +102,62 @@ runs on, by installing packages or editing global configuration, should
 be self-tested, since each run gets a fresh runner; see the [warning
 under test](cli.md#test).
 
+## A workshop in a gist
+
+A small workshop, instructions and inline actions with at most a few
+text files alongside, fits in a [GitHub gist](https://gist.github.com).
+A gist is a git repository whose name is its id, and the extension
+fetches it the way it fetches any repository: the server downloads its
+archive, and JupyterLite reads its raw files. The one difference is that
+a gist holds no directories, so every file sits beside the manifest.
+
+`jupyter workshop gist` makes the flat copy. Each file keeps its name
+with the directory separators turned into `--`, which keeps the origin
+of a file visible, groups the pages together in the gist's alphabetical
+listing, and avoids clashes between directories; the manifest and the
+directive options that named a file are rewritten to match:
+
+```
+workshop.yaml
+pages--01-welcome.md
+pages--02-finish.md
+templates--notes.md
+```
+
+```yaml
+pages:
+  - pages--01-welcome.md
+  - pages--02-finish.md
+```
+
+The command carries the manifest, the pages, the files the pages refer
+to with `from`, `script` or `path`, and the requirements file, lints
+the source and the flat copy, and writes the copy under `dist/gist/`.
+With `--create` it makes the gist, secret unless `--public`, and with
+`--update` it replaces the files of an existing one; see
+[gist](cli.md#gist) for the token it needs. A gist written by hand can
+use any names, since the extension treats page paths as given.
+
+Two things cannot be a gist: starter files under `files/`, which are
+copied into the workspace as a directory when the workshop opens, and
+binary files, which the gists API does not carry. A workshop with
+either is refused.
+
+The gist's page URL is the source, for the "Open Workshop from URL…"
+command, a `git` entry in a collection, or a launch link:
+
+```
+https://gist.github.com/owner/fee514f3051b532e3f790c2ae7068ed7
+```
+
+The permalink of a revision, the same URL with the full commit hash
+after the id, pins the workshop to that revision; `ref` does the same.
+A secret gist works as well as a public one, since the archive and the
+raw files are served to anyone with the link. The published
+[demo site](demo.md) is a JupyterLite instance, so a gist written for
+JupyterLite can be handed out as a link to it with the gist as the
+`workshop` parameter, without a site of its own.
+
 ## A catalog of collections
 
 An organisation with several collections publishes one catalog that

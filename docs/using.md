@@ -41,7 +41,7 @@ same three as buttons once one is open:
   same.
 
 - **Open from URL** downloads a workshop from a git repository, a forge
-  tree URL or an archive URL.
+  tree URL, a GitHub gist or an archive URL.
 
 A JupyterLab URL with a `workshop` parameter, a [launch
 link](collections.md#launch-links), opens a workshop as soon as JupyterLab

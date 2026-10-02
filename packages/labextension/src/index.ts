@@ -796,7 +796,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           const result = await InputDialog.getText({
             title: 'Open Workshop from URL',
             label:
-              'Repository URL (a GitHub tree URL may name a branch and directory) or archive URL',
+              'Repository URL (a GitHub tree URL may name a branch and directory), gist URL or archive URL',
             placeholder: 'https://github.com/owner/repo/tree/main/workshop'
           });
 

@@ -13,7 +13,7 @@ would do, it does in the browser instead:
 | On a server                                  | In JupyterLite                                                                                                                            |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Platform detection                           | Fixed: `frontend` is `jupyterlite`, `platform` is `emscripten`, `host` is `static`, `shell` is `cockle`, files live under `/drive`.       |
-| Download from a repository (archive)         | File by file from the raw files of the repository, through jsDelivr for GitHub.                                                           |
+| Download from a repository (archive)         | File by file from the raw files of the repository, through jsDelivr for GitHub and from the gist raw endpoint for a gist.                 |
 | Download from an archive URL                 | Not available; use a repository URL.                                                                                                      |
 | Collection index, catalog                    | Fetched by the browser, so the host must send CORS headers, or ship the file inside the site.                                             |
 | `execute-capture`, `verify` with `shell`     | The terminal extension's headless shell.                                                                                                  |

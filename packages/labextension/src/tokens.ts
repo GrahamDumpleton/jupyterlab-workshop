@@ -899,7 +899,7 @@ export interface IWorkshopManager {
 
 /** A request to download a workshop. */
 export interface IFetchRequest {
-  /** Repository, forge tree or archive URL. */
+  /** Repository, forge tree, gist or archive URL. */
   url: string;
   ref?: string;
   subdir?: string;

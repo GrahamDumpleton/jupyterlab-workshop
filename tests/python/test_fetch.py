@@ -75,6 +75,16 @@ class TestParseSource:
         assert source.ref == "main"
         assert source.subdir == "ws"
 
+    def test_gist_url_and_revision_permalink(self) -> None:
+        gist = "https://gist.github.com/ada/fee514f3051b532e3f790c2ae7068ed7"
+        commit = "fd3e2455602748479661e24b710610cf6f3786ee"
+
+        assert parse_source({"url": gist}) == Source(kind="git", url=gist)
+        assert parse_source({"url": f"{gist}/{commit}/"}) == Source(
+            kind="git", url=gist, ref=commit
+        )
+        assert parse_source({"url": f"{gist}/{commit}", "ref": "other"}).ref == "other"
+
     def test_archive_suffix_is_an_archive(self) -> None:
         source = parse_source({"url": "https://example.org/ws.tar.gz", "sha256": "AB"})
 
@@ -110,6 +120,16 @@ class TestArchiveUrl:
         )
         assert archive_url(Source("archive", "https://x/y.zip")) == "https://x/y.zip"
 
+    def test_gist(self) -> None:
+        assert (
+            archive_url(Source("git", "https://gist.github.com/ada/abc123"))
+            == "https://gist.github.com/ada/abc123/archive/HEAD.tar.gz"
+        )
+        assert (
+            archive_url(Source("git", "https://gist.github.com/ada/abc123", ref="def"))
+            == "https://gist.github.com/ada/abc123/archive/def.tar.gz"
+        )
+
     def test_needs_owner_and_repo(self) -> None:
         with pytest.raises(FetchError):
             archive_url(Source("git", "https://github.com/only"))
@@ -126,6 +146,20 @@ class TestUnpack:
 
             assert (target / "workshop.yaml").read_text() == MANIFEST
             assert (target / "pages" / "01.md").read_text() == "# Hi\n"
+
+    def test_unpacks_a_flat_gist(self, tmp_path: Path) -> None:
+        # A gist archive wraps its files in `<id>-<ref>/`, like a forge
+        # archive, and holds no directories, so the pages sit beside the
+        # manifest.
+        manifest = MANIFEST.replace("pages/01.md", "01.md")
+        data = make_tar({"workshop.yaml": manifest, "01.md": "# One"}, "abc123-HEAD/")
+
+        url = "https://gist.github.com/ada/abc123/archive/HEAD.tar.gz"
+
+        unpack_archive(data, url, tmp_path)
+
+        assert (tmp_path / "workshop.yaml").read_text() == manifest
+        assert (tmp_path / "01.md").read_text() == "# One"
 
     def test_keeps_only_the_subdirectory(self, tmp_path: Path) -> None:
         data = make_tar(

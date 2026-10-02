@@ -1,8 +1,9 @@
 """Fetch workshops from git forges and archive URLs into the server's root.
 
 A workshop source is either a git repository on a forge that offers archive
-downloads (GitHub, GitLab, Codeberg and Gitea) or a direct URL to a ``.zip``
-or ``.tar.gz`` archive. The archive is downloaded, hashed, unpacked with
+downloads (GitHub, GitLab, Codeberg and Gitea, and a GitHub gist, which is
+a repository named by its id) or a direct URL to a ``.zip`` or ``.tar.gz``
+archive. The archive is downloaded, hashed, unpacked with
 path traversal guarded, and recorded in ``_workshop/source.json`` so the
 frontend can identify the workshop later.
 """
@@ -119,6 +120,13 @@ _FORGE_TREE = re.compile(
     r"(?:/(?:tree|src/branch|-/tree)/(?P<ref>[^/]+)(?:/(?P<subdir>.+?))?)?/?$"
 )
 
+# A gist is a repository too, with the gist id as its name and, on the
+# permalink of a revision, the commit after the id instead of `/tree/`.
+_GIST_REVISION = re.compile(
+    r"^(?P<base>https://gist\.github\.com/[^/]+/[0-9a-fA-F]+)"
+    r"/(?P<ref>[0-9a-fA-F]+)/?$"
+)
+
 _ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".tar")
 
 
@@ -129,7 +137,9 @@ def parse_source(spec: dict[str, Any]) -> Source:
     ``ref`` and ``subdir``) or ``archive`` (a direct archive URL, optionally
     with ``sha256``). A bare ``url`` is classified by its suffix: archive
     extensions are archives and everything else is a git repository, with a
-    forge ``/tree/<ref>/<subdir>`` path providing the ref and directory.
+    forge ``/tree/<ref>/<subdir>`` path providing the ref and directory. A
+    GitHub gist is a repository named by its id, and the permalink of one
+    of its revisions provides the ref.
     """
 
     if not isinstance(spec, dict):
@@ -154,6 +164,12 @@ def parse_source(spec: dict[str, Any]) -> Source:
 
     ref = str(spec.get("ref") or "")
     subdir = _clean_subdir(str(spec.get("subdir") or ""))
+
+    match = _GIST_REVISION.match(url)
+
+    if match:
+        url = match.group("base")
+        ref = ref or match.group("ref")
 
     match = _FORGE_TREE.match(url)
 
@@ -186,6 +202,8 @@ def archive_url(source: Source) -> str:
     owner, repo = segments[0], segments[1]
     ref = source.ref or DEFAULT_REF
 
+    # A gist on gist.github.com has the same archive URL shape, with the
+    # gist id in place of the repository name.
     if host == "github.com" or host.endswith(".github.com"):
         return f"https://{host}/{owner}/{repo}/archive/{ref}.tar.gz"
 

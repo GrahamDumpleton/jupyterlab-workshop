@@ -24,17 +24,24 @@ export interface IForgeSource {
 const FORGE_TREE =
   /^https:\/\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/(?:tree|src\/branch|-\/tree)\/([^/]+)(?:\/(.+?))?)?\/?$/;
 
+// A gist is a repository too, with the gist id as its name and, on the
+// permalink of a revision, the commit after the id instead of `/tree/`.
+const GIST_REVISION =
+  /^https:\/\/(gist\.github\.com)\/([^/]+)\/([0-9a-f]+)\/([0-9a-f]+)\/?$/i;
+
 /**
  * Parse a repository URL, optionally a forge "tree" URL naming a branch
- * and directory, into its parts. Explicit `ref` and `subdir` arguments
- * win over anything in the URL. Returns null for anything else.
+ * and directory, into its parts. A GitHub gist URL is a repository whose
+ * name is the gist id, and a revision permalink names its ref. Explicit
+ * `ref` and `subdir` arguments win over anything in the URL. Returns
+ * null for anything else.
  */
 export function parseForgeUrl(
   url: string,
   ref = '',
   subdir = ''
 ): IForgeSource | null {
-  const match = FORGE_TREE.exec(url.trim());
+  const match = GIST_REVISION.exec(url.trim()) ?? FORGE_TREE.exec(url.trim());
 
   if (!match) {
     return null;
@@ -54,13 +61,24 @@ export function parseForgeUrl(
 /**
  * The URL, ending in a slash, under which the files of a repository can
  * be fetched from the browser. GitHub content comes through jsDelivr,
- * which serves it with CORS headers; GitLab, Codeberg and Gitea serve raw
- * files themselves.
+ * which serves it with CORS headers; a gist's raw files are served with
+ * them by GitHub itself; GitLab, Codeberg and Gitea serve raw files
+ * themselves.
  */
 export function rawBaseUrl(source: IForgeSource): string {
   const { host, owner, repo, subdir } = source;
   const ref = source.ref || 'main';
   const suffix = subdir ? `${subdir}/` : '';
+
+  // jsDelivr does not serve gists. Their raw endpoint takes a full
+  // commit hash before the file name, or nothing for the latest
+  // revision; it has no name for the default branch. Gists hold no
+  // directories, so a subdirectory is not applied.
+  if (host === 'gist.github.com') {
+    const version = source.ref ? `${source.ref}/` : '';
+
+    return `https://gist.githubusercontent.com/${owner}/${repo}/raw/${version}`;
+  }
 
   if (host === 'github.com' || host.endsWith('.github.com')) {
     const version = source.ref ? `@${source.ref}` : '';

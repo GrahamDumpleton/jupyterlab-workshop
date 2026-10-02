@@ -35,6 +35,34 @@ describe('parseForgeUrl', () => {
     expect(parseForgeUrl('https://example.com/archive.tar.gz')).toBeNull();
     expect(parseForgeUrl('not a url')).toBeNull();
   });
+
+  it('reads a gist and its revision permalink', () => {
+    expect(
+      parseForgeUrl(
+        'https://gist.github.com/ada/fee514f3051b532e3f790c2ae7068ed7'
+      )
+    ).toEqual({
+      host: 'gist.github.com',
+      owner: 'ada',
+      repo: 'fee514f3051b532e3f790c2ae7068ed7',
+      ref: '',
+      subdir: ''
+    });
+    expect(
+      parseForgeUrl(
+        'https://gist.github.com/ada/fee514f3051b532e3f790c2ae7068ed7/fd3e2455602748479661e24b710610cf6f3786ee'
+      )
+    ).toMatchObject({
+      repo: 'fee514f3051b532e3f790c2ae7068ed7',
+      ref: 'fd3e2455602748479661e24b710610cf6f3786ee'
+    });
+    expect(
+      parseForgeUrl(
+        'https://gist.github.com/ada/fee514f3051b532e3f790c2ae7068ed7/fd3e2455602748479661e24b710610cf6f3786ee',
+        'other'
+      )
+    ).toMatchObject({ ref: 'other' });
+  });
 });
 
 describe('rawBaseUrl', () => {
@@ -51,6 +79,18 @@ describe('rawBaseUrl', () => {
     expect(rawBaseUrl(gitlab!)).toBe('https://gitlab.com/org/repo/-/raw/dev/');
     expect(rawBaseUrl(codeberg!)).toBe(
       'https://codeberg.org/org/repo/raw/branch/main/'
+    );
+  });
+
+  it('serves a gist from its own raw endpoint, pinned by revision', () => {
+    const latest = parseForgeUrl('https://gist.github.com/ada/abc123');
+    const pinned = parseForgeUrl('https://gist.github.com/ada/abc123/def456');
+
+    expect(rawBaseUrl(latest!)).toBe(
+      'https://gist.githubusercontent.com/ada/abc123/raw/'
+    );
+    expect(rawBaseUrl(pinned!)).toBe(
+      'https://gist.githubusercontent.com/ada/abc123/raw/def456/'
     );
   });
 });
