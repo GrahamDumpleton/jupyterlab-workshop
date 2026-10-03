@@ -110,11 +110,15 @@ The panel shows one page at a time. The header has the workshop title,
 a progress bar and a page selector; the footer has Previous and Next,
 and Finish on the last page. Prose explains the step and the boxes are
 actions: each shows what it will do, a command, a file, a notebook cell,
-and clicking runs it in the session beside the panel. A tick or a cross
-on the box shows how it went, and a failure shows its message under the
-box. Clicking again runs it again. Some actions run by themselves when a
-page opens or after another action, which the workshop declares up
-front. When something grows in place near the bottom of the panel, a
+and clicking runs it in the session beside the panel. A word at the
+right of the box shows how it went, "running", then "done" or "failed",
+and the bar down the box's left edge takes a matching colour: orange,
+then green or red. A failure shows its message under the box. Clicking
+again runs it again, and the word then counts the runs, as in "done ×2".
+An action that did not run, because it was not allowed or had nothing
+to do on this platform, says "skipped". Some actions run by themselves
+when a page opens or after another action, which the workshop declares
+up front. When something grows in place near the bottom of the panel, a
 hint opened, an action's output or a quiz's feedback, the panel scrolls
 just enough to show it, but never so far that the hint or action itself
 rises above the top third of the panel, so what led up to it stays in
@@ -149,7 +153,9 @@ The About dialog for a showcase workshop.
 
 ## Checks, quizzes and forms
 
-A check is a box with a label, a Check button and its last result. Many
+A check is a box with a label, a Check button and its last result,
+shown as a mark at the left of the box: a circle until it has a result,
+then a tick for a pass or a cross for a failure. Many
 run on their own when the action before them completes or when the
 terminal shows something, so a step often ticks itself; Check runs it
 now. A failing check says what is missing in plain words written by the
