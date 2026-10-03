@@ -18,6 +18,7 @@ export * from './hash';
 export * from './launch/link';
 export * from './lint';
 export * from './lite';
+export * from './versions';
 export * from './markdown/parser';
 export * from './schema';
 export * from './trust';

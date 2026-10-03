@@ -157,10 +157,11 @@ https://gist.github.com/owner/fee514f3051b532e3f790c2ae7068ed7
 The permalink of a revision, the same URL with the full commit hash
 after the id, pins the workshop to that revision; `ref` does the same.
 A secret gist works as well as a public one, since the archive and the
-raw files are served to anyone with the link. The published
-[demo site](demo.md) is a JupyterLite instance, so a gist written for
-JupyterLite can be handed out as a link to it with the gist as the
-`workshop` parameter, without a site of its own.
+raw files are served to anyone with the link. A gist written for
+JupyterLite can be handed out as a link to one of the project's
+[launcher sites](#a-launcher-for-launch-links) with the gist as the
+`workshop` parameter, without a site of its own; that is the link the
+generated README's button carries.
 
 ## A catalog of collections
 
@@ -316,3 +317,37 @@ repository can do the same with just the JupyterLite build:
 A link to the deployed site with `?workshop=<name>` opens that workshop;
 add `restart=force` to start it afresh on every visit, as the project's
 demo link does. See [launch links](collections.md#launch-links).
+
+### A launcher for launch links
+
+A site built with no workshop is a launcher: a JupyterLite that opens
+whatever its launch link names, such as a [gist](#a-workshop-in-a-gist)
+or a repository. The project publishes one for each Python version its
+builds can carry, under a path that names the version:
+
+```
+https://grahamdumpleton.github.io/jupyterlab-workshop/lite/3.14/lab/index.html
+```
+
+The Python in a JupyterLite site is fixed when the site is built, by
+the Pyodide release the kernel package pins, so a site that tracked the
+latest release would change the Python under every link pointing at it.
+Naming the version in the path means a link, and the launch button
+`jupyter workshop gist` writes into a gist's README, keeps the Python it
+was written for when a launcher for a newer one is published alongside.
+The extension in every launcher is the current release, since the
+workshop format is what it keeps compatible.
+
+`just pages` builds the launcher with `--python` set to the version the
+installed kernel carries and names the directory after it, so the path
+can never claim one Python while serving another. A second version
+means building a second launcher with the kernel package that carries
+it. A workshop that needs a particular Python says so in
+`requires.tools`, which both the server preflight and the gist command
+honour:
+
+```yaml
+requires:
+  tools:
+    - { name: python, version: '>=3.14' }
+```

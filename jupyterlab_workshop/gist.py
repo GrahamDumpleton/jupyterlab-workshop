@@ -32,6 +32,7 @@ from urllib.request import Request, urlopen
 
 import yaml
 
+from .checks import satisfies_version
 from .fetch import USER_AGENT
 from .publish import PUBLISH_EXCLUDES, WORKSPACE_DIR, PublishError, read_manifest
 
@@ -45,10 +46,21 @@ SEPARATOR = "--"
 
 README_FILE = "README.md"
 
-#: The JupyterLite site the README's launch button opens by default.
-DEFAULT_SITE = (
-    "https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html"
+#: Python versions, newest first, that the project publishes a JupyterLite
+#: launcher site for; each is built with the Pyodide kernel of that Python.
+LAUNCHER_PYTHONS = ("3.14",)
+
+#: Where the launcher site for a Python version is published.
+LAUNCHER_SITE = (
+    "https://grahamdumpleton.github.io/jupyterlab-workshop/lite/{python}/lab/index.html"
 )
+
+#: The launcher the README's button opens when the manifest asks for no
+#: particular Python: the newest.
+DEFAULT_SITE = LAUNCHER_SITE.format(python=LAUNCHER_PYTHONS[0])
+
+#: Tool names a manifest requires Python under.
+PYTHON_TOOLS = ("python", "python3")
 
 #: Stands in for the gist's address in a README written before the gist exists.
 GIST_URL_PLACEHOLDER = "https://gist.github.com/<owner>/<id>"
@@ -116,6 +128,9 @@ class FlatWorkshop:
     #: The JupyterLite site the README's launch button opens.
     site: str = DEFAULT_SITE
 
+    #: The Python version that site provides, when it is a launcher.
+    python: str = ""
+
     #: The author's own README, appended to the generated one; empty for none.
     readme_extra: str = ""
 
@@ -169,8 +184,9 @@ def flat_name(path: str) -> str:
 def flatten_workshop(
     directory: Path,
     referenced: Sequence[str] = (),
-    site: str = DEFAULT_SITE,
+    site: str = "",
     append_readme: bool = False,
+    python: str = "",
 ) -> FlatWorkshop:
     """Lay a workshop out flat.
 
@@ -179,9 +195,11 @@ def flatten_workshop(
     reports them; those that exist are carried and their options
     rewritten. The manifest, the pages and the requirements file are
     always carried, and a ``README.md`` is generated from the manifest,
-    with a launch button for the JupyterLite ``site`` when the manifest
-    lists that frontend and, with ``append_readme``, the workshop's own
-    README below it. Starter files under ``files/`` cannot be carried,
+    with a launch button when the manifest lists the JupyterLite
+    frontend: for ``site`` when given, else the published launcher whose
+    Python suits the manifest, or ``python``; see ``launcher_site``.
+    With ``append_readme`` the workshop's own README goes below it.
+    Starter files under ``files/`` cannot be carried,
     since they are copied into the workspace as a directory, so a
     workshop that has any is refused, as is a binary file, which the
     gists API cannot hold.
@@ -202,6 +220,11 @@ def flatten_workshop(
         raise GistError("The manifest's pages must be a list of file names")
 
     _refuse_starter_files(directory)
+
+    if site:
+        launcher_python = ""
+    else:
+        launcher_python, site = launcher_site(manifest, python)
 
     # Which files ride along: the pages, which must exist, then whatever
     # the pages and the manifest refer to that does, in a stable order.
@@ -279,8 +302,57 @@ def flatten_workshop(
         left_out=_left_out(directory, carried_names),
         manifest=dict(manifest),
         site=site,
+        python=launcher_python,
         readme_extra=extra,
     )
+
+
+def launcher_site(manifest: Mapping[str, Any], python: str = "") -> tuple[str, str]:
+    """The published launcher a workshop's launch button should open.
+
+    ``python`` names the version outright and must be one that is
+    published. Otherwise the manifest's Python tool requirement, when it
+    carries a version, picks the newest published launcher that meets
+    it, and a workshop that says nothing gets the newest. Returns the
+    Python version and the site's URL.
+    """
+
+    if python:
+        if python not in LAUNCHER_PYTHONS:
+            raise GistError(
+                f"No launcher is published for Python {python}; "
+                f"the published ones are {', '.join(LAUNCHER_PYTHONS)}"
+            )
+
+        return python, LAUNCHER_SITE.format(python=python)
+
+    requirement = _python_requirement(manifest)
+
+    for candidate in LAUNCHER_PYTHONS:
+        if not requirement or satisfies_version(candidate, requirement):
+            return candidate, LAUNCHER_SITE.format(python=candidate)
+
+    raise GistError(
+        f"The workshop requires Python {requirement}, which no published "
+        f"launcher provides; the published ones are {', '.join(LAUNCHER_PYTHONS)}"
+    )
+
+
+def _python_requirement(manifest: Mapping[str, Any]) -> str:
+    requires = manifest.get("requires")
+    tools = requires.get("tools") if isinstance(requires, dict) else None
+
+    for tool in tools if isinstance(tools, list) else []:
+        if isinstance(tool, dict) and tool.get("name") in PYTHON_TOOLS:
+            frontends = tool.get("frontends")
+
+            # A requirement scoped to JupyterLab alone says nothing about Lite.
+            if isinstance(frontends, list) and "jupyterlite" not in frontends:
+                continue
+
+            return str(tool.get("version") or "")
+
+    return ""
 
 
 def render_readme(

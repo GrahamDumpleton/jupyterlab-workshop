@@ -98,6 +98,11 @@ class LiteBuildOptions:
     #: Rebuild everything rather than what changed.
     force: bool = True
 
+    #: The Python version, as major.minor, the site must provide; the
+    #: build is refused when the installed Pyodide kernel differs. Empty
+    #: takes whatever is installed.
+    python: str = ""
+
 
 @dataclass
 class LiteBuildResult:
@@ -107,6 +112,25 @@ class LiteBuildResult:
     workshops: list[str] = field(default_factory=list)
     terminal: bool = True
     command: list[str] = field(default_factory=list)
+
+    #: The Python version the site's kernel provides, as major.minor.
+    python: str = ""
+
+
+def python_version() -> str:
+    """The Python version, as major.minor, of the Pyodide kernel a build
+    would carry; empty when the kernel package is not installed.
+
+    The kernel package pins one Pyodide release, and with it the Python
+    inside, so this is settled by what is installed, not by the build.
+    """
+
+    try:
+        from jupyterlite_pyodide_kernel.constants import PYODIDE_PYTHON_VERSION
+    except ImportError:
+        return ""
+
+    return str(PYODIDE_PYTHON_VERSION)
 
 
 def default_lite_dir() -> Path:
@@ -434,6 +458,12 @@ def site_config(terminal: bool = True) -> dict[str, Any]:
         # progress events, since a site has no server to ask.
         "jupyterlabWorkshopVersion": _package_version(),
     }
+    python = python_version()
+
+    # The preflight compares a workshop's Python requirement with this,
+    # since the kernel cannot be asked before it has started.
+    if python:
+        data["pythonVersion"] = python
 
     if terminal:
         data["terminalsAvailable"] = True
@@ -635,6 +665,17 @@ def build_lite_site(
     if problems:
         raise LiteError("; ".join(problems))
 
+    # A site published under a Python version must carry that Python,
+    # which only the installed kernel package decides.
+    python = python_version()
+
+    if options.python and options.python != python:
+        raise LiteError(
+            f"The installed Pyodide kernel provides Python {python or 'unknown'}, "
+            f"not {options.python}; install the jupyterlite-pyodide-kernel "
+            f"release that carries Python {options.python}"
+        )
+
     lite_dir = (options.lite_dir or default_lite_dir()).resolve()
     staging = lite_dir / "contents"
     overrides = lite_dir / "overrides.json"
@@ -683,6 +724,7 @@ def build_lite_site(
         workshops=names,
         terminal=options.terminal,
         command=command,
+        python=python,
     )
 
 

@@ -405,7 +405,9 @@ def preflight(
         path = shutil.which(name) or ""
         version = _tool_version(path) if path and check_versions else ""
         satisfied = bool(path) and (
-            not requirement or not check_versions or _satisfies(version, requirement)
+            not requirement
+            or not check_versions
+            or satisfies_version(version, requirement)
         )
 
         results.append(
@@ -440,7 +442,16 @@ def _tool_version(path: str) -> str:
     return match.group(1) if match else ""
 
 
-def _satisfies(version: str, requirement: str) -> bool:
+def satisfies_version(version: str, requirement: str) -> bool:
+    """Whether a dotted version meets a requirement such as ``>=2.30``.
+
+    The requirement is one comparison, ``>=``, ``<=``, ``==``, ``>`` or
+    ``<`` and a dotted number, or a bare number meaning at least that.
+    Missing trailing parts count as zero, so ``3.12.0`` equals ``3.12``.
+    A requirement in any other form is taken as met, and an empty
+    version meets none.
+    """
+
     match = re.match(r"^\s*(>=|<=|==|>|<|=)?\s*(\d+(?:\.\d+)*)\s*$", requirement)
 
     if not match:

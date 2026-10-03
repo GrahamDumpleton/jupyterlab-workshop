@@ -20,7 +20,7 @@ would do, it does in the browser instead:
 | `verify` with `kernel`, `kernel-execute`     | The Pyodide kernel: Python without `subprocess`.                                                                                          |
 | `verify` with `script`, `environment-create` | Not available; the actions report why.                                                                                                    |
 | Checkpoints                                  | Copies of the files under `_workshop/snapshots/`.                                                                                         |
-| Preflight                                    | Python is always found; other tools must be commands of the shell. Versions are not checked.                                              |
+| Preflight                                    | Python is the kernel, with its version checked against the site's; other tools must be commands of the shell, versions unchecked.         |
 | Progress events                              | Appended to `_workshop/events.jsonl`; a sink is posted to by the browser, with the token as a header and as `?token=`, and so needs CORS. |
 
 Files written by actions, notebooks and progress live in the browser's

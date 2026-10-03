@@ -112,8 +112,8 @@ same on every machine.
 
 ```
 jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update GIST]
-                                  [--token TOKEN] [--site URL] [--append-readme]
-                                  [--frontend NAME]
+                                  [--token TOKEN] [--site URL | --python X.Y]
+                                  [--append-readme] [--frontend NAME]
 ```
 
 Lays a workshop out as a [GitHub gist](https://gist.github.com) holds
@@ -134,13 +134,22 @@ the gist page: the title, description, version, authors, duration,
 tags, platforms and frontends from the manifest, then how to open the
 workshop. When the manifest lists `jupyterlite` among its frontends
 the README carries a launch button that opens the gist in a JupyterLite
-site, the project's demo site unless `--site` names another, and it
-always gives the JupyterLab routes: the "Open Workshop from URL…"
-command, a launch link and `jupyter workshop launch`. The workshop's
-own `README.md` is left out unless `--append-readme` adds it below the
-generated part. In the flat copy on disk the README names a gist that
-does not exist yet; creating or updating the gist writes it again with
-the real address.
+site, and it always gives the JupyterLab routes: the "Open Workshop
+from URL…" command, a launch link and `jupyter workshop launch`. The
+workshop's own `README.md` is left out unless `--append-readme` adds it
+below the generated part. In the flat copy on disk the README names a
+gist that does not exist yet; creating or updating the gist writes it
+again with the real address.
+
+The button opens one of the project's published [launcher
+sites](publishing.md#a-launcher-for-launch-links), each of which carries
+one Python version. The version is chosen from the manifest: a `python`
+or `python3` entry under `requires.tools` with a version requirement
+picks the newest launcher that meets it, and a manifest that says
+nothing gets the newest; a requirement no launcher meets is an error.
+`--python X.Y` names the launcher outright, and `--site URL` points the
+button at a JupyterLite site of your own instead. The chosen launcher
+is printed as `launcher`.
 
 `--create` makes a new gist, secret unless `--public` is given, and
 `--update` replaces the files of an existing one, given by URL or id,
@@ -385,12 +394,12 @@ jupyter workshop launch workshops/git-basics --restart=force --trust trusted --f
 ## lite
 
 ```
-jupyter workshop lite my-workshop [other-workshop ...] [--out DIR]
-                                  [--default NAME] [--trust LEVEL]
-                                  [--collection URL|FILE] [--catalog URL|FILE]
-                                  [--settings FILE] [--welcome FILE]
-                                  [--no-terminal] [--lite-dir DIR]
-                                  [--serve] [--port PORT]
+jupyter workshop lite [my-workshop ...] [--out DIR] [--python X.Y]
+                      [--default NAME] [--trust LEVEL]
+                      [--collection URL|FILE] [--catalog URL|FILE]
+                      [--settings FILE] [--welcome FILE]
+                      [--no-terminal] [--lite-dir DIR]
+                      [--serve] [--port PORT]
 ```
 
 Builds a static [JupyterLite](lite.md) site carrying the workshops, with
@@ -398,6 +407,17 @@ the extension, the Pyodide kernel and the terminal, that any web host can
 serve. Needs the `lite` extra; the terminal's build step needs `node`,
 `npm` and `micromamba` unless `--no-terminal` is given. `--serve` serves
 the result locally to try it out.
+
+With no workshop at all the site is a launcher: it starts in an empty
+workshop browser and opens whatever a [launch
+link](collections.md#launch-links) names in its `workshop` parameter,
+such as a gist. The Python the site provides is whichever the installed
+Pyodide kernel package carries, which `jupyter workshop lite` writes
+into the site's configuration so the preflight can check a workshop's
+Python requirement against it; `--python X.Y` makes the build fail
+unless that is the version it would carry, for a site published under
+a path that names its Python. See [A launcher for launch
+links](publishing.md#a-launcher-for-launch-links).
 
 A site with one workshop, or with `--default NAME`, opens that workshop
 on start; any other site starts in the workshop browser. `--collection`

@@ -82,14 +82,21 @@ docs-serve:
 docs-clean:
     rm -rf docs/_build docs/reference
 
-# Assemble the GitHub Pages site into site/: landing page, JSON schemas and the JupyterLite demo.
+# Assemble the GitHub Pages site into site/: landing page, JSON schemas, the JupyterLite demo and the launcher for the installed Python.
 pages *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
     rm -rf site
     mkdir -p site/schemas/v1alpha1
     cp github-pages/index.html site/index.html
     touch site/.nojekyll
     cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json packages/core/src/schema/events.schema.json site/schemas/v1alpha1/
     uv run jupyter workshop lite examples/hello-jupyterlab --out site/demo "$@"
+    # The launcher carries no workshop and lives under the Python version
+    # its kernel provides, so launch links written against it keep that
+    # Python when a launcher for a newer one is published beside it.
+    python="$(uv run python -c 'from jupyterlab_workshop.lite import python_version; print(python_version())')"
+    uv run jupyter workshop lite --python "$python" --welcome github-pages/launcher.md --out "site/lite/$python" "$@"
 
 # Self-test a workshop directory in a real JupyterLab (default: every example).
 selftest *args:

@@ -17,6 +17,12 @@ the released package.
   `reset` and the extension's `restart=force`, so every visit starts
   afresh; see [launch links](collections.md#launch-links).
 
+- The [launcher](https://grahamdumpleton.github.io/jupyterlab-workshop/lite/3.14/lab/index.html)
+  is the same JupyterLite with no workshop built in, for opening a
+  workshop named by a launch link, such as one published as a gist. Its
+  path names the Python it carries; see [A launcher for launch
+  links](publishing.md#a-launcher-for-launch-links).
+
 The showcase workshops, taken in order, are:
 
 - **Why a workshop?** does one small task from a notebook of

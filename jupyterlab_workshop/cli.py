@@ -41,7 +41,7 @@ from .collection import (
 )
 from .fetch import FetchError
 from .gist import (
-    DEFAULT_SITE,
+    LAUNCHER_PYTHONS,
     GistError,
     create_gist,
     flatten_workshop,
@@ -395,9 +395,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gist.add_argument(
         "--site",
-        default=DEFAULT_SITE,
-        help="JupyterLite site the README's launch button opens "
-        "(default the project's demo site)",
+        default="",
+        help="JupyterLite site the README's launch button opens (default: the "
+        "published launcher for the Python the manifest requires, else the "
+        "newest)",
+    )
+    gist.add_argument(
+        "--python",
+        default="",
+        metavar="X.Y",
+        help="Python version of the published launcher the button opens, "
+        f"one of {', '.join(LAUNCHER_PYTHONS)}",
     )
     gist.add_argument(
         "--append-readme",
@@ -611,7 +619,20 @@ def build_parser() -> argparse.ArgumentParser:
     lite = commands.add_parser(
         "lite", help="build a static JupyterLite site carrying workshops"
     )
-    lite.add_argument("workshops", nargs="+", type=Path, help="workshop directories")
+    lite.add_argument(
+        "workshops",
+        nargs="*",
+        type=Path,
+        help="workshop directories; none builds a launcher that opens "
+        "workshops named by launch links",
+    )
+    lite.add_argument(
+        "--python",
+        default="",
+        metavar="X.Y",
+        help="Python version the site must provide; the build fails when the "
+        "installed Pyodide kernel carries another",
+    )
     lite.add_argument(
         "--out",
         type=Path,
@@ -1189,6 +1210,7 @@ def command_gist(args: argparse.Namespace) -> int:
             json.loads(listed.stdout)["files"],
             site=args.site,
             append_readme=args.append_readme,
+            python=args.python,
         )
         target = write_flat(flat, args.out)
     except GistError as error:
@@ -1199,6 +1221,11 @@ def command_gist(args: argparse.Namespace) -> int:
 
     for path in flat.left_out:
         print(f"left out {path}")
+
+    if "jupyterlite" in (flat.manifest.get("frontends") or []):
+        python = f" (Python {flat.python})" if flat.python else ""
+
+        print(f"launcher {flat.site}{python}")
 
     print(f"wrote {target}")
 
@@ -1320,6 +1347,7 @@ def command_lite(args: argparse.Namespace) -> int:
         catalogs=tuple(args.catalog),
         settings=args.settings,
         welcome=args.welcome,
+        python=args.python,
     )
 
     try:
@@ -1327,7 +1355,10 @@ def command_lite(args: argparse.Namespace) -> int:
     except LiteError as error:
         raise CliError(str(error)) from error
 
-    print(f"built {result.output} with {', '.join(result.workshops)}")
+    carried = ", ".join(result.workshops) or "no workshops, as a launcher"
+    python = f" and Python {result.python}" if result.python else ""
+
+    print(f"built {result.output} with {carried}{python}")
 
     if not result.terminal:
         print("the terminal was left out, so terminal actions will not run")

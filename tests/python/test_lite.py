@@ -1,4 +1,5 @@
 import json
+import re
 import urllib.request
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from jupyterlab_workshop.lite import (
     build_lite_site,
     missing_requirements,
     patch_site_config,
+    python_version,
     serve_directory,
     settings_overrides,
     settings_schema,
@@ -95,6 +97,60 @@ def test_stage_contents_copies_workshops_without_progress(tmp_path: Path) -> Non
 
     with pytest.raises(LiteError, match="Two workshops are named"):
         stage_contents([first, _workshop(tmp_path / "c", "first")], tmp_path / "s2")
+
+
+def test_python_version_is_the_installed_kernels() -> None:
+    version = python_version()
+
+    assert re.fullmatch(r"\d+\.\d+", version), version
+
+
+def test_build_lite_site_refuses_another_python(tmp_path: Path) -> None:
+    def runner(command, cwd):  # type: ignore[no-untyped-def]
+        raise AssertionError("the build should not run")
+
+    with pytest.raises(LiteError, match="not 2.7"):
+        build_lite_site(
+            LiteBuildOptions(
+                workshops=(),
+                output=tmp_path / "site",
+                lite_dir=tmp_path / "cache",
+                terminal=False,
+                python="2.7",
+            ),
+            runner=runner,
+        )
+
+
+def test_build_lite_site_without_workshops_is_a_launcher(tmp_path: Path) -> None:
+    seen: list[list[str]] = []
+
+    def runner(command, cwd):  # type: ignore[no-untyped-def]
+        seen.append(list(command))
+
+        return 0
+
+    lite_dir = tmp_path / "cache"
+    result = build_lite_site(
+        LiteBuildOptions(
+            workshops=(),
+            output=tmp_path / "site",
+            lite_dir=lite_dir,
+            terminal=False,
+            python=python_version(),
+        ),
+        runner=runner,
+    )
+    overrides = json.loads((lite_dir / "overrides.json").read_text())
+    config = json.loads((lite_dir / "jupyter-lite.json").read_text())
+
+    assert result.workshops == []
+    assert result.python == python_version()
+    assert seen and f"--contents={lite_dir / 'contents'}" in seen[0]
+    assert list((lite_dir / "contents").iterdir()) == []
+    assert overrides[PANEL_PLUGIN]["defaultWorkshop"] == ""
+    assert overrides[PANEL_PLUGIN]["browseOnStart"] is True
+    assert config["jupyter-config-data"]["pythonVersion"] == python_version()
 
 
 def test_settings_overrides_open_the_only_workshop_by_default(tmp_path: Path) -> None:
@@ -478,6 +534,7 @@ def test_patch_site_config_applies_the_settings(tmp_path: Path) -> None:
         "appName": "JupyterLite",
         "exposeAppInBrowser": True,
         "jupyterlabWorkshopVersion": __version__,
+        "pythonVersion": python_version(),
         "terminalsAvailable": True,
     }
     assert lab["jupyter-config-data"]["exposeAppInBrowser"] is True
@@ -495,6 +552,7 @@ def test_patch_site_config_without_terminal_leaves_terminals_off(
     assert root["jupyter-config-data"] == {
         "exposeAppInBrowser": True,
         "jupyterlabWorkshopVersion": __version__,
+        "pythonVersion": python_version(),
     }
 
 
@@ -529,11 +587,15 @@ def test_cli_parses_lite_options(tmp_path: Path) -> None:
             "settings.json",
             "--welcome",
             "welcome.md",
+            "--python",
+            "3.14",
         ]
     )
 
     assert args.func is cli.command_lite
     assert args.workshops == [Path("a"), Path("b")]
+    assert args.python == "3.14"
+    assert parser.parse_args(["lite", "--out", "launcher"]).workshops == []
     assert args.terminal is False
     assert args.collection == ["u"]
     assert args.catalog == ["c"]

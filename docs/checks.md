@@ -285,7 +285,10 @@ When a manifest lists `requires.tools`, opening the workshop asks the
 server which of them are on its path. A banner on the first page lists
 tools that are missing or too old. Versions are read from
 `<tool> --version` only when the workshop is trusted; otherwise only
-presence is checked.
+presence is checked. In JupyterLite, Python is the Pyodide kernel and
+its version requirement is checked against the Python the site was
+built with; other tools are looked for in the terminal's shell, without
+versions.
 
 ```yaml
 requires:

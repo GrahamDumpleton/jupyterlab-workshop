@@ -206,7 +206,7 @@ class TestCheckpoints:
 
 class TestPreflight:
     def test_finds_python_and_reports_missing_tools(self) -> None:
-        from jupyterlab_workshop.checks import _satisfies, preflight
+        from jupyterlab_workshop.checks import preflight, satisfies_version
 
         results = preflight(
             [
@@ -225,12 +225,12 @@ class TestPreflight:
         )
         assert results[2].found is False
 
-        assert _satisfies("2.39.1", ">=2.30") is True
-        assert _satisfies("2.29", ">=2.30") is False
-        assert _satisfies("3.12", "3.12") is True
-        assert _satisfies("3.12.0", "==3.12") is True
-        assert _satisfies("", ">=1") is False
-        assert _satisfies("1.0", "weird") is True
+        assert satisfies_version("2.39.1", ">=2.30") is True
+        assert satisfies_version("2.29", ">=2.30") is False
+        assert satisfies_version("3.12", "3.12") is True
+        assert satisfies_version("3.12.0", "==3.12") is True
+        assert satisfies_version("", ">=1") is False
+        assert satisfies_version("1.0", "weird") is True
 
 
 def test_create_checkpoint_leaves_no_partial_file(tmp_path: Path) -> None:

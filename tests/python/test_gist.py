@@ -9,12 +9,15 @@ import yaml
 from jupyterlab_workshop.gist import (
     DEFAULT_SITE,
     GIST_URL_PLACEHOLDER,
+    LAUNCHER_PYTHONS,
+    LAUNCHER_SITE,
     FlatWorkshop,
     GistError,
     create_gist,
     flat_name,
     flatten_workshop,
     gist_id,
+    launcher_site,
     render_readme,
     resolve_token,
     rewrite_manifest,
@@ -188,6 +191,65 @@ def test_flatten_leaves_unrenamed_workshops_alone(tmp_path: Path) -> None:
 
     assert flat.renames == {}
     assert flat.files["workshop.yaml"].endswith("pages: [01.md]\n")
+
+
+def test_launcher_site_follows_the_python_requirement() -> None:
+    newest = LAUNCHER_PYTHONS[0]
+    url = LAUNCHER_SITE.format(python=newest)
+
+    # Nothing said, or a requirement the newest launcher meets, picks it.
+    assert launcher_site({}) == (newest, url)
+    assert launcher_site({"requires": {"tools": [{"name": "git"}]}}) == (newest, url)
+    assert launcher_site(
+        {"requires": {"tools": [{"name": "python", "version": ">=3.12"}]}}
+    ) == (newest, url)
+    assert launcher_site(
+        {"requires": {"tools": [{"name": "python3", "version": f"=={newest}"}]}}
+    ) == (newest, url)
+
+    # A requirement for JupyterLab only says nothing about the launcher.
+    assert launcher_site(
+        {
+            "requires": {
+                "tools": [
+                    {"name": "python", "version": "<3", "frontends": ["jupyterlab"]}
+                ]
+            }
+        }
+    ) == (newest, url)
+
+    # One no launcher meets is an error rather than a wrong button.
+    with pytest.raises(GistError, match="requires Python <3"):
+        launcher_site({"requires": {"tools": [{"name": "python", "version": "<3"}]}})
+
+    # Naming a version wins, but only a published one.
+    assert launcher_site(
+        {"requires": {"tools": [{"name": "python", "version": "<3"}]}}, newest
+    ) == (newest, url)
+
+    with pytest.raises(GistError, match="No launcher is published for Python 2.7"):
+        launcher_site({}, "2.7")
+
+
+def test_flatten_records_the_launcher_or_the_site_given(tmp_path: Path) -> None:
+    directory = tmp_path / "ws"
+    directory.mkdir()
+    (directory / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: w\ntitle: W\n"
+        "frontends: [jupyterlab, jupyterlite]\npages: [01.md]\n"
+    )
+    (directory / "01.md").write_text("# One\n")
+
+    chosen = flatten_workshop(directory)
+
+    assert chosen.python == LAUNCHER_PYTHONS[0]
+    assert chosen.site == DEFAULT_SITE
+    assert DEFAULT_SITE in chosen.files["README.md"]
+
+    given = flatten_workshop(directory, site="https://lite.example.org/lab/")
+
+    assert given.python == ""
+    assert given.site == "https://lite.example.org/lab/"
 
 
 def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
