@@ -773,6 +773,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           : undefined;
         const launch = args.launch === true;
 
+        // A launch link's restart mode decides what happens when the
+        // download's directory exists already, as it does for a path.
+        const restart =
+          args.restart === 'force' || args.restart === 'ask'
+            ? args.restart
+            : undefined;
+
         // The browser installs without opening: the workshop is listed
         // under Installed, where Open starts it.
         const open = args.open !== false;
@@ -808,16 +815,20 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
         }
 
         const directory = await workshopsDirectory();
-        const path = await fetchWorkshop(manager, {
-          url,
-          ref,
-          subdir,
-          sha256,
-          archive,
-          directory,
-          name,
-          collection
-        });
+        const path = await fetchWorkshop(
+          manager,
+          {
+            url,
+            ref,
+            subdir,
+            sha256,
+            archive,
+            directory,
+            name,
+            collection
+          },
+          { restart, contents: app.serviceManager.contents }
+        );
 
         if (path && open) {
           await manager.open(path, { variables, launch });
@@ -1111,6 +1122,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             subdir: request.subdir,
             sha256: request.sha256,
             variables: request.variables,
+            restart: request.restart,
             launch: true
           });
         };
@@ -1727,14 +1739,67 @@ async function findInCollections(
   return undefined;
 }
 
+/** How a download treats a directory that exists already. */
+interface IFetchConflictOptions {
+  /**
+   * A launch link's restart mode: `force` replaces the directory without
+   * asking and `ask` asks only when it has recorded progress, as the
+   * same modes do for a directory link. Left out, the download asks.
+   */
+  restart?: 'ask' | 'force';
+
+  /** Where to look for the existing directory's progress. */
+  contents?: Contents.IManager;
+}
+
 /**
- * Download a workshop, offering to replace an existing directory, and
- * return the path it landed in or an empty string when nothing was
- * downloaded.
+ * Whether a download may replace the directory a conflict names. A forced
+ * restart always may; a bare restart may when the directory has recorded
+ * no progress, which is what a directory link's restart checks too; and
+ * otherwise the learner is asked, since work of theirs may be in there.
+ */
+async function mayReplace(
+  message: string,
+  options: IFetchConflictOptions
+): Promise<boolean> {
+  if (options.restart === 'force') {
+    return true;
+  }
+
+  // Both the server and the browser-side fetch report the conflict as
+  // `<path> already exists`, with the path relative to the root.
+  const named = /^(.+?) already exists/.exec(message);
+
+  if (options.restart === 'ask' && named && options.contents) {
+    const started = await getIfExists(
+      options.contents,
+      PathExt.join(named[1], WORKSHOP_STATE_DIR, STATE_FILE),
+      false
+    );
+
+    if (!started) {
+      return true;
+    }
+  }
+
+  const result = await showDialog({
+    title: 'Replace existing workshop?',
+    body: `${message}. Replace it with a fresh download? Progress recorded in it will be lost.`,
+    buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Replace' })]
+  });
+
+  return result.button.accept;
+}
+
+/**
+ * Download a workshop, replacing an existing directory as the options
+ * allow or after asking, and return the path it landed in or an empty
+ * string when nothing was downloaded.
  */
 async function fetchWorkshop(
   manager: IWorkshopManager,
-  request: IFetchRequest
+  request: IFetchRequest,
+  options: IFetchConflictOptions = {}
 ): Promise<string> {
   const notification = Notification.emit(
     `Downloading workshop from ${request.url}`,
@@ -1762,17 +1827,8 @@ async function fetchWorkshop(
       (error instanceof ServerConnection.ResponseError &&
         error.response.status === 409)
     ) {
-      const result = await showDialog({
-        title: 'Replace existing workshop?',
-        body: `${error.message}. Replace it with a fresh download? Progress recorded in it will be lost.`,
-        buttons: [
-          Dialog.cancelButton(),
-          Dialog.warnButton({ label: 'Replace' })
-        ]
-      });
-
-      if (result.button.accept) {
-        return fetchWorkshop(manager, { ...request, overwrite: true });
+      if (await mayReplace(error.message, options)) {
+        return fetchWorkshop(manager, { ...request, overwrite: true }, options);
       }
 
       return '';

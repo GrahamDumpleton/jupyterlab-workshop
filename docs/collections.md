@@ -467,8 +467,11 @@ https://hub.example.org/user/ada/lab?workshop=https://github.com/example-org/wor
   the first-open snapshot, progress forgotten, layout applied afresh.
   On its own it asks first when the workshop has recorded progress, and
   goes straight ahead when there is nothing to lose; `restart=force`
-  never asks, for a demo link that must always start clean. It applies
-  to a directory; a download replaces the files anyway. JupyterLab's own
+  never asks, for a demo link that must always start clean. A download
+  whose directory is already there, from an earlier use of the link, is
+  replaced by the same rule: `restart=force` replaces it without asking,
+  `restart` asks only when it has recorded progress, and a link with
+  neither asks before replacing it. JupyterLab's own
   `reset` parameter clears the window's tabs and panels, so a link that
   should look untouched carries both: `lab?reset&workshop=…&restart=force`.
 

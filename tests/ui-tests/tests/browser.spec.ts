@@ -1086,6 +1086,71 @@ test.describe('workshop browser', () => {
     expect(page.url()).not.toContain('restart');
   });
 
+  test('replaces a downloaded workshop under a launch link as its restart mode says', async ({
+    page
+  }) => {
+    const dialog = page.locator('.jp-Dialog');
+    const panel = page.locator('#jupyterlab-workshop-panel');
+    const title = panel.locator('.jp-WorkshopPanel-title');
+    const trust = dialog.locator('.jp-WorkshopTrust');
+    const replace = dialog.filter({ hasText: 'Replace existing workshop?' });
+    const link = `?workshop=${filesUrl(page, ARCHIVE_FILE)}`;
+    const relaunch = async (search: string): Promise<void> => {
+      await page
+        .evaluate((query: string) => {
+          window.location.assign(`${window.location.pathname}${query}`);
+        }, search)
+        .catch(() => undefined);
+    };
+    const trustIfAsked = async (): Promise<void> => {
+      await trust.or(title).first().waitFor({ timeout: 60000 });
+
+      if (await trust.isVisible()) {
+        await dialog
+          .getByRole('button', { name: 'Trust', exact: true })
+          .click();
+      }
+
+      await expect(title).toHaveText('Pandas for beginners');
+    };
+
+    // The first use downloads the workshop; a forced restart on the next
+    // replaces the directory without asking, as a demo link needs.
+    await relaunch(`${link}&restart=force`);
+    await trustIfAsked();
+    await relaunch(`${link}&restart=force`);
+    await trustIfAsked();
+    await expect(replace).toHaveCount(0);
+
+    // A bare restart replaces a copy with no progress recorded without
+    // asking, the same as a directory link, and asks once there is some.
+    // The state file lands a moment after the workshop opens, so the
+    // link waits for it, as the restart of a directory link does.
+    await relaunch(`${link}&restart`);
+    await trustIfAsked();
+    await expect(replace).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(
+          `api/contents/${WORKSHOPS_DIR}/pandas-intro/_workshop/state.json?content=0`
+        );
+
+        return response.ok();
+      })
+      .toBe(true);
+    await relaunch(`${link}&restart`);
+    await expect(replace).toBeVisible({ timeout: 60000 });
+    await replace.getByRole('button', { name: 'Replace' }).click();
+    await trustIfAsked();
+
+    // Without a restart mode the question is asked as before, and
+    // Cancel leaves the existing copy alone.
+    await relaunch(link);
+    await expect(replace).toBeVisible({ timeout: 60000 });
+    await replace.getByRole('button', { name: 'Cancel' }).click();
+    await expect(replace).toHaveCount(0);
+  });
+
   test('opens a workshop once from a launch link that also resets the window', async ({
     page
   }) => {
