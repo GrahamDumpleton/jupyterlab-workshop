@@ -1,4 +1,8 @@
-import { isActionType, isAutomatic } from '@jupyterlab-workshop/core';
+import {
+  collectDirectives,
+  isActionType,
+  isAutomatic
+} from '@jupyterlab-workshop/core';
 import React, { useEffect, useState } from 'react';
 
 import { IWorkshopManager } from '../tokens';
@@ -40,8 +44,24 @@ export function clickHintTarget(manager: IWorkshopManager): string | null {
   }
 
   for (const page of manager.visiblePages) {
-    for (const node of visibleDirectives(page, manager.variables.values)) {
-      if (!isActionType(node.name) || isAutomatic(node)) {
+    // A hint is not an action to click, and what it holds is out of
+    // sight until it is opened, so neither can carry the pointer.
+    const inHint = new Set<string>();
+
+    for (const node of visibleDirectives(page, manager.conditionValues)) {
+      if (node.name === 'hint') {
+        for (const held of collectDirectives(node.nodes ?? [])) {
+          inHint.add(held.id);
+        }
+
+        continue;
+      }
+
+      if (
+        inHint.has(node.id) ||
+        !isActionType(node.name) ||
+        isAutomatic(node)
+      ) {
         continue;
       }
 

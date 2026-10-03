@@ -177,22 +177,28 @@ were sent, and close with the workshop.
 
 ## Guidance
 
-| Directive   | Capability | Body     | Options                       | Description                                         |
-| ----------- | ---------- | -------- | ----------------------------- | --------------------------------------------------- |
-| `highlight` | none       | optional | `selector`, `duration`        | Draw attention to part of the interface.            |
-| `tour`      | none       | yaml     | (none)                        | Walk through interface elements listed in the body. |
-| `toast`     | none       | required | `type`, `duration`            | Show a notification message.                        |
-| `tooltip`   | none       | required | `selector`                    | Pin a note to an element until dismissed.           |
-| `dialog`    | none       | required | `title`, `buttons`, `capture` | Ask a question and store the answer in a variable.  |
-| `hint`      | none       | markdown | `title`, `open`               | Collapsible help text.                              |
+| Directive   | Capability | Body     | Options                             | Description                                         |
+| ----------- | ---------- | -------- | ----------------------------------- | --------------------------------------------------- |
+| `highlight` | none       | optional | `selector`, `duration`              | Draw attention to part of the interface.            |
+| `tour`      | none       | yaml     | (none)                              | Walk through interface elements listed in the body. |
+| `toast`     | none       | required | `type`, `duration`                  | Show a notification message.                        |
+| `tooltip`   | none       | required | `selector`                          | Pin a note to an element until dismissed.           |
+| `dialog`    | none       | required | `title`, `buttons`, `capture`       | Ask a question and store the answer in a variable.  |
+| `hint`      | none       | markdown | `title`, `open`, `unlock`, `locked` | Collapsible help, which can hold actions.           |
 
 The body of a `tour` is a YAML list of steps, each with a `selector`
 for the element to point at and the `text` to say about it. The box for
 a `tour` shows the text of each step, numbered, and not the selectors.
 
-A `hint` that quotes a fenced code block must be fenced with four
-backticks, so that the block's three do not close it; see
-[directives](pages.md#directives).
+A `hint` stays closed until the learner opens it, and its body is a
+piece of page: prose, and any actions written inside it, which is how a
+solution is kept out of sight until asked for. With `unlock` it shows
+locked until a condition holds, with the `locked` note beside its title.
+[Hints](pages.md#hints) describes both, and what a hint may not hold.
+
+A `hint` that holds an action or quotes a fenced code block must be
+fenced with four backticks, so that the block's three do not close it;
+see [directives](pages.md#directives).
 
 ## Flow and variables
 

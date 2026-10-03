@@ -1,4 +1,5 @@
 import {
+  ASSUMED_PROGRESS,
   IDirectiveNode,
   parseForm,
   parseQuiz
@@ -227,9 +228,13 @@ export async function runCurrentPage(
       break;
     }
 
-    const node = visibleDirectives(page, manager.variables.values).find(
-      item => !done.has(item.id)
-    );
+    // Conditions that wait on progress are taken to hold, so that what
+    // a page shows only after a check fails or a hint is opened, and
+    // what a locked hint holds, is run like the rest of the page.
+    const node = visibleDirectives(page, {
+      ...manager.variables.values,
+      ...ASSUMED_PROGRESS
+    }).find(item => !done.has(item.id));
 
     if (!node) {
       break;

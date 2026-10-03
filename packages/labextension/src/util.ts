@@ -57,19 +57,33 @@ export function conditionHolds(
 
 /**
  * The directives of a page that are shown given the variables, in
- * document order, descending into `when` blocks whose condition holds.
+ * document order, descending into `when` blocks whose condition holds
+ * and into hints that are not locked. A hint is locked while its
+ * `unlock` condition does not hold, unless its id is in `unlocked`, the
+ * hints whose condition has held before.
  */
 export function visibleDirectives(
   page: IPage,
-  variables: Variables
+  variables: Variables,
+  unlocked: ReadonlySet<string> = new Set()
 ): IDirectiveNode[] {
   const directives: IDirectiveNode[] = [];
 
   const walk = (nodes: PageNode[]): void => {
     for (const node of nodes) {
       if (node.kind === 'directive') {
-        if (conditionHolds(node.options.when, variables)) {
-          directives.push(node);
+        if (!conditionHolds(node.options.when, variables)) {
+          continue;
+        }
+
+        directives.push(node);
+
+        if (
+          node.nodes &&
+          (unlocked.has(node.id) ||
+            conditionHolds(node.options.unlock, variables))
+        ) {
+          walk(node.nodes);
         }
       } else if (
         node.kind === 'when' &&

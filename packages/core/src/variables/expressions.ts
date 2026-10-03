@@ -14,6 +14,10 @@
  * `false`, `no` or `0`. `in` on a string is a substring test, so a
  * variable that holds a list is named in `LIST_VARIABLES` and split on
  * commas when it is read, and `in` on it is membership.
+ *
+ * The `PROGRESS_VARIABLES` are lists of directive ids that say how far
+ * the learner has got, so a condition can wait for a check to fail or a
+ * hint to be opened.
  */
 
 import { Variables } from './substitute';
@@ -49,7 +53,45 @@ const KEYWORDS = new Set(['and', 'or', 'not', 'in', 'true', 'false']);
  * preflight check did not find, so `"git" in missing_tools` is true for
  * `git` and not for a `gitk` that happens to contain it.
  */
-export const LIST_VARIABLES: ReadonlySet<string> = new Set(['missing_tools']);
+export const LIST_VARIABLES: ReadonlySet<string> = new Set([
+  'missing_tools',
+  'passed_checks',
+  'failed_checks',
+  'opened_hints',
+  'done_actions'
+]);
+
+/**
+ * The list variables that hold progress, each the ids of directives:
+ * `passed_checks` and `failed_checks` the checks and quizzes whose last
+ * result was a pass or a failure, `opened_hints` the hints the learner
+ * has opened, and `done_actions` the other directives that have run and
+ * succeeded. They are worked out when a condition is evaluated and are
+ * not variables a page can substitute.
+ */
+export const PROGRESS_VARIABLES: readonly string[] = [
+  'passed_checks',
+  'failed_checks',
+  'opened_hints',
+  'done_actions'
+];
+
+/**
+ * An item that stands for every item: a list holding it contains
+ * whatever it is asked about.
+ */
+const ANY_ITEM = '*';
+
+/**
+ * Progress under which every `in` test of a progress list holds, as if
+ * each check had both passed and failed and each hint had been opened.
+ * The self-test evaluates conditions with it, since it runs a page from
+ * top to bottom and would otherwise never be shown content that waits
+ * for something further down.
+ */
+export const ASSUMED_PROGRESS: Readonly<Variables> = Object.fromEntries(
+  PROGRESS_VARIABLES.map(name => [name, ANY_ITEM])
+);
 
 /** One `<string> in <name>` or `<string> not in <name>` test of a condition. */
 export interface IMembershipTest {
@@ -434,7 +476,7 @@ function contains(container: Value, item: Value): boolean {
   const needle = asString(item);
 
   if (Array.isArray(container)) {
-    return container.includes(needle);
+    return container.includes(needle) || container.includes(ANY_ITEM);
   }
 
   return asString(container).includes(needle);

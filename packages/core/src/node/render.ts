@@ -96,8 +96,8 @@ function renderNodes(nodes: PageNode[]): string {
         .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
         .join(', ');
       const body =
-        node.html !== undefined
-          ? node.html
+        node.nodes !== undefined
+          ? renderNodes(node.nodes)
           : node.body.trim() !== '' && spec?.body !== 'none'
             ? `<pre>${escapeHtml(node.body)}</pre>`
             : '';

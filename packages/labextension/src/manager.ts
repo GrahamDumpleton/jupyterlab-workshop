@@ -17,6 +17,8 @@ import {
   resolveCatalog,
   parseRequirement,
   actionCapability,
+  allDirectives,
+  progressVariables,
   decideAction,
   declaredVariables,
   formatDiff,
@@ -289,7 +291,7 @@ export class WorkshopManager implements IWorkshopManager {
       return [];
     }
 
-    const values = this._store.values;
+    const values = this.conditionValues;
 
     return this._workshop.pages.filter(page =>
       conditionHolds(page.frontmatter.when, values)
@@ -1529,6 +1531,7 @@ export class WorkshopManager implements IWorkshopManager {
     this._record(request, result, trigger, registry.describe(request));
     this._running.delete(request.id);
     this._actionChanged.emit(request.id);
+    this._pagesFollowProgress();
     this._emitActionEvent(request, result, trigger, disposition.kind);
 
     // The self-test records a run the page made on its own rather than
@@ -1625,14 +1628,103 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   evaluate(condition: string): boolean {
+    return conditionHolds(condition, this.conditionValues);
+  }
+
+  get conditionValues(): Variables {
     // A page shown while the trust prompt is up was rendered with the
     // defaults, which is what its conditions are judged against too.
-    const values =
-      !this._workshop && this._preview
-        ? this._preview.variables
-        : this._store.values;
+    if (!this._workshop) {
+      return this._preview ? this._preview.variables : this._store.values;
+    }
 
-    return conditionHolds(condition, values);
+    // The progress lists are worked out here and kept out of the
+    // variable store, so that a click does not render the pages again
+    // or reach the environment files.
+    const state = this._state.state;
+
+    return {
+      ...this._store.values,
+      ...progressVariables(
+        allDirectives(this._workshop.pages),
+        id => state?.actions[id]?.status,
+        state?.hints?.opened ?? []
+      )
+    };
+  }
+
+  get unlockedHints(): ReadonlySet<string> {
+    return new Set(this._state.state?.hints?.unlocked ?? []);
+  }
+
+  hintLocked(node: IDirectiveNode): boolean {
+    if (!node.options.unlock || this.unlockedHints.has(node.id)) {
+      return false;
+    }
+
+    return !this.evaluate(node.options.unlock);
+  }
+
+  hintOpened(node: IDirectiveNode): void {
+    const state = this._state.state;
+
+    this._emit('hint-opened', { id: node.id });
+
+    if (!state) {
+      return;
+    }
+
+    const hints = state.hints ?? { opened: [], unlocked: [] };
+
+    if (!hints.opened.includes(node.id)) {
+      hints.opened.push(node.id);
+      state.hints = hints;
+      this._noteUnlocks();
+      this._state.save();
+    }
+
+    // What waits for this hint to be opened is shown from now on.
+    this._actionChanged.emit(node.id);
+    this._pagesFollowProgress();
+  }
+
+  /**
+   * A page whose `when` waits on progress joins or leaves the page list
+   * as the learner goes, and the list is drawn outside the page body,
+   * which only redraws on the broader change signal.
+   */
+  private _pagesFollowProgress(): void {
+    if (this._recordVisiblePages()) {
+      this._changed.emit();
+    }
+  }
+
+  /**
+   * Record the hints whose `unlock` condition now holds, so that each
+   * stays unlocked whatever its condition does later: a solution that
+   * unlocks when a check fails is still there once the check passes.
+   */
+  private _noteUnlocks(): void {
+    const state = this._state.state;
+
+    if (!this._workshop || !state) {
+      return;
+    }
+
+    const hints = state.hints ?? { opened: [], unlocked: [] };
+    const values = this.conditionValues;
+
+    for (const node of allDirectives(this._workshop.pages)) {
+      if (
+        node.name === 'hint' &&
+        node.options.unlock &&
+        !hints.unlocked.includes(node.id) &&
+        conditionHolds(node.options.unlock, values)
+      ) {
+        hints.unlocked.push(node.id);
+        state.hints = hints;
+      }
+    }
   }
 
   resolvePath(path: string, base: PathBase = 'workspace'): string {
@@ -1739,6 +1831,7 @@ export class WorkshopManager implements IWorkshopManager {
       trigger
     });
 
+    this._noteUnlocks();
     this._state.save();
   }
 
@@ -1766,9 +1859,11 @@ export class WorkshopManager implements IWorkshopManager {
       const page = this.currentPage;
 
       if (page) {
-        const autos = visibleDirectives(page, this._store.values).filter(
-          node => node.options.auto === 'page-enter'
-        );
+        const autos = visibleDirectives(
+          page,
+          this.conditionValues,
+          this.unlockedHints
+        ).filter(node => node.options.auto === 'page-enter');
 
         this._enqueue(
           autos.map(node => ({
@@ -1991,7 +2086,11 @@ export class WorkshopManager implements IWorkshopManager {
       return;
     }
 
-    const directives = visibleDirectives(page, this._store.values);
+    const directives = visibleDirectives(
+      page,
+      this.conditionValues,
+      this.unlockedHints
+    );
     const followers: IQueued[] = [];
 
     // Cascade from the producer: the next action in document order, or a
@@ -2147,12 +2246,13 @@ export class WorkshopManager implements IWorkshopManager {
   /**
    * Keep the list of visible page ids in the state file so the installed
    * listing can report progress out of the pages the learner can see.
+   * Returns whether the list changed.
    */
-  private _recordVisiblePages(): void {
+  private _recordVisiblePages(): boolean {
     const state = this._state.state;
 
     if (!state) {
-      return;
+      return false;
     }
 
     const ids = this.visiblePages.map(page => page.id);
@@ -2165,6 +2265,8 @@ export class WorkshopManager implements IWorkshopManager {
       state.visiblePages = ids;
       this._state.save();
     }
+
+    return !same;
   }
 
   private _onFileChanged(

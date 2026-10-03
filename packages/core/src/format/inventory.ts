@@ -58,10 +58,13 @@ export function pageInventory(
         node.kind === 'directive' &&
         !STRUCTURE_DIRECTIVES.has(node.name)
       ) {
-        found.push({
-          node,
-          conditional: inside || Boolean(node.options.when)
-        });
+        const conditional = inside || Boolean(node.options.when);
+
+        found.push({ node, conditional });
+
+        if (node.nodes) {
+          walk(node.nodes, conditional);
+        }
       }
     }
   };

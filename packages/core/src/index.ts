@@ -14,6 +14,7 @@ export * from './format/inventory';
 export * from './format/layouts';
 export * from './format/manifest';
 export * from './format/page';
+export * from './format/progress';
 export * from './format/variants';
 export * from './hash';
 export * from './launch/link';

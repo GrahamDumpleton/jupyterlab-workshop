@@ -28,6 +28,7 @@ import {
   folderIcon,
   launcherIcon,
   listIcon,
+  lockIcon,
   refreshIcon,
   runIcon,
   settingsIcon,
@@ -612,12 +613,25 @@ function Nodes({
               manager={manager}
               commands={commands}
             >
-              <DirectiveBlock node={node} manager={manager} />
+              <DirectiveBlock
+                node={node}
+                manager={manager}
+                commands={commands}
+                onProseClick={onProseClick}
+              />
             </AuthorGutter>
           );
         }
 
-        return <DirectiveBlock key={node.id} node={node} manager={manager} />;
+        return (
+          <DirectiveBlock
+            key={node.id}
+            node={node}
+            manager={manager}
+            commands={commands}
+            onProseClick={onProseClick}
+          />
+        );
       })}
     </>
   );
@@ -808,14 +822,25 @@ function ProseBlock({
 
 function DirectiveBlock({
   node,
-  manager
+  manager,
+  commands,
+  onProseClick
 }: {
   node: IDirectiveNode;
   manager: IWorkshopManager;
+  commands: CommandRegistry;
+  onProseClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   switch (node.name) {
     case 'hint':
-      return <HintBlock node={node} manager={manager} />;
+      return (
+        <HintBlock
+          node={node}
+          manager={manager}
+          commands={commands}
+          onProseClick={onProseClick}
+        />
+      );
     case 'choice':
       return <ChoiceBlock node={node} manager={manager} />;
     case 'verify':
@@ -871,20 +896,49 @@ function useRevealOnMessage(
   }, [key, root, status.message, status.status]);
 }
 
+/**
+ * A hint: help that stays closed until the learner opens it, holding
+ * prose and the actions written inside it. A hint with an `unlock`
+ * condition that has not yet held shows as locked, with its title and a
+ * note saying why, and nothing of what it holds.
+ */
 function HintBlock({
   node,
-  manager
+  manager,
+  commands,
+  onProseClick
 }: {
   node: IDirectiveNode;
   manager: IWorkshopManager;
+  commands: CommandRegistry;
+  onProseClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   // A hint that starts open fires a toggle as it renders; only a
   // learner's click should scroll the panel.
   const initialOpen = useRef(node.options.open === 'true');
+  const title = node.options.title ?? 'Hint';
+
+  if (manager.hintLocked(node)) {
+    return (
+      <div
+        className="jp-WorkshopPanel-hint jp-mod-locked"
+        data-action-id={node.id}
+      >
+        <div className="jp-WorkshopPanel-hintLockedTitle">
+          <lockIcon.react tag="span" width="14px" height="14px" />
+          {title}
+        </div>
+        <div className="jp-WorkshopPanel-hintLockedNote">
+          {node.options.locked ?? 'Not available yet'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <details
       className="jp-WorkshopPanel-hint"
+      data-action-id={node.id}
       open={node.options.open === 'true'}
       onToggle={event => {
         const details = event.currentTarget;
@@ -896,18 +950,22 @@ function HintBlock({
           return;
         }
 
-        manager.track('hint-opened', { id: node.id });
+        manager.hintOpened(node);
 
         if (!first) {
           revealBelow(details, details.querySelector('summary') ?? details);
         }
       }}
     >
-      <summary>{node.options.title ?? 'Hint'}</summary>
-      <div
-        className="jp-WorkshopPanel-prose jp-RenderedHTMLCommon"
-        dangerouslySetInnerHTML={{ __html: node.html ?? '' }}
-      />
+      <summary>{title}</summary>
+      <div className="jp-WorkshopPanel-hintBody">
+        <Nodes
+          nodes={node.nodes ?? []}
+          manager={manager}
+          commands={commands}
+          onProseClick={onProseClick}
+        />
+      </div>
     </details>
   );
 }

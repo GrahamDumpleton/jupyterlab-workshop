@@ -40,11 +40,18 @@ import {
   WORKSPACE_DIR,
   toolApplies
 } from '../format/manifest';
-import { IDirectiveNode, IPage, PageNode } from '../format/page';
+import {
+  IDirectiveNode,
+  IPage,
+  PageNode,
+  collectDirectives
+} from '../format/page';
+import { progressList } from '../format/progress';
 import { PLATFORM_NAMES } from '../format/variants';
 import { liteShellProblems, usesSubprocess } from '../lite';
 import {
   IMembershipTest,
+  PROGRESS_VARIABLES,
   evaluateExpression,
   expressionNames,
   membershipTests
@@ -117,6 +124,8 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintChecks(input, messages);
   lintRequirements(input, messages);
   lintTools(input, manifestPath, messages);
+  lintHints(input, messages);
+  lintProgress(input, messages);
   lintFormOrder(input, messages);
   lintLayouts(input, manifestPath, messages);
   lintLayoutTerminals(input, manifestPath, messages);
@@ -421,20 +430,215 @@ function lintTools(
     }
   };
 
+  for (const item of conditions(input.pages)) {
+    check(item.condition, item.path, item.line);
+  }
+}
+
+/** A condition written on a page, and where. */
+interface ICondition {
+  condition: string;
+  path: string;
+  line?: number;
+
+  /** The option or field that holds it, as an author would name it. */
+  where: string;
+}
+
+/**
+ * Every condition the pages carry: the `when` of a page's front matter,
+ * of a `{when}` block and of a directive, and the `unlock` of a hint.
+ */
+function conditions(pages: IPage[]): ICondition[] {
+  const found: ICondition[] = [];
+
+  const add = (
+    condition: string | undefined,
+    where: string,
+    path: string,
+    line?: number
+  ): void => {
+    if (condition && condition.trim() !== '') {
+      found.push({
+        condition,
+        where,
+        path,
+        ...(line === undefined ? {} : { line })
+      });
+    }
+  };
+
   const walk = (nodes: PageNode[], path: string): void => {
     for (const node of nodes) {
       if (node.kind === 'when') {
-        check(node.condition, path, node.line);
+        add(node.condition, 'when', path, node.line);
         walk(node.nodes, path);
       } else if (node.kind === 'directive') {
-        check(node.options.when, path, node.line);
+        add(node.options.when, 'when', path, node.line);
+        add(node.options.unlock, 'unlock', path, node.line);
+
+        if (node.nodes) {
+          walk(node.nodes, path);
+        }
       }
     }
   };
 
-  for (const page of input.pages) {
-    check(page.frontmatter.when, page.path);
+  for (const page of pages) {
+    add(page.frontmatter.when, 'when', page.path);
     walk(page.nodes, page.path);
+  }
+
+  return found;
+}
+
+/** The directives a hint must not hold, since each decides progress. */
+const NOT_IN_HINT: ReadonlySet<string> = new Set(['verify', 'quiz', 'form']);
+
+/**
+ * A hint is closed until the learner opens it, and may be locked, so
+ * what it holds must not be something the page counts on. A check, quiz
+ * or form inside one could gate a page from out of sight, and an action
+ * that runs on its own would run where the learner cannot see it.
+ */
+function lintHints(input: ILintInput, messages: ILintMessage[]): void {
+  for (const page of input.pages) {
+    const hints = allDirectives([page]).filter(node => node.name === 'hint');
+
+    // The hint that holds each directive, the innermost where hints nest.
+    const holder = new Map<string, IDirectiveNode>();
+
+    for (const hint of hints) {
+      for (const node of collectDirectives(hint.nodes ?? [])) {
+        holder.set(node.id, hint);
+      }
+    }
+
+    for (const hint of hints) {
+      const where = { path: page.path, line: hint.line };
+
+      if (hint.options.locked !== undefined && !hint.options.unlock) {
+        messages.push({
+          level: 'warning',
+          rule: 'hint-locked',
+          message: `Hint "${hint.id}" has a "locked" note but no "unlock" condition, so it is never locked`,
+          ...where
+        });
+      }
+
+      if (hint.options.unlock) {
+        try {
+          evaluateExpression(hint.options.unlock, {});
+        } catch (error) {
+          messages.push({
+            level: 'error',
+            rule: 'invalid-condition',
+            message: `The "unlock" condition of hint "${hint.id}" cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+            ...where
+          });
+        }
+      }
+    }
+
+    for (const node of allDirectives([page])) {
+      const where = { path: page.path, line: node.line };
+      const inside = holder.get(node.id);
+
+      if (inside && NOT_IN_HINT.has(node.name)) {
+        messages.push({
+          level: 'error',
+          rule: 'hint-content',
+          message: `The ${node.name} "${node.id}" is inside hint "${inside.id}"; a ${node.name} must be on the page itself, where the learner always sees it`,
+          ...where
+        });
+      }
+
+      if (inside && isAutomatic(node)) {
+        messages.push({
+          level: 'error',
+          rule: 'hint-auto',
+          message: `"${node.id}" is inside hint "${inside.id}" and runs on its own, so it would run while out of sight; remove its "auto" option`,
+          ...where
+        });
+      }
+
+      // A cascade into a hint from outside it runs an action the learner
+      // has not asked to see. Within one hint it is as anywhere else.
+      const cascade = node.options.cascade;
+
+      if (cascades(node) && cascade !== 'true') {
+        const target = (cascade ?? '').trim().split(/\s+/)[0];
+        const targetHint = holder.get(target);
+
+        if (targetHint && targetHint !== inside) {
+          messages.push({
+            level: 'error',
+            rule: 'hint-cascade',
+            message: `"${node.id}" cascades to "${target}", which is inside hint "${targetHint.id}" and so would run while out of sight`,
+            ...where
+          });
+        }
+      }
+    }
+  }
+}
+
+/**
+ * A condition that tests a progress list names a directive by id, and a
+ * mistyped id, or the id of a directive that can never be in that list,
+ * makes a condition that never holds.
+ */
+function lintProgress(input: ILintInput, messages: ILintMessage[]): void {
+  const types = new Map<string, string>();
+
+  for (const node of allDirectives(input.pages)) {
+    types.set(node.id, node.name);
+  }
+
+  for (const item of conditions(input.pages)) {
+    let tests: IMembershipTest[];
+
+    try {
+      tests = membershipTests(item.condition);
+    } catch {
+      continue;
+    }
+
+    for (const test of tests) {
+      if (!PROGRESS_VARIABLES.includes(test.container)) {
+        continue;
+      }
+
+      const type = types.get(test.item);
+      const where = {
+        path: item.path,
+        ...(item.line === undefined ? {} : { line: item.line })
+      };
+
+      if (type === undefined) {
+        messages.push({
+          level: 'error',
+          rule: 'unknown-action-id',
+          message: `"${test.item}" is tested against ${test.container} but no directive has that id`,
+          ...where
+        });
+
+        continue;
+      }
+
+      const list = progressList(type);
+      const expected =
+        test.container === 'failed_checks' ? 'passed_checks' : test.container;
+
+      if (list !== expected) {
+        messages.push({
+          level: 'warning',
+          rule: 'progress-list',
+          message: `"${test.item}" is a ${type}, which is never in ${test.container}; test it against ${list === 'passed_checks' ? 'passed_checks or failed_checks' : list}`,
+          ...where
+        });
+      }
+    }
   }
 }
 

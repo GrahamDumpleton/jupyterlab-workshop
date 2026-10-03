@@ -468,6 +468,45 @@
   font-weight: 600;
 }
 
+/* What a hint holds: prose and action boxes, set off from the title. */
+.jp-WorkshopPanel-hintBody {
+  margin-top: 6px;
+}
+
+.jp-WorkshopPanel-hintBody > :last-child,
+.jp-WorkshopPanel-hintBody > .jp-WorkshopPanel-prose > :last-child {
+  margin-bottom: 4px;
+}
+
+/*
+ * A hint inside a hint keeps only its bar, so each level costs a few
+ * pixels of the panel's width and not a box inside a box.
+ */
+.jp-WorkshopPanel-hint .jp-WorkshopPanel-hint {
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  padding: 0 0 0 8px;
+}
+
+/* A hint whose unlock condition has not yet held. */
+.jp-WorkshopPanel-hint.jp-mod-locked {
+  border-left-color: var(--jp-border-color1);
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopPanel-hintLockedTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.jp-WorkshopPanel-hintLockedNote {
+  font-size: var(--jp-ui-font-size0);
+}
+
 .jp-WorkshopPanel-choice {
   cursor: default;
 }

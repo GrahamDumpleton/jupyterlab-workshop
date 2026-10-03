@@ -514,10 +514,14 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'required',
         ['title', 'buttons', 'capture']
       ),
-      spec('hint', 'guidance', 'Collapsible help text.', 'none', 'markdown', [
-        'title',
-        'open'
-      ]),
+      spec(
+        'hint',
+        'guidance',
+        'Collapsible help, which can hold actions.',
+        'none',
+        'markdown',
+        ['title', 'open', 'unlock', 'locked']
+      ),
 
       // Flow and variables.
       spec(

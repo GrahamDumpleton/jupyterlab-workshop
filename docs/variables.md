@@ -153,9 +153,12 @@ Conditions use `==`, `!=`, `in`, `not in`, `and`, `or`, `not` and
 parentheses over variables, quoted strings and `[lists]`. A bare
 variable name is true when it has a non-empty value. `in` on a string
 is a substring test, so `"mac" in platform` holds for `macos`; a
-variable that holds a list, which today is only `missing_tools`, is
-read as one, so `"git" in missing_tools` holds for `git` and not for a
-`gitk` that happens to contain it.
+variable that holds a list is read as one, so `"git" in missing_tools`
+holds for `git` and not for a `gitk` that happens to contain it. The
+lists are `missing_tools` and the four that hold the learner's
+progress, `passed_checks`, `failed_checks`, `opened_hints` and
+`done_actions`, which [conditional content](pages.md#conditional-content)
+describes; those four exist only in conditions.
 
 ## Tracks
 

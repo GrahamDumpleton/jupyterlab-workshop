@@ -42,8 +42,11 @@ export interface IDirectiveNode {
   options: Record<string, string>;
   body: string;
 
-  /** Rendered HTML of the body for directives whose body is Markdown. */
-  html?: string;
+  /**
+   * The content of a directive whose body is Markdown, a `hint`: prose
+   * and the directives written inside it, in document order.
+   */
+  nodes?: PageNode[];
 
   /** Every platform and frontend alternative of the body, when the body has variants. */
   variants?: Record<string, string>;
@@ -145,8 +148,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
 }
 
 /**
- * Collect every directive node on a page, descending into `when` blocks,
- * in document order.
+ * Collect every directive node on a page, descending into `when` blocks
+ * and into the directives a `hint` holds, in document order.
  */
 export function collectDirectives(nodes: PageNode[]): IDirectiveNode[] {
   const directives: IDirectiveNode[] = [];
@@ -154,6 +157,10 @@ export function collectDirectives(nodes: PageNode[]): IDirectiveNode[] {
   for (const node of nodes) {
     if (node.kind === 'directive') {
       directives.push(node);
+
+      if (node.nodes) {
+        directives.push(...collectDirectives(node.nodes));
+      }
     } else if (node.kind === 'when') {
       directives.push(...collectDirectives(node.nodes));
     }
@@ -212,9 +219,9 @@ function parseFrontmatter(
 /**
  * Split a token stream at its top-level directives, rendering the prose
  * between them to HTML. The tokens were parsed from `source`, whose first
- * line is line `lineOffset + 1` of the page; a `when` body is parsed on
- * its own, so its tokens come through here with the body as the source
- * and `nested` set.
+ * line is line `lineOffset + 1` of the page; the body of a `when` or a
+ * `hint` is parsed on its own, so its tokens come through here with the
+ * body as the source and `nested` set.
  */
 function tokensToNodes(
   tokens: MarkdownIt.Token[],
@@ -279,8 +286,17 @@ function tokensToNodes(
       node.unset = meta.unset;
     }
 
+    // A Markdown body is a document of its own, as a `when` body is, so
+    // the directives written inside it parse as they would on the page.
     if (ACTION_TYPES[meta.name]?.body === 'markdown') {
-      node.html = md.render(meta.body, env);
+      node.nodes = tokensToNodes(
+        md.parse(meta.body, env),
+        md,
+        env,
+        meta.body,
+        line + meta.bodyStart,
+        true
+      );
     }
 
     nodes.push(node);

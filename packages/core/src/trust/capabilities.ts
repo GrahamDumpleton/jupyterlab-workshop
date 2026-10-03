@@ -97,7 +97,8 @@ export function cascades(node: IDirectiveNode): boolean {
 }
 
 /**
- * Every action directive in the pages, descending into `when` blocks.
+ * Every action directive in the pages, descending into `when` blocks
+ * and into the directives a `hint` holds.
  */
 export function allDirectives(pages: IPage[]): IDirectiveNode[] {
   const directives: IDirectiveNode[] = [];
@@ -106,6 +107,10 @@ export function allDirectives(pages: IPage[]): IDirectiveNode[] {
     for (const node of nodes) {
       if (node.kind === 'directive') {
         directives.push(node);
+
+        if (node.nodes) {
+          walk(node.nodes);
+        }
       } else if (node.kind === 'when') {
         walk(node.nodes);
       }

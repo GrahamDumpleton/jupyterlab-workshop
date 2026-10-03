@@ -66,6 +66,13 @@ export interface IWorkshopState {
    */
   visiblePages?: string[];
   actions: Record<string, IActionStatus>;
+
+  /**
+   * Ids of the hints the learner has opened, and of the hints whose
+   * `unlock` condition has held at some point. A hint stays unlocked
+   * once it has been, whatever its condition does afterwards.
+   */
+  hints?: { opened: string[]; unlocked: string[] };
   variables: Record<string, { value: string; source: VariableSource }>;
   checkpoints: string[];
   log: IActionLogEntry[];

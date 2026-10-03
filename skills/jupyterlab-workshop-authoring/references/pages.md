@@ -186,8 +186,106 @@ Install the package with pip.
 Conditions use `==`, `!=`, `in`, `not in`, `and`, `or`, `not` and
 parentheses over variables, quoted strings and `[lists]`. A bare
 variable name is true when it has a non-empty value. The same
-conditions serve the `when` option of any directive and the `when`
-field of a page's front matter.
+conditions serve the `when` option of any directive, the `when` field
+of a page's front matter and the `unlock` option of a hint.
+
+A condition can also wait on what the learner has done. Four lists hold
+the ids of directives, and `in` tests whether one is among them:
+
+- `passed_checks` and `failed_checks` hold the `verify` checks and the
+  quizzes whose last result was a pass or a failure. A check that has
+  not been run is in neither, and a check that fails and then passes
+  moves from one to the other.
+
+- `opened_hints` holds the hints the learner has opened.
+
+- `done_actions` holds every other directive whose last run succeeded,
+  a submitted form and a made choice included.
+
+````markdown
+```{when} "first-commit-check" in passed_checks
+Well done. The commit is recorded, which is what the next page builds
+on.
+```
+````
+
+Give an explicit `:id:` to anything a condition names. The lists are
+worked out when a condition is judged; they are not variables, so
+`{{ }}` cannot substitute them and they are not in the environment of a
+terminal. Lint reports `unknown-action-id` for an id no directive has,
+and `progress-list` for an id tested against a list its directive can
+never be in, such as an `execute` against `passed_checks`.
+
+## Hints
+
+A `hint` is help the learner opens when they want it. Its body is a
+piece of page in its own right, so besides prose it can hold actions:
+
+`````markdown
+````{hint}
+:title: Where do I look?
+The function is near the top of the file.
+
+```{file-open}
+:path: src/greet.py
+:line: 3
+```
+````
+`````
+
+The action is out of sight until the hint is opened, and is then an
+ordinary action box. A hint can hold another hint. It cannot hold a
+`verify`, a `quiz` or a `form`, which the page's progress counts on and
+the learner must always be able to see (lint reports `hint-content`),
+and an action inside one cannot carry `auto` or be the target of a
+`cascade` from outside the hint, since it would then run where the
+learner cannot see it (`hint-auto` and `hint-cascade`).
+
+With `unlock`, a hint shows locked until a condition holds: its title,
+a lock and a note, and nothing of what it holds. `locked` is the note,
+"Not available yet" when left out. This is the way out for a learner
+who is stuck on an exercise, a solution they can have once they have
+tried:
+
+`````markdown
+````{hint}
+:title: Show me a solution
+:unlock: "total-check" in failed_checks
+:locked: Run the check below first
+This writes the file the check looks for.
+
+```{file-write}
+:path: total.txt
+42
+```
+````
+
+```{verify}
+:id: total-check
+:substrate: contents
+:trigger: file-saved total.txt
+exists total.txt
+```
+`````
+
+Put the solution above the check it waits for, as here. The self-test
+runs a page from top to bottom, so it then runs the solution and finds
+the check passing, where a solution below the check would leave the
+check failed. A hint that has unlocked stays unlocked, so the solution
+is still there after the check passes. A second hint that unlocks when the first
+is opened, with `:unlock: "first-hint" in opened_hints`, makes a ladder
+of hints without nesting one inside the other. To hide a hint
+altogether until a condition holds, use `when` in place of `unlock`.
+
+Opening a hint is reported as a `hint-opened` [progress
+event](analytics.md) and running an action inside one as
+`action-executed`, each with its id, so a learner who looked at a
+solution can be told from one who ran it.
+
+The [self-test](cli.md#test) takes every test of a progress list to hold, so
+it runs what a locked hint holds, and what a `when` that waits on
+progress shows, in page order along with everything else. Content shown
+only while an id is `not in` a list is therefore not run by it.
 
 ## Substitution
 

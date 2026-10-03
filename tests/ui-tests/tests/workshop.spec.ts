@@ -2869,3 +2869,93 @@ test.describe('terminal scroll', () => {
     await expect.poll(fromBottom).toBeLessThan(1);
   });
 });
+
+test.describe('hints that hold actions', () => {
+  test('keeps a solution locked until its check fails, then runs it', async ({
+    page,
+    tmpPath
+  }) => {
+    const root = `${tmpPath}/hints`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${root}/${path}`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: hints',
+        'title: Hints',
+        'capabilities: [write-files]',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        '````{hint}',
+        ':id: solution',
+        ':title: Show me a solution',
+        ':unlock: "answer-check" in failed_checks',
+        ':locked: Run the check first',
+        'This writes the file.',
+        '',
+        '```{file-write}',
+        ':id: write-answer',
+        ':path: answer.txt',
+        '42',
+        '```',
+        '````',
+        '',
+        '```{verify}',
+        ':id: answer-check',
+        ':substrate: contents',
+        'exists answer.txt',
+        '```',
+        '',
+        '```{when} "answer-check" in passed_checks',
+        'Shown once the check passes.',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+    await openWorkshop(page, root);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const hint = panel.locator('.jp-WorkshopPanel-hint');
+    const action = panel.locator('.jp-WorkshopPanel-action.jp-mod-file-write');
+    const check = panel.locator('.jp-WorkshopPanel-verify');
+
+    // Locked: the title and the note show, and nothing of what it holds.
+    await expect(hint).toHaveClass(/jp-mod-locked/);
+    await expect(hint).toContainText('Show me a solution');
+    await expect(hint).toContainText('Run the check first');
+    await expect(action).toHaveCount(0);
+    await expect(panel).not.toContainText('Shown once the check passes.');
+
+    // The check fails, which unlocks the hint; it stays closed.
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-fail/);
+    await expect(hint).not.toHaveClass(/jp-mod-locked/);
+    await expect(action).toBeHidden();
+
+    // Opened, it shows the action, which runs like any other.
+    await hint.locator('summary').click();
+    await expect(action).toBeVisible();
+    await action.click();
+    await expect(action).toHaveClass(/jp-mod-status-ok/);
+    await expect(hint).toHaveAttribute('open', '');
+
+    // The check passes, the hint stays unlocked, and what waits on the
+    // check appears.
+    await check.getByRole('button', { name: 'Check' }).click();
+    await expect(check).toHaveClass(/jp-mod-verify-pass/);
+    await expect(hint).not.toHaveClass(/jp-mod-locked/);
+    await expect(panel).toContainText('Shown once the check passes.');
+  });
+});

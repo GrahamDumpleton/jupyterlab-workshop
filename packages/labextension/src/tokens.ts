@@ -884,8 +884,30 @@ export interface IWorkshopManager {
   /** Cancel any pending cascade or auto-run. */
   stopChain(): void;
 
-  /** Evaluate a `when` condition against the current variables. */
+  /**
+   * Evaluate a `when` condition against the current variables and the
+   * learner's progress.
+   */
   evaluate(condition: string): boolean;
+
+  /**
+   * What conditions are judged against: the variables, and the progress
+   * lists (`passed_checks`, `failed_checks`, `opened_hints` and
+   * `done_actions`) worked out from what the learner has done.
+   */
+  readonly conditionValues: Variables;
+
+  /** Ids of the hints whose `unlock` condition has held at some point. */
+  readonly unlockedHints: ReadonlySet<string>;
+
+  /**
+   * Whether a hint is locked: it has an `unlock` condition that does not
+   * hold and has never held.
+   */
+  hintLocked(node: IDirectiveNode): boolean;
+
+  /** Record that the learner opened a hint. */
+  hintOpened(node: IDirectiveNode): void;
 
   /**
    * Resolve a path relative to the workshop directory to a path relative

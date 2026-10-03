@@ -1,5 +1,6 @@
 import {
   IDirectiveNode,
+  IProseNode,
   IWhenNode,
   collectDirectives,
   parsePage,
@@ -85,8 +86,11 @@ describe('when directives', () => {
     const hint = page.nodes[3] as IDirectiveNode;
 
     expect(hint.options.title).toBe('Stuck?');
-    expect(hint.html).toContain('<strong>read</strong>');
-    expect(hint.html).toContain(
+    const prose = (hint.nodes ?? [])[0] as IProseNode;
+
+    expect(hint.nodes).toHaveLength(1);
+    expect(prose.html).toContain('<strong>read</strong>');
+    expect(prose.html).toContain(
       '<code class="jp-Workshop-role jp-Workshop-role-var">pip</code>'
     );
   });
