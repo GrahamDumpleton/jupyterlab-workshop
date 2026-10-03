@@ -1995,6 +1995,18 @@ test.describe('workshop panel', () => {
       'demo/README.md'
     );
 
+    // The code in a role button is the size of other inline code in the
+    // prose, not the smaller size a button has by default.
+    const codeFontSize = (selector: string): Promise<string> =>
+      panel
+        .locator(selector)
+        .first()
+        .evaluate(element => getComputedStyle(element).fontSize);
+
+    expect(await codeFontSize('.jp-Workshop-role-open code')).toBe(
+      await codeFontSize('.jp-WorkshopPanel-prose p > code')
+    );
+
     const insertAction = panel.locator(
       '.jp-WorkshopPanel-action.jp-mod-editor-insert'
     );

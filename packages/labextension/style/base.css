@@ -138,10 +138,14 @@
   font-size: var(--jp-ui-font-size0);
 }
 
-/* Inline roles rendered by the page parser. */
+/* Inline roles rendered by the page parser. A clickable role is a
+   button, which takes the browser's own control size rather than the
+   size of the text it sits in, so the size is inherited to keep its code
+   the same size as other inline code in the paragraph. */
 
 .jp-Workshop-role {
   padding: 0;
+  font-size: inherit;
   border: none;
   background: transparent;
   color: var(--jp-content-link-color);
