@@ -122,6 +122,19 @@ A launch link can name a file instead, with `welcome=<path>`, which is
 shown every time the link is used and takes the place of the setting
 for that session; see [launch links](collections.md#launch-links).
 
+Someone who arrives by a launch link that opens a workshop has come for
+that workshop, and a deployment whose message is really for those who
+arrive without one, such as a [launcher
+site](publishing.md#a-launcher-for-launch-links) explaining how to
+bring a workshop, sets `welcomeOnLaunch` to `false`: the message is then
+shown only to a visit without a link, and a visit with one does not use
+up the once-per-browser showing. A `welcome` link parameter is shown
+regardless.
+
+The dialog takes up to most of the window's height, and a long message
+is widened step by step, as far as the window allows, before its body
+has to scroll.
+
 Nothing is added to the message: what to say about the platform is the
 deployment's to decide, which is why the file belongs with the
 deployment's other files, such as a Binder repository's `binder/`

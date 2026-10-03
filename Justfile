@@ -96,7 +96,7 @@ pages *args:
     # its kernel provides, so launch links written against it keep that
     # Python when a launcher for a newer one is published beside it.
     python="$(uv run python -c 'from jupyterlab_workshop.lite import python_version; print(python_version())')"
-    uv run jupyter workshop lite --python "$python" --welcome github-pages/launcher.md --out "site/lite/$python" "$@"
+    uv run jupyter workshop lite --python "$python" --welcome github-pages/launcher.md --settings github-pages/launcher-settings.json --out "site/lite/$python" "$@"
 
 # Self-test a workshop directory in a real JupyterLab (default: every example).
 selftest *args:

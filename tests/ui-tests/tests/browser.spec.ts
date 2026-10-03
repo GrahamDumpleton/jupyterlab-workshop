@@ -17,6 +17,7 @@ const SECOND_FILE = 'second/collection.json';
 const CATALOG_FILE = 'test-catalog.json';
 
 const WELCOME_FILE = 'test-welcome.md';
+const LONG_WELCOME_FILE = 'test-long-welcome.md';
 
 const ARCHIVE_FILE = 'pandas-intro-2.0.0.tar.gz';
 
@@ -1548,6 +1549,108 @@ test.describe('welcome message', () => {
     });
     await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
       'Welcome to the tests'
+    );
+    await dialog.getByRole('button', { name: 'Close' }).click();
+  });
+
+  test('widens a long welcome message before it scrolls', async ({ page }) => {
+    // Paragraphs long enough to wrap, so that a wider dialog shows more
+    // of the message per line; a message of short lines has nothing to
+    // gain from widening and is left as it is.
+    const sentence =
+      'This paragraph runs on at some length so that it wraps onto several ' +
+      'lines in a narrow dialog, which is what makes a wider one worth ' +
+      'having, since the same words then take fewer lines and less scrolling.';
+    const paragraphs = Array.from(
+      { length: 14 },
+      (_, index) => `Paragraph ${index + 1}. ${sentence}`
+    );
+
+    await page.contents.uploadContent(
+      `# A long welcome\n\n${paragraphs.join('\n\n')}\n`,
+      'text',
+      LONG_WELCOME_FILE
+    );
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?welcome=${LONG_WELCOME_FILE}`)
+      .catch(() => undefined);
+
+    const dialog = page.locator('.jp-Dialog.jp-WorkshopFitDialog');
+
+    await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
+      'A long welcome',
+      { timeout: 60000 }
+    );
+
+    // The body is widened a step at a time while it overflows, past the
+    // width a short message gets.
+    await expect(dialog).toHaveClass(/jp-mod-wide/);
+    await expect
+      .poll(
+        async () =>
+          (await dialog.locator('.jp-WorkshopWelcome').boundingBox())?.width ??
+          0
+      )
+      .toBeGreaterThan(700);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.contents.deleteFile(LONG_WELCOME_FILE);
+  });
+});
+
+test.describe('welcome message kept for arrivals without a launch link', () => {
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        workshopsDirectory: WORKSHOPS_DIR,
+        welcome: WELCOME_FILE,
+        welcomeOnLaunch: false
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await removeFixtures(page);
+  });
+
+  test('skips the welcome under a launch link and shows it to a plain visit', async ({
+    page
+  }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?workshop=${WORKSHOPS_DIR}/${WORKSHOP}`)
+      .catch(() => undefined);
+
+    // The workshop opens as the link asked, with no welcome over it.
+    await trustWorkshop(page, 'Git from the command line');
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('Git from the command line');
+    await expect(page.locator('.jp-WorkshopWelcome')).toHaveCount(0);
+
+    // Not having been shown, it is not remembered as shown either, so a
+    // visit without a link gets it.
+    await page
+      .evaluate(() => {
+        window.location.assign(window.location.pathname);
+      })
+      .catch(() => undefined);
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-Dialog-header')).toHaveText(
+      'Welcome to the tests',
+      { timeout: 60000 }
     );
     await dialog.getByRole('button', { name: 'Close' }).click();
   });

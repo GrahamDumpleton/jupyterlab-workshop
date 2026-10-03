@@ -1,0 +1,5 @@
+{
+  "@jupyterlab-workshop/labextension:panel": {
+    "welcomeOnLaunch": false
+  }
+}

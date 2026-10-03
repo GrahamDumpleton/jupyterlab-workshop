@@ -1594,6 +1594,22 @@
   overflow: auto;
 }
 
+/* A dialog of prose, such as the welcome, finish and about messages, may
+   use most of the window's height, and is widened a step at a time while
+   its body would otherwise scroll; see showFittedDialog. */
+
+.jp-WorkshopFitDialog .jp-Dialog-content {
+  max-height: 85vh;
+}
+
+.jp-WorkshopFitDialog.jp-mod-wide .jp-Dialog-body {
+  max-width: min(800px, calc(100vw - 96px));
+}
+
+.jp-WorkshopFitDialog.jp-mod-widest .jp-Dialog-body {
+  max-width: min(952px, calc(100vw - 96px));
+}
+
 .jp-WorkshopSources-tabs {
   display: flex;
   gap: 4px;

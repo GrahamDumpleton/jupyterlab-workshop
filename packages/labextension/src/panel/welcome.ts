@@ -1,9 +1,10 @@
 import { createRenderEnv, getMarkdownParser } from '@jupyterlab-workshop/core';
-import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { Dialog } from '@jupyterlab/apputils';
 import { PageConfig, PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 import { Widget } from '@lumino/widgets';
 
+import { showFittedDialog } from './fit';
 import { readIfExists } from '../actions/contents';
 
 /** Prefix of the localStorage keys remembering a welcome message was shown. */
@@ -92,7 +93,7 @@ export function markWelcomeShown(path: string): void {
 export async function showWelcomeDialog(
   message: IWelcomeMessage
 ): Promise<void> {
-  await showDialog({
+  await showFittedDialog({
     title: message.title,
     body: new WelcomeBody(message.body),
     buttons: [Dialog.okButton({ label: 'Close' })]

@@ -1643,12 +1643,27 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     // Once restored, show the welcome message over whatever opened: a
     // launch link's every time, the setting's once per browser, and the
     // setting's is only remembered as shown once its file has been read.
+    // A deployment may keep the setting's message for those who arrive
+    // without a launch link, which leaves it unshown, not remembered.
     void app.restored.then(async () => {
       if (welcomeLink === undefined) {
         welcomePath = await readSetting(settingRegistry, 'welcome', '');
         app.commands.notifyCommandChanged(CommandIDs.welcome);
 
         if (welcomePath === '' || wasWelcomeShown(welcomePath)) {
+          return;
+        }
+
+        const sources = parseSourceLink(initialSearch);
+        const launched =
+          parseLaunchLink(initialSearch) !== null ||
+          sources.collections.length > 0 ||
+          sources.catalogs.length > 0;
+
+        if (
+          launched &&
+          !(await readFlag(settingRegistry, 'welcomeOnLaunch', true))
+        ) {
           return;
         }
       }

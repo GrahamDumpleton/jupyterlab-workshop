@@ -1,8 +1,9 @@
-import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { Dialog } from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
 
 import { IWorkshopManager } from '../tokens';
 import { PLATFORM_LABELS } from './components';
+import { showFittedDialog } from './fit';
 
 /**
  * Show the About dialog for the open workshop: its description and the
@@ -18,7 +19,7 @@ export async function showAboutDialog(
     return;
   }
 
-  await showDialog({
+  await showFittedDialog({
     title: workshop.manifest.title,
     body: new AboutBody(workshop.manifest),
     buttons: [Dialog.okButton({ label: 'Close' })]

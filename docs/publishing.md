@@ -342,9 +342,12 @@ workshop format is what it keeps compatible.
 installed kernel carries and names the directory after it, so the path
 can never claim one Python while serving another. A second version
 means building a second launcher with the kernel package that carries
-it. A workshop that needs a particular Python says so in
-`requires.tools`, which both the server preflight and the gist command
-honour:
+it. The launcher carries a welcome message explaining what it is, for
+anyone who opens it without a link; its settings file turns
+[`welcomeOnLaunch`](settings.md) off, so a link that names a workshop
+goes straight to that workshop's trust dialog. A workshop that needs a
+particular Python says so in `requires.tools`, which both the server
+preflight and the gist command honour:
 
 ```yaml
 requires:

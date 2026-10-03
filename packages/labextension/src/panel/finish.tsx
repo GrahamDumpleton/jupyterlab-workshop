@@ -1,9 +1,10 @@
 import { createRenderEnv, getMarkdownParser } from '@jupyterlab-workshop/core';
-import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { Dialog } from '@jupyterlab/apputils';
 import { CommandRegistry } from '@lumino/commands';
 import { Widget } from '@lumino/widgets';
 
 import { IFeaturePolicy, IWorkshopManager } from '../tokens';
+import { showFittedDialog } from './fit';
 
 /** JupyterLab's own shut down command, the one File then Shut Down runs. */
 const SHUTDOWN_COMMAND = 'filemenu:shutdown';
@@ -84,7 +85,7 @@ export async function showFinishDialog(
     buttons.push(Dialog.okButton({ label: 'Next workshop' }));
   }
 
-  const result = await showDialog({
+  const result = await showFittedDialog({
     title: `Finished: ${workshop.manifest.title}`,
     body: new FinishBody(
       workshop.manifest.finish,
