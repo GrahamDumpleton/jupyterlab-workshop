@@ -160,7 +160,13 @@ tab, and defaults to the pane name. The URL is substituted like any
 option, and the action waits until every variable in it has a value.
 A site that forbids being framed shows as an empty pane, and nothing
 can detect that, so try each URL once. A JupyterLab served over https
-cannot show an http page in a pane and opens it in a new tab instead.
+cannot show an http page in a pane and opens it in a new tab instead,
+so lint warns about an http URL. It does not warn about one on a
+loopback host (`localhost`, `127.0.0.1` or `[::1]`), such as a server
+the workshop starts in a terminal: that address reaches the server only
+when the browser is on the machine JupyterLab runs on, where JupyterLab
+is itself reached over http. It does not reach it in a container or on
+a hosted JupyterLab, where the address is the learner's own machine.
 Panes come back after the browser page reloads, at the last URL they
 were sent, and close with the workshop.
 

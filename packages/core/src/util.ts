@@ -41,3 +41,16 @@ export function pathStem(path: string): string {
 export function isWebLink(value: string): boolean {
   return /^https?:\/\/\S+$/.test(value);
 }
+
+/**
+ * Whether a web URL names a loopback host: `localhost` or a name under
+ * it, an address in `127.0.0.0/8`, or `[::1]`. Such an address reaches
+ * only the machine the browser is on. The host is read by pattern
+ * rather than by parsing, so a URL with a variable left in its port or
+ * path can still be told.
+ */
+export function isLoopbackUrl(value: string): boolean {
+  return /^https?:\/\/(?:[^/?#@]*@)?(?:(?:[a-z0-9-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?=[:/?#]|$)/i.test(
+    value
+  );
+}

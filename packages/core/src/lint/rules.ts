@@ -59,7 +59,7 @@ import {
 } from '../trust/capabilities';
 import { dangerWarnings, mentionsAbsolutePath } from './danger';
 import { writeTargetProblem } from '../trust/paths';
-import { isWebLink } from '../util';
+import { isLoopbackUrl, isWebLink } from '../util';
 import { ILintMessage } from './types';
 
 /** What the linter looks at. */
@@ -156,9 +156,12 @@ function lintLinks(
 
 /**
  * A `url-open` needs a web URL, and a page served over https cannot show
- * an http page in a pane, so that goes to a new tab instead. A new tab
- * is only allowed by the browser on a click, so an automatic run with no
- * pane to open in has nothing it can do.
+ * an http page in a pane, so that goes to a new tab instead. A loopback
+ * address is let through: it reaches a server the workshop started only
+ * when the browser is on the machine JupyterLab runs on, and a
+ * JupyterLab there is itself reached over http. A new tab is only
+ * allowed by the browser on a click, so an automatic run with no pane to
+ * open in has nothing it can do.
  */
 function lintUrlOpen(input: ILintInput, messages: ILintMessage[]): void {
   for (const page of input.pages) {
@@ -184,7 +187,7 @@ function lintUrlOpen(input: ILintInput, messages: ILintMessage[]): void {
           message: `The url-open action needs an http or https URL, not "${url}"`,
           ...where
         });
-      } else if (/^http:/i.test(url)) {
+      } else if (/^http:/i.test(url) && !isLoopbackUrl(url)) {
         messages.push({
           level: 'warning',
           rule: 'insecure-url',

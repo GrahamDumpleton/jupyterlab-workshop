@@ -1095,11 +1095,29 @@ describe('url-open', () => {
 
   it('warns about an http URL', () => {
     const findings = lint(
-      '```{url-open}\n:url: http://localhost:8000/\n:pane: app\n```\n'
+      '```{url-open}\n:url: http://example.com:8000/\n:pane: app\n```\n'
     ).filter(message => message.rule === 'insecure-url');
 
     expect(findings).toHaveLength(1);
     expect(findings[0].level).toBe('warning');
+  });
+
+  it('lets an http URL on a loopback host through', () => {
+    const insecure = (url: string): number =>
+      lint(`\`\`\`{url-open}\n:url: ${url}\n:pane: app\n\`\`\`\n`).filter(
+        message => message.rule === 'insecure-url'
+      ).length;
+
+    expect(insecure('http://localhost:8000/')).toBe(0);
+    expect(insecure('http://app.localhost/')).toBe(0);
+    expect(insecure('http://127.0.0.1:8101/?ask=hello')).toBe(0);
+    expect(insecure('http://127.1.2.3')).toBe(0);
+    expect(insecure('http://[::1]:8000/')).toBe(0);
+
+    // A host that only starts like one, or names one elsewhere, is not.
+    expect(insecure('http://localhost.example.com/')).toBe(1);
+    expect(insecure('http://127.0.0.1.example.com/')).toBe(1);
+    expect(insecure('http://example.com/?next=http://localhost/')).toBe(1);
   });
 
   it('warns about an automatic run with no pane', () => {
