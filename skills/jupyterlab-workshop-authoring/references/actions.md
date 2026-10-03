@@ -59,8 +59,9 @@ What an edit wrote is marked rather than selected, so a stray key press
 cannot replace it: the text `editor-insert` and `editor-replace` put in,
 at every place they put it, and the lines a `file-write` with `mode:
 append` added, are tinted, with a bar beside their line numbers. The
-marks stay until the next action runs, as do those of a deletion, which
-has no text left to tint: a red triangle beside the line numbers shows
+marks stay until the next action runs, other than a `verify`, which
+changes nothing and is often run by the edit it follows. So do those of
+a deletion, which has no text left to tint: a red triangle beside the line numbers shows
 where an `editor-replace` with an empty body took text from, on the
 boundary between two lines when whole lines went, and beside the line,
 with a red tick in it at the point, when text went from within one. A
@@ -75,7 +76,7 @@ text `file-open` with `line`, `editor-select` and `editor-highlight`
 point at is centred, so it has context on both sides. A position that
 already serves is left where it is: anywhere in view for centred text,
 and the upper half of the view for new text, which lower down would run
-off the bottom. The ends of the file limit the scroll, so a match near
+off the bottom, as long as three lines show above it. The ends of the file limit the scroll, so a match near
 the top sits as far down as the lines before it allow.
 
 `file-open` opens a file in the text editor unless `factory` names

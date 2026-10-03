@@ -38,8 +38,11 @@ export class ActionRegistry implements IActionRegistry {
     }
 
     // What the last action changed in an editor stays marked only until
-    // the next one runs.
-    clearChangedMarks();
+    // the next one runs. A check changes nothing, and is often run by
+    // the very edit it follows, so it leaves the marks alone.
+    if (request.type !== 'verify') {
+      clearChangedMarks();
+    }
 
     try {
       return await implementation.run(request);

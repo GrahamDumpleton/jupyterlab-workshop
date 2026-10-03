@@ -997,11 +997,15 @@ type RevealPlacement = 'upper' | 'center';
 /** How far down the view the `upper` placement puts a position. */
 const UPPER_FRACTION = 0.25;
 
+/** The lines new text needs above it to be left where it already is. */
+const UPPER_CONTEXT_LINES = 3;
+
 /**
  * Scroll a position into view at the given placement, unless it is
  * already somewhere that serves, in which case nothing moves: anywhere
  * in view for the centre, and the upper half of the view for new text,
- * which would otherwise be left running off the bottom.
+ * which would otherwise be left running off the bottom, though not so
+ * near the top that nothing of what comes before it shows.
  */
 function revealAt(
   editor: CodeEditor.IEditor,
@@ -1010,16 +1014,18 @@ function revealAt(
 ): void {
   const coordinate = editor.getCoordinateForPosition(position);
   const viewport = editor.host.getBoundingClientRect();
-  const lowest =
-    placement === 'upper'
-      ? viewport.top + viewport.height / 2
-      : viewport.bottom;
+  const upper = placement === 'upper';
+  const lowest = upper ? viewport.top + viewport.height / 2 : viewport.bottom;
 
-  if (
-    coordinate &&
-    coordinate.top >= viewport.top &&
-    coordinate.bottom <= lowest
-  ) {
+  // New text at the very top of the view would show nothing of what
+  // comes before it, so it counts as placed only with lines above it,
+  // or when it is so near the start of the file that there are none.
+  const highest =
+    upper && position.line >= UPPER_CONTEXT_LINES
+      ? viewport.top + UPPER_CONTEXT_LINES * editor.lineHeight
+      : viewport.top;
+
+  if (coordinate && coordinate.top >= highest && coordinate.bottom <= lowest) {
     return;
   }
 

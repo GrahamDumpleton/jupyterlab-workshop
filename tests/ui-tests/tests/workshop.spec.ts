@@ -1362,6 +1362,153 @@ test.describe('workshop panel', () => {
     expect(await read('pages/01.md')).toContain('Still work');
   });
 
+  test('keeps an edit marked through a triggered check, and places it with lines above it', async ({
+    page,
+    tmpPath
+  }) => {
+    const tabbed = `${tmpPath}/tabbed`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${tabbed}/${path}`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: tabbed',
+        'title: Tabbed',
+        'capabilities: [write-files]',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload(
+      [...NOTES_LINES, ...MORE_LINES, ''].join('\n'),
+      'files/long.txt'
+    );
+    await upload('other\n', 'files/other.txt');
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        '```{file-open}',
+        ':id: open-long',
+        ':path: long.txt',
+        '```',
+        '',
+        '```{editor-insert}',
+        ':id: insert-checked',
+        ':path: long.txt',
+        ':match: more 30',
+        'checked',
+        '```',
+        '',
+        '```{verify}',
+        ':id: checked-in-place',
+        ':label: The line is in the file',
+        ':substrate: contents',
+        ':trigger: after:insert-checked',
+        'contains long.txt checked',
+        '```',
+        '',
+        '```{file-open}',
+        ':id: open-other',
+        ':path: other.txt',
+        '```',
+        '',
+        '```{editor-insert}',
+        ':id: insert-behind',
+        ':path: long.txt',
+        ':match: more 10',
+        'behind',
+        '```',
+        '',
+        '```{editor-insert}',
+        ':id: insert-at-top',
+        ':path: long.txt',
+        ':match: more 20',
+        ':save: false',
+        'topmost',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+    await openWorkshop(page, tabbed);
+
+    const panel = page.locator(PANEL);
+    const runAction = async (id: string): Promise<void> => {
+      const action = panel.locator(`[data-action-id="${id}"]`);
+
+      await action.click();
+      await expect(action).toHaveClass(/jp-mod-status-ok/, { timeout: 60000 });
+    };
+
+    // Whether a line of the editor in front is marked as changed and
+    // sits a quarter of the way down the view.
+    const placedAndMarked = (text: string): Promise<boolean | null> =>
+      page.evaluate((wanted: string) => {
+        const scroller = Array.from(
+          document.querySelectorAll<HTMLElement>('.jp-FileEditor .cm-scroller')
+        ).find(element => element.offsetParent !== null);
+        const line = Array.from(
+          scroller?.querySelectorAll('.cm-line') ?? []
+        ).find(element => element.textContent === wanted);
+
+        if (!scroller || !line) {
+          return null;
+        }
+
+        const height = scroller.getBoundingClientRect().height;
+        const offset =
+          line.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top;
+
+        return (
+          offset > height * 0.15 &&
+          offset < height * 0.35 &&
+          line.classList.contains('jp-WorkshopEditor-changedLine')
+        );
+      }, text);
+
+    // A check the edit triggers runs as an action of its own, and must
+    // not take the marks the edit left.
+    await runAction('open-long');
+    await runAction('insert-checked');
+    await expect(
+      panel.locator('[data-action-id="checked-in-place"]')
+    ).toHaveClass(/jp-mod-verify-pass/, { timeout: 30000 });
+    expect(await placedAndMarked('checked')).toBe(true);
+
+    // An edit to a file whose tab is behind another brings it forward,
+    // and is placed once the editor has its size again.
+    await runAction('open-other');
+    await runAction('insert-behind');
+    await expect.poll(() => placedAndMarked('behind')).toBe(true);
+    await page.waitForTimeout(500);
+    expect(await placedAndMarked('behind')).toBe(true);
+
+    // An edit that lands on the top line of the view is in view, but
+    // with nothing of what comes before it, so it is still moved down.
+    await page.evaluate(() => {
+      const scroller = Array.from(
+        document.querySelectorAll<HTMLElement>('.jp-FileEditor .cm-scroller')
+      ).find(element => element.offsetParent !== null);
+      const line = Array.from(
+        scroller?.querySelectorAll('.cm-line') ?? []
+      ).find(element => element.textContent === 'more 20');
+
+      if (scroller && line) {
+        scroller.scrollTop +=
+          line.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top;
+      }
+    });
+    await runAction('insert-at-top');
+    await expect.poll(() => placedAndMarked('topmost')).toBe(true);
+  });
+
   test('moves the file browser out of the workspace before a restart empties it', async ({
     page,
     tmpPath
