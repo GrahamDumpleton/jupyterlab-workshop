@@ -41,6 +41,7 @@ from .collection import (
 )
 from .fetch import FetchError
 from .gist import (
+    DEFAULT_SITE,
     GistError,
     create_gist,
     flatten_workshop,
@@ -391,6 +392,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="GitHub token with the gist scope "
         "(default GH_TOKEN, GITHUB_TOKEN, then gh auth token)",
+    )
+    gist.add_argument(
+        "--site",
+        default=DEFAULT_SITE,
+        help="JupyterLite site the README's launch button opens "
+        "(default the project's demo site)",
+    )
+    gist.add_argument(
+        "--append-readme",
+        action="store_true",
+        help="append the workshop's own README.md below the generated one",
     )
     gist.add_argument(
         "--frontend",
@@ -1172,7 +1184,12 @@ def command_gist(args: argparse.Namespace) -> int:
         return listed.returncode
 
     try:
-        flat = flatten_workshop(directory, json.loads(listed.stdout)["files"])
+        flat = flatten_workshop(
+            directory,
+            json.loads(listed.stdout)["files"],
+            site=args.site,
+            append_readme=args.append_readme,
+        )
         target = write_flat(flat, args.out)
     except GistError as error:
         raise CliError(str(error)) from error

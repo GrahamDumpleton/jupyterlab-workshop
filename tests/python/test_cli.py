@@ -170,10 +170,12 @@ def test_gist_writes_a_flat_copy_that_lints(
     assert "renamed pages/01-welcome.md -> pages--01-welcome.md" in output
     assert f"wrote {copy}" in output
     assert sorted(path.name for path in copy.iterdir()) == [
+        "README.md",
         "pages--01-welcome.md",
         "pages--02-first-steps.md",
         "workshop.yaml",
     ]
+    assert (copy / "README.md").read_text().startswith("# Flat me\n")
     assert "pages--01-welcome.md" in (copy / "workshop.yaml").read_text()
 
     assert cli.main(["lint", str(copy)]) == 0

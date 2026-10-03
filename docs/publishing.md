@@ -133,8 +133,12 @@ pages:
 The command carries the manifest, the pages, the files the pages refer
 to with `from`, `script` or `path`, and the requirements file, lints
 the source and the flat copy, and writes the copy under `dist/gist/`.
-With `--create` it makes the gist, secret unless `--public`, and with
-`--update` it replaces the files of an existing one; see
+It also writes a `README.md`, which GitHub shows first on the gist
+page, with the workshop's details from the manifest and how to open it,
+including a button that launches it in JupyterLite when the manifest
+lists that frontend. With `--create` it makes the gist, secret unless
+`--public`, and prints its address; with `--update` it replaces the
+files of an existing one, as a new revision in the gist's history; see
 [gist](cli.md#gist) for the token it needs. A gist written by hand can
 use any names, since the extension treats page paths as given.
 

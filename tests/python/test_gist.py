@@ -7,12 +7,15 @@ import pytest
 import yaml
 
 from jupyterlab_workshop.gist import (
+    DEFAULT_SITE,
+    GIST_URL_PLACEHOLDER,
     FlatWorkshop,
     GistError,
     create_gist,
     flat_name,
     flatten_workshop,
     gist_id,
+    render_readme,
     resolve_token,
     rewrite_manifest,
     rewrite_options,
@@ -95,6 +98,7 @@ def test_flatten_renames_and_rewrites(tmp_path: Path) -> None:
     assert flat.title == "Demo"
     assert sorted(flat.files) == [
         "03-flat.md",
+        "README.md",
         "env--requirements.txt",
         "pages--01-intro.md",
         "pages--02-files.md",
@@ -110,6 +114,16 @@ def test_flatten_renames_and_rewrites(tmp_path: Path) -> None:
         "env/requirements.txt": "env--requirements.txt",
     }
     assert flat.left_out == ["README.md"]
+
+    # The generated README stands in for the author's unless asked to
+    # keep theirs below it, and names a gist that does not exist yet.
+    assert "about" not in flat.files["README.md"]
+    assert GIST_URL_PLACEHOLDER in flat.files["README.md"]
+
+    appended = flatten_workshop(tmp_path / "ws", REFERENCED, append_readme=True)
+
+    assert appended.files["README.md"].endswith("\n---\n\nabout\n")
+    assert appended.left_out == []
 
     # Options that named a renamed file follow it; the rest stay put.
     page = flat.files["pages--01-intro.md"]
@@ -174,6 +188,47 @@ def test_flatten_leaves_unrenamed_workshops_alone(tmp_path: Path) -> None:
 
     assert flat.renames == {}
     assert flat.files["workshop.yaml"].endswith("pages: [01.md]\n")
+
+
+def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
+    manifest = {
+        "name": "demo",
+        "title": "Demo",
+        "description": "A demo.",
+        "version": "1.2.0",
+        "authors": ["Ada", "Grace"],
+        "duration": "20m",
+        "tags": ["python"],
+        "platforms": ["linux"],
+        "frontends": ["jupyterlab", "jupyterlite"],
+        "homepage": "https://example.org/demo",
+    }
+    gist = "https://gist.github.com/ada/abc"
+    readme = render_readme(manifest, gist, "https://lite.example.org/lab/index.html")
+
+    assert readme.startswith(
+        "# Demo\n\nA demo.\n\n| | |\n| --- | --- |\n| Version | 1.2.0 |\n"
+    )
+    assert "| Authors | Ada, Grace |" in readme
+    assert "| Frontends | jupyterlab, jupyterlite |" in readme
+    assert (
+        "](https://lite.example.org/lab/index.html?reset&workshop="
+        "https://gist.github.com/ada/abc&restart=force)" in readme
+    )
+    assert f"jupyter workshop launch {gist}" in readme
+    assert "[Homepage](https://example.org/demo)" in readme
+    assert "Issues" not in readme
+
+    # Without JupyterLite among the frontends there is no button to press.
+    plain = render_readme({"name": "demo", "pages": []}, gist)
+
+    assert plain.startswith("# demo\n\n## Open this workshop\n")
+    assert "Launch in JupyterLite" not in plain
+    assert DEFAULT_SITE not in plain
+    assert "Open Workshop from URL" in plain
+
+    # The author's README goes under a rule.
+    assert render_readme(manifest, gist, extra="Mine.\n").endswith("\n---\n\nMine.\n")
 
 
 def test_rewrite_options_only_touches_whole_values() -> None:
@@ -267,14 +322,21 @@ def test_resolve_token_tries_the_argument_environment_and_gh(
 
 
 def test_create_and_update_send_the_files() -> None:
+    manifest = {"name": "demo", "title": "Demo", "frontends": ["jupyterlite"]}
     flat = FlatWorkshop(
         "demo",
         "Demo",
         "A demo.",
-        {"workshop.yaml": "name: demo\n", "pages--01.md": "# One\n"},
+        {
+            "workshop.yaml": "name: demo\n",
+            "pages--01.md": "# One\n",
+            "README.md": render_readme(manifest, GIST_URL_PLACEHOLDER),
+        },
         {"pages/01.md": "pages--01.md"},
         [],
+        manifest=manifest,
     )
+    final_readme = render_readme(manifest, "https://gist.github.com/ada/abc")
     calls: list[tuple[str, str, Mapping[str, Any] | None]] = []
 
     def fake_request(
@@ -284,10 +346,15 @@ def test_create_and_update_send_the_files() -> None:
         calls.append((method, url, body))
 
         if method == "GET":
-            return {"files": {"workshop.yaml": {}, "old.md": {}}}
+            return {
+                "files": {"workshop.yaml": {}, "old.md": {}},
+                "html_url": "https://gist.github.com/ada/abc",
+            }
 
         return {"id": "abc", "html_url": "https://gist.github.com/ada/abc"}
 
+    # Creating sends the files, then the README again once the address
+    # is known.
     created = create_gist(flat, "tok", public=True, request=fake_request)
 
     assert created.url == "https://gist.github.com/ada/abc"
@@ -302,10 +369,17 @@ def test_create_and_update_send_the_files() -> None:
                 "files": {
                     "workshop.yaml": {"content": "name: demo\n"},
                     "pages--01.md": {"content": "# One\n"},
+                    "README.md": {"content": flat.files["README.md"]},
                 },
             },
-        )
+        ),
+        (
+            "PATCH",
+            "https://api.github.com/gists/abc",
+            {"files": {"README.md": {"content": final_readme}}},
+        ),
     ]
+    assert "https://gist.github.com/ada/abc&restart=force" in final_readme
 
     calls.clear()
     updated = update_gist(
@@ -322,6 +396,7 @@ def test_create_and_update_send_the_files() -> None:
         "files": {
             "workshop.yaml": {"content": "name: demo\n"},
             "pages--01.md": {"content": "# One\n"},
+            "README.md": {"content": final_readme},
             "old.md": None,
         },
     }

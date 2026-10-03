@@ -112,7 +112,8 @@ same on every machine.
 
 ```
 jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update GIST]
-                                  [--token TOKEN] [--frontend NAME]
+                                  [--token TOKEN] [--site URL] [--append-readme]
+                                  [--frontend NAME]
 ```
 
 Lays a workshop out as a [GitHub gist](https://gist.github.com) holds
@@ -128,9 +129,24 @@ The workshop is linted before and the flat copy after, with
 meant for the [demo site](demo.md), and the flat copy is written under
 `dist/gist/<name>/`.
 
+A `README.md` is generated as well, which GitHub pins to the top of
+the gist page: the title, description, version, authors, duration,
+tags, platforms and frontends from the manifest, then how to open the
+workshop. When the manifest lists `jupyterlite` among its frontends
+the README carries a launch button that opens the gist in a JupyterLite
+site, the project's demo site unless `--site` names another, and it
+always gives the JupyterLab routes: the "Open Workshop from URL…"
+command, a launch link and `jupyter workshop launch`. The workshop's
+own `README.md` is left out unless `--append-readme` adds it below the
+generated part. In the flat copy on disk the README names a gist that
+does not exist yet; creating or updating the gist writes it again with
+the real address.
+
 `--create` makes a new gist, secret unless `--public` is given, and
 `--update` replaces the files of an existing one, given by URL or id,
-removing any the flat copy no longer has. Both need a GitHub token with
+removing any the flat copy no longer has. Each update is one revision
+in the gist's history, where removed files stay readable. Both need a
+GitHub token with
 the `gist` scope, from `--token`, else `GH_TOKEN` or `GITHUB_TOKEN`,
 else `gh auth token` for someone signed in to the `gh` command. The
 gists API carries text files only.

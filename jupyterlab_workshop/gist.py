@@ -6,9 +6,13 @@ directory separators turned into ``--``, so ``pages/01-welcome.md``
 becomes ``pages--01-welcome.md``, and the manifest and the directive
 options that name those files are rewritten to match. Only what the
 workshop needs at run time rides along: the manifest, the pages, the
-files the pages refer to and the requirements file. The flat copy is
-written to a directory and, when asked, sent to GitHub through the gists
-API, which carries text files only.
+files the pages refer to and the requirements file, plus a generated
+``README.md`` that GitHub pins to the top of the gist page: the title,
+description and details from the manifest, and how to open the
+workshop, with a launch button for a JupyterLite site when the manifest
+lists that frontend. The flat copy is written to a directory and, when
+asked, sent to GitHub through the gists API, which carries text files
+only.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -38,6 +42,20 @@ FILES_DIR = "files"
 
 #: Stands in for the directory separator in a gist file name.
 SEPARATOR = "--"
+
+README_FILE = "README.md"
+
+#: The JupyterLite site the README's launch button opens by default.
+DEFAULT_SITE = (
+    "https://grahamdumpleton.github.io/jupyterlab-workshop/demo/lab/index.html"
+)
+
+#: Stands in for the gist's address in a README written before the gist exists.
+GIST_URL_PLACEHOLDER = "https://gist.github.com/<owner>/<id>"
+
+PROJECT_URL = "https://github.com/GrahamDumpleton/jupyterlab-workshop"
+
+LAUNCH_BADGE = "https://img.shields.io/badge/launch-JupyterLite-F37626?logo=jupyter&logoColor=white"
 
 #: GitHub names a file it was not given a name for `gistfile<n>`.
 RESERVED_PREFIX = "gistfile"
@@ -92,6 +110,25 @@ class FlatWorkshop:
     #: Files in the workshop directory that are not carried.
     left_out: list[str]
 
+    #: The manifest, as parsed, for the README.
+    manifest: dict[str, Any] = field(default_factory=dict)
+
+    #: The JupyterLite site the README's launch button opens.
+    site: str = DEFAULT_SITE
+
+    #: The author's own README, appended to the generated one; empty for none.
+    readme_extra: str = ""
+
+    def with_gist_url(self, url: str) -> FlatWorkshop:
+        """The same copy with the README written for the gist at ``url``."""
+
+        files = dict(self.files)
+        files[README_FILE] = render_readme(
+            self.manifest, url, self.site, self.readme_extra
+        )
+
+        return replace(self, files=files)
+
 
 @dataclass(frozen=True)
 class GistResult:
@@ -129,16 +166,25 @@ def flat_name(path: str) -> str:
     return name
 
 
-def flatten_workshop(directory: Path, referenced: Sequence[str] = ()) -> FlatWorkshop:
+def flatten_workshop(
+    directory: Path,
+    referenced: Sequence[str] = (),
+    site: str = DEFAULT_SITE,
+    append_readme: bool = False,
+) -> FlatWorkshop:
     """Lay a workshop out flat.
 
     ``referenced`` lists the workshop-relative paths the pages name in
     their directive options, as the core package's ``referencedFiles``
     reports them; those that exist are carried and their options
     rewritten. The manifest, the pages and the requirements file are
-    always carried. Starter files under ``files/`` cannot be, since they
-    are copied into the workspace as a directory, so a workshop that has
-    any is refused, as is a binary file, which the gists API cannot hold.
+    always carried, and a ``README.md`` is generated from the manifest,
+    with a launch button for the JupyterLite ``site`` when the manifest
+    lists that frontend and, with ``append_readme``, the workshop's own
+    README below it. Starter files under ``files/`` cannot be carried,
+    since they are copied into the workspace as a directory, so a
+    workshop that has any is refused, as is a binary file, which the
+    gists API cannot hold.
     """
 
     try:
@@ -188,9 +234,9 @@ def flatten_workshop(directory: Path, referenced: Sequence[str] = ()) -> FlatWor
                 f"{path} and {clash} would both be named {flat} in the gist"
             )
 
-        if flat == MANIFEST_FILE:
+        if flat in (MANIFEST_FILE, README_FILE):
             raise GistError(
-                f"{path} would be named {MANIFEST_FILE}, which is the manifest"
+                f"{path} would be named {flat}, which the gist has its own of"
             )
 
         names[path] = flat
@@ -213,14 +259,112 @@ def flatten_workshop(directory: Path, referenced: Sequence[str] = ()) -> FlatWor
         _read_text(directory, MANIFEST_FILE), manifest, renames
     )
 
+    # The README is written for a gist that does not exist yet; creating
+    # or updating one writes it again with the real address.
+    extra = ""
+
+    if append_readme and (directory / README_FILE).is_file():
+        extra = _read_text(directory, README_FILE)
+
+    files[README_FILE] = render_readme(manifest, GIST_URL_PLACEHOLDER, site, extra)
+
+    carried_names = set(names) | ({README_FILE} if extra else set())
+
     return FlatWorkshop(
         name=name,
         title=str(manifest.get("title") or name),
         description=str(manifest.get("description") or ""),
         files=files,
         renames=renames,
-        left_out=_left_out(directory, set(names)),
+        left_out=_left_out(directory, carried_names),
+        manifest=dict(manifest),
+        site=site,
+        readme_extra=extra,
     )
+
+
+def render_readme(
+    manifest: Mapping[str, Any],
+    gist_url: str,
+    site: str = DEFAULT_SITE,
+    extra: str = "",
+) -> str:
+    """The gist's README: the workshop's details and how to open it.
+
+    GitHub pins ``README.md`` to the top of a gist page, so this is what
+    a visitor reads first. The JupyterLite launch button appears only
+    when the manifest lists that frontend, since the button would not
+    work otherwise; the JupyterLab route is always described. ``extra``
+    is the author's own README, appended under a rule.
+    """
+
+    name = str(manifest.get("name") or "")
+    title = str(manifest.get("title") or name)
+    description = str(manifest.get("description") or "").strip()
+    lines = [f"# {title}", ""]
+
+    if description:
+        lines += [description, ""]
+
+    details = [
+        ("Version", _scalar(manifest.get("version"))),
+        ("Authors", _listed(manifest.get("authors"))),
+        ("Duration", _scalar(manifest.get("duration"))),
+        ("Tags", _listed(manifest.get("tags"))),
+        ("Platforms", _listed(manifest.get("platforms"))),
+        ("Frontends", _listed(manifest.get("frontends"))),
+    ]
+    rows = [(label, value) for label, value in details if value]
+
+    if rows:
+        lines += ["| | |", "| --- | --- |"]
+        lines += [f"| {label} | {value} |" for label, value in rows]
+        lines.append("")
+
+    lines += ["## Open this workshop", ""]
+
+    if "jupyterlite" in _strings(manifest.get("frontends")):
+        launch = f"{site}?reset&workshop={gist_url}&restart=force"
+
+        lines += [
+            f"[![Launch in JupyterLite]({LAUNCH_BADGE})]({launch})",
+            "",
+            "The button opens the workshop in JupyterLite, which runs in the "
+            "browser with nothing to install.",
+            "",
+        ]
+
+    lines += [
+        "In a JupyterLab with the "
+        f"[jupyterlab-workshop]({PROJECT_URL}) extension, choose "
+        '"Workshop: Open Workshop from URL..." and give it this gist\'s address, '
+        "or open a launch link with the address as the `workshop` parameter:",
+        "",
+        "```",
+        f"https://<your-jupyterlab>/lab?workshop={gist_url}",
+        "```",
+        "",
+        "On your own machine, with the extension installed:",
+        "",
+        "```",
+        f"jupyter workshop launch {gist_url}",
+        "```",
+        "",
+    ]
+
+    links = [
+        f"[{label}]({manifest[key]})"
+        for key, label in (("homepage", "Homepage"), ("issues", "Issues"))
+        if manifest.get(key)
+    ]
+
+    if links:
+        lines += [" | ".join(links), ""]
+
+    if extra.strip():
+        lines += ["---", "", extra.strip(), ""]
+
+    return "\n".join(lines)
 
 
 def rewrite_options(text: str, renames: Mapping[str, str]) -> str:
@@ -413,7 +557,11 @@ def create_gist(
     public: bool = False,
     request: Requester = github_request,
 ) -> GistResult:
-    """Create a gist holding the flat copy; secret unless ``public``."""
+    """Create a gist holding the flat copy; secret unless ``public``.
+
+    The README names the gist's own address, which is only known once
+    the gist exists, so it is written a second time after creation.
+    """
 
     reply = request(
         "POST",
@@ -425,12 +573,20 @@ def create_gist(
         },
         token,
     )
+    identifier = str(reply.get("id", ""))
+    url = str(reply.get("html_url", ""))
 
-    return GistResult(
-        id=str(reply.get("id", "")),
-        url=str(reply.get("html_url", "")),
-        created=True,
-    )
+    if url:
+        readme = flat.with_gist_url(url).files[README_FILE]
+
+        request(
+            "PATCH",
+            f"{API_URL}/gists/{identifier}",
+            {"files": {README_FILE: {"content": readme}}},
+            token,
+        )
+
+    return GistResult(id=identifier, url=url, created=True)
 
 
 def update_gist(
@@ -444,8 +600,9 @@ def update_gist(
 
     identifier = gist_id(gist)
     existing = request("GET", f"{API_URL}/gists/{identifier}", None, token)
+    url = str(existing.get("html_url", "")) or f"https://gist.github.com/{identifier}"
     files: dict[str, Any] = {
-        name: {"content": text} for name, text in flat.files.items()
+        name: {"content": text} for name, text in flat.with_gist_url(url).files.items()
     }
 
     for name in existing.get("files") or {}:
@@ -459,11 +616,28 @@ def update_gist(
         token,
     )
 
-    return GistResult(id=identifier, url=str(reply.get("html_url", "")), created=False)
+    return GistResult(
+        id=identifier, url=str(reply.get("html_url", "")) or url, created=False
+    )
 
 
 def _description(flat: FlatWorkshop) -> str:
     return f"{flat.title}: {flat.description}" if flat.description else flat.title
+
+
+def _scalar(value: object) -> str:
+    return str(value).strip() if isinstance(value, (str, int, float)) else ""
+
+
+def _strings(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    return [str(item) for item in value if isinstance(item, (str, int, float))]
+
+
+def _listed(value: object) -> str:
+    return ", ".join(_strings(value))
 
 
 def _refuse_starter_files(directory: Path) -> None:
