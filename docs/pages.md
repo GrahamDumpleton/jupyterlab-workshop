@@ -60,6 +60,16 @@ refers to: a `requires` entry, a verify `trigger`, a `cascade`, an
 `auto: after:`. Short descriptive ids read best: `create-repo`,
 `first-commit`, `staging-quiz`.
 
+The box for an action shows its body under the title, since for most
+actions the body is what the learner should read: a command, code, the
+text of a file. `tour` and `notebook-create` take a YAML body that is
+written for the action and not for the learner, so the box shows a
+readable form of it instead: for a `tour`, what each step says,
+numbered; for a `notebook-create`, the content of each cell, one below
+the other. Selectors, cell kinds and tags are not shown. A body that
+cannot be read as the YAML the action expects is shown as written, so
+the mistake is in plain sight.
+
 A body may hold alternatives for particular platforms or frontends,
 marked by a line holding only `:windows:`, `:linux:`, `:macos:`,
 `:jupyterlab:` or `:jupyterlite:`; see

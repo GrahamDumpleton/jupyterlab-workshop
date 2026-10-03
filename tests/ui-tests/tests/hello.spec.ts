@@ -200,6 +200,13 @@ test.describe('hello-jupyterlab workshop', () => {
       '.jp-WorkshopPanel-action.jp-mod-notebook-create'
     );
 
+    // The box shows the content of each cell, not the YAML of the body.
+    await expect(create.locator('.jp-WorkshopPanel-actionBody')).toHaveText([
+      /^# Hello notebook\nCreated by a workshop action\.$/,
+      /^message = "Hello from a notebook"\nprint\(message\)$/,
+      /^answer = 6 \* 7\nanswer$/
+    ]);
+
     await create.click();
     await expect(create).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-NotebookPanel .jp-Cell')).toHaveCount(3);

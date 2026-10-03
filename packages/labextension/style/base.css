@@ -267,6 +267,10 @@
   word-break: break-word;
 }
 
+.jp-WorkshopPanel-actionBody + .jp-WorkshopPanel-actionBody {
+  border-top: 1px solid var(--jp-border-color3);
+}
+
 .jp-WorkshopPanel-actionMessage {
   padding: 4px 8px;
   border-top: 1px solid var(--jp-border-color3);

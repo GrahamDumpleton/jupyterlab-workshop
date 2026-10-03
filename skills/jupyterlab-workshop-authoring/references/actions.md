@@ -132,6 +132,10 @@ learner comes back to it, and replacing would discard every cell they
 had added and run since. The linter reports `notebook-overwrite` for an
 automatic `notebook-create` without it.
 
+The box for a `notebook-create` shows the content of each cell, one
+below the other, and not the YAML of its body, so a learner sees what
+the notebook will hold.
+
 `cell-insert` with `run` reports an error when the kernel never ran the
 cell, since what the cell defines is then missing for the steps after
 it. A cell that ran and raised still counts as run: showing an error
@@ -181,6 +185,10 @@ were sent, and close with the workshop.
 | `tooltip`   | none       | required | `selector`                    | Pin a note to an element until dismissed.           |
 | `dialog`    | none       | required | `title`, `buttons`, `capture` | Ask a question and store the answer in a variable.  |
 | `hint`      | none       | markdown | `title`, `open`               | Collapsible help text.                              |
+
+The body of a `tour` is a YAML list of steps, each with a `selector`
+for the element to point at and the `text` to say about it. The box for
+a `tour` shows the text of each step, numbered, and not the selectors.
 
 A `hint` that quotes a fenced code block must be fenced with four
 backticks, so that the block's three do not close it; see

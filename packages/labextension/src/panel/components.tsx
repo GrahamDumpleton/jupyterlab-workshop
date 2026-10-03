@@ -1,5 +1,6 @@
 import {
   ACTION_TYPES,
+  actionDisplay,
   ActionDisposition,
   describeRequirement,
   IDirectiveNode,
@@ -1073,9 +1074,11 @@ function ActionBlock({
           {statusText(status)}
         </span>
       </div>
-      {display ? (
-        <pre className="jp-WorkshopPanel-actionBody">{display}</pre>
-      ) : null}
+      {display.map((text, index) => (
+        <pre key={index} className="jp-WorkshopPanel-actionBody">
+          {text}
+        </pre>
+      ))}
       {status.status === 'error' && status.message ? (
         <div className="jp-WorkshopPanel-actionMessage">{status.message}</div>
       ) : null}
@@ -1947,14 +1950,19 @@ function dispositionBadge(
   }
 }
 
-function displayText(node: IDirectiveNode): string {
+/**
+ * The blocks of text an action box shows under its title: the body as
+ * written, or for an action whose body is YAML, its readable form, one
+ * block for each step or cell.
+ */
+function displayText(node: IDirectiveNode): string[] {
   const body = ACTION_TYPES[node.name]?.body;
 
   if (body === 'none' || node.name === 'file-open') {
-    return '';
+    return [];
   }
 
-  return node.body;
+  return actionDisplay(node.name, node.body) ?? (node.body ? [node.body] : []);
 }
 
 function showsOutput(node: IDirectiveNode): boolean {
