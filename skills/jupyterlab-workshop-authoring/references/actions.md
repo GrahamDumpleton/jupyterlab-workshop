@@ -52,14 +52,31 @@ at the start of what it wrote: the top of the file, or with `mode:
 append` the first appended line, so a long file opens where the change
 is. An editor already showing the file is moved there whether or not
 `open` is set, since its cursor may have been in text the write
-replaced. `editor-insert` leaves the cursor on the first inserted line,
-and `editor-replace` selects the new text. New text is scrolled to the
-top of the view so it reads downward from there; the text `file-open`
-with `line`, `editor-select` and `editor-highlight` point at is
-centred, so it has context on both sides. Either way a position that is
-already in view is left where it is, and the ends of the file limit
-the scroll, so a match near the top sits as far down as the lines
-before it allow.
+replaced. `editor-insert` and `editor-replace` leave the cursor at the
+start of the first text they wrote.
+
+What an edit wrote is marked rather than selected, so a stray key press
+cannot replace it: the text `editor-insert` and `editor-replace` put in,
+at every place they put it, and the lines a `file-write` with `mode:
+append` added, are tinted, with a bar beside their line numbers. The
+marks stay until the next action runs, as do those of a deletion, which
+has no text left to tint: a red triangle beside the line numbers shows
+where an `editor-replace` with an empty body took text from, on the
+boundary between two lines when whole lines went, and beside the line,
+with a red tick in it at the point, when text went from within one. A
+file written whole is not marked. `editor-highlight` tints the text it points at in another
+colour for its `duration`, again without selecting it; only
+`editor-select` makes a selection, for the learner to copy or type
+over.
+
+New text is scrolled to a quarter of the way down the view, so it reads
+downward from there with a few lines of what came before it above; the
+text `file-open` with `line`, `editor-select` and `editor-highlight`
+point at is centred, so it has context on both sides. A position that
+already serves is left where it is: anywhere in view for centred text,
+and the upper half of the view for new text, which lower down would run
+off the bottom. The ends of the file limit the scroll, so a match near
+the top sits as far down as the lines before it allow.
 
 `file-open` opens a file in the text editor unless `factory` names
 another of JupyterLab's widget factories, as `docmanager:open` takes

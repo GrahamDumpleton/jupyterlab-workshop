@@ -1,5 +1,6 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { Notification } from '@jupyterlab/apputils';
+import { EditorView } from '@codemirror/view';
 import { CodeEditor } from '@jupyterlab/codeeditor';
 import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
@@ -25,6 +26,12 @@ import {
   IActionResult,
   IWorkshopManager
 } from '../tokens';
+import {
+  IChangedSpan,
+  editorView,
+  markChanged,
+  markPointed
+} from '../editormarks';
 import { parseDuration } from '../util';
 import {
   deleteTree,
@@ -105,10 +112,17 @@ export class FileWriteAction implements IActionImplementation {
     // the line after the existing content for an append, the top
     // otherwise.
     let firstLine = 0;
+    let writtenLines = 0;
 
-    if (mode === 'append' && existing && typeof existing.content === 'string') {
+    if (
+      mode === 'append' &&
+      existing &&
+      typeof existing.content === 'string' &&
+      existing.content !== ''
+    ) {
       const kept = withTrailingNewline(existing.content);
 
+      writtenLines = countLines(content);
       content = kept + content;
       firstLine = countLines(kept);
     }
@@ -118,10 +132,11 @@ export class FileWriteAction implements IActionImplementation {
     // Write through an open editor so it does not later report a conflict.
     const widget = findEditor(this._context.docManager, serverPath);
 
+    let shown = widget;
+
     if (widget) {
       widget.content.model.sharedModel.setSource(content);
       await widget.context.save();
-      revealLine(widget, firstLine, 'start');
     } else {
       await contents.save(serverPath, {
         type: 'file',
@@ -131,13 +146,17 @@ export class FileWriteAction implements IActionImplementation {
     }
 
     if (request.options.open === 'true') {
-      const opened = await openEditor(
-        this._context,
-        serverPath,
-        request.options.area
-      );
+      shown = await openEditor(this._context, serverPath, request.options.area);
+    }
 
-      revealLine(opened, firstLine, 'start');
+    // Appended text is marked as what changed; a file written whole has
+    // nothing to tell apart, so it is only shown from the top.
+    if (shown && writtenLines > 0) {
+      showChange(shown, [
+        lineBlockSpan(shown.content.editor, firstLine, writtenLines)
+      ]);
+    } else if (shown) {
+      revealLine(shown, firstLine, 'upper');
     }
 
     return { status: 'ok' };
@@ -249,9 +268,10 @@ export class EditorInsertAction implements IActionImplementation {
       };
     }
 
-    let firstLine = lineIndexes[0];
+    const blockLines = countLines(text);
+    const firstLines: number[] = [];
 
-    for (const lineIndex of [...lineIndexes].reverse()) {
+    for (const [order, lineIndex] of [...lineIndexes.entries()].reverse()) {
       if (lineIndex >= editor.lineCount) {
         const current = sharedModel.getSource();
         const separator =
@@ -262,16 +282,27 @@ export class EditorInsertAction implements IActionImplementation {
           current.length,
           separator + text
         );
-        firstLine = editor.lineCount - countLines(text);
+
+        // The text ends in a newline, so the editor counts one empty
+        // line after the block.
+        firstLines[order] = editor.lineCount - 1 - blockLines;
       } else {
         const offset = editor.getOffsetAt({ line: lineIndex, column: 0 });
 
         sharedModel.updateSource(offset, offset, text);
+        firstLines[order] = lineIndex;
       }
     }
 
     await saveIfWanted(widget, request);
-    revealLine(widget, Math.max(0, firstLine), 'start');
+
+    // Each block sits below the ones inserted before it in the file.
+    showChange(
+      widget,
+      firstLines.map((firstLine, order) =>
+        lineBlockSpan(editor, firstLine + order * blockLines, blockLines)
+      )
+    );
 
     return { status: 'ok' };
   }
@@ -282,7 +313,7 @@ export class EditorInsertAction implements IActionImplementation {
 /**
  * The `editor-replace` action: replace the matches of a pattern, or a
  * range of lines, with the body, through the editor, and save. The new
- * text is left selected so the learner sees what changed.
+ * text is marked so the learner sees what changed.
  */
 export class EditorReplaceAction implements IActionImplementation {
   readonly type = 'editor-replace';
@@ -331,11 +362,24 @@ export class EditorReplaceAction implements IActionImplementation {
     }
 
     await saveIfWanted(widget, request);
-    showSpan(
-      widget,
-      { start: edits[0].start, end: edits[0].start + edits[0].text.length },
-      'start'
-    );
+
+    // Where each replacement ended up, once the ones before it in the
+    // file have changed length.
+    let shift = 0;
+
+    const spans = edits.map((edit): IChangedSpan => {
+      const start = edit.start + shift;
+
+      shift += edit.text.length - (edit.end - edit.start);
+
+      return {
+        start,
+        end: start + edit.text.length,
+        wholeLines: isWholeLines(source, edit)
+      };
+    });
+
+    showChange(widget, spans);
 
     return { status: 'ok' };
   }
@@ -382,8 +426,8 @@ export class EditorSelectAction implements IActionImplementation {
 }
 
 /**
- * The `editor-highlight` action: select matching text or a range of
- * lines briefly.
+ * The `editor-highlight` action: tint matching text or a range of
+ * lines briefly, without selecting it.
  */
 export class EditorHighlightAction implements IActionImplementation {
   readonly type = 'editor-highlight';
@@ -411,16 +455,15 @@ export class EditorHighlightAction implements IActionImplementation {
       return { status: 'error', message: 'Nothing to highlight was found' };
     }
 
-    const range = showSpan(widget, span, 'center');
+    const editor = widget.content.editor;
+    const start = editor.getPositionAt(span.start);
 
-    window.setTimeout(
-      () => {
-        if (!widget.isDisposed && range) {
-          widget.content.editor.setCursorPosition(range.start);
-        }
-      },
-      parseDuration(request.options.duration, 3000)
-    );
+    if (start) {
+      revealAt(editor, start, 'center');
+      editor.setCursorPosition(start, { scroll: false });
+    }
+
+    markPointed(editor, span, parseDuration(request.options.duration, 3000));
 
     return { status: 'ok' };
   }
@@ -943,27 +986,22 @@ function isFileEditor(
 }
 
 /**
- * Where a revealed position goes in the view: new text starts at the top
- * so it reads downward and fills the screen; existing text is centred so
- * it has context on both sides. Either is clamped by the ends of the
- * file, so a match near the top sits as far down as the lines before it
- * allow.
+ * Where a revealed position goes in the view: new text sits a quarter of
+ * the way down, so it reads downward with a few lines of what came
+ * before it above; existing text is centred so it has context on both
+ * sides. Either is clamped by the ends of the file, so a match near the
+ * top sits as far down as the lines before it allow.
  */
-type RevealPlacement = 'start' | 'center';
+type RevealPlacement = 'upper' | 'center';
 
-/** The reveal signature of JupyterLab's CodeMirror editor, which takes
- * the placement; the abstract editor interface declares only the
- * position. */
-interface IPlacedReveal {
-  revealPosition(
-    position: CodeEditor.IPosition,
-    options?: ScrollIntoViewOptions
-  ): void;
-}
+/** How far down the view the `upper` placement puts a position. */
+const UPPER_FRACTION = 0.25;
 
 /**
  * Scroll a position into view at the given placement, unless it is
- * already in view, in which case nothing moves.
+ * already somewhere that serves, in which case nothing moves: anywhere
+ * in view for the centre, and the upper half of the view for new text,
+ * which would otherwise be left running off the bottom.
  */
 function revealAt(
   editor: CodeEditor.IEditor,
@@ -972,17 +1010,39 @@ function revealAt(
 ): void {
   const coordinate = editor.getCoordinateForPosition(position);
   const viewport = editor.host.getBoundingClientRect();
+  const lowest =
+    placement === 'upper'
+      ? viewport.top + viewport.height / 2
+      : viewport.bottom;
 
   if (
     coordinate &&
     coordinate.top >= viewport.top &&
-    coordinate.bottom <= viewport.bottom
+    coordinate.bottom <= lowest
   ) {
     return;
   }
 
-  (editor as unknown as IPlacedReveal).revealPosition(position, {
-    block: placement
+  // The abstract editor reveals a position only where it chooses, so the
+  // placement is asked of CodeMirror itself.
+  const view = editorView(editor);
+
+  if (!view) {
+    editor.revealPosition(position);
+
+    return;
+  }
+
+  view.dispatch({
+    effects: EditorView.scrollIntoView(
+      editor.getOffsetAt(position),
+      placement === 'upper'
+        ? {
+            y: 'start',
+            yMargin: Math.round(view.scrollDOM.clientHeight * UPPER_FRACTION)
+          }
+        : { y: 'center' }
+    )
   });
 }
 
@@ -1122,6 +1182,61 @@ function insertionLines(
   }
 
   return [...lines].sort((a, b) => a - b);
+}
+
+/**
+ * Whether a span of a file is whole lines: it starts at the start of a
+ * line and takes the newline of its last.
+ */
+function isWholeLines(source: string, span: IOffsetSpan): boolean {
+  return (
+    span.end > span.start &&
+    (span.start === 0 || source[span.start - 1] === '\n') &&
+    source[span.end - 1] === '\n'
+  );
+}
+
+/**
+ * The span of a block of whole lines, from the start of its first line
+ * to the start of the line after its last, or the end of the file.
+ */
+function lineBlockSpan(
+  editor: CodeEditor.IEditor,
+  firstLine: number,
+  lines: number
+): IOffsetSpan {
+  const offsetOfLine = (line: number): number =>
+    line < editor.lineCount
+      ? editor.getOffsetAt({ line, column: 0 })
+      : editor.model.sharedModel.getSource().length;
+
+  return {
+    start: offsetOfLine(Math.max(0, firstLine)),
+    end: offsetOfLine(firstLine + lines)
+  };
+}
+
+/**
+ * Show what an edit changed: mark the new text, in file order, and put
+ * the cursor at the start of the first of it, scrolled to where new
+ * text goes. The text is marked rather than selected so a stray key
+ * press cannot replace it. An empty span, as a deletion leaves, marks
+ * the place the text was.
+ */
+function showChange(
+  widget: IDocumentWidget<FileEditor>,
+  spans: IChangedSpan[]
+): void {
+  const editor = widget.content.editor;
+  const start = editor.getPositionAt(spans[0].start);
+
+  if (!start) {
+    return;
+  }
+
+  editor.setCursorPosition(start, { scroll: false });
+  revealAt(editor, start, 'upper');
+  markChanged(editor, spans);
 }
 
 /**

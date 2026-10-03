@@ -1845,3 +1845,61 @@
 .jp-WorkshopBulk-warning {
   color: var(--jp-warn-color1);
 }
+
+/* Marks actions leave on text in an editor. */
+
+.jp-WorkshopEditor-changedLine,
+.jp-WorkshopEditor-changedText {
+  background-color: color-mix(
+    in srgb,
+    var(--jp-success-color1) 16%,
+    transparent
+  );
+}
+
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-changedGutter {
+  box-shadow: inset -3px 0 0 var(--jp-success-color1);
+}
+
+/* Where text was deleted: a triangle beside the line numbers, on the
+   boundary above the line when whole lines went and beside the line
+   when text went from within it, and a tick at the point in the line. */
+
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedAbove,
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedWithin {
+  position: relative;
+}
+
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedAbove::after,
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedWithin::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--jp-error-color1);
+}
+
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedAbove::after {
+  top: -4px;
+}
+
+.cm-lineNumbers .cm-gutterElement.jp-WorkshopEditor-deletedWithin::after {
+  top: calc(50% - 4px);
+}
+
+.jp-WorkshopEditor-deletedTick {
+  display: inline-block;
+  width: 0;
+  height: 1.1em;
+  margin: 0 -1px;
+  border-left: 2px solid var(--jp-error-color1);
+  vertical-align: text-bottom;
+}
+
+.jp-WorkshopEditor-pointedLine,
+.jp-WorkshopEditor-pointedText {
+  background-color: color-mix(in srgb, var(--jp-warn-color1) 22%, transparent);
+}

@@ -5,6 +5,7 @@ import {
   IActionResult,
   errorMessage
 } from '../tokens';
+import { clearChangedMarks } from '../editormarks';
 
 /**
  * Registry of action implementations keyed by action type.
@@ -35,6 +36,10 @@ export class ActionRegistry implements IActionRegistry {
         message: `Unknown action type "${request.type}"`
       };
     }
+
+    // What the last action changed in an editor stays marked only until
+    // the next one runs.
+    clearChangedMarks();
 
     try {
       return await implementation.run(request);

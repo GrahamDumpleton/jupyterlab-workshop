@@ -226,9 +226,9 @@ The `editor-select`, `editor-highlight`, `editor-replace` and
 The body of `editor-replace` loses its final newline, so a match that
 stops short of a newline is replaced cleanly; the bodies of
 `editor-insert` and of a replace by line gain one, so they are whole
-lines. After a replace the new text is left selected, so a select, an
-explanation and a replace with the same pattern show the learner what
-is about to change and then what did.
+lines. After a replace or an insert the new text is left marked, so a
+select or highlight, an explanation and a replace with the same pattern
+show the learner what is about to change and then what did.
 
 `editor-insert` and `editor-replace` save the file after the edit
 unless `save: false`, which leaves it modified in the editor. A

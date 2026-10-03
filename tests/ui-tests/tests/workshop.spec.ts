@@ -1176,6 +1176,18 @@ test.describe('workshop panel', () => {
         'exists ../pages/01.md',
         '```',
         '',
+        '```{editor-replace}',
+        ':id: delete-line',
+        ':path: notes.txt',
+        ':line: 70',
+        '```',
+        '',
+        '```{editor-replace}',
+        ':id: delete-within',
+        ':path: notes.txt',
+        ':match: re 30',
+        '```',
+        '',
         '```{file-write}',
         ':id: clobber-page',
         ':path: ../pages/01.md',
@@ -1210,7 +1222,8 @@ test.describe('workshop panel', () => {
     await runAction('append-notes');
 
     // An append that opens the file lands on the first appended line,
-    // scrolled to the top of the view so the block reads downward.
+    // scrolled a quarter of the way down the view so the lines before
+    // it show above, with the appended lines marked rather than selected.
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
     await expect
       .poll(() =>
@@ -1243,15 +1256,26 @@ test.describe('workshop panel', () => {
             return null;
           }
 
-          return (
+          const height = scroller.getBoundingClientRect().height;
+          const offset =
             line.getBoundingClientRect().top -
-            scroller.getBoundingClientRect().top
+            scroller.getBoundingClientRect().top;
+
+          return (
+            offset > height * 0.15 &&
+            offset < height * 0.35 &&
+            line.classList.contains('jp-WorkshopEditor-changedLine') &&
+            window.getSelection()?.toString() === ''
           );
         }, MORE_LINES[0])
       )
-      .toBeLessThan(24);
+      .toBe(true);
 
+    // The marks last until the next action runs.
     await runAction('copy-hello');
+    await expect(
+      page.locator('.jp-FileEditor .jp-WorkshopEditor-changedLine')
+    ).toHaveCount(0);
     await runAction('where');
     expect(await read('work/notes.txt')).toBe(
       [...NOTES_LINES, ...MORE_LINES, ''].join('\n')
@@ -1265,6 +1289,35 @@ test.describe('workshop panel', () => {
 
     await check.getByRole('button', { name: 'Check' }).click();
     await expect(check).toHaveClass(/jp-mod-verify-pass/, { timeout: 30000 });
+
+    // A deletion leaves a triangle beside the line numbers: on the
+    // boundary above the line that closed up when a whole line went,
+    // and beside the line, with a tick at the point, when text went
+    // from within one.
+    const editorLines = page.locator('.jp-FileEditor .cm-content .cm-line');
+    const lineNumbers = page.locator(
+      '.jp-FileEditor .cm-lineNumbers .cm-gutterElement'
+    );
+
+    await runAction('delete-line');
+    await expect(
+      lineNumbers.and(page.locator('.jp-WorkshopEditor-deletedAbove'))
+    ).toHaveText('70');
+    await expect(editorLines.filter({ hasText: /^more 10$/ })).toHaveCount(0);
+    await expect(page.locator('.jp-WorkshopEditor-deletedTick')).toHaveCount(0);
+
+    await runAction('delete-within');
+    await expect(
+      lineNumbers.and(page.locator('.jp-WorkshopEditor-deletedAbove'))
+    ).toHaveCount(0);
+    await expect(
+      lineNumbers.and(page.locator('.jp-WorkshopEditor-deletedWithin'))
+    ).toHaveCount(1);
+    await expect(
+      editorLines.filter({
+        has: page.locator('.jp-WorkshopEditor-deletedTick')
+      })
+    ).toHaveText('mo');
 
     // A write aimed at a page is refused, badge and all, and the page
     // is untouched.
@@ -1951,6 +2004,11 @@ test.describe('workshop panel', () => {
     await expect(page.locator('.jp-FileEditor .cm-content')).toContainText(
       'Learned how git diff shows unstaged changes.'
     );
+
+    // An insert at the end marks the line it added, and that line only.
+    await expect(
+      page.locator('.jp-FileEditor .jp-WorkshopEditor-changedLine')
+    ).toHaveText('- Learned how git diff shows unstaged changes.');
     await expect
       .poll(() =>
         page.evaluate(async (target: string) => {

@@ -279,12 +279,23 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect(fileWrite).toHaveClass(/jp-mod-status-ok/);
     await expect(page.locator('.jp-FileEditor')).toBeVisible();
 
+    // What an edit wrote is marked, not selected: the replaced words
+    // within their line, the inserted line across its width.
     await runEditorAction('replace-literal');
     await expect(editorContent).toContainText('shipped with this workshop');
+    await expect(
+      editorContent.locator('.jp-WorkshopEditor-changedText')
+    ).toHaveText('shipped with this workshop');
     await runEditorAction('insert-after-title');
     await expect(editorContent.locator('.cm-line').nth(1)).toHaveText(
       'Revised by an editor-insert action.'
     );
+    await expect(
+      editorContent.locator('.jp-WorkshopEditor-changedText')
+    ).toHaveCount(0);
+    await expect(
+      editorContent.locator('.jp-WorkshopEditor-changedLine')
+    ).toHaveText('Revised by an editor-insert action.');
     await runEditorAction('replace-expand');
     await expect(editorContent.locator('.cm-line').first()).toHaveText(
       '# Revised notes for Learner'
@@ -296,10 +307,18 @@ test.describe('hello-jupyterlab workshop', () => {
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.toString()))
       .toBe('action');
+
+    // A highlight tints its lines without selecting them.
     await runEditorAction('highlight-lines');
+    await expect(
+      editorContent.locator('.jp-WorkshopEditor-pointedLine')
+    ).toHaveCount(2);
+    await expect(
+      editorContent.locator('.jp-WorkshopEditor-pointedLine').nth(1)
+    ).toHaveText('Revised by an editor-insert action.');
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.toString()))
-      .toContain('Revised by an editor-insert action.');
+      .toBe('');
 
     await fileClose.click();
     await expect(fileClose).toHaveClass(/jp-mod-status-ok/);
