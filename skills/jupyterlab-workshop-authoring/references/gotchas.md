@@ -68,6 +68,13 @@ once a workshop does a particular kind of thing.
   rebuild the session: running the notebook again is not safe in
   general, since pages may also have changed files the cells read.
 
+- **A cell for the learner to write in has no line to click on.** A
+  `cell-insert` holding only a comment that says where to write needs
+  an empty line under the comment. Leave one blank line before the
+  closing fence; with none the cell ends at the comment. This cannot be
+  checked from the kernel, since IPython drops trailing line breaks
+  from what it keeps in `In`; it shows only in the notebook.
+
 - **A cell shows no output.** A result of `None` and a trailing
   assignment both show nothing, which looks like a cell that failed to
   run. Print what the prose talks about.

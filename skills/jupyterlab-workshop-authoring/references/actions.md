@@ -141,6 +141,11 @@ cell, since what the cell defines is then missing for the steps after
 it. A cell that ran and raised still counts as run: showing an error
 can be the point of the cell.
 
+The body of a `cell-insert` is the source of the cell, line for line.
+A blank line before the closing fence leaves the cell ending with an
+empty line, which is what a cell holding only a comment that says where
+to write needs, so the learner has a line to click on and type.
+
 ## Interface and layout
 
 | Directive       | Capability  | Body     | Options                        | Description                                                                |

@@ -224,7 +224,11 @@ the options is a separator
 and is dropped, the line break before the closing fence ends the last
 line, and every other blank line, leading or trailing, is kept; so a
 `file-write` append that must leave two blank lines above a Python
-definition starts its body with three.
+definition starts its body with three, and a `cell-insert` whose cell
+must end with an empty line for the learner to type on ends its body
+with one blank line. The exceptions are `editor-replace` with a `match`,
+`terminal-type` and `env-set`, which drop one more line break from the
+end of the body.
 
 Every directive gets an id from `:id:` or, failing that, from the page id
 and its position (`first-commit-2`). Give an explicit `:id:` to anything

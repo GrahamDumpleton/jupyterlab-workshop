@@ -533,9 +533,14 @@ export class CellInsertAction implements IActionImplementation {
           .filter(tag => tag !== '')
       : [];
 
+    // The body is the cell's source as written. The parser has already
+    // taken the line break before the closing fence, so a blank line the
+    // author left at the end stays as an empty line for the learner to
+    // type on.
+
     model.sharedModel.insertCell(index, {
       cell_type: kind,
-      source: requireBody(request).replace(/\n$/, ''),
+      source: requireBody(request),
       metadata: tags.length > 0 ? { tags } : {}
     });
 

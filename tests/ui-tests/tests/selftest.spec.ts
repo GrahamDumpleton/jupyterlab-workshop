@@ -600,6 +600,13 @@ const NOTEBOOK_PAGE = `# Build it up
 second = 2
 \`\`\`
 
+\`\`\`{cell-insert}
+:id: insert-blank
+:path: work.ipynb
+# Write your answer below
+
+\`\`\`
+
 \`\`\`{verify}
 :id: both
 :substrate: learner-kernel
@@ -705,7 +712,13 @@ test.describe("self-test of checks in a notebook's kernel", () => {
     );
     const cells = (await saved.json()).content.cells as { source: string }[];
 
-    expect(cells.map(cell => cell.source)).toEqual(['first = 1', 'second = 2']);
+    // The blank line that ends the body of the last insert is kept, so
+    // the cell has an empty line under its comment.
+    expect(cells.map(cell => cell.source)).toEqual([
+      'first = 1',
+      'second = 2',
+      '# Write your answer below\n'
+    ]);
   });
 });
 

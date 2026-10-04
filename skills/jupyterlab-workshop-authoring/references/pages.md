@@ -107,7 +107,13 @@ line rather than adding a blank one, and actions that write the body to
 a file end it with a single newline. Every other blank line is kept,
 leading or trailing, so a `file-write` with `mode: append` that must
 leave two blank lines above a Python definition starts its body with
-three.
+three, and a `cell-insert` whose cell must end with an empty line for
+the learner to type on ends its body with one blank line.
+
+Three actions put their body inside something that is already there,
+and drop one more line break from its end: `editor-replace` with a
+`match`, `terminal-type` and `env-set`. A blank line at the end of
+their body is not kept; two leave one.
 
 ## Common options
 
