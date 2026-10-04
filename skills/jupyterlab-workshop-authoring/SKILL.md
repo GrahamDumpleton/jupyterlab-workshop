@@ -390,6 +390,14 @@ assert out.strip(), "No commits yet: run git commit"
 - `ui`: `terminal-open <session>`, `file-open <path>`, `notebook-open
 <path>`, `panel-open <id>`, `kernel-idle <notebook>`.
 
+  A `contents` or `ui` check that fails says which predicate did not
+  hold, in the author's terms, naming a cell by its tag. Give it a
+  `:message:` option, on one line, to say it in the learner's terms and
+  say what to do next, such as "The cell has not run yet. Click the
+  action above to add the cell and run it." It covers whichever
+  predicate failed, and is what an attempt's `:expect:` matches. Only
+  these two substrates take it; lint reports it elsewhere.
+
 - `learner-kernel`: Python run in the learner's notebook kernel
   (`:path:` names the notebook). The value of the last expression
   decides, and `False`, `None` or `0` fails; anything printed becomes

@@ -87,6 +87,11 @@ git init command above first"`.
 - Use the `contents` substrate when a file check is enough; it needs no
   capability and no kernel.
 
+- Give a `contents` or `ui` check a `:message:` wherever a learner could
+  click Check too early. Without one the learner reads the predicate's
+  own reason, which names a cell by its tag and says nothing of what to
+  do next.
+
 - A `shell` check's message is its whole output, so shape it: colour off,
   one line on success and the full output on failure. `pytest -q` prints
   the dots and the summary, `-qq` drops the summary, which is the wrong

@@ -21,6 +21,7 @@ import { parseRequirement } from '../checks/gating';
 import { parseQuiz } from '../checks/quiz';
 import {
   CONTENTS_PREDICATES,
+  MESSAGE_SUBSTRATES,
   UI_PREDICATES,
   parsePredicates,
   parseTriggers,
@@ -292,6 +293,19 @@ function verifyProblems(node: IDirectiveNode): string[] {
     problems.push(`Unknown substrate "${node.options.substrate}"`);
 
     return problems;
+  }
+
+  // The message option replaces a message the extension would make. A
+  // check that runs code or a script gives its own, so there it would
+  // be written and never shown.
+  if (node.options.message !== undefined) {
+    if (!MESSAGE_SUBSTRATES.includes(substrate)) {
+      problems.push(
+        `The "message" option is for the contents and ui substrates; a ${substrate} check gives its own message`
+      );
+    } else if (node.options.message.trim() === '') {
+      problems.push('The "message" option is empty');
+    }
   }
 
   switch (substrate) {

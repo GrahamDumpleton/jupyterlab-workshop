@@ -73,6 +73,34 @@ directories whose names start with a dot unless the server is configured
 to allow hidden files, so a check for `.git` needs the `kernel` or
 `script` substrate.
 
+A `contents` or `ui` check that fails says which predicate did not hold,
+in the terms the predicate was written in:
+`Cell "call-hours" of functions.ipynb has not been run`. That suits an
+author, but a learner never sees the tag of a cell and is not told what
+to do next. `:message:` gives the text to show in its place:
+
+````markdown
+```{verify}
+:id: hours-called
+:label: The cell that calls the function has run
+:substrate: contents
+:trigger: cell-executed call-hours
+:message: The cell has not run yet. Click the action above to add the cell and run it.
+cell-executed functions.ipynb call-hours
+```
+````
+
+The message is shown as plain text, on one line of the page source, and
+may use [variables](variables.md). It is the message of the check whichever
+predicate failed, so a check of several predicates wants words that fit
+them all, or splitting into one check for each. It is also what an
+[attempt](#attempt) matches with `:expect:` and what the self-test
+report quotes; the reason made from the predicate goes to the browser
+console instead. A check whose predicates are written wrongly still
+says so in the extension's words. The other substrates take no
+`:message:`, since their code, command or script gives the message
+already, and lint reports one written there.
+
 The hidden workshop kernel is started on first use and kept for the
 `kernel` and `shell` checks and `execute-capture` actions that follow,
 but a check must not rely on it: each `kernel` check should read the

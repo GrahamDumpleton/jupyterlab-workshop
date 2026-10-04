@@ -384,6 +384,52 @@ options: [a]
     expect(messages[1].message).toContain('Unknown predicate "nope"');
   });
 
+  it('takes a message on a contents or ui verify, and on no other', () => {
+    const messages = lintPages({
+      'pages/01.md': `---
+title: One
+---
+
+\`\`\`{verify}
+:id: told
+:substrate: contents
+:message: The file is not there yet.
+exists demo
+\`\`\`
+
+\`\`\`{verify}
+:id: shown
+:substrate: ui
+:message: Open the terminal first.
+terminal-open main
+\`\`\`
+
+\`\`\`{verify}
+:id: coded
+:message: Never shown.
+assert True
+\`\`\`
+
+\`\`\`{verify}
+:id: blank
+:substrate: contents
+:message:
+exists demo
+\`\`\`
+`
+    });
+
+    expect(messages.map(message => message.rule)).toEqual([
+      'invalid-verify',
+      'invalid-verify'
+    ]);
+    expect(messages[0].message).toContain(
+      'The "message" option is for the contents and ui substrates'
+    );
+    expect(messages[0].message).toContain('"coded"');
+    expect(messages[1].message).toContain('The "message" option is empty');
+  });
+
   it('checks requirements name existing checks', () => {
     const messages = lintPages({
       'pages/01.md': `---

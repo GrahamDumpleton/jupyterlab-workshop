@@ -44,6 +44,25 @@ export interface ICheckActionContext {
 }
 
 /**
+ * The message of a predicate check that failed: the one the page gives
+ * in its `message` option when it has one, and otherwise the reason the
+ * extension found. The reason names things as the author wrote them, a
+ * cell by its tag and a file by its path, so with a message of the
+ * page's own it goes to the console, where an author can still read it.
+ */
+function authorMessage(request: IActionRequest, reason: string): string {
+  const message = (request.options.message ?? '').trim();
+
+  if (message === '') {
+    return reason;
+  }
+
+  console.info(`Check "${request.id}" failed: ${reason}`);
+
+  return message;
+}
+
+/**
  * The `verify` action: check learner progress on one of the substrates
  * and report pass (ok) or fail (error) with a message.
  */
@@ -173,7 +192,7 @@ export class VerifyAction implements IActionImplementation {
       const failure = await this._contentsPredicate(predicate);
 
       if (failure) {
-        return { status: 'error', message: failure };
+        return { status: 'error', message: authorMessage(request, failure) };
       }
     }
 
@@ -260,7 +279,7 @@ export class VerifyAction implements IActionImplementation {
       const failure = await this._uiPredicate(predicate);
 
       if (failure) {
-        return { status: 'error', message: failure };
+        return { status: 'error', message: authorMessage(request, failure) };
       }
     }
 

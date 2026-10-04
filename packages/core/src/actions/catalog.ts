@@ -549,7 +549,15 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         'Check learner progress with code, a script, or file and interface predicates.',
         'none',
         'optional',
-        ['label', 'trigger', 'substrate', 'script', 'path', 'timeout']
+        [
+          'label',
+          'trigger',
+          'substrate',
+          'script',
+          'path',
+          'timeout',
+          'message'
+        ]
       ),
       spec(
         'quiz',

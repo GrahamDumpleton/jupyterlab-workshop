@@ -24,6 +24,16 @@ export const CODE_SUBSTRATES: readonly VerifySubstrate[] = [
   'learner-kernel'
 ];
 
+/**
+ * Substrates whose failure message is made by the extension from the
+ * predicate that failed, and so can be replaced by the `message` option.
+ * The others say why they failed in the author's own words already.
+ */
+export const MESSAGE_SUBSTRATES: readonly VerifySubstrate[] = [
+  'contents',
+  'ui'
+];
+
 /** An event that makes a verify run again. */
 export type VerifyTrigger =
   | { kind: 'click' }

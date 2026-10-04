@@ -419,8 +419,9 @@ pages:
 
 /**
  * The first attempt holds no actions and tests what the check says
- * before anything is done, the second writes the wrong text, and the
- * third expects the check to say something it does not.
+ * before anything is done, the second does the same of a check that
+ * gives a message of its own, the third writes the wrong text, and the
+ * fourth expects the check to say something it does not.
  */
 const ATTEMPT_PAGE = `# A greeting
 
@@ -428,6 +429,12 @@ const ATTEMPT_PAGE = `# A greeting
 :id: nothing-yet
 :check: greeting
 :expect: does not exist yet
+\`\`\`\`
+
+\`\`\`\`{attempt}
+:id: own-words
+:check: written
+:expect: Click the action above
 \`\`\`\`
 
 \`\`\`\`{attempt}
@@ -465,6 +472,14 @@ Hello
 :label: The file says Hello
 :substrate: contents
 contains greeting.txt Hello
+\`\`\`
+
+\`\`\`{verify}
+:id: written
+:label: The file has been written
+:substrate: contents
+:message: The file is not there yet. Click the action above to write it.
+exists greeting.txt
 \`\`\`
 `;
 
@@ -514,6 +529,14 @@ test.describe('self-test of what a check says on a wrong answer', () => {
     expect(byId.get('nothing-yet')?.message).toBe(
       'The check said: greeting.txt does not exist yet'
     );
+
+    // A check with a message of its own says that, and not the reason
+    // made from its predicate.
+    expect(byId.get('own-words')?.status).toBe('ok');
+    expect(byId.get('own-words')?.message).toBe(
+      'The check said: The file is not there yet. Click the action above to write it.'
+    );
+
     expect(byId.get('wrong-text')?.status).toBe('ok');
     expect(byId.get('wrong-text')?.message).toBe(
       'The check said: greeting.txt does not contain "Hello"'
@@ -528,10 +551,11 @@ test.describe('self-test of what a check says on a wrong answer', () => {
     // An attempt can expect a pass, and the page then goes on as usual.
     expect(byId.get('right-answer')?.status).toBe('ok');
     expect(byId.get('greeting')?.status).toBe('ok');
+    expect(byId.get('written')?.status).toBe('ok');
 
     // What an attempt holds is not reported as a step of its own.
     expect(byId.has('write-wrong')).toBe(false);
-    expect(report.passed).toBe(5);
+    expect(report.passed).toBe(7);
     expect(report.failed).toBe(1);
 
     // An author is shown the attempts, each with its actions to click.
@@ -541,7 +565,7 @@ test.describe('self-test of what a check says on a wrong answer', () => {
       void exposed.jupyterapp.commands.execute('workshop:author-mode', {});
     });
 
-    await expect(panel.locator('.jp-WorkshopPanel-attempt')).toHaveCount(4);
+    await expect(panel.locator('.jp-WorkshopPanel-attempt')).toHaveCount(5);
     await expect(
       panel.locator('.jp-WorkshopPanel-attempt', { hasText: 'wrong' }).first()
     ).toContainText('"greeting" should fail');
