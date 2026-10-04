@@ -345,8 +345,8 @@ export class VerifyAction implements IActionImplementation {
 
     // Not silent: a silent execute never yields an execute_result, so the
     // value of a bare expression would be lost and only printed text
-    // would count. History is still not stored, so the notebook's In and
-    // Out counters are untouched.
+    // would count. History is still not stored, and the value is kept
+    // out of the notebook's Out, so the learner's results are untouched.
     const output = await executeInKernel(kernel, request.body, false);
 
     if (output.error) {

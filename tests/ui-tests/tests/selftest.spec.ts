@@ -708,3 +708,125 @@ test.describe("self-test of checks in a notebook's kernel", () => {
     expect(cells.map(cell => cell.source)).toEqual(['first = 1', 'second = 2']);
   });
 });
+
+const RESULTS_WORKSHOP = 'notebook-results';
+
+const RESULTS_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${RESULTS_WORKSHOP}
+title: Checks and the notebook's results
+version: 0.1.0
+description: Checks that read what the learner's cells gave.
+capabilities:
+  - write-files
+  - kernel-exec
+  - auto-run
+pages:
+  - pages/01-results.md
+`;
+
+/**
+ * The learner's cell gives 44, which the kernel keeps in Out and in the
+ * name _. Each check ends in an expression, whose value must not take
+ * the place of the 44: the same check asked twice passes twice, and _
+ * is still 44 after both, and after code run with its result shown. The
+ * last check cannot be compiled, and names its own first line.
+ */
+const RESULTS_PAGE = `# What the cell gave
+
+\`\`\`{notebook-create}
+:id: create
+:path: sums.ipynb
+:auto: page-enter
+- code: 40 + 4
+  tags: [sum]
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-sum
+:path: sums.ipynb
+:cell: sum
+\`\`\`
+
+\`\`\`{verify}
+:id: seen-once
+:substrate: learner-kernel
+:path: sums.ipynb
+44 in Out.values()
+\`\`\`
+
+\`\`\`{verify}
+:id: seen-again
+:substrate: learner-kernel
+:path: sums.ipynb
+44 in Out.values()
+\`\`\`
+
+\`\`\`{kernel-execute}
+:id: shown
+:path: sums.ipynb
+:silent: false
+"a result of the workshop's own"
+\`\`\`
+
+\`\`\`{verify}
+:id: underscore
+:substrate: learner-kernel
+:path: sums.ipynb
+_ == 44 and len(Out) == 1
+\`\`\`
+
+\`\`\`{verify}
+:id: broken
+:substrate: learner-kernel
+:path: sums.ipynb
+44 in in Out
+\`\`\`
+`;
+
+test.describe("self-test of checks that read the notebook's results", () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${RESULTS_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      RESULTS_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      RESULTS_PAGE,
+      'text',
+      `${target}/pages/01-results.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test("a check that ends in an expression leaves the learner's Out and _ as they were", async ({
+    page
+  }) => {
+    test.setTimeout(180000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & {
+      results: { id: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+    const detail = JSON.stringify(report.results);
+
+    // The first check did not put its own True where the 44 was.
+    expect(byId.get('seen-once')?.status, detail).toBe('ok');
+    expect(byId.get('seen-again')?.status, detail).toBe('ok');
+
+    // Nor did code run with its result shown, and nothing was added.
+    expect(byId.get('shown')?.status, detail).toBe('ok');
+    expect(byId.get('underscore')?.status, detail).toBe('ok');
+
+    // The line named is a line of the check as the author wrote it.
+    expect(byId.get('broken')?.status, detail).toBe('error');
+    expect(byId.get('broken')?.message, detail).toMatch(/line 1\)$/);
+    expect(report.failed, detail).toBe(1);
+  });
+});

@@ -48,6 +48,13 @@ say why. A check that raises fails with the error as its message, and
 leaves the learner's own cells alone: a cell queued behind it in the
 kernel still runs.
 
+The value of that closing expression goes no further than the check. The
+notebook's own record of results, `Out`, `_` and the numbered names such
+as `_3`, is left as the learner's cells made it, so a check may read
+them, `44 in Out.values()` for one, and find the same thing each time it
+is asked. Names the check assigns are another matter: they stay in the
+learner's kernel, as they would from a cell.
+
 Contents predicates: `exists <path>`, `missing <path>`,
 `contains <path> <text>`, `matches <path> <regex>`, and
 `cell-executed <notebook> <tag or index>`, which passes once the cell has

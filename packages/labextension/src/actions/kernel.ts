@@ -34,7 +34,111 @@ export const DEFAULT_EXECUTE_TIMEOUT_MS = 120000;
 export const REPLY_GRACE_MS = 15000;
 
 /**
+ * Python run ahead of code that is not silent, to keep the kernel's
+ * record of results as it was. IPython stores the value of a closing
+ * expression in `Out`, `_` and the like even when history is off, and
+ * with history off it stores it under the number of the last cell that
+ * ran, over that cell's own result. This notes what is there and puts it
+ * back once the code has run, whether or not it raised. It runs in a
+ * namespace of its own, so it leaves no names behind, and does nothing
+ * in a Python kernel that is not IPython.
+ */
+const KEEP_RESULTS = `
+def arm():
+    import re
+    from IPython import get_ipython
+
+    shell = get_ipython()
+
+    if shell is None:
+        return
+
+    names = shell.user_ns
+    hidden = getattr(shell, "user_ns_hidden", None)
+    hook = shell.displayhook
+    result_name = re.compile(r"^(_+|_\\d+)$")
+
+    out = names.get("_oh")
+    kept_out = dict(out) if isinstance(out, dict) else None
+    kept_names = {k: v for k, v in names.items() if result_name.match(k)}
+    kept_hidden = (
+        {k: v for k, v in hidden.items() if result_name.match(k)}
+        if isinstance(hidden, dict)
+        else None
+    )
+    kept_hook = {k: getattr(hook, k) for k in ("_", "__", "___") if hasattr(hook, k)}
+
+    def restore(*args):
+        try:
+            shell.events.unregister("post_run_cell", restore)
+        except ValueError:
+            pass
+
+        now = names.get("_oh")
+
+        if kept_out is not None and isinstance(now, dict):
+            now.clear()
+            now.update(kept_out)
+
+        for k in [k for k in names if result_name.match(k) and k not in kept_names]:
+            del names[k]
+
+        names.update(kept_names)
+
+        if kept_hidden is not None:
+            for k in [k for k in hidden if result_name.match(k) and k not in kept_hidden]:
+                del hidden[k]
+
+            hidden.update(kept_hidden)
+
+        for k, v in kept_hook.items():
+            setattr(hook, k, v)
+
+    shell.events.register("post_run_cell", restore)
+
+try:
+    arm()
+except Exception:
+    pass
+`;
+
+/**
+ * The line put ahead of code so that it leaves the kernel's record of
+ * results alone. One line exactly: `shiftedLines` relies on that.
+ */
+const KEEP_RESULTS_LINE = `__import__("builtins").exec(${JSON.stringify(KEEP_RESULTS)}, {})\n`;
+
+/**
+ * Errors raised on compiling code, which name a line of it. Matched
+ * anywhere in the name, since the Pyodide kernel gives the name as
+ * `<class 'SyntaxError'>`.
+ */
+const COMPILE_ERROR = /\b(SyntaxError|IndentationError|TabError)\b/;
+
+/**
+ * The value of a compile error with its line number brought back by one,
+ * for code that had `KEEP_RESULTS_LINE` put ahead of it. Other errors
+ * carry no line number in their value and are returned as they are.
+ */
+export function shiftedLines(name: string, value: string): string {
+  if (!COMPILE_ERROR.test(name)) {
+    return value;
+  }
+
+  return value.replace(
+    /, line (\d+)\)$/,
+    (whole: string, line: string): string =>
+      Number(line) > 1 ? `, line ${Number(line) - 1})` : whole
+  );
+}
+
+/**
  * Run code in a kernel and collect its output.
+ *
+ * Code that is not silent can end in an expression, whose value comes
+ * back as `result`. In a Python kernel the value is kept out of the
+ * kernel's own record of results, `Out` and `_`, which stay as the
+ * cells of the notebook left them.
  */
 export async function executeInKernel(
   kernel: Kernel.IKernelConnection,
@@ -42,6 +146,11 @@ export async function executeInKernel(
   silent = true
 ): Promise<IKernelOutput> {
   const output: IKernelOutput = { text: '', stderr: '' };
+  const keeping = !silent && (await isPython(kernel));
+
+  if (keeping) {
+    code = KEEP_RESULTS_LINE + code;
+  }
 
   // Not stop_on_error: with it, code that raises makes the kernel abort
   // every execute request queued behind it. In a notebook's kernel that
@@ -80,13 +189,25 @@ export async function executeInKernel(
     } else if (type === 'error') {
       const content = message.content as KernelMessage.IErrorMsg['content'];
 
-      output.error = `${content.ename}: ${content.evalue}`;
+      const value = keeping
+        ? shiftedLines(content.ename, content.evalue)
+        : content.evalue;
+
+      output.error = `${content.ename}: ${value}`;
     }
   };
 
   await future.done;
 
   return output;
+}
+
+async function isPython(kernel: Kernel.IKernelConnection): Promise<boolean> {
+  try {
+    return (await kernel.info).language_info.name === 'python';
+  } catch {
+    return false;
+  }
 }
 
 /**
