@@ -843,3 +843,159 @@ test.describe("self-test of checks that read the notebook's results", () => {
     expect(report.failed, detail).toBe(1);
   });
 });
+
+const LAST_CELL_WORKSHOP = 'notebook-last-cell';
+
+const LAST_CELL_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${LAST_CELL_WORKSHOP}
+title: Checks and the learner's last cell
+version: 0.1.0
+description: Checks asked after cells that end oddly.
+capabilities:
+  - write-files
+  - kernel-exec
+  - auto-run
+pages:
+  - pages/01-last-cell.md
+`;
+
+/**
+ * Each check ends in an expression and follows a cell of the learner's
+ * that IPython would read when deciding whether to show a value: one
+ * with an open bracket, one with an open quote, and one ending in a
+ * semicolon. The check's value must come back all the same, a True as
+ * a pass and a False as a failure with what was printed. The last cell
+ * ends in a semicolon again, and its own value must still be hidden.
+ */
+const LAST_CELL_PAGE = `# After a cell that ends oddly
+
+\`\`\`{notebook-create}
+:id: create
+:path: odd.ipynb
+:auto: page-enter
+- code: "total = (3 + 4"
+  tags: [bracket]
+- code: 'name = "Amara'
+  tags: [quote]
+- code: "7;"
+  tags: [semicolon]
+- code: "8;"
+  tags: [again]
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-bracket
+:path: odd.ipynb
+:cell: bracket
+\`\`\`
+
+\`\`\`{verify}
+:id: after-bracket
+:substrate: learner-kernel
+:path: odd.ipynb
+print("The check ran")
+True
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-quote
+:path: odd.ipynb
+:cell: quote
+\`\`\`
+
+\`\`\`{verify}
+:id: after-quote
+:substrate: learner-kernel
+:path: odd.ipynb
+True
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-semicolon
+:path: odd.ipynb
+:cell: semicolon
+\`\`\`
+
+\`\`\`{verify}
+:id: after-semicolon
+:substrate: learner-kernel
+:path: odd.ipynb
+True
+\`\`\`
+
+\`\`\`{verify}
+:id: said-why
+:substrate: learner-kernel
+:path: odd.ipynb
+print("Not there yet")
+False
+\`\`\`
+
+\`\`\`{cell-run}
+:id: run-again
+:path: odd.ipynb
+:cell: again
+\`\`\`
+
+\`\`\`{verify}
+:id: still-hidden
+:substrate: learner-kernel
+:path: odd.ipynb
+len(Out) == 0
+\`\`\`
+`;
+
+test.describe('self-test of checks after a cell that ends oddly', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${LAST_CELL_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      LAST_CELL_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      LAST_CELL_PAGE,
+      'text',
+      `${target}/pages/01-last-cell.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test("a check's closing expression decides whatever the learner's last cell was", async ({
+    page
+  }) => {
+    test.setTimeout(180000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & {
+      results: { id: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+    const detail = JSON.stringify(report.results);
+
+    // The cells with an open bracket and an open quote fail as cells,
+    // and the checks after them give their own verdict, not a TokenError.
+    expect(byId.get('run-bracket')?.status, detail).toBe('error');
+    expect(byId.get('after-bracket')?.status, detail).toBe('ok');
+    expect(byId.get('after-bracket')?.message, detail).toBe('The check ran');
+    expect(byId.get('run-quote')?.status, detail).toBe('error');
+    expect(byId.get('after-quote')?.status, detail).toBe('ok');
+
+    // After a cell ending in a semicolon a True still passes, and a
+    // False still fails rather than passing on what it printed.
+    expect(byId.get('run-semicolon')?.status, detail).toBe('ok');
+    expect(byId.get('after-semicolon')?.status, detail).toBe('ok');
+    expect(byId.get('said-why')?.status, detail).toBe('error');
+    expect(byId.get('said-why')?.message, detail).toBe('Not there yet');
+
+    // The learner's own semicolon goes on hiding the value of a cell.
+    expect(byId.get('run-again')?.status, detail).toBe('ok');
+    expect(byId.get('still-hidden')?.status, detail).toBe('ok');
+    expect(report.failed, detail).toBe(3);
+  });
+});

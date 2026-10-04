@@ -39,9 +39,19 @@ export const REPLY_GRACE_MS = 15000;
  * expression in `Out`, `_` and the like even when history is off, and
  * with history off it stores it under the number of the last cell that
  * ran, over that cell's own result. This notes what is there and puts it
- * back once the code has run, whether or not it raised. It runs in a
- * namespace of its own, so it leaves no names behind, and does nothing
- * in a Python kernel that is not IPython.
+ * back once the code has run, whether or not it raised.
+ *
+ * It also has the value of the closing expression shown whatever the
+ * last cell was. Before showing a value IPython asks whether the input
+ * ended in `;`, and it reads the input from the history, where with
+ * history off the last entry is the learner's cell and not this code. A
+ * cell ending in `;` would hide the value, and a cell that cannot be
+ * split into tokens, one with an open quote or bracket, would raise
+ * `TokenError` in its place. The question is answered with a no for
+ * this one run, and asked as usual of the cells that follow.
+ *
+ * It runs in a namespace of its own, so it leaves no names behind, and
+ * does nothing in a Python kernel that is not IPython.
  */
 const KEEP_RESULTS = `
 def arm():
@@ -68,11 +78,17 @@ def arm():
     )
     kept_hook = {k: getattr(hook, k) for k in ("_", "__", "___") if hasattr(hook, k)}
 
+    def shown():
+        return False
+
     def restore(*args):
         try:
             shell.events.unregister("post_run_cell", restore)
         except ValueError:
             pass
+
+        if vars(hook).get("quiet") is shown:
+            del hook.quiet
 
         now = names.get("_oh")
 
@@ -95,6 +111,9 @@ def arm():
             setattr(hook, k, v)
 
     shell.events.register("post_run_cell", restore)
+
+    if callable(getattr(hook, "quiet", None)):
+        hook.quiet = shown
 
 try:
     arm()

@@ -55,6 +55,11 @@ them, `44 in Out.values()` for one, and find the same thing each time it
 is asked. Names the check assigns are another matter: they stay in the
 learner's kernel, as they would from a cell.
 
+Nor does the learner's last cell change what the check says. A cell
+that ended in a semicolon, which hides the value of a cell, does not
+hide the value of the check, and a cell left with an open quote or
+bracket does not stop the check giving its own verdict.
+
 Contents predicates: `exists <path>`, `missing <path>`,
 `contains <path> <text>`, `matches <path> <regex>`, and
 `cell-executed <notebook> <tag or index>`, which passes once the cell has
