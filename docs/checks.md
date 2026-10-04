@@ -73,6 +73,12 @@ directories whose names start with a dot unless the server is configured
 to allow hidden files, so a check for `.git` needs the `kernel` or
 `script` substrate.
 
+`file-open` passes when the file is open in any viewer: the editor, the
+table viewer of a CSV file, the preview of a Markdown file, or whichever
+viewer a `file-open` action named with `factory`. `notebook-open` passes
+only when the file is open as a notebook, so a notebook opened as text in
+the editor satisfies `file-open` and not `notebook-open`.
+
 A `contents` or `ui` check that fails says which predicate did not hold,
 in the terms the predicate was written in:
 `Cell "call-hours" of functions.ipynb has not been run`. That suits an

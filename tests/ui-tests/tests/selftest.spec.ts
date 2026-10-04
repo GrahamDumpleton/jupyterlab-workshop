@@ -1023,3 +1023,164 @@ test.describe('self-test of checks after a cell that ends oddly', () => {
     expect(report.failed, detail).toBe(3);
   });
 });
+
+const OPEN_WORKSHOP = 'open-in-any-viewer';
+
+const OPEN_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${OPEN_WORKSHOP}
+title: Files open in one viewer or another
+version: 0.1.0
+description: Checks that a file is open, whatever it is open in.
+capabilities:
+  - write-files
+layouts:
+  data:
+    main:
+      areas:
+        - { tabs: ['file:spending.csv'] }
+        - { size: 0.4, tabs: ['markdown:notes.md'] }
+pages:
+  - pages/01-open.md
+`;
+
+/**
+ * The editor is not the viewer JupyterLab opens a CSV, a JSON or a
+ * notebook file in by default, and the preview is not the one it opens a
+ * Markdown file in, so each of these is open in a viewer other than the
+ * default for its type. The file-open predicate must find them all the
+ * same, and notebook-open must not take a notebook open as text for an
+ * open notebook.
+ */
+const OPEN_PAGE = `# Open in any viewer
+
+\`\`\`{file-write}
+:id: write-csv
+:path: spending.csv
+item,amount
+bread,3
+\`\`\`
+
+\`\`\`{file-write}
+:id: write-notes
+:path: notes.md
+# Notes
+\`\`\`
+
+\`\`\`{verify}
+:id: not-yet
+:substrate: ui
+file-open spending.csv
+\`\`\`
+
+\`\`\`{layout}
+:id: show
+:name: data
+\`\`\`
+
+\`\`\`{verify}
+:id: csv-in-editor
+:substrate: ui
+file-open spending.csv
+\`\`\`
+
+\`\`\`{verify}
+:id: markdown-in-preview
+:substrate: ui
+file-open notes.md
+\`\`\`
+
+\`\`\`{file-write}
+:id: write-json
+:path: data.json
+{"bread": 3}
+\`\`\`
+
+\`\`\`{file-open}
+:id: open-json
+:path: data.json
+\`\`\`
+
+\`\`\`{verify}
+:id: json-in-editor
+:substrate: ui
+file-open data.json
+\`\`\`
+
+\`\`\`{file-write}
+:id: write-notebook
+:path: plain.ipynb
+{"cells": [], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+\`\`\`
+
+\`\`\`{file-open}
+:id: open-notebook-as-text
+:path: plain.ipynb
+\`\`\`
+
+\`\`\`{verify}
+:id: notebook-as-file
+:substrate: ui
+file-open plain.ipynb
+\`\`\`
+
+\`\`\`{verify}
+:id: notebook-as-notebook
+:substrate: ui
+notebook-open plain.ipynb
+\`\`\`
+`;
+
+test.describe('self-test of checks that a file is open', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${OPEN_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      OPEN_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      OPEN_PAGE,
+      'text',
+      `${target}/pages/01-open.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test('a file counts as open in whichever viewer it is open in', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & {
+      results: { id: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+    const detail = JSON.stringify(report.results);
+
+    // A file that exists but that nothing has opened is not open.
+    expect(byId.get('not-yet')?.status, detail).toBe('error');
+    expect(byId.get('not-yet')?.message, detail).toBe(
+      'spending.csv is not open'
+    );
+
+    // The layout put the CSV file in the editor, not the table viewer,
+    // and the Markdown file in the preview, not the editor.
+    expect(byId.get('show')?.status, detail).toBe('ok');
+    expect(byId.get('csv-in-editor')?.status, detail).toBe('ok');
+    expect(byId.get('markdown-in-preview')?.status, detail).toBe('ok');
+
+    // An action opens a file in the editor too.
+    expect(byId.get('json-in-editor')?.status, detail).toBe('ok');
+
+    // A notebook open as text is an open file, and not an open notebook.
+    expect(byId.get('notebook-as-file')?.status, detail).toBe('ok');
+    expect(byId.get('notebook-as-notebook')?.status, detail).toBe('error');
+    expect(report.failed, detail).toBe(2);
+  });
+});

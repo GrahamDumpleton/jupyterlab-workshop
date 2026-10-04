@@ -390,6 +390,10 @@ assert out.strip(), "No commits yet: run git commit"
 - `ui`: `terminal-open <session>`, `file-open <path>`, `notebook-open
 <path>`, `panel-open <id>`, `kernel-idle <notebook>`.
 
+  `file-open` passes for a file open in any viewer (the editor, a table
+  viewer, a Markdown preview); `notebook-open` only for a file open as a
+  notebook.
+
   A `contents` or `ui` check that fails says which predicate did not
   hold, in the author's terms, naming a cell by its tag. Give it a
   `:message:` option, on one line, to say it in the learner's terms and

@@ -296,10 +296,23 @@ export class VerifyAction implements IActionImplementation {
           ? null
           : `Terminal "${argument}" is not open`;
 
-      case 'file-open':
-      case 'notebook-open': {
+      case 'file-open': {
+        // With no viewer named the document manager looks only for the
+        // default viewer of the file type, which for a CSV or JSON file
+        // is not the editor the file was opened in. A null name has it
+        // look for any viewer that can show the file.
+
         const path = manager.resolvePath(argument);
-        const open = docManager.findWidget(path) !== undefined;
+        const open = docManager.findWidget(path, null) !== undefined;
+
+        return open ? null : `${argument} is not open`;
+      }
+
+      case 'notebook-open': {
+        // A notebook open as text in the editor is not open as a notebook.
+
+        const path = manager.resolvePath(argument);
+        const open = docManager.findWidget(path) instanceof NotebookPanel;
 
         return open ? null : `${argument} is not open`;
       }
