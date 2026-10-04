@@ -544,7 +544,11 @@ function PageBody({
   );
 
   return (
-    <div className="jp-WorkshopPanel-body" ref={container}>
+    <div
+      className="jp-WorkshopPanel-body"
+      ref={container}
+      data-page-id={page.id}
+    >
       <h3 className="jp-WorkshopPanel-pageTitle">{page.title}</h3>
       {manager.pageIndex === 0 ? <PlatformBanner manager={manager} /> : null}
       {manager.pageIndex === 0 ? <PreflightBanner manager={manager} /> : null}

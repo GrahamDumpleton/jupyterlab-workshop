@@ -547,6 +547,16 @@ kernel pointing at a deleted directory is left in the kernel picker.
 With `--in-place` the environment and its kernel stay, since the
 workshop does.
 
+An action that waits for a person, `dialog`, `upload-prompt` or `tour`,
+is not run and is reported as a skip. A `tour` is still checked as far
+as it can be without stepping through it: a step whose selector matches
+nothing on screen at that point of the page is reported as a failure,
+as the tour would fail there for a learner.
+
+The self-test waits for the instructions panel to show each page before
+running the page's actions, so a `highlight`, `tooltip` or `tour` may
+point at part of the panel itself, such as its header or footer.
+
 Requirements: the `test` extra, which installs Playwright, a library
 that drives a browser from Python (`uv add "jupyterlab-workshop[test]"`
 or `pip install "jupyterlab-workshop[test]"`), and a browser for it,

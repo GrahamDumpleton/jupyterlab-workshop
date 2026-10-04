@@ -545,6 +545,8 @@ pass, `soft` only shows what is missing.
 
 - Interactive actions (`dialog`, `upload-prompt`, `tour`) are skipped by
   the self-test; do not gate a page on something only a person can do.
+  A `tour` is still checked for selectors that match nothing on screen,
+  which the self-test reports as a failure.
 
 - Use `:wait: prompt` on `execute` when the next action or check depends
   on the command having finished (the self-test adds it automatically).

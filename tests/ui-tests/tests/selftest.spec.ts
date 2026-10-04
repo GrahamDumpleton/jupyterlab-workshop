@@ -261,6 +261,149 @@ test.describe('self-test of automatic actions', () => {
   });
 });
 
+const POINT_WORKSHOP = 'point-at-panel';
+
+const POINT_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${POINT_WORKSHOP}
+title: Pointing at the panel
+version: 0.1.0
+description: Actions that point at parts of the instructions panel.
+pages:
+  - pages/01-first.md
+  - pages/02-second.md
+`;
+
+const ELSEWHERE_WORKSHOP = 'somewhere-else';
+
+/** A workshop to be in, so that the run has to open the one it tests. */
+const ELSEWHERE_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${ELSEWHERE_WORKSHOP}
+title: Somewhere else
+version: 0.1.0
+description: A page of prose and nothing to run.
+pages:
+  - pages/01-only.md
+`;
+
+const ELSEWHERE_PAGE = `# Somewhere else
+
+Nothing to do here.
+`;
+
+/**
+ * The first tour names what is on screen and the second a selector
+ * that matches nothing, which nobody is there to step through to.
+ */
+const POINT_FIRST_PAGE = `# The panel
+
+\`\`\`{highlight}
+:id: footer
+:selector: .jp-WorkshopPanel-footer
+:duration: 200ms
+\`\`\`
+
+\`\`\`{tour}
+:id: good-tour
+- selector: .jp-WorkshopPanel-header
+  text: The header.
+- selector: .jp-WorkshopPanel-footer
+  text: The footer.
+\`\`\`
+
+\`\`\`{tour}
+:id: bad-tour
+- selector: .jp-WorkshopPanel-header
+  text: The header.
+- selector: .jp-NothingLikeThis
+  text: Not there.
+\`\`\`
+`;
+
+/**
+ * The first action of the page points at its own box, which is in the
+ * panel only once the panel has drawn this page.
+ */
+const POINT_SECOND_PAGE = `# The next page
+
+\`\`\`{highlight}
+:id: own-box
+:selector: [data-action-id=own-box]
+:duration: 200ms
+\`\`\`
+`;
+
+test.describe('self-test of actions that point at the panel', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${POINT_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      POINT_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      POINT_FIRST_PAGE,
+      'text',
+      `${target}/pages/01-first.md`
+    );
+    await page.contents.uploadContent(
+      POINT_SECOND_PAGE,
+      'text',
+      `${target}/pages/02-second.md`
+    );
+    await page.contents.uploadContent(
+      ELSEWHERE_MANIFEST,
+      'text',
+      `${tmpPath}/${ELSEWHERE_WORKSHOP}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      ELSEWHERE_PAGE,
+      'text',
+      `${tmpPath}/${ELSEWHERE_WORKSHOP}/pages/01-only.md`
+    );
+
+    // Trust the workshop under test, then leave it for another, so the
+    // run opens it and goes straight on to its first action.
+    await openWorkshop(page, target);
+    await openWorkshop(page, `${tmpPath}/${ELSEWHERE_WORKSHOP}`);
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('Somewhere else');
+  });
+
+  test('waits for the panel to draw each page, and checks the selectors of a tour', async ({
+    page,
+    tmpPath
+  }) => {
+    test.setTimeout(120000);
+
+    const report = (await page.evaluate((path: string) => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', { path });
+    }, `${tmpPath}/${POINT_WORKSHOP}`)) as IReport & {
+      results: { id: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+
+    // The panel has drawn the page by the time its first action runs.
+    expect(byId.get('footer')?.status).toBe('ok');
+    expect(byId.get('own-box')?.status).toBe('ok');
+
+    // A tour is not stepped through, but what it points at is looked for.
+    expect(byId.get('good-tour')?.status).toBe('skipped');
+    expect(byId.get('bad-tour')?.status).toBe('error');
+    expect(byId.get('bad-tour')?.message).toBe(
+      'Nothing on screen matches ".jp-NothingLikeThis" (step 2)'
+    );
+
+    expect(report.passed).toBe(2);
+    expect(report.failed).toBe(1);
+    expect(report.skipped).toBe(1);
+  });
+});
+
 const NOTEBOOK_WORKSHOP = 'notebook-checks';
 
 const NOTEBOOK_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1

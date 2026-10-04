@@ -315,6 +315,19 @@ export class CopyAction implements IActionImplementation {
   }
 }
 
+/**
+ * The selectors of a `tour` that match nothing on screen, each with the
+ * number of its step, so that a tour nobody is there to step through
+ * can still be checked. Throws when the body is not a list of steps.
+ */
+export function missingTourTargets(
+  body: string
+): { step: number; selector: string }[] {
+  return parseSteps(body)
+    .map((item, index) => ({ step: index + 1, selector: item.selector }))
+    .filter(item => findElement(item.selector) === null);
+}
+
 function parseSteps(body: string): ITourStep[] {
   const data: unknown = load(body);
 

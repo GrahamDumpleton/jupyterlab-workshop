@@ -7,7 +7,9 @@ import {
 } from '@jupyterlab-workshop/core';
 import { ReadonlyPartialJSONObject } from '@lumino/coreutils';
 
+import { missingTourTargets } from './actions/guidance';
 import { IOpeningLayout } from './layout';
+import { pageDrawn } from './panel/drawn';
 import { IActionResult, IWorkshopManager } from './tokens';
 import { parseDuration, sleep, visibleDirectives } from './util';
 
@@ -218,6 +220,10 @@ export async function runCurrentPage(
     return results;
   }
 
+  // The panel draws the page a moment after the manager moves to it, and
+  // an action may point at part of the panel, so wait for it to show.
+  await pageDrawn(pageId);
+
   // Actions can set variables, which re-renders the pages, so fetch the
   // current page again before each step and continue from the next id.
   const done = new Set<string>();
@@ -254,14 +260,18 @@ export async function runCurrentPage(
     }
 
     if (INTERACTIVE.has(node.name)) {
+      const problem = node.name === 'tour' ? tourProblem(node) : null;
+
       results.push({
         page: pageId,
         id: node.id,
         type: node.name,
-        status: 'skipped',
-        message: 'Needs a person; skipped by the self-test',
+        status: problem ? 'error' : 'skipped',
+        message: problem ?? 'Needs a person; skipped by the self-test',
         seconds: 0
       });
+
+      options.onProgress?.({ results: [...results], current: null });
 
       continue;
     }
@@ -549,6 +559,31 @@ export function summarize(
     failed: results.filter(item => item.status === 'error').length,
     skipped: results.filter(item => item.status === 'skipped').length
   };
+}
+
+/**
+ * What is wrong with a `tour`, as far as can be told without a person
+ * to step through it: a body that is not a list of steps, or a step
+ * whose selector matches nothing on screen. Null when nothing is.
+ */
+function tourProblem(node: IDirectiveNode): string | null {
+  let missing: { step: number; selector: string }[];
+
+  try {
+    missing = missingTourTargets(node.body);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  if (missing.length === 0) {
+    return null;
+  }
+
+  return missing
+    .map(
+      item => `Nothing on screen matches "${item.selector}" (step ${item.step})`
+    )
+    .join('; ');
 }
 
 function prepared(node: IDirectiveNode): IDirectiveNode {
