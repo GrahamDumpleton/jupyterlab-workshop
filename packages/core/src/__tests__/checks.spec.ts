@@ -9,6 +9,7 @@ import {
 import {
   CONTENTS_PREDICATES,
   UI_PREDICATES,
+  kernelErrorName,
   parsePredicates,
   parseTriggers,
   verifySubstrate
@@ -373,5 +374,24 @@ describe('requirements', () => {
     expect(describeRequirement({ kind: 'form', id: 'setup' })).toBe(
       'Fill in the form "setup"'
     );
+  });
+});
+
+describe('kernelErrorName', () => {
+  it('gives the plain name for the form the Pyodide kernel reports', () => {
+    expect(kernelErrorName("<class 'AssertionError'>")).toBe('AssertionError');
+    expect(kernelErrorName("<class 'SyntaxError'>")).toBe('SyntaxError');
+  });
+
+  it('drops the module of an error that is not a builtin', () => {
+    expect(kernelErrorName("<class 'json.decoder.JSONDecodeError'>")).toBe(
+      'JSONDecodeError'
+    );
+  });
+
+  it('leaves a name that is already plain as it is', () => {
+    expect(kernelErrorName('AssertionError')).toBe('AssertionError');
+    expect(kernelErrorName('ValueError')).toBe('ValueError');
+    expect(kernelErrorName('')).toBe('');
   });
 });

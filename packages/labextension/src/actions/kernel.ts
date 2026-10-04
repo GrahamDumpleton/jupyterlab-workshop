@@ -2,6 +2,8 @@ import { JupyterFrontEnd } from '@jupyterlab/application';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Kernel, KernelMessage, Session } from '@jupyterlab/services';
 
+import { kernelErrorName } from '@jupyterlab-workshop/core';
+
 import { WORKSHOP_STATE_DIR } from '../state';
 import { IWorkshopManager } from '../tokens';
 import { ensureDirectory } from './contents';
@@ -208,11 +210,15 @@ export async function executeInKernel(
     } else if (type === 'error') {
       const content = message.content as KernelMessage.IErrorMsg['content'];
 
+      // The Pyodide kernel gives the name as `<class 'ValueError'>`; the
+      // plain form is what the learner is shown, and what callers match.
+      const name = kernelErrorName(content.ename);
+
       const value = keeping
-        ? shiftedLines(content.ename, content.evalue)
+        ? shiftedLines(name, content.evalue)
         : content.evalue;
 
-      output.error = `${content.ename}: ${value}`;
+      output.error = `${name}: ${value}`;
     }
   };
 

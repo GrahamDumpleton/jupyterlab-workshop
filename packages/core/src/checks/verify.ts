@@ -154,6 +154,18 @@ export function parseSeconds(text: string): number | null {
   }
 }
 
+/**
+ * The name of an error as a kernel reported it, in the plain form such
+ * as `AssertionError`. The Pyodide kernel of JupyterLite gives the name
+ * as `<class 'AssertionError'>`, and a name already plain is returned as
+ * it is, so a failure reads the same whichever kernel ran the code.
+ */
+export function kernelErrorName(name: string): string {
+  const match = /^<class '(?:[\w.]*\.)?(\w+)'>$/.exec(name.trim());
+
+  return match ? match[1] : name;
+}
+
 /** A predicate checked by the `contents` and `ui` substrates. */
 export interface IPredicate {
   name: string;
