@@ -1184,3 +1184,167 @@ test.describe('self-test of checks that a file is open', () => {
     expect(report.failed, detail).toBe(2);
   });
 });
+
+const CHANGED_WORKSHOP = 'changed-on-disk';
+
+const CHANGED_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${CHANGED_WORKSHOP}
+title: Files the kernel changed
+version: 0.1.0
+description: Actions that write a file a kernel has written since it was opened.
+capabilities:
+  - write-files
+  - kernel-exec
+  - auto-run
+pages:
+  - pages/01-changed.md
+`;
+
+/**
+ * The report is open in the editor each time code in the learner's
+ * kernel writes it, so the editor holds a copy older than the one on
+ * disk. JupyterLab asks which to keep when such an editor is saved, a
+ * dialog that stops the self-test, so each action that writes the file
+ * must first bring the editor up to date. The last two steps run code
+ * in the hidden kernel, which must write its file into the workspace.
+ */
+const CHANGED_PAGE = `# Changed on disk
+
+\`\`\`{notebook-create}
+:id: create
+:path: writer.ipynb
+:auto: page-enter
+- code: "1 + 1"
+\`\`\`
+
+\`\`\`{file-write}
+:id: first
+:path: report.txt
+:open: true
+written by the action
+\`\`\`
+
+\`\`\`{kernel-execute}
+:id: kernel-first
+:path: writer.ipynb
+with open("report.txt", "w") as file:
+    file.write("changed by the kernel\\n")
+\`\`\`
+
+\`\`\`{file-write}
+:id: overwrite
+:path: report.txt
+changed by the action
+\`\`\`
+
+\`\`\`{verify}
+:id: overwritten
+:substrate: contents
+contains report.txt changed by the action
+\`\`\`
+
+\`\`\`{kernel-execute}
+:id: kernel-second
+:path: writer.ipynb
+with open("report.txt", "w") as file:
+    file.write("kernel once more\\n")
+\`\`\`
+
+\`\`\`{file-write}
+:id: append
+:path: report.txt
+:mode: append
+appended by the action
+\`\`\`
+
+\`\`\`{verify}
+:id: appended
+:substrate: contents
+contains report.txt kernel once more
+contains report.txt appended by the action
+\`\`\`
+
+\`\`\`{kernel-execute}
+:id: kernel-third
+:path: writer.ipynb
+with open("report.txt", "w") as file:
+    file.write("kernel a third time\\n")
+\`\`\`
+
+\`\`\`{editor-insert}
+:id: insert
+:path: report.txt
+:line: end
+inserted by the action
+\`\`\`
+
+\`\`\`{verify}
+:id: inserted
+:substrate: contents
+contains report.txt kernel a third time
+contains report.txt inserted by the action
+\`\`\`
+
+\`\`\`{kernel-execute}
+:id: hidden-write
+with open("hidden.txt", "w") as file:
+    file.write("from the hidden kernel\\n")
+\`\`\`
+
+\`\`\`{verify}
+:id: hidden-written
+:substrate: contents
+contains hidden.txt from the hidden kernel
+\`\`\`
+`;
+
+test.describe('self-test of actions on a file a kernel changed', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${CHANGED_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      CHANGED_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      CHANGED_PAGE,
+      'text',
+      `${target}/pages/01-changed.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test('an action writes an open file the kernel changed without asking which to keep', async ({
+    page
+  }) => {
+    test.setTimeout(180000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & {
+      results: { id: string; message: string }[];
+    };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+    const detail = JSON.stringify(report.results);
+
+    // An overwrite replaces what the kernel wrote, with no dialog.
+    expect(byId.get('overwrite')?.status, detail).toBe('ok');
+    expect(byId.get('overwritten')?.status, detail).toBe('ok');
+
+    // An append and an insert keep what the kernel wrote and add to it.
+    expect(byId.get('append')?.status, detail).toBe('ok');
+    expect(byId.get('appended')?.status, detail).toBe('ok');
+    expect(byId.get('insert')?.status, detail).toBe('ok');
+    expect(byId.get('inserted')?.status, detail).toBe('ok');
+
+    // Code given no notebook runs in the workspace.
+    expect(byId.get('hidden-write')?.status, detail).toBe('ok');
+    expect(byId.get('hidden-written')?.status, detail).toBe('ok');
+    expect(report.failed, detail).toBe(0);
+    await expect(page.locator('.jp-Dialog')).toHaveCount(0);
+  });
+});

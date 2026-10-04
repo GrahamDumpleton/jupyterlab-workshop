@@ -52,7 +52,10 @@ at the start of what it wrote: the top of the file, or with `mode:
 append` the first appended line, so a long file opens where the change
 is. An editor already showing the file is moved there whether or not
 `open` is set, since its cursor may have been in text the write
-replaced. `editor-insert` and `editor-replace` leave the cursor at the
+replaced. The write replaces what is on disk even when the file has
+changed there since the editor loaded it, as it has when the learner's
+code wrote it, and the learner is not asked which copy to keep.
+`editor-insert` and `editor-replace` leave the cursor at the
 start of the first text they wrote.
 
 What an edit wrote is marked rather than selected, so a stray key press
@@ -135,6 +138,13 @@ automatic `notebook-create` without it.
 The box for a `notebook-create` shows the content of each cell, one
 below the other, and not the YAML of its body, so a learner sees what
 the notebook will hold.
+
+`kernel-execute` with a `path` runs its code in the kernel of that
+notebook, where the learner's own names are, and in the notebook's
+directory. Without a `path` the code runs in the hidden workshop kernel,
+in the workspace and with the variables and the manifest's `env` in the
+environment, as a `kernel` check does, so a file it writes by a relative
+path lands where the learner's files are.
 
 `cell-insert` with `run` reports an error when the kernel never ran the
 cell, since what the cell defines is then missing for the steps after

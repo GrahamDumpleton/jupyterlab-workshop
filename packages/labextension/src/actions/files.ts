@@ -135,6 +135,16 @@ export class FileWriteAction implements IActionImplementation {
     let shown = widget;
 
     if (widget) {
+      // The editor saves only over the file it last loaded, and asks the
+      // learner which to keep when the file has since changed on disk,
+      // as it has when code in a kernel wrote it. The action replaces
+      // the file whatever it holds, so the editor is brought up to date
+      // with the disk first and there is nothing to ask.
+
+      if (existing) {
+        await widget.context.revert();
+      }
+
       widget.content.model.sharedModel.setSource(content);
       await widget.context.save();
     } else {

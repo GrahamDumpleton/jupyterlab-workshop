@@ -16,6 +16,7 @@ import { parseDuration } from '../util';
 import { ensureDirectory } from './contents';
 import { LayoutManager } from '../layout';
 import { WorkshopKernel, executeInKernel } from './kernel';
+import { workspacePreamble } from './shell';
 import { requireBody, requireOption } from './registry';
 import { TerminalSessions } from './terminal';
 
@@ -818,7 +819,12 @@ export class KernelExecuteAction implements IActionImplementation {
         request.options.silent !== 'false'
       );
     } else {
-      output = await this._context.kernel.execute(code);
+      // As for a kernel check, the code runs in the workspace, and not
+      // wherever the hidden kernel was started or last left.
+
+      const preamble = workspacePreamble(this._context.manager);
+
+      output = await this._context.kernel.execute(`${preamble}\n${code}`);
     }
 
     if (output.error) {

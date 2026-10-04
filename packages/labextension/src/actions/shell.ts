@@ -45,6 +45,21 @@ export function commandEnvironment(
 }
 
 /**
+ * Python that puts the hidden workshop kernel in the workspace, with the
+ * variables and the manifest's `env` in its environment, to run ahead of
+ * code the workshop gives it. The kernel starts in the workshop's state
+ * directory, where a file the code wrote by a relative path would be
+ * lost to the learner and to the checks that follow.
+ */
+export function workspacePreamble(manager: IWorkshopManager): string {
+  return [
+    'import os as _os',
+    `_os.chdir(${JSON.stringify(manager.absolutePath())})`,
+    `_os.environ.update(${JSON.stringify(commandEnvironment(manager))})`
+  ].join('\n');
+}
+
+/**
  * Runs commands as subprocesses of the hidden workshop kernel, which is
  * how the JupyterLab server reaches the operating system's shell.
  */

@@ -27,7 +27,7 @@ import { parseDuration } from '../util';
 import { getIfExists, readTextFile } from './contents';
 import { WorkshopKernel, executeInKernel } from './kernel';
 import { INotebookActionContext, openNotebook } from './notebook';
-import { IShellRunner, commandEnvironment } from './shell';
+import { IShellRunner, commandEnvironment, workspacePreamble } from './shell';
 import { TerminalSessions } from './terminal';
 
 /** Services the check actions need. */
@@ -109,12 +109,7 @@ export class VerifyAction implements IActionImplementation {
     // Run inside the workshop directory with the variables and the
     // manifest's env in the environment, so checks can use subprocess
     // and os.environ freely.
-    const manager = this._context.manager;
-    const preamble = [
-      'import os as _os',
-      `_os.chdir(${JSON.stringify(manager.absolutePath())})`,
-      `_os.environ.update(${JSON.stringify(commandEnvironment(manager))})`
-    ].join('\n');
+    const preamble = workspacePreamble(this._context.manager);
     const output = await this._context.kernel.execute(
       `${preamble}\n${request.body}`
     );
