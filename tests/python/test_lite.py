@@ -1,6 +1,8 @@
 import json
 import re
+import threading
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from jupyterlab_workshop.lite import (
     LiteError,
     build_command,
     build_lite_site,
+    build_lock,
     missing_requirements,
     patch_site_config,
     python_version,
@@ -567,6 +570,63 @@ def test_serve_directory_serves_files(tmp_path: Path) -> None:
             assert r.read() == b"<p>hello</p>"
     finally:
         server.shutdown()
+
+
+def test_serve_directory_lets_a_page_load_of_connections_wait(tmp_path: Path) -> None:
+    server, _ = serve_directory(tmp_path)
+
+    try:
+        # A page of a site asks for over a hundred files at once, and the
+        # default queue of five has the rest refused.
+        assert server.request_queue_size >= 128
+    finally:
+        server.shutdown()
+
+
+def test_build_lock_makes_a_second_build_wait(tmp_path: Path) -> None:
+    entered = threading.Event()
+
+    def second() -> None:
+        with build_lock(tmp_path):
+            entered.set()
+
+    with build_lock(tmp_path):
+        thread = threading.Thread(target=second)
+        thread.start()
+
+        assert not entered.wait(0.5)
+
+    thread.join(10)
+
+    assert entered.is_set()
+
+
+def test_build_holds_the_cache_directory_while_it_runs(tmp_path: Path) -> None:
+    lite_dir = tmp_path / "cache"
+    held: list[bool] = []
+
+    def runner(command: Sequence[str], cwd: Path) -> int:
+        taken = threading.Event()
+
+        def other() -> None:
+            with build_lock(lite_dir):
+                taken.set()
+
+        thread = threading.Thread(target=other, daemon=True)
+        thread.start()
+        held.append(not taken.wait(0.5))
+
+        return 1
+
+    with pytest.raises(LiteError):
+        build_lite_site(
+            LiteBuildOptions(
+                workshops=(), output=tmp_path / "out", lite_dir=lite_dir, terminal=False
+            ),
+            runner=runner,
+        )
+
+    assert held == [True]
 
 
 def test_cli_parses_lite_options(tmp_path: Path) -> None:

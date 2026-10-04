@@ -286,7 +286,9 @@ so File, New, Terminal and the launcher card work as well as the
 workshop's own actions. `--no-terminal` leaves it out. `--lite-dir`
 names the directory JupyterLite keeps its build state and those
 downloads in; the default is under the Jupyter data directory so that
-later builds are quick.
+later builds are quick. One build uses the directory at a time: a build
+started while another is running, a JupyterLite self-test included,
+waits for it to finish.
 
 Pyodide itself is loaded from a CDN when the site opens, so learners
 need network access on first use. The built site is relative-path only

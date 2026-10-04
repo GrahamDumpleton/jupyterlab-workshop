@@ -13,17 +13,20 @@ can be served by any static web server, such as GitHub Pages, or by
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import http.server
 import importlib.util
 import json
+import os
 import posixpath
 import re
 import shutil
 import subprocess
 import sys
 import threading
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeGuard
@@ -49,6 +52,19 @@ TERMINAL_ADDON = "jupyterlite-terminal"
 
 #: Tools the terminal extension's build step needs on the path.
 TERMINAL_TOOLS = ("node", "npm", "micromamba")
+
+#: Name of the file in the build cache directory that a build holds
+#: locked, so that two builds never use the directory at once.
+LOCK_FILE = ".build.lock"
+
+#: Seconds between tries for the lock on the build cache directory.
+LOCK_POLL_SECONDS = 0.2
+
+#: Connections the site server lets wait to be accepted. A page of a site
+#: asks for over a hundred files at once, each on its own connection, and
+#: the default of five has the rest refused, which shows as chunks that
+#: fail to load and plugins that never start.
+SERVER_QUEUE_SIZE = 128
 
 #: Runs a command in a directory and returns its exit code.
 Runner = Callable[[Sequence[str], Path], int]
@@ -677,11 +693,22 @@ def build_lite_site(
         )
 
     lite_dir = (options.lite_dir or default_lite_dir()).resolve()
+    lite_dir.mkdir(parents=True, exist_ok=True)
+
+    # The cache directory holds this build's staged contents, its
+    # settings and the build tool's own state, so a second build using it
+    # at the same time would spoil both.
+    with build_lock(lite_dir):
+        return _build_locked(options, lite_dir, python, runner)
+
+
+def _build_locked(
+    options: LiteBuildOptions, lite_dir: Path, python: str, runner: Runner | None
+) -> LiteBuildResult:
     staging = lite_dir / "contents"
     overrides = lite_dir / "overrides.json"
 
     # The staging area is rebuilt from scratch so removed workshops go.
-    lite_dir.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir()
 
@@ -728,6 +755,66 @@ def build_lite_site(
     )
 
 
+@contextlib.contextmanager
+def build_lock(lite_dir: Path) -> Iterator[None]:
+    """Hold the build cache directory for one build.
+
+    Waits while another process holds it, saying so once, and lets go
+    when the block ends. The lock belongs to the process, so it is also
+    released if the process dies.
+    """
+
+    handle = os.open(lite_dir / LOCK_FILE, os.O_RDWR | os.O_CREAT)
+    waiting = False
+
+    try:
+        while not _try_lock(handle):
+            if not waiting:
+                print(
+                    f"waiting for another build that is using {lite_dir}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                waiting = True
+
+            time.sleep(LOCK_POLL_SECONDS)
+
+        try:
+            yield
+        finally:
+            _unlock(handle)
+    finally:
+        os.close(handle)
+
+
+def _try_lock(handle: int) -> bool:
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            msvcrt.locking(handle, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+
+    return True
+
+
+def _unlock(handle: int) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        os.lseek(handle, 0, os.SEEK_SET)
+        msvcrt.locking(handle, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def patch_site_config(output: Path, terminal: bool = True) -> None:
     """Apply ``site_config`` to the built site's configuration files.
 
@@ -763,12 +850,16 @@ def serve_directory(
     """
 
     handler = functools.partial(_QuietHandler, directory=str(root))
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server = _SiteServer(("127.0.0.1", port), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
 
     thread.start()
 
     return server, int(server.server_address[1])
+
+
+class _SiteServer(http.server.ThreadingHTTPServer):
+    request_queue_size = SERVER_QUEUE_SIZE
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
