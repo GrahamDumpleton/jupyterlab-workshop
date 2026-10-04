@@ -1,7 +1,9 @@
 import {
   CONTENTS_PREDICATES,
   IPredicate,
+  IQuizSpec,
   UI_PREDICATES,
+  gradeAnswer,
   gradeQuiz,
   parseForm,
   parsePredicates,
@@ -383,8 +385,9 @@ export class VerifyAction implements IActionImplementation {
 }
 
 /**
- * The `quiz` action: grade the picked options, given as a JSON array of
- * indexes in the argument.
+ * The `quiz` action: grade the answer given in the argument, which is a
+ * JSON array of the indexes of the picked options, or for a quiz of type
+ * `text` a JSON string of what was typed.
  */
 export class QuizAction implements IActionImplementation {
   readonly type = 'quiz';
@@ -400,23 +403,26 @@ export class QuizAction implements IActionImplementation {
       return { status: 'error', message: parsed.errors.join('; ') };
     }
 
-    let picked: number[];
+    const quiz = parsed.quiz;
+    let value: unknown;
 
     try {
-      const value: unknown = JSON.parse(request.argument || '[]');
-
-      picked = Array.isArray(value)
-        ? value.filter((item): item is number => Number.isInteger(item))
-        : [];
+      value = JSON.parse(request.argument || 'null');
     } catch {
-      picked = [];
+      value = null;
     }
+
+    if (quiz.type === 'text') {
+      return gradeTyped(quiz, typeof value === 'string' ? value : '');
+    }
+
+    const picked: number[] = Array.isArray(value)
+      ? value.filter((item): item is number => Number.isInteger(item))
+      : [];
 
     if (picked.length === 0) {
       return { status: 'error', message: 'Pick an answer first' };
     }
-
-    const quiz = parsed.quiz;
 
     if (gradeQuiz(quiz, picked)) {
       return { status: 'ok', message: quiz.explanation ?? 'Correct' };
@@ -433,6 +439,27 @@ export class QuizAction implements IActionImplementation {
       message: reasons.length > 0 ? reasons.join(' ') : 'Not quite, try again'
     };
   }
+}
+
+/**
+ * The result of a typed answer. What was typed is never put in the
+ * message, so it goes no further than the grading.
+ */
+function gradeTyped(quiz: IQuizSpec, typed: string): IActionResult {
+  if (typed.trim() === '') {
+    return { status: 'error', message: 'Type an answer first' };
+  }
+
+  const grade = gradeAnswer(quiz, typed);
+
+  if (grade.correct) {
+    return { status: 'ok', message: quiz.explanation ?? 'Correct' };
+  }
+
+  return {
+    status: 'error',
+    message: grade.explanation ?? 'Not quite, try again'
+  };
 }
 
 /**

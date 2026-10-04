@@ -2959,3 +2959,91 @@ test.describe('hints that hold actions', () => {
     await expect(panel).toContainText('Shown once the check passes.');
   });
 });
+
+test.describe('a quiz with a typed answer', () => {
+  test('explains expected wrong answers, then passes and unlocks a hint', async ({
+    page,
+    tmpPath
+  }) => {
+    const root = `${tmpPath}/typed`;
+    const upload = (text: string, path: string): Promise<unknown> =>
+      page.contents.uploadContent(text, 'text', `${root}/${path}`);
+
+    await upload(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: typed',
+        'title: Typed',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'workshop.yaml'
+    );
+    await upload(
+      [
+        '---',
+        'title: First',
+        '---',
+        '',
+        '```{quiz}',
+        ':id: division',
+        ':type: text',
+        ':attempts: 4',
+        'question: What does `print(10 / 2)` show?',
+        'answer: "5.0"',
+        'wrong:',
+        '  - { text: "5", explanation: "`/` gives a float." }',
+        'otherwise: "Think about the type."',
+        'explanation: "True division."',
+        '```',
+        '',
+        '```{hint}',
+        ':id: help',
+        ':title: A clue',
+        ':unlock: "division" in failed_checks',
+        'It has a point in it.',
+        '```',
+        ''
+      ].join('\n'),
+      'pages/01.md'
+    );
+    await openWorkshop(page, root);
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const quiz = panel.locator('.jp-WorkshopPanel-quiz');
+    const answer = quiz.getByLabel('Your answer');
+    const submit = quiz.getByRole('button', { name: 'Submit' });
+    const feedback = quiz.locator('.jp-WorkshopPanel-quizFeedback');
+    const hint = panel.locator('.jp-WorkshopPanel-hint');
+
+    // Nothing to pick from, and nothing to submit until something is typed.
+    await expect(quiz.locator('.jp-WorkshopPanel-quizOption')).toHaveCount(0);
+    await expect(submit).toBeDisabled();
+    await expect(hint).toHaveClass(/jp-mod-locked/);
+
+    // A wrong answer the author expected gives its own explanation, and
+    // the failure unlocks the hint.
+    await answer.fill('5');
+    await submit.click();
+    await expect(feedback).toHaveText('/ gives a float.');
+    await expect(feedback.locator('code')).toHaveText('/');
+    await expect(quiz).toContainText('3 attempts left');
+    await expect(hint).not.toHaveClass(/jp-mod-locked/);
+
+    // Any other wrong answer gets the general one. Enter submits.
+    await answer.fill('five');
+    await answer.press('Enter');
+    await expect(feedback).toHaveText('Think about the type.');
+    await expect(quiz).toContainText('2 attempts left');
+
+    // The right answer passes, white space around it ignored, and the
+    // box locks with what was typed still in it.
+    await answer.fill(' 5.0 ');
+    await answer.press('Enter');
+    await expect(quiz).toHaveClass(/jp-mod-status-ok/);
+    await expect(feedback).toHaveText('True division.');
+    await expect(answer).toBeDisabled();
+    await expect(submit).toBeDisabled();
+  });
+});

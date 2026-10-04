@@ -554,10 +554,10 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
       spec(
         'quiz',
         'checks',
-        'Ask a multiple choice question with the options in the body.',
+        'Ask a question, with the options to pick from or the answer to type in the body.',
         'none',
         'yaml',
-        ['type', 'shuffle', 'attempts']
+        ['type', 'shuffle', 'attempts', 'case', 'lines']
       ),
       spec(
         'form',

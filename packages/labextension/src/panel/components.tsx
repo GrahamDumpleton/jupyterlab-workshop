@@ -13,6 +13,7 @@ import {
   parseForm,
   parseQuiz,
   parseTriggers,
+  quizTestAnswer,
   renderInlineMarkdown,
   TRUST_LEVEL_DESCRIPTIONS,
   validateForm
@@ -1548,6 +1549,7 @@ function QuizBlock({
   const parsed = parseQuiz(node.body, node.options);
   const status = manager.actionStatus(node.id);
   const [picked, setPicked] = useState<number[]>([]);
+  const [typed, setTyped] = useState<string>('');
 
   if (!parsed.quiz) {
     return (
@@ -1574,6 +1576,24 @@ function QuizBlock({
 
   useRevealOnMessage(root, status);
   const remaining = quiz.attempts > 0 ? quiz.attempts - status.runs : null;
+
+  // A typed quiz that was passed before the page was last loaded has
+  // nothing typed in it, so it shows the answer it accepts.
+  const text = quiz.type === 'text';
+  const shown = passed && typed === '' ? (quizTestAnswer(quiz) ?? '') : typed;
+  const ready = text ? typed.trim() !== '' : picked.length > 0;
+
+  const submit = (): void => {
+    if (locked || !ready) {
+      return;
+    }
+
+    void manager.runAction(
+      node,
+      'click',
+      JSON.stringify(text ? typed : picked)
+    );
+  };
 
   const toggle = (index: number): void => {
     if (quiz.type === 'single') {
@@ -1608,6 +1628,15 @@ function QuizBlock({
             __html: renderInlineMarkdown(quiz.question)
           }}
         />
+        {text ? (
+          <QuizAnswer
+            lines={quiz.lines}
+            value={shown}
+            disabled={locked}
+            onChange={setTyped}
+            onSubmit={submit}
+          />
+        ) : null}
         <div className="jp-WorkshopPanel-quizOptions">
           {order.map(index => (
             <label key={index} className="jp-WorkshopPanel-quizOption">
@@ -1630,10 +1659,8 @@ function QuizBlock({
           <button
             type="button"
             className="jp-Button jp-mod-styled jp-mod-accept"
-            disabled={locked || picked.length === 0}
-            onClick={() =>
-              void manager.runAction(node, 'click', JSON.stringify(picked))
-            }
+            disabled={locked || !ready}
+            onClick={submit}
           >
             Submit
           </button>
@@ -1653,6 +1680,61 @@ function QuizBlock({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Where the learner types the answer to a quiz of type `text`: one line,
+ * on which Enter submits, or several. It is set in the code font, since
+ * what is asked for is usually what a program prints, and the browser is
+ * kept from correcting or capitalising what is typed.
+ */
+function QuizAnswer({
+  lines,
+  value,
+  disabled,
+  onChange,
+  onSubmit
+}: {
+  lines: number;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}): JSX.Element {
+  const shared = {
+    className: 'jp-WorkshopPanel-quizAnswer',
+    'aria-label': 'Your answer',
+    value,
+    disabled,
+    spellCheck: false,
+    autoComplete: 'off',
+    autoCorrect: 'off',
+    autoCapitalize: 'off'
+  };
+
+  if (lines > 1) {
+    return (
+      <textarea
+        {...shared}
+        rows={lines}
+        onChange={event => onChange(event.target.value)}
+      />
+    );
+  }
+
+  return (
+    <input
+      {...shared}
+      type="text"
+      onChange={event => onChange(event.target.value)}
+      onKeyDown={event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onSubmit();
+        }
+      }}
+    />
   );
 }
 

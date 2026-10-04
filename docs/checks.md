@@ -145,8 +145,10 @@ substituted as in any directive body. The `:title:` shown in the
 header is plain text. The body is YAML, so a value that starts with a
 backtick or contains `: `, `{` or `}` must be quoted, as above.
 
-`:type:` is `single` (radio buttons, default) or `multi` (check boxes,
-every correct option and no others must be picked). `:attempts:` limits
+`:type:` is `single` (radio buttons, default), `multi` (check boxes,
+every correct option and no others must be picked) or `text` (the
+learner types the answer, described under [A typed answer](#a-typed-answer)).
+`:attempts:` limits
 submissions; after the last failed attempt the quiz locks. A correct
 answer shows the quiz `explanation`, a wrong one shows the explanations
 of the wrong options picked, if any.
@@ -161,6 +163,71 @@ every visit, so it is not a randomisation: with four options about one
 quiz in four still shows its correct answer first. Vary where the
 correct option sits in the source as well. Grading and the self-test
 go by the options as written, so shuffling changes neither.
+
+### A typed answer
+
+Picking from a list tests whether the learner recognises the right
+answer, and the list shows it to anyone who reads it. A quiz of
+`:type: text` has no options: the learner types the answer, which suits
+a question that asks them to predict what a piece of code will show
+before they run it.
+
+````markdown
+```{quiz}
+:id: division
+:type: text
+:attempts: 3
+question: What does `print(10 / 2)` show?
+answer: "5.0"
+wrong:
+  - { text: "5", explanation: "`/` gives a float, even when it divides evenly." }
+  - { pattern: "5\\.0+", explanation: "Close, but Python prints one digit after the point here." }
+otherwise: "Think about the type that `/` returns."
+explanation: "`/` is true division, so the result is the float `5.0`."
+```
+````
+
+- `answer` is the text that is accepted, or a list of them. An entry
+  can also be a mapping with a `pattern`, a regular expression that the
+  whole of the typed answer must match, as in
+  `{ pattern: "0x[0-9a-f]+", example: "0x7f3a" }`.
+
+- `wrong` lists the wrong answers the author expects, each with a
+  `text` or a `pattern` and the `explanation` to show for it. The
+  accepted answers are looked for first, then these in the order
+  written.
+
+- `otherwise` is shown for any other wrong answer. Without it the
+  learner is told "Not quite, try again".
+
+- `explanation` is shown for a correct answer, as for any quiz.
+
+An answer is compared exactly: `4.0` is not `4`, `True` is not `true`
+and `'a'` is not `a`, since that difference is often what the question
+is about. White space around the answer and at the end of each line is
+ignored, and nothing else is. `:case: false` makes the comparison
+ignore case, patterns included. `:lines:` gives the learner a box of
+that many lines for output that runs over several, up to 20; with one
+line, the default, pressing Enter submits.
+
+Quote every `answer` and every `text`. The body is YAML, which reads an
+unquoted `4.0` as the number 4, `True` as a boolean and `[1, 2]` as a
+list, so the answer compared against would not be the one written. The
+linter reports an answer that is not text, a pattern that does not
+compile, an `example` that does not match its pattern, and a wrong
+answer that is also an accepted one and so could never show its
+explanation.
+
+The self-test types the first answer given as text, or failing that
+the first `example` of a pattern, so a quiz needs one or the other. What
+the learner types is used for grading only: it is not stored with the
+workshop's state, written to the action log or sent in a
+[progress event](analytics.md), which reports that the quiz was
+answered and whether correctly, as for the other types.
+
+A typed quiz counts in `passed_checks` and `failed_checks` like any
+other, so a [hint](pages.md#hints) can stay locked until the learner
+has tried: `:unlock: "division" in failed_checks`.
 
 ## Form
 

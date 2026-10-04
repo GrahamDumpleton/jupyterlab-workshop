@@ -943,6 +943,22 @@
   margin: 2px 0;
 }
 
+/* A typed answer is set in the code font: what is asked for is usually
+   what a program prints. */
+.jp-WorkshopPanel-quizAnswer {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 2px;
+  background: var(--jp-input-background);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  resize: vertical;
+}
+
 .jp-WorkshopPanel-quizFooter {
   display: flex;
   align-items: center;

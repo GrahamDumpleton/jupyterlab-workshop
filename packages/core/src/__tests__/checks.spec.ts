@@ -1,6 +1,11 @@
 import { parseForm, validateForm } from '../checks/form';
 import { describeRequirement, parseRequirement } from '../checks/gating';
-import { gradeQuiz, parseQuiz } from '../checks/quiz';
+import {
+  gradeAnswer,
+  gradeQuiz,
+  parseQuiz,
+  quizTestAnswer
+} from '../checks/quiz';
 import {
   CONTENTS_PREDICATES,
   UI_PREDICATES,
@@ -108,6 +113,132 @@ describe('verifySubstrate', () => {
         declared: ['kernel-exec']
       })
     ).toMatchObject({ kind: 'skip' });
+  });
+});
+
+describe('a quiz with a typed answer', () => {
+  const BODY = `
+question: What does print(10 / 2) show?
+answer: "5.0"
+wrong:
+  - { text: "5", explanation: Division gives a float. }
+  - { pattern: "5\\\\.0+", explanation: One digit only. }
+otherwise: Think about the type.
+explanation: True division.
+`;
+  const OPTIONS: Record<string, string> = { type: 'text' };
+
+  it('grades what was typed exactly, apart from white space around it', () => {
+    const { quiz, errors } = parseQuiz(BODY, OPTIONS);
+
+    expect(errors).toEqual([]);
+    expect(quiz).toMatchObject({ type: 'text', options: [], lines: 1 });
+    expect(gradeAnswer(quiz!, '5.0')).toEqual({ correct: true });
+    expect(gradeAnswer(quiz!, '  5.0 \n')).toEqual({ correct: true });
+    expect(gradeAnswer(quiz!, '5')).toEqual({
+      correct: false,
+      explanation: 'Division gives a float.'
+    });
+    expect(gradeAnswer(quiz!, '5.00')).toEqual({
+      correct: false,
+      explanation: 'One digit only.'
+    });
+    expect(gradeAnswer(quiz!, 'five')).toEqual({
+      correct: false,
+      explanation: 'Think about the type.'
+    });
+    expect(quizTestAnswer(quiz!)).toBe('5.0');
+  });
+
+  it('keeps case unless told to ignore it', () => {
+    const body = 'question: x\nanswer: "True"';
+    const exact = parseQuiz(body, OPTIONS).quiz!;
+    const loose = parseQuiz(body, { type: 'text', case: 'false' }).quiz!;
+
+    expect(gradeAnswer(exact, 'true').correct).toBe(false);
+    expect(gradeAnswer(loose, 'true').correct).toBe(true);
+    expect(gradeAnswer(exact, 'xyz').explanation).toBeUndefined();
+  });
+
+  it('compares several lines, ignoring white space at line ends', () => {
+    const quiz = parseQuiz('question: x\nanswer: "1\\n2"', {
+      type: 'text',
+      lines: '2'
+    }).quiz!;
+
+    expect(quiz.lines).toBe(2);
+    expect(gradeAnswer(quiz, '1  \r\n2\n').correct).toBe(true);
+    expect(gradeAnswer(quiz, '1\n 2').correct).toBe(false);
+  });
+
+  it('accepts any of a list of answers, and a pattern with an example', () => {
+    const quiz = parseQuiz(
+      'question: x\nanswer:\n  - { pattern: "0x[0-9a-f]+", example: "0x1f" }\n  - "none"',
+      OPTIONS
+    ).quiz!;
+
+    expect(gradeAnswer(quiz, '0xbeef').correct).toBe(true);
+    expect(gradeAnswer(quiz, 'at 0xbeef').correct).toBe(false);
+    expect(gradeAnswer(quiz, 'none').correct).toBe(true);
+    expect(quizTestAnswer(quiz)).toBe('none');
+  });
+
+  it('refuses an answer that YAML did not read as text', () => {
+    expect(parseQuiz('question: x\nanswer: 4.0', OPTIONS).errors[0]).toContain(
+      'The answer 4 is not text'
+    );
+    expect(parseQuiz('question: x\nanswer: True', OPTIONS).errors[0]).toContain(
+      'The answer true is not text'
+    );
+    expect(
+      parseQuiz('question: x\nanswer: ["a", [1, 2]]', OPTIONS).errors[0]
+    ).toContain('The answer [1,2] is not text');
+    expect(
+      parseQuiz(
+        'question: x\nanswer: "4"\nwrong:\n  - { text: 4.0, explanation: y }',
+        OPTIONS
+      ).errors[0]
+    ).toContain('The wrong text 4 is not text');
+  });
+
+  it('reports problems', () => {
+    const problems = (body: string, options = OPTIONS): string[] =>
+      parseQuiz(`question: x\n${body}`, options).errors;
+
+    expect(problems('')).toEqual(['A text quiz needs an "answer"']);
+    expect(problems('answer: "a"\noptions: [a]')).toEqual([
+      'A text quiz takes an "answer", not "options"'
+    ]);
+    expect(problems('answer: { pattern: "a+" }')[0]).toContain(
+      'for the self-test to type'
+    );
+    expect(problems('answer: { pattern: "a(" }')[0]).toContain(
+      'Invalid pattern'
+    );
+    expect(problems('answer: { pattern: "a+", example: "b" }')[0]).toContain(
+      'does not match the pattern'
+    );
+    expect(
+      problems('answer: "a"\nwrong:\n  - { text: " a ", explanation: y }')
+    ).toEqual(['The wrong answer " a " is also an accepted answer']);
+    expect(problems('answer: "a"\nwrong:\n  - { text: "b" }')).toEqual([
+      'Each wrong answer needs an "explanation"'
+    ]);
+    expect(problems('answer: "a"', { type: 'text', lines: '0' })[0]).toContain(
+      'Lines must be'
+    );
+    expect(problems('answer: "a"', { type: 'text', shuffle: 'false' })).toEqual(
+      ['A text quiz has no options to shuffle']
+    );
+    expect(
+      parseQuiz(
+        'question: x\nanswer: "a"\noptions:\n  - { text: a, correct: true }',
+        { lines: '2' }
+      ).errors
+    ).toEqual([
+      '"answer" is for a quiz of type text',
+      'The lines option is for a quiz of type text'
+    ]);
   });
 });
 

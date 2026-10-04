@@ -138,6 +138,11 @@ git init command above first"`.
   `:shuffle: false` only for options with an order of their own, such
   as steps or numeric ranges.
 
+- Where the question is what a piece of code will show, prefer a quiz
+  of `:type: text`, in which the learner types the answer, over options
+  that put it on show. Quote the `answer`, give a `wrong` entry for
+  each mistake worth explaining, and an `otherwise` for the rest.
+
 - Forms only for values the workshop needs (names, choices); give every
   field a `default` so the self-test and impatient learners can proceed.
 

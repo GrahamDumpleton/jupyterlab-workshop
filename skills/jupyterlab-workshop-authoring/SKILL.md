@@ -402,8 +402,8 @@ assert out.strip(), "No commits yet: run git commit"
 Check always works. Prefer a trigger tied to the action the learner is
 expected to run.
 
-Quiz (`:type: single` or `multi`, `:attempts:`, `:shuffle: false` to
-show the options as written):
+Quiz (`:type: single`, `multi` or `text`, `:attempts:`, `:shuffle: false`
+to show the options as written):
 
 ````markdown
 ```{quiz}
@@ -427,6 +427,34 @@ Markdown on one line: write `` `git add` `` for a command or a name,
 and `[text](url)` for a link. Inline roles, bare URLs and raw HTML are
 not rendered there. Choice bodies and options, and form labels and
 descriptions, render the same way.
+
+A quiz of `:type: text` has the learner type the answer, which suits
+"predict what this prints" and does not put the answer on show:
+
+````markdown
+```{quiz}
+:id: division
+:type: text
+question: What does `print(10 / 2)` show?
+answer: "5.0"
+wrong:
+  - { text: "5", explanation: "`/` gives a float, even when it divides evenly." }
+otherwise: "Think about the type that `/` returns."
+explanation: "`/` is true division, so the result is the float `5.0`."
+```
+````
+
+`answer` is one text or a list; an entry may be
+`{ pattern: "regex", example: "text that matches" }`, matched against
+the whole answer. `wrong` entries (`text` or `pattern`, plus
+`explanation`) answer expected mistakes and `otherwise` any other. The
+match is exact apart from white space around the answer and at line
+ends; `:case: false` ignores case and `:lines: 3` gives a box for
+several lines. Always quote `answer` and `text` values: unquoted,
+YAML turns `4.0` into 4, `True` into a boolean and `[1, 2]` into a
+list, and lint rejects them. The self-test types the first text answer
+or pattern `example`, so give one. Pair it with a locked hint:
+`:unlock: "division" in failed_checks`.
 
 The quiz body is YAML: quote any `question`, `text` or `explanation`
 that starts with a backtick or contains `: `, `{`, `}` or, inside the

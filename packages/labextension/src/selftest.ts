@@ -2,7 +2,8 @@ import {
   ASSUMED_PROGRESS,
   IDirectiveNode,
   parseForm,
-  parseQuiz
+  parseQuiz,
+  quizTestAnswer
 } from '@jupyterlab-workshop/core';
 import { ReadonlyPartialJSONObject } from '@lumino/coreutils';
 
@@ -566,6 +567,11 @@ function argumentFor(
   switch (node.name) {
     case 'quiz': {
       const parsed = parseQuiz(node.body, node.options);
+
+      if (parsed.quiz?.type === 'text') {
+        return JSON.stringify(quizTestAnswer(parsed.quiz) ?? '');
+      }
+
       const correct = (parsed.quiz?.options ?? [])
         .map((option, position) => (option.correct ? position : -1))
         .filter(position => position >= 0);
