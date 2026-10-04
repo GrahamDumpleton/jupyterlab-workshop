@@ -2,6 +2,7 @@ import {
   IDirectiveNode,
   IPage,
   PageNode,
+  TEST_DIRECTIVES,
   Variables,
   evaluateExpression
 } from '@jupyterlab-workshop/core';
@@ -61,11 +62,17 @@ export function conditionHolds(
  * and into hints that are not locked. A hint is locked while its
  * `unlock` condition does not hold, unless its id is in `unlocked`, the
  * hints whose condition has held before.
+ *
+ * A directive written for the self-test alone, an `attempt`, is left
+ * out with all it holds, since the learner never sees it, unless
+ * `withTests` is set, when the directive itself is included and what it
+ * holds is still left for `heldDirectives`.
  */
 export function visibleDirectives(
   page: IPage,
   variables: Variables,
-  unlocked: ReadonlySet<string> = new Set()
+  unlocked: ReadonlySet<string> = new Set(),
+  withTests = false
 ): IDirectiveNode[] {
   const directives: IDirectiveNode[] = [];
 
@@ -73,6 +80,14 @@ export function visibleDirectives(
     for (const node of nodes) {
       if (node.kind === 'directive') {
         if (!conditionHolds(node.options.when, variables)) {
+          continue;
+        }
+
+        if (TEST_DIRECTIVES.has(node.name)) {
+          if (withTests) {
+            directives.push(node);
+          }
+
           continue;
         }
 
@@ -95,6 +110,37 @@ export function visibleDirectives(
   };
 
   walk(page.nodes);
+
+  return directives;
+}
+
+/**
+ * The directives a directive holds that are shown given the variables,
+ * in document order, descending into `when` blocks whose condition
+ * holds: the actions of an `attempt`, for the self-test to run.
+ */
+export function heldDirectives(
+  holder: IDirectiveNode,
+  variables: Variables
+): IDirectiveNode[] {
+  const directives: IDirectiveNode[] = [];
+
+  const walk = (nodes: PageNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === 'directive') {
+        if (conditionHolds(node.options.when, variables)) {
+          directives.push(node);
+        }
+      } else if (
+        node.kind === 'when' &&
+        conditionHolds(node.condition, variables)
+      ) {
+        walk(node.nodes);
+      }
+    }
+  };
+
+  walk(holder.nodes ?? []);
 
   return directives;
 }

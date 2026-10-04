@@ -266,6 +266,81 @@ updates the values.
 The linter reports a variable used on a page before the page whose form
 sets it, unless the manifest gives the variable a default.
 
+## Attempt
+
+`````markdown
+````{attempt}
+:id: tickets-only
+:check: total-cost
+:expect: That is the cost of the 3 tickets only
+
+```{cell-insert}
+:path: cinema.ipynb
+:run: true
+3 * 12
+```
+````
+`````
+
+The self-test follows a workshop along the path where everything goes
+right, so on its own it shows that a check passes on a correct answer
+and nothing of what the check says on a wrong one. Where learners write
+code, that message is much of the teaching: it names the likely mistake
+and says what to try. An attempt is how a workshop tests it.
+
+An attempt is written for the self-test alone. It holds the actions
+that make an answer, names a `verify` of the same page with `:check:`,
+and says with `:expect:` what that check should say. The learner never
+sees an attempt or what it holds: nothing of it is shown in the panel,
+its actions never run on their own, and it is not in the page list a
+[progress event](analytics.md) carries.
+
+When [the self-test](cli.md#test) reaches an attempt it runs the actions
+the attempt holds, in order, and then runs the check once, as a click
+on Check would. The attempt passes when the check fails and its message
+contains the `:expect:` text, anywhere in it, with runs of white space
+counted as one space so that a message wrapped over lines still
+matches. The report then gives what the check said, so every message
+can be read in one place:
+
+```text
+PASS 09-your-own-calculation/tickets-only (attempt, 0.1s)  The check said: Your expression gives 36. That is the cost of the 3 tickets only.
+```
+
+An attempt fails when the check passes, when it says something else,
+which the report quotes, or when one of the attempt's own actions fails.
+
+`:result: pass` turns an attempt round, for a right answer written
+another way than the solution: the check must then pass, and `:expect:`
+may be left out. An attempt with no actions tests the check as things
+stand at that point of the page, which is how to test what a check says
+before the learner has done anything.
+
+Attempts are run where they are written, so they go before the action
+that gives the solution, usually just above the check. Nothing is
+undone between them: each leaves the session as a learner's wrong
+answer would, with its cell in the notebook or its text in the file,
+and the next attempt and the solution build on that. This is what a
+learner who gets it wrong twice and then right does, and it finds a
+check that reads more than the latest answer. An attempt that needs a
+clean start says so with an action, such as `kernel-restart` or
+`restore`.
+
+An attempt holds only actions the self-test can run one after the
+other: not a `verify`, `quiz`, `form`, `hint` or another attempt, not
+an action that waits for a person (`dialog`, `upload-prompt`, `tour`),
+and nothing with an `auto` or `cascade` option; lint reports each. The
+actions need their capabilities declared in the manifest like any
+other. An attempt holding an action is fenced with four backticks; see
+[directives](pages.md#directives).
+
+Attempts belong to a full run. Run actions and Run checks in
+[author mode](authoring.md#author-mode) leave them alone, since they
+change the session the author is working in. Author mode does show each
+attempt on the page, as a dashed box saying what it expects, with its
+actions to click: click them, then Check, to see the message as a
+learner would.
+
 ## Gating
 
 ```markdown

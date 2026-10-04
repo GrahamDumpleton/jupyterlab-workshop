@@ -456,6 +456,34 @@ list, and lint rejects them. The self-test types the first text answer
 or pattern `example`, so give one. Pair it with a locked hint:
 `:unlock: "division" in failed_checks`.
 
+Test what a check says on a wrong answer with an `attempt`, a block the
+learner never sees. The self-test runs the actions it holds, then the
+check named by `:check:`, and passes it when the check fails with a
+message containing `:expect:`:
+
+`````markdown
+````{attempt}
+:id: tickets-only
+:check: total-cost
+:expect: That is the cost of the 3 tickets only
+
+```{cell-insert}
+:path: {{ notebook }}
+:run: true
+3 * 12
+```
+````
+`````
+
+Write one for each failure message a check has, above the action that
+gives the solution, with a first one holding no actions for the message
+shown before the learner has done anything. `:result: pass` expects a
+pass, for another right answer. Nothing is undone between attempts, as
+for a learner who gets it wrong twice, so a check must judge the latest
+answer and not everything tried so far. Option values are taken as
+written: do not put quotes round `:expect:` text. An attempt holds only
+plain actions: no check, hint, `dialog`, `tour`, `auto` or `cascade`.
+
 The quiz body is YAML: quote any `question`, `text` or `explanation`
 that starts with a backtick or contains `: `, `{`, `}` or, inside the
 one-line `{ ... }` option form, a comma; lint reports the parse error,
@@ -542,6 +570,10 @@ pass, `soft` only shows what is missing.
 
 - Do not pipe downloads into a shell, use `sudo`, or `rm -rf` outside the
   workshop; lint flags these and the trust dialog shows them.
+
+- The self-test runs the solution path only. Every failure message a
+  check has is untested unless an `attempt` covers it; read the
+  "The check said" lines of the report to see each message.
 
 - Interactive actions (`dialog`, `upload-prompt`, `tour`) are skipped by
   the self-test; do not gate a page on something only a person can do.

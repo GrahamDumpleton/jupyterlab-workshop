@@ -404,6 +404,150 @@ test.describe('self-test of actions that point at the panel', () => {
   });
 });
 
+const ATTEMPT_WORKSHOP = 'wrong-answers';
+
+const ATTEMPT_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1
+name: ${ATTEMPT_WORKSHOP}
+title: Wrong answers
+version: 0.1.0
+description: A check with attempts that say what it should say.
+capabilities:
+  - write-files
+pages:
+  - pages/01-greeting.md
+`;
+
+/**
+ * The first attempt holds no actions and tests what the check says
+ * before anything is done, the second writes the wrong text, and the
+ * third expects the check to say something it does not.
+ */
+const ATTEMPT_PAGE = `# A greeting
+
+\`\`\`\`{attempt}
+:id: nothing-yet
+:check: greeting
+:expect: does not exist yet
+\`\`\`\`
+
+\`\`\`\`{attempt}
+:id: wrong-text
+:check: greeting
+:expect: does not contain "Hello"
+
+\`\`\`{file-write}
+:id: write-wrong
+:path: greeting.txt
+Goodbye
+\`\`\`
+\`\`\`\`
+
+\`\`\`\`{attempt}
+:id: wrong-expectation
+:check: greeting
+:expect: is spelled wrongly
+\`\`\`\`
+
+\`\`\`{file-write}
+:id: write-right
+:path: greeting.txt
+Hello
+\`\`\`
+
+\`\`\`\`{attempt}
+:id: right-answer
+:check: greeting
+:result: pass
+\`\`\`\`
+
+\`\`\`{verify}
+:id: greeting
+:label: The file says Hello
+:substrate: contents
+contains greeting.txt Hello
+\`\`\`
+`;
+
+test.describe('self-test of what a check says on a wrong answer', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    const target = `${tmpPath}/${ATTEMPT_WORKSHOP}`;
+
+    await page.contents.uploadContent(
+      ATTEMPT_MANIFEST,
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      ATTEMPT_PAGE,
+      'text',
+      `${target}/pages/01-greeting.md`
+    );
+    await openWorkshop(page, target);
+  });
+
+  test('runs each attempt against its check, and keeps attempts from the learner', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    const panel = page.locator('#jupyterlab-workshop-panel');
+
+    // The learner is shown the page's own action and check, and nothing
+    // of the attempts or of what they hold.
+    await expect(panel.locator('[data-action-id="write-right"]')).toBeVisible();
+    await expect(panel.locator('[data-action-id="write-wrong"]')).toHaveCount(
+      0
+    );
+    await expect(panel.locator('.jp-WorkshopPanel-attempt')).toHaveCount(0);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {});
+    })) as IReport & { results: { id: string; message: string }[] };
+
+    const byId = new Map(report.results.map(item => [item.id, item]));
+
+    // An attempt passes when the check fails saying what was expected,
+    // and its message is what the check said.
+    expect(byId.get('nothing-yet')?.status).toBe('ok');
+    expect(byId.get('nothing-yet')?.message).toBe(
+      'The check said: greeting.txt does not exist yet'
+    );
+    expect(byId.get('wrong-text')?.status).toBe('ok');
+    expect(byId.get('wrong-text')?.message).toBe(
+      'The check said: greeting.txt does not contain "Hello"'
+    );
+
+    // One that expects other words fails, and quotes the check.
+    expect(byId.get('wrong-expectation')?.status).toBe('error');
+    expect(byId.get('wrong-expectation')?.message).toContain(
+      'said "greeting.txt does not contain "Hello"", which does not contain "is spelled wrongly"'
+    );
+
+    // An attempt can expect a pass, and the page then goes on as usual.
+    expect(byId.get('right-answer')?.status).toBe('ok');
+    expect(byId.get('greeting')?.status).toBe('ok');
+
+    // What an attempt holds is not reported as a step of its own.
+    expect(byId.has('write-wrong')).toBe(false);
+    expect(report.passed).toBe(5);
+    expect(report.failed).toBe(1);
+
+    // An author is shown the attempts, each with its actions to click.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:author-mode', {});
+    });
+
+    await expect(panel.locator('.jp-WorkshopPanel-attempt')).toHaveCount(4);
+    await expect(
+      panel.locator('.jp-WorkshopPanel-attempt', { hasText: 'wrong' }).first()
+    ).toContainText('"greeting" should fail');
+  });
+});
+
 const NOTEBOOK_WORKSHOP = 'notebook-checks';
 
 const NOTEBOOK_MANIFEST = `apiVersion: jupyterlab-workshop/v1alpha1

@@ -21,7 +21,7 @@ to the panel:
 | Manifest                | Opens `workshop.yaml` in the editor. Saving reloads the workshop.                                                                                                         |
 | Insert                  | A form for an action: pick the type, fill in its options, write the body. The block goes at the cursor of the page open in the editor, or at the end of the current page. |
 | Capture                 | Adds what you just did in the session, the last terminal commands, files saved and cells run, to the page as actions.                                                     |
-| Run actions, Run checks | Run the current page's steps or its checks in order, as the self-test would.                                                                                              |
+| Run actions, Run checks | Run the current page's steps or its checks in order, as the self-test would. [Attempts](checks.md#attempt) are left to a full run.                                        |
 | Lint                    | Opens the lint panel: every finding with its file and line, and a Fix button for the mechanical ones (declare or remove a capability, drop an unknown option).            |
 | Trust                   | Shows the dialog learners will see for this manifest.                                                                                                                     |
 | Publish                 | Builds the archive, its SHA-256 and a collection entry under `dist/` in the workshop.                                                                                     |

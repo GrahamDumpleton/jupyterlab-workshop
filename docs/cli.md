@@ -547,6 +547,14 @@ kernel pointing at a deleted directory is left in the kernel picker.
 With `--in-place` the environment and its kernel stay, since the
 workshop does.
 
+The self-test follows the path where the learner gets everything right.
+What a check says on a wrong answer is tested by an
+[attempt](checks.md#attempt), a block the learner never sees: the
+self-test runs the actions it holds, then the check it names, and
+passes the attempt when the check fails saying what the attempt
+expects. Each attempt is one line of the report, with what the check
+said.
+
 An action that waits for a person, `dialog`, `upload-prompt` or `tour`,
 is not run and is reported as a skip. A `tour` is still checked as far
 as it can be without stepping through it: a step whose selector matches

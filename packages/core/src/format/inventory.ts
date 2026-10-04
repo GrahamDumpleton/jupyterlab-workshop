@@ -6,7 +6,7 @@
  * the events that name each id and reports what nobody ran.
  */
 
-import { STRUCTURE_DIRECTIVES } from '../actions/catalog';
+import { STRUCTURE_DIRECTIVES, TEST_DIRECTIVES } from '../actions/catalog';
 import { parseTriggers } from '../checks/verify';
 import { IDirectiveNode, IPage, PageNode } from './page';
 
@@ -56,7 +56,8 @@ export function pageInventory(
         walk(node.nodes, true);
       } else if (
         node.kind === 'directive' &&
-        !STRUCTURE_DIRECTIVES.has(node.name)
+        !STRUCTURE_DIRECTIVES.has(node.name) &&
+        !TEST_DIRECTIVES.has(node.name)
       ) {
         const conditional = inside || Boolean(node.options.when);
 

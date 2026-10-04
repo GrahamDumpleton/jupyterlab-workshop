@@ -10,6 +10,7 @@ import {
   IProseNode,
   isActionType,
   PageNode,
+  parseAttempt,
   parseForm,
   parseQuiz,
   parseTriggers,
@@ -835,8 +836,17 @@ function DirectiveBlock({
   manager: IWorkshopManager;
   commands: CommandRegistry;
   onProseClick: (event: React.MouseEvent<HTMLDivElement>) => void;
-}): JSX.Element {
+}): JSX.Element | null {
   switch (node.name) {
+    case 'attempt':
+      return manager.authoring ? (
+        <AttemptBlock
+          node={node}
+          manager={manager}
+          commands={commands}
+          onProseClick={onProseClick}
+        />
+      ) : null;
     case 'hint':
       return (
         <HintBlock
@@ -963,6 +973,51 @@ function HintBlock({
       }}
     >
       <summary>{title}</summary>
+      <div className="jp-WorkshopPanel-hintBody">
+        <Nodes
+          nodes={node.nodes ?? []}
+          manager={manager}
+          commands={commands}
+          onProseClick={onProseClick}
+        />
+      </div>
+    </details>
+  );
+}
+
+/**
+ * An attempt, shown in author mode alone: what the self-test will try
+ * against a check and what the check should then say, with the actions
+ * it holds, which the author can click to see the check's message as a
+ * learner would. A learner is never shown one.
+ */
+function AttemptBlock({
+  node,
+  manager,
+  commands,
+  onProseClick
+}: {
+  node: IDirectiveNode;
+  manager: IWorkshopManager;
+  commands: CommandRegistry;
+  onProseClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+}): JSX.Element {
+  const parsed = parseAttempt(node.options);
+  const attempt = parsed.attempt;
+
+  return (
+    <details className="jp-WorkshopPanel-attempt" data-action-id={node.id}>
+      <summary>
+        Attempt for the self-test
+        {attempt ? `: "${attempt.check}" should ${attempt.result}` : ''}
+      </summary>
+      <div className="jp-WorkshopPanel-attemptNote">
+        {attempt
+          ? attempt.expect
+            ? `The check should say: ${attempt.expect}`
+            : 'The check may say anything.'
+          : parsed.error}
+      </div>
       <div className="jp-WorkshopPanel-hintBody">
         <Nodes
           nodes={node.nodes ?? []}

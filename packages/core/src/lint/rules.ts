@@ -15,6 +15,7 @@ import {
   EDITOR_FACTORY,
   editorTargetProblems
 } from '../actions/editor';
+import { parseAttempt } from '../checks/attempt';
 import { parseForm } from '../checks/form';
 import { parseRequirement } from '../checks/gating';
 import { parseQuiz } from '../checks/quiz';
@@ -125,6 +126,7 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintRequirements(input, messages);
   lintTools(input, manifestPath, messages);
   lintHints(input, messages);
+  lintAttempts(input, messages);
   lintProgress(input, messages);
   lintFormOrder(input, messages);
   lintLayouts(input, manifestPath, messages);
@@ -575,6 +577,120 @@ function lintHints(input: ILintInput, messages: ILintMessage[]): void {
             level: 'error',
             rule: 'hint-cascade',
             message: `"${node.id}" cascades to "${target}", which is inside hint "${targetHint.id}" and so would run while out of sight`,
+            ...where
+          });
+        }
+      }
+    }
+  }
+}
+
+/**
+ * The directives an attempt must not hold: a check, a hint or another
+ * attempt, which are not steps towards an answer, and the actions that
+ * wait for a person, which the self-test cannot run.
+ */
+const NOT_IN_ATTEMPT: ReadonlySet<string> = new Set([
+  'verify',
+  'quiz',
+  'form',
+  'hint',
+  'attempt',
+  'dialog',
+  'upload-prompt',
+  'tour'
+]);
+
+/**
+ * An attempt is run by the self-test alone: the actions it holds, then
+ * the check it names, which must come out as the attempt says. So it
+ * must name a verify of its own page, say what that verify should say,
+ * and hold only actions the self-test can run one after the other.
+ */
+function lintAttempts(input: ILintInput, messages: ILintMessage[]): void {
+  for (const page of input.pages) {
+    const directives = allDirectives([page]);
+    const attempts = directives.filter(node => node.name === 'attempt');
+    const types = new Map<string, string>();
+
+    for (const node of directives) {
+      types.set(node.id, node.name);
+    }
+
+    // The attempt that holds each directive.
+    const holder = new Map<string, IDirectiveNode>();
+
+    for (const attempt of attempts) {
+      for (const node of collectDirectives(attempt.nodes ?? [])) {
+        holder.set(node.id, attempt);
+      }
+    }
+
+    for (const attempt of attempts) {
+      const where = { path: page.path, line: attempt.line };
+      const parsed = parseAttempt(attempt.options);
+
+      if (!parsed.attempt) {
+        messages.push({
+          level: 'error',
+          rule: 'attempt-options',
+          message: `Attempt "${attempt.id}": ${parsed.error}`,
+          ...where
+        });
+
+        continue;
+      }
+
+      const type = types.get(parsed.attempt.check);
+
+      if (type !== 'verify') {
+        messages.push({
+          level: 'error',
+          rule: 'attempt-check',
+          message:
+            type === undefined
+              ? `Attempt "${attempt.id}" names the check "${parsed.attempt.check}", but no verify on the page has that id`
+              : `Attempt "${attempt.id}" names "${parsed.attempt.check}", which is a ${type}; an attempt tests a verify`,
+          ...where
+        });
+      }
+    }
+
+    for (const node of directives) {
+      const where = { path: page.path, line: node.line };
+      const inside = holder.get(node.id);
+
+      if (inside && NOT_IN_ATTEMPT.has(node.name)) {
+        messages.push({
+          level: 'error',
+          rule: 'attempt-content',
+          message: `The ${node.name} "${node.id}" is inside attempt "${inside.id}"; an attempt holds only the actions that make an answer, which the self-test runs without a person`,
+          ...where
+        });
+      }
+
+      if (inside && (isAutomatic(node) || cascades(node))) {
+        messages.push({
+          level: 'error',
+          rule: 'attempt-auto',
+          message: `"${node.id}" is inside attempt "${inside.id}", whose actions the self-test runs in order; remove its "auto" and "cascade" options`,
+          ...where
+        });
+      }
+
+      // A cascade into an attempt would run for the learner what is
+      // there for the self-test alone.
+      const cascade = node.options.cascade;
+
+      if (!inside && cascades(node) && cascade !== 'true') {
+        const target = (cascade ?? '').trim().split(/\s+/)[0];
+        const targetAttempt = holder.get(target);
+
+        if (targetAttempt) {
+          messages.push({
+            level: 'error',
+            rule: 'attempt-cascade',
+            message: `"${node.id}" cascades to "${target}", which is inside attempt "${targetAttempt.id}" and is run by the self-test alone`,
             ...where
           });
         }

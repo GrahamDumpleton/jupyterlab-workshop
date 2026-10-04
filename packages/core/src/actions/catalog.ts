@@ -568,6 +568,14 @@ export const ACTION_TYPES: Readonly<Record<string, IActionTypeSpec>> =
         ['label']
       ),
       spec(
+        'attempt',
+        'checks',
+        'An answer for the self-test to try against a check, with what the check should say; never shown to the learner.',
+        'none',
+        'markdown',
+        ['check', 'expect', 'result']
+      ),
+      spec(
         'checkpoint',
         'checks',
         'Snapshot the workshop files and variables under a name.',
@@ -630,6 +638,14 @@ export const ROLE_TYPES: Readonly<Record<string, IRoleTypeSpec>> = {
 
 /** Directives that structure content rather than run actions. */
 export const STRUCTURE_DIRECTIVES: ReadonlySet<string> = new Set(['when']);
+
+/**
+ * Directives written for the self-test alone. The learner never sees
+ * one, and what it holds is run only by the self-test, so nothing that
+ * follows the learner, the panel, the triggers or the page inventory,
+ * looks inside it.
+ */
+export const TEST_DIRECTIVES: ReadonlySet<string> = new Set(['attempt']);
 
 /**
  * Test whether a directive name is a known action.

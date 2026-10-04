@@ -1,6 +1,9 @@
 import {
   ASSUMED_PROGRESS,
   IDirectiveNode,
+  Variables,
+  attemptProblem,
+  parseAttempt,
   parseForm,
   parseQuiz,
   quizTestAnswer
@@ -11,7 +14,12 @@ import { missingTourTargets } from './actions/guidance';
 import { IOpeningLayout } from './layout';
 import { pageDrawn } from './panel/drawn';
 import { IActionResult, IWorkshopManager } from './tokens';
-import { parseDuration, sleep, visibleDirectives } from './util';
+import {
+  heldDirectives,
+  parseDuration,
+  sleep,
+  visibleDirectives
+} from './util';
 
 /** Actions that wait for a person and so are skipped by the self-test. */
 const INTERACTIVE: ReadonlySet<string> = new Set([
@@ -238,10 +246,13 @@ export async function runCurrentPage(
     // Conditions that wait on progress are taken to hold, so that what
     // a page shows only after a check fails or a hint is opened, and
     // what a locked hint holds, is run like the rest of the page.
-    const node = visibleDirectives(page, {
+    const variables: Variables = {
       ...manager.variables.values,
       ...ASSUMED_PROGRESS
-    }).find(item => !done.has(item.id));
+    };
+    const node = visibleDirectives(page, variables, new Set(), true).find(
+      item => !done.has(item.id)
+    );
 
     if (!node) {
       break;
@@ -251,8 +262,12 @@ export async function runCurrentPage(
 
     const isCheck = CHECKS.has(node.name);
 
+    // An attempt changes the session to test a check, so it belongs to
+    // a run of everything, and not to one of the steps or of the checks
+    // alone, which an author makes on the session they are working in.
     if (
       node.name === 'hint' ||
+      (node.name === 'attempt' && filter !== 'all') ||
       (filter === 'actions' && isCheck) ||
       (filter === 'checks' && !isCheck)
     ) {
@@ -272,6 +287,43 @@ export async function runCurrentPage(
       });
 
       options.onProgress?.({ results: [...results], current: null });
+
+      continue;
+    }
+
+    // An attempt is run whole: the actions it holds, then the check it
+    // names, which has to come out as the attempt says.
+    if (node.name === 'attempt') {
+      const started = Date.now();
+
+      options.onProgress?.({
+        results: [...results],
+        current: {
+          page: pageId,
+          id: node.id,
+          type: node.name,
+          startedAt: started
+        }
+      });
+
+      const outcome = await runAttempt(manager, node, variables, {
+        defaults,
+        flatLimit
+      });
+
+      results.push({
+        page: pageId,
+        id: node.id,
+        type: node.name,
+        ...outcome,
+        seconds: (Date.now() - started) / 1000
+      });
+
+      options.onProgress?.({ results: [...results], current: null });
+
+      if (outcome.timedOut) {
+        break;
+      }
 
       continue;
     }
@@ -405,6 +457,112 @@ async function outcomeSoFar(
     status: status.status,
     message: status.message || 'Ran on its own',
     seconds: 0
+  };
+}
+
+/** What running an attempt came to. */
+type AttemptOutcome = Pick<ISelfTestResult, 'status' | 'message' | 'timedOut'>;
+
+/**
+ * Run an attempt: each action it holds, in order, then the check it
+ * names, once, as a click on Check would. The attempt passes when the
+ * check comes out as the attempt says, and its message is then what
+ * the check said, so the report shows the text a learner would read.
+ *
+ * An action of the attempt may fire the check's own trigger. That run
+ * is waited for and then left aside: it is the run made here that is
+ * judged, so the result does not depend on which came first.
+ */
+async function runAttempt(
+  manager: IWorkshopManager,
+  node: IDirectiveNode,
+  variables: Variables,
+  limits: { defaults: Readonly<Record<string, string>>; flatLimit: number }
+): Promise<AttemptOutcome> {
+  const parsed = parseAttempt(node.options);
+  const page = manager.currentPage;
+
+  if (!parsed.attempt || !page) {
+    return { status: 'error', message: parsed.error ?? 'No page is open' };
+  }
+
+  const attempt = parsed.attempt;
+  const check = visibleDirectives(page, variables).find(
+    item => item.id === attempt.check && item.name === 'verify'
+  );
+
+  if (!check) {
+    return {
+      status: 'error',
+      message: `No verify on the page has the id "${attempt.check}"`
+    };
+  }
+
+  const stopped = (
+    what: string,
+    result: IBlockedByDialog | null,
+    limit: number
+  ): AttemptOutcome => ({
+    status: 'error',
+    message:
+      result === null
+        ? `${what} was still running after ${Math.round(limit / 1000)}s; the self-test stopped here`
+        : `${what} was blocked by a dialog nobody can answer: "${result.dialog}"; the self-test stopped here`,
+    timedOut: true
+  });
+
+  for (const step of heldDirectives(node, variables)) {
+    // Lint refuses these inside an attempt; one that got here is left.
+    if (
+      CHECKS.has(step.name) ||
+      INTERACTIVE.has(step.name) ||
+      step.nodes !== undefined
+    ) {
+      continue;
+    }
+
+    const limit = limitFor(step, limits.defaults, limits.flatLimit);
+
+    await settleChain(manager, limit);
+
+    const result = await withLimit(runStep(manager, step), limit);
+
+    if (result === null || 'dialog' in result) {
+      return stopped(`The action "${step.id}" of the attempt`, result, limit);
+    }
+
+    if (result.status === 'error') {
+      return {
+        status: 'error',
+        message: `The action "${step.id}" of the attempt failed: ${result.message ?? 'no message'}`
+      };
+    }
+  }
+
+  const limit = limitFor(check, limits.defaults, limits.flatLimit);
+
+  await settleChain(manager, limit);
+
+  if (manager.actionStatus(check.id).status === 'running') {
+    await withLimit(outcomeOf(manager, check.id), limit);
+  }
+
+  const result = await withLimit(
+    manager.runAction(check, 'click', undefined, { settle: false }),
+    limit
+  );
+
+  if (result === null || 'dialog' in result) {
+    return stopped(`The check "${check.id}"`, result, limit);
+  }
+
+  const problem = attemptProblem(attempt, result);
+
+  return {
+    status: problem ? 'error' : 'ok',
+    message:
+      problem ??
+      `The check said: ${(result.message ?? '').replace(/\s+/g, ' ').trim()}`
   };
 }
 

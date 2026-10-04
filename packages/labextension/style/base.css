@@ -507,6 +507,30 @@
   font-size: var(--jp-ui-font-size0);
 }
 
+/*
+ * An attempt, which only an author sees: what the self-test tries
+ * against a check. Dashed, to set it apart from what a learner is shown.
+ */
+.jp-WorkshopPanel-attempt {
+  margin: 0 0 12px;
+  padding: 4px 8px;
+  border: 1px dashed var(--jp-border-color1);
+  border-left: 3px dashed var(--jp-warn-color1);
+  border-radius: 3px;
+}
+
+.jp-WorkshopPanel-attempt summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopPanel-attemptNote {
+  margin-top: 4px;
+  font-size: var(--jp-ui-font-size0);
+  color: var(--jp-ui-font-color2);
+}
+
 .jp-WorkshopPanel-choice {
   cursor: default;
 }

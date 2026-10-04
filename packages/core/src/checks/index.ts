@@ -1,3 +1,4 @@
+export * from './attempt';
 export * from './form';
 export * from './gating';
 export * from './quiz';
