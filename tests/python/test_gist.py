@@ -344,6 +344,15 @@ def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
     )
 
     assert binder_link(BINDER_LAUNCHER, gist) == binder
+
+    # Both buttons share one line, and one paragraph says what each opens.
+    section = readme.split("## Open this workshop\n\n", 1)[1].split("\n\n")
+
+    assert section[0].startswith("[![Launch in JupyterLite](")
+    assert " [![Launch on Binder](" in section[0]
+    assert section[1].startswith("The JupyterLite button opens the workshop in ")
+    assert "The Binder button opens it in JupyterLab on [mybinder.org]" in section[1]
+    assert "The button opens the workshop in JupyterLab" in plain
     assert f"[![Launch on Binder]({BINDER_BADGE})]({binder})" in readme
     assert f"]({binder})" in plain
 

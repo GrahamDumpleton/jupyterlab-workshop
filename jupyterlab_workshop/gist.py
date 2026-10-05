@@ -395,26 +395,39 @@ def render_readme(
 
     lines += ["## Open this workshop", ""]
 
-    if "jupyterlite" in _strings(manifest.get("frontends")):
+    # The buttons share a line, followed by one paragraph saying what
+    # each of them opens.
+    lite = "jupyterlite" in _strings(manifest.get("frontends"))
+    on_binder = bool(binder) and _runs_on_binder(manifest)
+    buttons: list[str] = []
+
+    if lite:
         launch = f"{site}?reset&workshop={gist_url}&restart=force"
 
-        lines += [
-            f"[![Launch in JupyterLite]({LAUNCH_BADGE})]({launch})",
-            "",
-            "The button opens the workshop in JupyterLite, which runs in the "
-            "browser with nothing to install.",
-            "",
-        ]
+        buttons.append(f"[![Launch in JupyterLite]({LAUNCH_BADGE})]({launch})")
 
-    if binder and _runs_on_binder(manifest):
-        lines += [
-            f"[![Launch on Binder]({BINDER_BADGE})]({binder_link(binder, gist_url)})",
-            "",
-            "The button opens the workshop in JupyterLab on "
-            "[mybinder.org](https://mybinder.org), which starts a temporary "
-            "session for you; it can take a minute or two to start.",
-            "",
-        ]
+    if on_binder:
+        buttons.append(
+            f"[![Launch on Binder]({BINDER_BADGE})]({binder_link(binder, gist_url)})"
+        )
+
+    lite_text = "in JupyterLite, which runs in the browser with nothing to install"
+    binder_text = (
+        "in JupyterLab on [mybinder.org](https://mybinder.org), which starts "
+        "a temporary session for you and can take a minute or two to start"
+    )
+
+    if lite and on_binder:
+        explained = (
+            f"The JupyterLite button opens the workshop {lite_text}. "
+            f"The Binder button opens it {binder_text}."
+        )
+    else:
+        where = lite_text if lite else binder_text
+        explained = f"The button opens the workshop {where}."
+
+    if buttons:
+        lines += [" ".join(buttons), "", explained, ""]
 
     lines += [
         "In a JupyterLab with the "
