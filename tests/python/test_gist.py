@@ -117,9 +117,13 @@ def test_flatten_stores_files_flat_and_leaves_them_as_written(tmp_path: Path) ->
         "workshop.yaml",
     ]
 
-    # Nothing is rewritten: the manifest and pages are as written.
-    assert flat.files["workshop.yaml"] == MANIFEST
-    assert flat.files["pages--01-intro.md"] == INTRO
+    # Nothing is rewritten: the manifest and pages are as written, line
+    # endings included, as they are on disk wherever the tests run.
+    def on_disk(path: str) -> str:
+        return (directory / path).read_bytes().decode()
+
+    assert flat.files["workshop.yaml"] == on_disk("workshop.yaml")
+    assert flat.files["pages--01-intro.md"] == on_disk("pages/01-intro.md")
     assert flat.renames["pages/01-intro.md"] == "pages--01-intro.md"
     assert "03-flat.md" not in flat.renames
 
@@ -158,6 +162,10 @@ def test_flatten_stores_files_flat_and_leaves_them_as_written(tmp_path: Path) ->
 
 def test_flat_copy_restores_to_the_workshop_as_written(tmp_path: Path) -> None:
     directory = make_workshop(tmp_path / "ws")
+
+    # Line endings come back as written, CRLF as well as LF.
+    (directory / "templates" / "crlf.md").write_bytes(b"# CRLF\r\nline\r\n")
+
     target = write_flat(flatten_workshop(directory), tmp_path / "out")
     restored = tmp_path / "restored"
 

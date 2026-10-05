@@ -440,7 +440,9 @@ def write_flat(flat: FlatWorkshop, out: Path) -> Path:
     target.mkdir(parents=True)
 
     for name, text in flat.files.items():
-        (target / name).write_text(text, encoding="utf-8")
+        # Written as held, since the text keeps the workshop's own line
+        # endings and translating them again would double a CRLF.
+        (target / name).write_text(text, encoding="utf-8", newline="")
 
     return target
 
