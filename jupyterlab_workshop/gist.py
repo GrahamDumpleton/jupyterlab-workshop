@@ -77,7 +77,9 @@ BINDER_LAUNCHER = (
     "https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop-binder/main"
 )
 
-BINDER_BADGE = "https://mybinder.org/badge_logo.svg"
+BINDER_BADGE = (
+    "https://img.shields.io/badge/launch-Binder-579ACA?logo=jupyter&logoColor=white"
+)
 
 #: GitHub names a file it was not given a name for `gistfile<n>`.
 RESERVED_PREFIX = "gistfile"
