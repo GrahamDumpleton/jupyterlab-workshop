@@ -14,8 +14,9 @@ cannot hold, is recorded in the tree alone. A generated ``README.md``,
 which GitHub pins to the top of the gist page, gives the title,
 description and details from the manifest, and how to open the
 workshop, with a launch button for a JupyterLite site when the manifest
-lists that frontend. The flat copy is written to a directory and, when
-asked, sent to GitHub through the gists API.
+lists that frontend and one for the project's Binder launcher. The flat
+copy is written to a directory and, when asked, sent to GitHub through
+the gists API.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from .checks import satisfies_version
@@ -68,6 +70,14 @@ GIST_URL_PLACEHOLDER = "https://gist.github.com/<owner>/<id>"
 PROJECT_URL = "https://github.com/GrahamDumpleton/jupyterlab-workshop"
 
 LAUNCH_BADGE = "https://img.shields.io/badge/launch-JupyterLite-F37626?logo=jupyter&logoColor=white"
+
+#: The project's Binder repository, which installs JupyterLab with the
+#: extension and nothing else, so a launch link names the workshop.
+BINDER_LAUNCHER = (
+    "https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop-binder/main"
+)
+
+BINDER_BADGE = "https://mybinder.org/badge_logo.svg"
 
 #: GitHub names a file it was not given a name for `gistfile<n>`.
 RESERVED_PREFIX = "gistfile"
@@ -135,12 +145,15 @@ class FlatWorkshop:
     #: The author's own README, appended to the generated one; empty for none.
     readme_extra: str = ""
 
+    #: The Binder launcher the README's Binder button opens; empty for none.
+    binder: str = BINDER_LAUNCHER
+
     def with_gist_url(self, url: str) -> FlatWorkshop:
         """The same copy with the README written for the gist at ``url``."""
 
         files = dict(self.files)
         files[README_FILE] = render_readme(
-            self.manifest, url, self.site, self.readme_extra
+            self.manifest, url, self.site, self.readme_extra, self.binder
         )
 
         return replace(self, files=files)
@@ -172,6 +185,7 @@ def flatten_workshop(
     site: str = "",
     append_readme: bool = False,
     python: str = "",
+    binder: str = BINDER_LAUNCHER,
 ) -> FlatWorkshop:
     """Lay a workshop out flat, with a tree file to put it back.
 
@@ -184,7 +198,9 @@ def flatten_workshop(
     ``README.md`` is generated from the manifest, with a launch button
     when the manifest lists the JupyterLite frontend: for ``site`` when
     given, else the published launcher whose Python suits the manifest,
-    or ``python``; see ``launcher_site``. With ``append_readme`` the
+    or ``python``; see ``launcher_site``. It also carries a button that
+    opens the workshop through the Binder launcher ``binder``, unless that
+    is empty; see ``render_readme``. With ``append_readme`` the
     workshop's own README goes below it.
     """
 
@@ -258,7 +274,9 @@ def flatten_workshop(
     if append_readme and (directory / README_FILE).is_file():
         extra = (directory / README_FILE).read_text(encoding="utf-8")
 
-    files[README_FILE] = render_readme(manifest, GIST_URL_PLACEHOLDER, site, extra)
+    files[README_FILE] = render_readme(
+        manifest, GIST_URL_PLACEHOLDER, site, extra, binder
+    )
 
     carried_names = set(carried) | ({README_FILE} if extra else set())
 
@@ -278,6 +296,7 @@ def flatten_workshop(
         site=site,
         python=launcher_python,
         readme_extra=extra,
+        binder=binder,
     )
 
 
@@ -334,14 +353,19 @@ def render_readme(
     gist_url: str,
     site: str = DEFAULT_SITE,
     extra: str = "",
+    binder: str = BINDER_LAUNCHER,
 ) -> str:
     """The gist's README: the workshop's details and how to open it.
 
     GitHub pins ``README.md`` to the top of a gist page, so this is what
     a visitor reads first. The JupyterLite launch button appears only
     when the manifest lists that frontend, since the button would not
-    work otherwise; the JupyterLab route is always described. ``extra``
-    is the author's own README, appended under a rule.
+    work otherwise. The Binder button opens the workshop in JupyterLab
+    through the launcher repository ``binder``, and appears unless that
+    is empty or the manifest rules the session out: frontends that leave
+    out JupyterLab, or platforms that leave out Linux, which is what
+    Binder runs. The JupyterLab route is always described. ``extra`` is
+    the author's own README, appended under a rule.
     """
 
     name = str(manifest.get("name") or "")
@@ -377,6 +401,16 @@ def render_readme(
             "",
             "The button opens the workshop in JupyterLite, which runs in the "
             "browser with nothing to install.",
+            "",
+        ]
+
+    if binder and _runs_on_binder(manifest):
+        lines += [
+            f"[![Launch on Binder]({BINDER_BADGE})]({binder_link(binder, gist_url)})",
+            "",
+            "The button opens the workshop in JupyterLab on "
+            "[mybinder.org](https://mybinder.org), which starts a temporary "
+            "session for you; it can take a minute or two to start.",
             "",
         ]
 
@@ -420,6 +454,26 @@ def render_readme(
         lines += ["---", "", extra.strip(), ""]
 
     return "\n".join(lines)
+
+
+def binder_link(binder: str, gist_url: str) -> str:
+    """The link that opens a gist through a Binder launcher repository.
+
+    mybinder's ``urlpath`` names the page JupyterLab opens once the
+    session starts, so it carries the extension's launch link, encoded.
+    """
+
+    return f"{binder}?urlpath={quote(f'lab?workshop={gist_url}', safe='')}"
+
+
+def _runs_on_binder(manifest: Mapping[str, Any]) -> bool:
+    # No frontends listed means JupyterLab, and no platforms means any.
+    frontends = _strings(manifest.get("frontends"))
+    platforms = _strings(manifest.get("platforms"))
+
+    return (not frontends or "jupyterlab" in frontends) and (
+        not platforms or "linux" in platforms
+    )
 
 
 def write_flat(flat: FlatWorkshop, out: Path) -> Path:

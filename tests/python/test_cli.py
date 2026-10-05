@@ -178,6 +178,11 @@ def test_gist_writes_a_flat_copy_that_lints(
         "workshop.yaml",
     ]
     assert (copy / "README.md").read_text().startswith("# Flat me\n")
+    assert "Launch on Binder" in (copy / "README.md").read_text()
+
+    assert cli.main(["gist", str(target), "--out", str(out), "--no-binder"]) == 0
+    assert "Launch on Binder" not in (copy / "README.md").read_text()
+    capsys.readouterr()
     assert (copy / "workshop.yaml").read_text() == (
         target / "workshop.yaml"
     ).read_text()

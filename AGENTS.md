@@ -286,6 +286,18 @@ underlying commands yourself; run `just --list` to see everything.
      `uv sync --reinstall-package jupyterlab-workshop` is needed before
      the Python side reports the new version.
 
+  6. Repin the Binder launcher, which gist READMEs link to, in the
+     separate `GrahamDumpleton/jupyterlab-workshop-binder` repository:
+     set `jupyterlab-workshop==X.Y.Z` in its `binder/requirements.txt`,
+     commit on its `main` and push. mybinder caches the image it built
+     for a commit, so without the repin the launcher keeps serving the
+     previous release.
+
+     ```
+     git commit -am "Pin jupyterlab-workshop X.Y.Z"
+     git push origin main
+     ```
+
   Three self-test flakes are known in CI and are not regressions: the
   browser job's hello-jupyterlab hidden-kernel execute-capture step;
   the lite job's terminal `execute` with `wait: prompt` timing out at

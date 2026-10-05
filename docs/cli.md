@@ -113,6 +113,7 @@ same on every machine.
 ```
 jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update GIST]
                                   [--token TOKEN] [--site URL | --python X.Y]
+                                  [--binder URL | --no-binder]
                                   [--append-readme] [--frontend NAME]
 ```
 
@@ -155,6 +156,17 @@ nothing gets the newest; a requirement no launcher meets is an error.
 `--python X.Y` names the launcher outright, and `--site URL` points the
 button at a JupyterLite site of your own instead. The chosen launcher
 is printed as `launcher`.
+
+The README also carries a button that opens the gist in JupyterLab on
+[mybinder.org](https://mybinder.org), through the project's [Binder
+launcher](https://github.com/GrahamDumpleton/jupyterlab-workshop-binder),
+a repository that installs JupyterLab with the extension and nothing
+else, with the gist named by the launch link in mybinder's `urlpath`.
+It is left out when the manifest's frontends leave out `jupyterlab`, or
+its platforms leave out `linux`, which is what Binder runs. `--binder
+URL` points the button at a launcher repository of your own, given as
+its `https://mybinder.org/v2/...` address, and `--no-binder` leaves the
+button out.
 
 `--create` makes a new gist, secret unless `--public` is given, and
 `--update` replaces the files of an existing one, given by URL or id,

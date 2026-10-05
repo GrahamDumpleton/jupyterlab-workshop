@@ -8,12 +8,15 @@ from typing import Any
 import pytest
 
 from jupyterlab_workshop.gist import (
+    BINDER_BADGE,
+    BINDER_LAUNCHER,
     DEFAULT_SITE,
     GIST_URL_PLACEHOLDER,
     LAUNCHER_PYTHONS,
     LAUNCHER_SITE,
     FlatWorkshop,
     GistError,
+    binder_link,
     create_gist,
     flat_name,
     flatten_workshop,
@@ -282,6 +285,16 @@ def test_flatten_records_the_launcher_or_the_site_given(tmp_path: Path) -> None:
 
     given = flatten_workshop(directory, site="https://lite.example.org/lab/")
 
+    assert chosen.binder == BINDER_LAUNCHER
+    assert "Launch on Binder" in chosen.files["README.md"]
+
+    unbound = flatten_workshop(directory, binder="")
+
+    assert "Launch on Binder" not in unbound.files["README.md"]
+    assert (
+        "Launch on Binder" not in unbound.with_gist_url("https://x").files["README.md"]
+    )
+
     assert given.python == ""
     assert given.site == "https://lite.example.org/lab/"
 
@@ -322,6 +335,35 @@ def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
     assert "Launch in JupyterLite" not in plain
     assert DEFAULT_SITE not in plain
     assert "Open Workshop from URL" in plain
+
+    # The Binder button opens the launcher with the launch link encoded
+    # in urlpath, whatever the JupyterLite button does.
+    binder = (
+        f"{BINDER_LAUNCHER}?urlpath="
+        "lab%3Fworkshop%3Dhttps%3A%2F%2Fgist.github.com%2Fada%2Fabc"
+    )
+
+    assert binder_link(BINDER_LAUNCHER, gist) == binder
+    assert f"[![Launch on Binder]({BINDER_BADGE})]({binder})" in readme
+    assert f"]({binder})" in plain
+
+    # It is left out when asked, and when the workshop cannot run there:
+    # JupyterLite only, or platforms without Linux.
+    assert "Launch on Binder" not in render_readme(manifest, gist, binder="")
+    assert "Launch on Binder" not in render_readme(
+        {**manifest, "frontends": ["jupyterlite"]}, gist
+    )
+    assert "Launch on Binder" not in render_readme(
+        {**manifest, "platforms": ["macos", "windows"]}, gist
+    )
+    assert "Launch on Binder" in render_readme(
+        {**manifest, "platforms": ["linux", "macos"]}, gist
+    )
+
+    # A launcher of the author's own is used as given.
+    assert "](https://mybinder.org/v2/gh/me/mine/HEAD?urlpath=lab%3F" in (
+        render_readme(manifest, gist, binder="https://mybinder.org/v2/gh/me/mine/HEAD")
+    )
 
     # The author's README goes under a rule.
     assert render_readme(manifest, gist, extra="Mine.\n").endswith("\n---\n\nMine.\n")

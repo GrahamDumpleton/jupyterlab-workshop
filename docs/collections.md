@@ -518,22 +518,30 @@ organisation's repositories.
 
 Launch links compose with services that start JupyterLab from a URL. On
 [mybinder.org](https://mybinder.org) a single repository that installs
-this package can open any workshop:
+this package can open any workshop. The project publishes one,
+[jupyterlab-workshop-binder](https://github.com/GrahamDumpleton/jupyterlab-workshop-binder),
+which installs JupyterLab and the extension and nothing else, and which
+`jupyter workshop gist` links to from a gist's README:
 
 ```
-https://mybinder.org/v2/gh/example-org/launcher/main?urlpath=lab%3Fworkshop%3Dhttps%3A%2F%2Fgithub.com%2Fexample-org%2Fworkshops%26subdir%3Dgit-basics
+https://mybinder.org/v2/gh/GrahamDumpleton/jupyterlab-workshop-binder/main?urlpath=lab%3Fworkshop%3Dhttps%3A%2F%2Fgithub.com%2Fexample-org%2Fworkshops%26subdir%3Dgit-basics
 ```
 
 The `urlpath` is `lab?workshop=…` URL-encoded; `lab?collection=…` and
 `lab?catalog=…` work the same way and land in the browser instead, which
-is how one link can show off everything a catalog offers. This
-repository's own `binder/` directory is an example: `runtime.txt`
-selects a Python the package supports, `requirements.txt` installs
-JupyterLab and the package, and `postBuild` writes a settings override
-that starts in the browser with the examples listed as installed, and
-trusts them. A workshop repository can carry the same files and a
-launch badge, with the `workshop` parameter naming a directory in the
-checkout rather than a URL.
+is how one link can show off everything a catalog offers. In the
+launcher's `binder/` directory, `runtime.txt` selects a Python the
+package supports, `requirements.txt` installs JupyterLab and a pinned
+release of the package, and `postBuild` writes a settings override that
+starts in the browser, then removes the repository's own files so the
+visitor's home directory holds only the workshops they open. Nothing is
+disabled or trusted in advance, since the link can name anyone's
+workshop. This repository's own `binder/` directory is the other shape:
+its `postBuild` starts in the browser with the examples listed as
+installed, trusts them, and turns off opening anything else. A workshop
+repository can carry the same files and a launch badge, with the
+`workshop` parameter naming a directory in the checkout rather than a
+URL.
 
 ## Installed workshops and the server
 

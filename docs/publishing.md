@@ -159,7 +159,9 @@ the tree alone. The command lints the source, writes the copy under
 and lints that. It also writes a `README.md`, which GitHub shows first
 on the gist page, with the workshop's details from the manifest and how
 to open it, including a button that launches it in JupyterLite when the
-manifest lists that frontend. With `--create` it makes the gist, secret
+manifest lists that frontend, and one that launches it in JupyterLab on
+mybinder.org through the project's [Binder
+launcher](collections.md#launch-links). With `--create` it makes the gist, secret
 unless `--public`, and prints its address; with `--update` it replaces
 the files of an existing one, as a new revision in the gist's history;
 see [gist](cli.md#gist) for the token it needs.

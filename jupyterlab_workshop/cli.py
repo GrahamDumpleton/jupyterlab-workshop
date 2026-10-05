@@ -42,6 +42,7 @@ from .collection import (
 )
 from .fetch import FetchError
 from .gist import (
+    BINDER_LAUNCHER,
     LAUNCHER_PYTHONS,
     GistError,
     create_gist,
@@ -408,6 +409,21 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="X.Y",
         help="Python version of the published launcher the button opens, "
         f"one of {', '.join(LAUNCHER_PYTHONS)}",
+    )
+    gist_binder = gist.add_mutually_exclusive_group()
+    gist_binder.add_argument(
+        "--binder",
+        default=BINDER_LAUNCHER,
+        metavar="URL",
+        help="Binder launcher repository the README's Binder button opens, as "
+        "its mybinder.org/v2/... URL (default the project's launcher)",
+    )
+    gist_binder.add_argument(
+        "--no-binder",
+        dest="binder",
+        action="store_const",
+        const="",
+        help="leave the Binder button out of the README",
     )
     gist.add_argument(
         "--append-readme",
@@ -1204,6 +1220,7 @@ def command_gist(args: argparse.Namespace) -> int:
             site=args.site,
             append_readme=args.append_readme,
             python=args.python,
+            binder=args.binder.rstrip("/"),
         )
         target = write_flat(flat, args.out)
     except GistError as error:

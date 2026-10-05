@@ -141,3 +141,8 @@ Releases are made by pushing a tag that is the bare version string, such
 as `0.1.0`, with no `v` prefix. The release workflow refuses to build if
 the tag does not match the version in `package.json`, then builds the
 wheel and sdist, attaches them to a GitHub release and publishes to PyPI.
+Once the release is on PyPI, repin `jupyterlab-workshop==<version>` in
+the `binder/requirements.txt` of the
+[jupyterlab-workshop-binder](https://github.com/GrahamDumpleton/jupyterlab-workshop-binder)
+repository and push it, so the Binder launcher that gist READMEs link to
+serves the new release.
