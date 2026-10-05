@@ -118,16 +118,21 @@ jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --upd
 
 Lays a workshop out as a [GitHub gist](https://gist.github.com) holds
 it and, with `--create` or `--update`, sends it there. A gist is a git
-repository with no directories, so every file is renamed with its
-directory separators turned into `--`: `pages/01-welcome.md` becomes
-`pages--01-welcome.md`, and the manifest and the directive options that
-named the file are rewritten to match. The manifest, the pages, the
-files the pages refer to with `from`, `script` or `path`, and the
-requirements file are carried; other files are reported as left out.
-The workshop is linted before and the flat copy after, with
+repository with no directories, so every file is stored under its path
+with the directory separators turned into `--`, `pages/01-welcome.md`
+as `pages--01-welcome.md`, and a `workshop-tree.json` maps each path
+back to its gist file. Nothing in the workshop is rewritten: a download
+of the gist puts every file back at its path. The files carried are the
+ones [publish](#publish) would archive, less hidden files, editor
+droppings and the workshop's own `README.md`; the command prints each
+file it stores under a different name, and reports what it left out. A
+file that is not text is stored as base64 under a name ending
+`.base64`, and an empty file is recorded in the tree alone, since the
+gists API carries neither. The workshop is linted before, and after
+writing the flat copy under `dist/gist/<name>/` the command puts the
+copy back together the way a download would and lints that, with
 `--frontend jupyterlite` selecting the JupyterLite rules for a gist
-meant for the [demo site](demo.md), and the flat copy is written under
-`dist/gist/<name>/`.
+meant for the [demo site](demo.md).
 
 A `README.md` is generated as well, which GitHub pins to the top of
 the gist page: the title, description, version, authors, duration,
@@ -157,11 +162,7 @@ removing any the flat copy no longer has. Each update is one revision
 in the gist's history, where removed files stay readable. Both need a
 GitHub token with
 the `gist` scope, from `--token`, else `GH_TOKEN` or `GITHUB_TOKEN`,
-else `gh auth token` for someone signed in to the `gh` command. The
-gists API carries text files only.
-
-A workshop that seeds the workspace from `files/` cannot be a gist,
-since the files are copied as a directory, and is refused. See [A
+else `gh auth token` for someone signed in to the `gh` command. See [A
 workshop in a gist](publishing.md#a-workshop-in-a-gist).
 
 ## collection

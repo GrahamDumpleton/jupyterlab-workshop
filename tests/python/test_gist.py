@@ -1,10 +1,11 @@
+import base64
+import json
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from jupyterlab_workshop.gist import (
     DEFAULT_SITE,
@@ -20,11 +21,10 @@ from jupyterlab_workshop.gist import (
     launcher_site,
     render_readme,
     resolve_token,
-    rewrite_manifest,
-    rewrite_options,
     update_gist,
     write_flat,
 )
+from jupyterlab_workshop.tree import TREE_FILE, restore_tree
 
 MANIFEST = """\
 apiVersion: jupyterlab-workshop/v1alpha1
@@ -64,7 +64,7 @@ def make_workshop(directory: Path, manifest: str = MANIFEST) -> Path:
     (directory / "workshop.yaml").write_text(manifest)
     (directory / "pages").mkdir()
     (directory / "pages" / "01-intro.md").write_text(INTRO)
-    (directory / "pages" / "02-files.md").write_text("# Files\n")
+    (directory / "pages" / "02-files.md").write_text("# Files\n![](../images/a.svg)\n")
     (directory / "03-flat.md").write_text("# Flat\n")
     (directory / "templates").mkdir()
     (directory / "templates" / "notes.md").write_text("notes\n")
@@ -72,30 +72,33 @@ def make_workshop(directory: Path, manifest: str = MANIFEST) -> Path:
     (directory / "verify" / "check.py").write_text("print('ok')\n")
     (directory / "env").mkdir()
     (directory / "env" / "requirements.txt").write_text("rich\n")
+    (directory / "images").mkdir()
+    (directory / "images" / "a.svg").write_text("<svg/>\n")
+    (directory / "files" / "pkg").mkdir(parents=True)
+    (directory / "files" / ".gitkeep").write_text("")
+    (directory / "files" / "pkg" / "__init__.py").write_text("")
+    (directory / "files" / "pkg" / "blank.txt").write_text("\n")
+    (directory / "files" / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00")
     (directory / "README.md").write_text("about\n")
+    (directory / ".gitignore").write_text("_workshop/\n")
+    (directory / "notes.md~").write_text("backup\n")
     (directory / "_workshop").mkdir()
     (directory / "_workshop" / "state.json").write_text("{}")
+    (directory / "work").mkdir()
+    (directory / "work" / "mine.py").write_text("x = 1\n")
 
     return directory
 
 
-REFERENCED = ["templates/notes.md", "verify/check.py", "notes.md"]
-
-
-def test_flat_name_joins_directories_and_refuses_the_separator() -> None:
+def test_flat_name_joins_directories() -> None:
     assert flat_name("pages/01-intro.md") == "pages--01-intro.md"
     assert flat_name("pages/part1/01.md") == "pages--part1--01.md"
     assert flat_name("03-flat.md") == "03-flat.md"
 
-    with pytest.raises(GistError, match='contains "--"'):
-        flat_name("pages/odd--name.md")
 
-    with pytest.raises(GistError, match="reserves"):
-        flat_name("gistfile1.md")
-
-
-def test_flatten_renames_and_rewrites(tmp_path: Path) -> None:
-    flat = flatten_workshop(make_workshop(tmp_path / "ws"), REFERENCED)
+def test_flatten_stores_files_flat_and_leaves_them_as_written(tmp_path: Path) -> None:
+    directory = make_workshop(tmp_path / "ws")
+    flat = flatten_workshop(directory)
 
     assert flat.name == "demo"
     assert flat.title == "Demo"
@@ -103,94 +106,117 @@ def test_flatten_renames_and_rewrites(tmp_path: Path) -> None:
         "03-flat.md",
         "README.md",
         "env--requirements.txt",
+        "files--logo.png.base64",
+        "files--pkg--blank.txt.base64",
+        "images--a.svg",
         "pages--01-intro.md",
         "pages--02-files.md",
         "templates--notes.md",
         "verify--check.py",
+        TREE_FILE,
         "workshop.yaml",
     ]
-    assert flat.renames == {
-        "pages/01-intro.md": "pages--01-intro.md",
-        "pages/02-files.md": "pages--02-files.md",
-        "templates/notes.md": "templates--notes.md",
-        "verify/check.py": "verify--check.py",
-        "env/requirements.txt": "env--requirements.txt",
-    }
+
+    # Nothing is rewritten: the manifest and pages are as written.
+    assert flat.files["workshop.yaml"] == MANIFEST
+    assert flat.files["pages--01-intro.md"] == INTRO
+    assert flat.renames["pages/01-intro.md"] == "pages--01-intro.md"
+    assert "03-flat.md" not in flat.renames
+
+    # The tree maps every path back, binaries and blank files as base64
+    # and the empty file with no gist file at all.
+    tree = json.loads(flat.files[TREE_FILE])
+
+    assert tree["version"] == 1
+    assert {"path": "files/pkg/__init__.py", "empty": True} in tree["files"]
+    assert {
+        "path": "files/logo.png",
+        "name": "files--logo.png.base64",
+        "encoding": "base64",
+    } in tree["files"]
+    assert {"path": "workshop.yaml", "name": "workshop.yaml"} in tree["files"]
+    assert base64.b64decode(flat.files["files--logo.png.base64"]) == (
+        b"\x89PNG\r\n\x1a\n\x00"
+    )
+
+    # Hidden files, droppings, the state and workspace directories are
+    # left out silently; the author's README is reported.
     assert flat.left_out == ["README.md"]
 
     # The generated README stands in for the author's unless asked to
-    # keep theirs below it, and names a gist that does not exist yet.
+    # keep theirs below it, names a gist that does not exist yet, and
+    # says how the files go back.
     assert "about" not in flat.files["README.md"]
     assert GIST_URL_PLACEHOLDER in flat.files["README.md"]
+    assert f"`{TREE_FILE}` says where each one goes back" in flat.files["README.md"]
 
-    appended = flatten_workshop(tmp_path / "ws", REFERENCED, append_readme=True)
+    appended = flatten_workshop(directory, append_readme=True)
 
     assert appended.files["README.md"].endswith("\n---\n\nabout\n")
     assert appended.left_out == []
 
-    # Options that named a renamed file follow it; the rest stay put.
-    page = flat.files["pages--01-intro.md"]
 
-    assert ":from: templates--notes.md" in page
-    assert ":script:   verify--check.py" in page
-    assert ":path: notes.md" in page
+def test_flat_copy_restores_to_the_workshop_as_written(tmp_path: Path) -> None:
+    directory = make_workshop(tmp_path / "ws")
+    target = write_flat(flatten_workshop(directory), tmp_path / "out")
+    restored = tmp_path / "restored"
 
-    # The manifest keeps its comment and quoting and parses as expected.
-    manifest = flat.files["workshop.yaml"]
+    restore_tree(target, restored)
 
-    assert "# The pages, in order." in manifest
-    assert '- "pages--02-files.md"' in manifest
-    assert "Mentions pages/01-intro.md nowhere else." in manifest
-    assert yaml.safe_load(manifest)["pages"] == [
-        "pages--01-intro.md",
-        "pages--02-files.md",
-        "03-flat.md",
-    ]
-    assert yaml.safe_load(manifest)["environment"] == {
-        "requirements": "env--requirements.txt"
+    def listing(root: Path) -> dict[str, bytes]:
+        return {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+
+    expected = {
+        path: data
+        for path, data in listing(directory).items()
+        if not path.startswith(("_workshop/", "work/", ".", "files/.gitkeep"))
+        and path not in {"README.md", "notes.md~"}
     }
+
+    assert listing(restored) == expected
 
 
 def test_flatten_refuses_what_a_gist_cannot_hold(tmp_path: Path) -> None:
-    starter = make_workshop(tmp_path / "starter")
-    (starter / "files").mkdir()
-    (starter / "files" / "data.csv").write_text("a,b\n")
-
-    with pytest.raises(GistError, match="starter files"):
-        flatten_workshop(starter)
-
-    binary = make_workshop(tmp_path / "binary")
-    (binary / "templates" / "notes.md").write_bytes(b"\x00\x01\xff")
-
-    with pytest.raises(GistError, match="not a text file"):
-        flatten_workshop(binary, REFERENCED)
-
     taken = make_workshop(tmp_path / "taken")
     (taken / "pages--01-intro.md").write_text("# Looks flat already\n")
 
-    with pytest.raises(GistError, match='contains "--"'):
-        flatten_workshop(taken, ["pages--01-intro.md"])
+    with pytest.raises(GistError, match="would both be named pages--01-intro.md"):
+        flatten_workshop(taken)
+
+    cased = make_workshop(tmp_path / "cased")
+    (cased / "Pages--02-files.md").write_text("# Differs only in case\n")
+
+    with pytest.raises(GistError, match="would both be named"):
+        flatten_workshop(cased)
+
+    readme = make_workshop(tmp_path / "readme")
+    (readme / "README.md").unlink()
+    (readme / "readme.md").write_text("lower case\n")
+
+    with pytest.raises(GistError, match="which the gist has its own of"):
+        flatten_workshop(readme)
+
+    reserved = make_workshop(tmp_path / "reserved")
+    (reserved / "gistfile1.md").write_text("# Reserved\n")
+
+    with pytest.raises(GistError, match="reserves"):
+        flatten_workshop(reserved)
+
+    tree = make_workshop(tmp_path / "tree")
+    (tree / TREE_FILE).write_text("{}")
+
+    with pytest.raises(GistError, match="the gist's own"):
+        flatten_workshop(tree)
 
     missing = make_workshop(tmp_path / "missing")
     (missing / "pages" / "02-files.md").unlink()
 
     with pytest.raises(GistError, match="does not exist"):
         flatten_workshop(missing)
-
-
-def test_flatten_leaves_unrenamed_workshops_alone(tmp_path: Path) -> None:
-    directory = tmp_path / "flat"
-    directory.mkdir()
-    (directory / "workshop.yaml").write_text(
-        "apiVersion: jupyterlab-workshop/v1alpha1\nname: flat\ntitle: Flat\n"
-        "pages: [01.md]\n"
-    )
-    (directory / "01.md").write_text("# One\n")
-
-    flat = flatten_workshop(directory)
-
-    assert flat.renames == {}
-    assert flat.files["workshop.yaml"].endswith("pages: [01.md]\n")
 
 
 def test_launcher_site_follows_the_python_requirement() -> None:
@@ -291,39 +317,6 @@ def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
 
     # The author's README goes under a rule.
     assert render_readme(manifest, gist, extra="Mine.\n").endswith("\n---\n\nMine.\n")
-
-
-def test_rewrite_options_only_touches_whole_values() -> None:
-    renames = {"pages/01.md": "pages--01.md"}
-
-    assert rewrite_options(":from: pages/01.md\n", renames) == ":from: pages--01.md\n"
-    assert (
-        rewrite_options("  :from: pages/01.md  \n", renames)
-        == "  :from: pages--01.md  \n"
-    )
-    assert (
-        rewrite_options(":path: pages/01.md/extra\n", renames)
-        == ":path: pages/01.md/extra\n"
-    )
-    assert rewrite_options(":id: pages/01.md\n", renames) == ":id: pages/01.md\n"
-    assert rewrite_options("See pages/01.md for more.\n", renames) == (
-        "See pages/01.md for more.\n"
-    )
-
-
-def test_rewrite_manifest_handles_inline_lists_and_refuses_wider_changes() -> None:
-    source = "name: x\ntitle: pages/01.md\npages: [pages/01.md, pages/02.md]\n"
-    manifest = yaml.safe_load(source)
-    renames = {"pages/01.md": "pages--01.md", "pages/02.md": "pages--02.md"}
-
-    assert rewrite_manifest(source, manifest, renames) == (
-        "name: x\ntitle: pages/01.md\npages: [pages--01.md, pages--02.md]\n"
-    )
-
-    listed = "name: x\ntags:\n  - pages/01.md\npages:\n  - pages/01.md\n"
-
-    with pytest.raises(GistError, match="rename them by hand"):
-        rewrite_manifest(listed, yaml.safe_load(listed), renames)
 
 
 def test_write_flat_replaces_an_earlier_copy_only(tmp_path: Path) -> None:

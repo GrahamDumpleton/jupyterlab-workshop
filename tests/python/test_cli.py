@@ -9,6 +9,7 @@ import pytest
 from jupyterlab_workshop import cli
 from jupyterlab_workshop.harness import SelfTestReport, _junit, _to_report
 from jupyterlab_workshop.scaffold import slug
+from jupyterlab_workshop.tree import restore_tree
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None or not cli.NODE_BUNDLE.is_file(),
@@ -167,18 +168,27 @@ def test_gist_writes_a_flat_copy_that_lints(
     output = capsys.readouterr().out
     copy = out / "flat-me"
 
-    assert "renamed pages/01-welcome.md -> pages--01-welcome.md" in output
+    assert "stored pages/01-welcome.md as pages--01-welcome.md" in output
     assert f"wrote {copy}" in output
     assert sorted(path.name for path in copy.iterdir()) == [
         "README.md",
         "pages--01-welcome.md",
         "pages--02-first-steps.md",
+        "workshop-tree.json",
         "workshop.yaml",
     ]
     assert (copy / "README.md").read_text().startswith("# Flat me\n")
-    assert "pages--01-welcome.md" in (copy / "workshop.yaml").read_text()
+    assert (copy / "workshop.yaml").read_text() == (
+        target / "workshop.yaml"
+    ).read_text()
 
-    assert cli.main(["lint", str(copy)]) == 0
+    # The copy is put back together and linted, as the command does.
+    restored = tmp_path / "restored" / "flat-me"
+
+    restore_tree(copy, restored)
+
+    assert (restored / "pages" / "01-welcome.md").is_file()
+    assert cli.main(["lint", str(restored)]) == 0
     assert "0 error(s)" in capsys.readouterr().out
 
 

@@ -23,6 +23,7 @@ export * from './lite';
 export * from './versions';
 export * from './markdown/parser';
 export * from './schema';
+export * from './tree';
 export * from './trust';
 export * from './variables/expressions';
 export * from './variables/substitute';

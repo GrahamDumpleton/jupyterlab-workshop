@@ -4,7 +4,8 @@ A workshop source is either a git repository on a forge that offers archive
 downloads (GitHub, GitLab, Codeberg and Gitea, and a GitHub gist, which is
 a repository named by its id) or a direct URL to a ``.zip`` or ``.tar.gz``
 archive. The archive is downloaded, hashed, unpacked with
-path traversal guarded, and recorded in ``_workshop/source.json`` so the
+path traversal guarded, put back into its directories when it is a gist
+holding a tree file (see ``tree``), and recorded in ``_workshop/source.json`` so the
 frontend can identify the workshop later.
 """
 
@@ -30,6 +31,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import yaml
+
+from .tree import TREE_FILE, TreeError, restore_tree
 
 MANIFEST_FILE = "workshop.yaml"
 
@@ -220,6 +223,15 @@ def archive_url(source: Source) -> str:
     return f"https://{host}/{owner}/{repo}/archive/{ref}.tar.gz"
 
 
+def is_gist(source: Source) -> bool:
+    """Whether a source is a GitHub gist."""
+
+    return (
+        source.kind == "git"
+        and urlsplit(source.url).netloc.lower() == "gist.github.com"
+    )
+
+
 def download(
     url: str, limit: int = MAX_ARCHIVE_BYTES, timeout: float = DOWNLOAD_TIMEOUT
 ) -> bytes:
@@ -318,6 +330,18 @@ def fetch_workshop(
         staging = Path(tmp) / "unpacked"
 
         unpack_archive(data, url, staging, source.subdir)
+
+        # A gist published by `jupyter workshop gist` holds its files flat,
+        # with a tree file saying where each one goes back.
+        if is_gist(source) and (staging / TREE_FILE).is_file():
+            restored = Path(tmp) / "restored"
+
+            try:
+                restore_tree(staging, restored)
+            except TreeError as error:
+                raise FetchError(str(error)) from error
+
+            staging = restored
 
         manifest_name = read_manifest_name(staging / MANIFEST_FILE)
         target_name = _check_name(name or manifest_name)

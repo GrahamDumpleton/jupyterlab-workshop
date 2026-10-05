@@ -1,45 +1,45 @@
 """Publishing a workshop as a GitHub gist.
 
 A gist is a git repository that holds no directories, so a workshop is
-laid out flat before it goes in: every file keeps its name with the
-directory separators turned into ``--``, so ``pages/01-welcome.md``
-becomes ``pages--01-welcome.md``, and the manifest and the directive
-options that name those files are rewritten to match. Only what the
-workshop needs at run time rides along: the manifest, the pages, the
-files the pages refer to and the requirements file, plus a generated
-``README.md`` that GitHub pins to the top of the gist page: the title,
+laid out flat before it goes in: every file is stored under its path
+with the directory separators turned into ``--``, so
+``pages/01-welcome.md`` is held as ``pages--01-welcome.md``, and a
+``workshop-tree.json`` beside them maps each path to the gist file that
+holds it. Nothing in the workshop is rewritten: a download of the gist
+puts every file back at its path (see ``tree``). The files carried are
+the ones ``jupyter workshop publish`` would archive, less hidden files
+and the workshop's own README. The gists API carries text only, so a
+file that is not text is held as base64, and an empty file, which a gist
+cannot hold, is recorded in the tree alone. A generated ``README.md``,
+which GitHub pins to the top of the gist page, gives the title,
 description and details from the manifest, and how to open the
 workshop, with a launch button for a JupyterLite site when the manifest
 lists that frontend. The flat copy is written to a directory and, when
-asked, sent to GitHub through the gists API, which carries text files
-only.
+asked, sent to GitHub through the gists API.
 """
 
 from __future__ import annotations
 
-import copy
+import base64
 import json
 import os
 import re
 import shutil
 import subprocess
-from collections.abc import Callable, Mapping, Sequence
+import textwrap
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-import yaml
-
 from .checks import satisfies_version
 from .fetch import USER_AGENT
 from .publish import PUBLISH_EXCLUDES, WORKSPACE_DIR, PublishError, read_manifest
+from .tree import BASE64, TREE_FILE, TreeEntry, tree_document
 
 MANIFEST_FILE = "workshop.yaml"
-
-#: Starter files copied into the workspace when the workshop opens.
-FILES_DIR = "files"
 
 #: Stands in for the directory separator in a gist file name.
 SEPARATOR = "--"
@@ -79,22 +79,20 @@ API_VERSION = "2022-11-28"
 #: Environment variables a token is read from, in order, as `gh` reads them.
 TOKEN_VARIABLES = ("GH_TOKEN", "GITHUB_TOKEN")
 
-#: Directive options whose value may name a file shipped with the workshop.
-FILE_OPTIONS = ("from", "script", "path")
+#: Added to the gist name of a file held as base64.
+BASE64_SUFFIX = ".base64"
+
+#: Line length the base64 of a file is wrapped at, so the gist shows it.
+BASE64_WIDTH = 76
+
+#: Editor and operating system droppings, which are never carried.
+DROPPINGS = {"Thumbs.db", "desktop.ini"}
 
 #: How long one API call may take.
 API_TIMEOUT = 60
 
 #: Sends one API request: method, URL, JSON body and token, to a JSON reply.
 Requester = Callable[[str, str, Mapping[str, Any] | None, str], dict[str, Any]]
-
-_OPTION_LINE = re.compile(
-    r"^(?P<lead>\s*:(?P<name>[a-z-]+):[ \t]*)(?P<value>\S.*?)(?P<tail>\s*)$"
-)
-
-# The manifest lines a file name is replaced on: list items, for the
-# pages, and the requirements setting; prose elsewhere is left alone.
-_MANIFEST_FILE_LINE = re.compile(r"^\s*(?:-\s|pages:|requirements:)")
 
 _GIST_URL = re.compile(
     r"^(?:https://gist\.github\.com/(?:[^/]+/)?)?(?P<id>[0-9a-fA-F]+)(?:/[0-9a-fA-F]+)?/?$"
@@ -113,7 +111,7 @@ class FlatWorkshop:
     title: str
     description: str
 
-    #: Gist file name to content, the manifest included.
+    #: Gist file name to content, the manifest, tree file and README included.
     files: dict[str, str]
 
     #: Workshop path to gist file name, for the files whose name changed.
@@ -121,6 +119,9 @@ class FlatWorkshop:
 
     #: Files in the workshop directory that are not carried.
     left_out: list[str]
+
+    #: Where each carried file goes back, as the tree file lists it.
+    entries: list[TreeEntry] = field(default_factory=list)
 
     #: The manifest, as parsed, for the README.
     manifest: dict[str, Any] = field(default_factory=dict)
@@ -158,51 +159,33 @@ def flat_name(path: str) -> str:
     """The gist file name for a workshop-relative path.
 
     Directory separators become ``--``, which keeps the origin of a file
-    visible and the mapping reversible, so a path that already contains
-    ``--`` is refused, as is a name GitHub reserves.
+    visible on the gist page and groups a directory's files together in
+    its alphabetical listing. The name is only for reading: the tree
+    file says where each file goes back, so nothing parses it.
     """
 
-    parts = PurePosixPath(path).parts
-
-    if any(SEPARATOR in part for part in parts):
-        raise GistError(
-            f'{path} contains "{SEPARATOR}", which stands for a directory '
-            "separator in a gist file name"
-        )
-
-    name = SEPARATOR.join(parts)
-
-    if name.lower().startswith(RESERVED_PREFIX):
-        raise GistError(
-            f"{path} would be named {name}, and GitHub reserves names "
-            f'starting with "{RESERVED_PREFIX}"'
-        )
-
-    return name
+    return SEPARATOR.join(PurePosixPath(path).parts)
 
 
 def flatten_workshop(
     directory: Path,
-    referenced: Sequence[str] = (),
     site: str = "",
     append_readme: bool = False,
     python: str = "",
 ) -> FlatWorkshop:
-    """Lay a workshop out flat.
+    """Lay a workshop out flat, with a tree file to put it back.
 
-    ``referenced`` lists the workshop-relative paths the pages name in
-    their directive options, as the core package's ``referencedFiles``
-    reports them; those that exist are carried and their options
-    rewritten. The manifest, the pages and the requirements file are
-    always carried, and a ``README.md`` is generated from the manifest,
-    with a launch button when the manifest lists the JupyterLite
-    frontend: for ``site`` when given, else the published launcher whose
-    Python suits the manifest, or ``python``; see ``launcher_site``.
-    With ``append_readme`` the workshop's own README goes below it.
-    Starter files under ``files/`` cannot be carried,
-    since they are copied into the workspace as a directory, so a
-    workshop that has any is refused, as is a binary file, which the
-    gists API cannot hold.
+    The files carried are those ``jupyter workshop publish`` would
+    archive, less hidden files, editor droppings, links and the
+    workshop's own ``README.md``; every page the manifest lists must be
+    among them. Each is stored under its ``flat_name``, text as it is,
+    anything else as base64 under a name ending ``.base64``, and an
+    empty file in the tree alone, since a gist cannot hold one. A
+    ``README.md`` is generated from the manifest, with a launch button
+    when the manifest lists the JupyterLite frontend: for ``site`` when
+    given, else the published launcher whose Python suits the manifest,
+    or ``python``; see ``launcher_site``. With ``append_readme`` the
+    workshop's own README goes below it.
     """
 
     try:
@@ -219,87 +202,78 @@ def flatten_workshop(
     if not isinstance(pages, list) or not all(isinstance(page, str) for page in pages):
         raise GistError("The manifest's pages must be a list of file names")
 
-    _refuse_starter_files(directory)
+    if (directory / TREE_FILE).exists():
+        raise GistError(f"{TREE_FILE} is the gist's own and cannot be a workshop file")
 
     if site:
         launcher_python = ""
     else:
         launcher_python, site = launcher_site(manifest, python)
 
-    # Which files ride along: the pages, which must exist, then whatever
-    # the pages and the manifest refer to that does, in a stable order.
-    carried: list[str] = []
-    requirements = _requirements_file(manifest)
+    # The pages must be carried, so one that is missing, hidden or in an
+    # excluded directory is an error rather than a broken gist.
+    carried = _carried_files(directory)
 
-    for path in [*pages, *referenced, *requirements]:
-        clean = _clean_path(path)
+    for page in pages:
+        if PurePosixPath(page.strip()).as_posix() not in carried:
+            raise GistError(
+                f"Page {page} listed in workshop.yaml does not exist "
+                "or would not be carried"
+            )
 
-        if not clean:
-            continue
-
-        file = directory / clean
-
-        if path in pages and not file.is_file():
-            raise GistError(f"Page {path} listed in workshop.yaml does not exist")
-
-        if file.is_file() and clean not in carried:
-            carried.append(clean)
-
-    # Flat names must be distinct from each other and from the manifest.
-    names: dict[str, str] = {}
+    # Store each file under its flat name, as text when it is text.
+    files: dict[str, str] = {}
+    entries: list[TreeEntry] = []
+    taken: dict[str, str] = {
+        README_FILE.lower(): README_FILE,
+        TREE_FILE.lower(): TREE_FILE,
+    }
 
     for path in carried:
-        flat = flat_name(path)
-        clash = next((other for other, taken in names.items() if taken == flat), None)
+        data = (directory / path).read_bytes()
 
-        if clash is not None:
-            raise GistError(
-                f"{path} and {clash} would both be named {flat} in the gist"
-            )
+        if not data:
+            entries.append(TreeEntry(path=path, empty=True))
 
-        if flat in (MANIFEST_FILE, README_FILE):
-            raise GistError(
-                f"{path} would be named {flat}, which the gist has its own of"
-            )
+            continue
 
-        names[path] = flat
+        text = _as_text(data)
+        flat = flat_name(path) if text is not None else flat_name(path) + BASE64_SUFFIX
 
-    renames = {path: flat for path, flat in names.items() if path != flat}
+        _claim(taken, flat, path)
 
-    # Read every file as text, rewriting the options that name a renamed
-    # file as they go, and the manifest last.
-    files: dict[str, str] = {}
+        if text is not None:
+            files[flat] = text
+            entries.append(TreeEntry(path=path, name=flat))
+        else:
+            files[flat] = _wrapped_base64(data)
+            entries.append(TreeEntry(path=path, name=flat, encoding=BASE64))
 
-    for path, flat in names.items():
-        text = _read_text(directory, path)
-
-        if path in pages:
-            text = rewrite_options(text, renames)
-
-        files[flat] = text
-
-    files[MANIFEST_FILE] = rewrite_manifest(
-        _read_text(directory, MANIFEST_FILE), manifest, renames
-    )
+    files[TREE_FILE] = json.dumps(tree_document(entries), indent=2) + "\n"
 
     # The README is written for a gist that does not exist yet; creating
     # or updating one writes it again with the real address.
     extra = ""
 
     if append_readme and (directory / README_FILE).is_file():
-        extra = _read_text(directory, README_FILE)
+        extra = (directory / README_FILE).read_text(encoding="utf-8")
 
     files[README_FILE] = render_readme(manifest, GIST_URL_PLACEHOLDER, site, extra)
 
-    carried_names = set(names) | ({README_FILE} if extra else set())
+    carried_names = set(carried) | ({README_FILE} if extra else set())
 
     return FlatWorkshop(
         name=name,
         title=str(manifest.get("title") or name),
         description=str(manifest.get("description") or ""),
         files=files,
-        renames=renames,
+        renames={
+            entry.path: entry.name
+            for entry in entries
+            if entry.name and entry.name != entry.path
+        },
         left_out=_left_out(directory, carried_names),
+        entries=entries,
         manifest=dict(manifest),
         site=site,
         python=launcher_python,
@@ -433,89 +407,19 @@ def render_readme(
     if links:
         lines += [" | ".join(links), ""]
 
+    lines += [
+        "A gist holds no directories, so the workshop's files are stored "
+        f"under flat names, and `{TREE_FILE}` says where each one goes back "
+        "when the workshop is downloaded. A file it does not list is left "
+        "out, so republish with `jupyter workshop gist --update` rather "
+        "than adding or renaming files here.",
+        "",
+    ]
+
     if extra.strip():
         lines += ["---", "", extra.strip(), ""]
 
     return "\n".join(lines)
-
-
-def rewrite_options(text: str, renames: Mapping[str, str]) -> str:
-    """Rename the files that a page's directive options point at.
-
-    Only an option line whose whole value is one of the renamed paths
-    changes, so prose and other options are left as they are.
-    """
-
-    if not renames:
-        return text
-
-    lines = text.split("\n")
-
-    for index, line in enumerate(lines):
-        match = _OPTION_LINE.match(line)
-
-        if not match or match.group("name") not in FILE_OPTIONS:
-            continue
-
-        value = _clean_path(match.group("value"))
-
-        if value in renames:
-            lines[index] = match.group("lead") + renames[value] + match.group("tail")
-
-    return "\n".join(lines)
-
-
-def rewrite_manifest(
-    source: str, manifest: Mapping[str, Any], renames: Mapping[str, str]
-) -> str:
-    """Rename the files the manifest lists, keeping its comments and layout.
-
-    The paths are replaced in the text rather than by writing the YAML
-    back out, which would lose comments and ordering, and only on the
-    lines that list files, so prose that mentions a page is left alone.
-    The result is parsed and compared with what the rewrite should have
-    produced, so a replacement that touched anything else is refused
-    rather than published.
-    """
-
-    if not renames:
-        return source
-
-    patterns = {
-        re.compile(r"(?<![\w./-])" + re.escape(old) + r"(?![\w./-])"): new
-        for old, new in renames.items()
-    }
-    lines = source.split("\n")
-
-    for index, line in enumerate(lines):
-        if not _MANIFEST_FILE_LINE.match(line):
-            continue
-
-        for pattern, new in patterns.items():
-            line = pattern.sub(new.replace("\\", r"\\"), line)
-
-        lines[index] = line
-
-    text = "\n".join(lines)
-
-    expected: dict[str, Any] = copy.deepcopy(dict(manifest))
-    expected["pages"] = [renames.get(page, page) for page in manifest["pages"]]
-
-    for path in _requirements_file(manifest):
-        expected["environment"]["requirements"] = renames.get(path, path)
-
-    try:
-        parsed = yaml.safe_load(text)
-    except yaml.YAMLError as error:
-        raise GistError(f"workshop.yaml could not be rewritten: {error}") from error
-
-    if parsed != expected:
-        raise GistError(
-            "workshop.yaml could not be rewritten for the flat layout without "
-            "changing something other than the file names; rename them by hand"
-        )
-
-    return text
 
 
 def write_flat(flat: FlatWorkshop, out: Path) -> Path:
@@ -712,80 +616,97 @@ def _listed(value: object) -> str:
     return ", ".join(_strings(value))
 
 
-def _refuse_starter_files(directory: Path) -> None:
-    files_dir = directory / FILES_DIR
+def _carried_files(directory: Path) -> list[str]:
+    # What the publish archive would hold, less what a gist should not.
+    carried: list[str] = []
 
-    if not files_dir.is_dir():
-        return
+    for path in sorted(directory.rglob("*")):
+        relative = path.relative_to(directory)
+        posix = relative.as_posix()
 
-    starters = [
-        path
-        for path in files_dir.rglob("*")
-        if path.is_file() and path.name != ".gitkeep"
-    ]
+        if _skipped(relative) or path.is_symlink() or not path.is_file():
+            continue
 
-    if starters:
-        raise GistError(
-            f"{FILES_DIR}/ holds starter files, which are copied into the workspace "
-            "as a directory when the workshop opens; a gist has no directories"
-        )
+        if posix == README_FILE:
+            continue
 
+        carried.append(posix)
 
-def _requirements_file(manifest: Mapping[str, Any]) -> list[str]:
-    environment = manifest.get("environment")
-
-    if not isinstance(environment, dict):
-        return []
-
-    requirements = environment.get("requirements")
-
-    return [requirements] if isinstance(requirements, str) else []
-
-    return []
+    return carried
 
 
-def _clean_path(value: str) -> str:
-    cleaned = value.strip().replace("\\", "/").strip("/")
+def _skipped(relative: PurePosixPath | Path) -> bool:
+    parts = relative.parts
 
-    if not cleaned or cleaned.startswith("..") or "/.." in cleaned:
-        return ""
+    if parts[0] in PUBLISH_EXCLUDES or parts[0] == WORKSPACE_DIR:
+        return True
 
-    return str(PurePosixPath(cleaned))
+    if any(part.startswith(".") for part in parts):
+        return True
 
-
-def _read_text(directory: Path, path: str) -> str:
-    try:
-        text = (directory / path).read_text(encoding="utf-8")
-    except UnicodeDecodeError as error:
-        raise GistError(
-            f"{path} is not a text file; the gists API holds text only"
-        ) from error
-
-    if "\x00" in text:
-        raise GistError(f"{path} is not a text file; the gists API holds text only")
-
-    return text
+    return relative.name in DROPPINGS or relative.name.endswith("~")
 
 
 def _left_out(directory: Path, carried: set[str]) -> list[str]:
-    skipped = PUBLISH_EXCLUDES | {WORKSPACE_DIR, FILES_DIR}
+    # Reported so the author sees what the gist will not have; the
+    # excluded directories and hidden files are left out silently.
     left: list[str] = []
 
     for path in sorted(directory.rglob("*")):
         relative = path.relative_to(directory)
-
-        if not path.is_file() or relative.parts[0] in skipped:
-            continue
-
-        if relative.name.startswith(".") or relative.parts[0].startswith("."):
-            continue
-
         posix = relative.as_posix()
 
-        if posix != MANIFEST_FILE and posix not in carried:
+        if not path.is_file() or _skipped(relative):
+            continue
+
+        if posix not in carried:
             left.append(posix)
 
     return left
+
+
+def _as_text(data: bytes) -> str | None:
+    # Text the gists API can carry: UTF-8 without NULs, and not blank,
+    # since the API refuses a file holding only white space.
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+    if "\x00" in text or not text.strip():
+        return None
+
+    return text
+
+
+def _wrapped_base64(data: bytes) -> str:
+    encoded = base64.b64encode(data).decode("ascii")
+
+    return "\n".join(textwrap.wrap(encoded, BASE64_WIDTH)) + "\n"
+
+
+def _claim(taken: dict[str, str], flat: str, path: str) -> None:
+    # Gist file names are compared without case, as GitHub and a
+    # checkout on macOS or Windows would.
+    folded = flat.lower()
+
+    if folded in taken:
+        other = taken[folded]
+
+        if other in (README_FILE, TREE_FILE):
+            raise GistError(
+                f"{path} would be named {flat}, which the gist has its own of"
+            )
+
+        raise GistError(f"{path} and {other} would both be named {flat} in the gist")
+
+    if folded.startswith(RESERVED_PREFIX):
+        raise GistError(
+            f"{path} would be named {flat}, and GitHub reserves names "
+            f'starting with "{RESERVED_PREFIX}"'
+        )
+
+    taken[folded] = path
 
 
 def _error_message(error: HTTPError) -> str:

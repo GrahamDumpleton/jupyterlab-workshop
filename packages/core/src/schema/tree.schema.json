@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/tree.schema.json",
+  "title": "Workshop tree",
+  "description": "The workshop-tree.json file of a workshop published as a GitHub gist. A gist holds no directories, so each file of the workshop is stored under a flat name, and this file maps every workshop-relative path to the gist file that holds it. A download of the gist puts each file back at its path and leaves out any gist file not listed. Paths must stay inside the workshop directory and outside its _workshop state directory; the extension also refuses two entries for one path compared without case, a path that is also the directory of another, and two entries reading one gist file.",
+  "type": "object",
+  "required": ["version", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "files": {
+      "type": "array",
+      "description": "Every file of the workshop, workshop.yaml included.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["path", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/definitions/path"
+              },
+              "name": {
+                "type": "string",
+                "description": "The gist file holding the content.",
+                "minLength": 1,
+                "pattern": "^[^/\\\\]+$",
+                "not": {
+                  "pattern": "^(\\.{1,2}|workshop-tree\\.json)$"
+                }
+              },
+              "encoding": {
+                "description": "How the gist file encodes the content, for a file that is not text: base64, which may be wrapped over several lines.",
+                "const": "base64"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["path", "empty"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/definitions/path"
+              },
+              "empty": {
+                "description": "An empty file, which a gist cannot hold, so it has no gist file and is created empty.",
+                "const": true
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "path": {
+      "type": "string",
+      "description": "Workshop-relative POSIX path the file is restored to.",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!_workshop(/|$))(?!.*(^|/)\\.git(/|$))(?!workshop-tree\\.json$)[^/\\\\]+(/[^/\\\\]+)*$",
+      "not": {
+        "pattern": "(^|/)\\.{1,2}(/|$)"
+      }
+    }
+  }
+}

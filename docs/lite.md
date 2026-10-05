@@ -86,6 +86,14 @@ are not all in the site: each is downloaded file by file from its
 repository, as the table above says, which takes longer than a server
 unpacking an archive.
 
+A file-by-file download cannot list a repository, so it fetches the
+manifest, the pages, and the files the pages name with `from`,
+`script`, or the `path` of `file-open` and `notebook-open`; other files,
+such as starter files under `files/`, are not downloaded. A gist
+published by `jupyter workshop gist` lists every file in its
+`workshop-tree.json`, so it arrives complete, each file put back at its
+path; see [A workshop in a gist](publishing.md#a-workshop-in-a-gist).
+
 ## Building a site
 
 `jupyter workshop lite` builds a static site carrying one or more

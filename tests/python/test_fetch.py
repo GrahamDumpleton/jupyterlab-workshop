@@ -287,6 +287,85 @@ class TestFetchWorkshop:
 
         assert not (tmp_path / "workshops" / "demo" / "stale.txt").exists()
 
+    def test_puts_a_gist_with_a_tree_file_back_together(self, tmp_path: Path) -> None:
+        tree = {
+            "version": 1,
+            "files": [
+                {"path": "workshop.yaml", "name": "workshop.yaml"},
+                {"path": "pages/01.md", "name": "pages--01.md"},
+                {
+                    "path": "files/logo.png",
+                    "name": "files--logo.png.base64",
+                    "encoding": "base64",
+                },
+                {"path": "files/pkg/__init__.py", "empty": True},
+            ],
+        }
+        files = {
+            "workshop.yaml": MANIFEST,
+            "pages--01.md": "# One\n",
+            "files--logo.png.base64": "iVBO\nRw0K\n",
+            "README.md": "# Generated\n",
+            "workshop-tree.json": json.dumps(tree),
+        }
+        data = make_tar(files, "abc123-HEAD/")
+        gist = Source("git", "https://gist.github.com/ada/abc123")
+
+        result = fetch_workshop(gist, tmp_path, "workshops", downloader=lambda _: data)
+        target = tmp_path / result.path
+
+        # Each file is back at its path, the generated README and the tree
+        # file are gone, and the source is recorded as usual.
+        assert sorted(
+            path.relative_to(target).as_posix()
+            for path in target.rglob("*")
+            if path.is_file()
+        ) == [
+            "_workshop/source.json",
+            "files/logo.png",
+            "files/pkg/__init__.py",
+            "pages/01.md",
+            "workshop.yaml",
+        ]
+        assert (target / "pages" / "01.md").read_text() == "# One\n"
+        assert (target / "files" / "logo.png").read_bytes() == b"\x89PNG\r\n"
+        assert (target / "files" / "pkg" / "__init__.py").read_bytes() == b""
+
+        # The same files from a repository are taken as they are.
+        repo = Source("git", "https://github.com/ada/flat")
+        plain = fetch_workshop(
+            repo, tmp_path, "plain", downloader=lambda _: make_tar(files)
+        )
+
+        assert (tmp_path / plain.path / "workshop-tree.json").is_file()
+        assert (tmp_path / plain.path / "pages--01.md").is_file()
+
+    def test_refuses_a_gist_tree_that_escapes(self, tmp_path: Path) -> None:
+        tree = {
+            "version": 1,
+            "files": [
+                {"path": "workshop.yaml", "name": "workshop.yaml"},
+                {"path": "../outside.md", "name": "pages--01.md"},
+            ],
+        }
+        data = make_tar(
+            {
+                "workshop.yaml": MANIFEST,
+                "pages--01.md": "# One\n",
+                "workshop-tree.json": json.dumps(tree),
+            },
+            "abc123-HEAD/",
+        )
+        gist = Source("git", "https://gist.github.com/ada/abc123")
+
+        with pytest.raises(FetchError, match="not a file inside the workshop"):
+            fetch_workshop(gist, tmp_path, "workshops", downloader=lambda _: data)
+
+        assert not (tmp_path / "workshops").exists() or not any(
+            (tmp_path / "workshops").iterdir()
+        )
+        assert not (tmp_path / "outside.md").exists()
+
     def test_checks_the_expected_hash(self, tmp_path: Path) -> None:
         data = make_tar({"workshop.yaml": MANIFEST})
         source = Source("archive", "https://x/ws.tar.gz", sha256="0" * 64)

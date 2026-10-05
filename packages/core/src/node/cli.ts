@@ -10,7 +10,6 @@ import { parseCatalog } from '../catalog';
 import { parseCollectionIndex } from '../collection';
 import { lintWorkshop } from '../lint/rules';
 import { ILintMessage, formatLintMessage } from '../lint/types';
-import { referencedFiles } from '../lite';
 import {
   CATALOG_SCHEMA,
   COLLECTION_SCHEMA,
@@ -123,7 +122,6 @@ function usage(): string {
     '                             Print the manifest, collection, catalog or events JSON schema',
     '  check <file.json>          Validate a collection or catalog file, as JSON',
     '  pages <dir>                List page ids and titles as JSON',
-    '  files <dir>                List the pages and the files they refer to as JSON',
     '  draft <recording> <dir> [--name <name>] [--title <title>] [--json]',
     '                             Write draft pages from a recorded session'
   ].join('\n');
@@ -228,27 +226,6 @@ export function main(argv: string[]): number {
               title: page.title,
               requires: page.frontmatter.requires
             })),
-            null,
-            2
-          )}\n`
-        );
-
-        return 0;
-      }
-
-      case 'files': {
-        if (!positional[0]) {
-          throw new Error('files needs a workshop directory');
-        }
-
-        const workshop = loadWorkshopFiles(positional[0], options);
-
-        process.stdout.write(
-          `${JSON.stringify(
-            {
-              pages: workshop.manifest.pages,
-              files: referencedFiles(workshop.pages)
-            },
             null,
             2
           )}\n`

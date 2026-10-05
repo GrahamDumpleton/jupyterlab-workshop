@@ -1,10 +1,14 @@
 import {
+  cleanBase64,
   hashFiles,
+  IWorkshopManifest,
   parseForgeUrl,
   parseManifest,
   parsePage,
+  parseWorkshopTree,
   rawBaseUrl,
-  referencedFiles
+  referencedFiles,
+  TREE_FILE
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
@@ -30,11 +34,23 @@ interface IDownloaded {
   base64?: string;
 }
 
+/** A downloaded workshop: its manifest and files by workshop path. */
+interface IDownloadedWorkshop {
+  manifest: IWorkshopManifest;
+
+  /** Text files, the manifest and pages included. */
+  texts: Record<string, string>;
+
+  /** Other files, as base64. */
+  binaries: Record<string, string>;
+}
+
 /**
  * Download a workshop file by file from a git forge into the browser's
  * contents, the way JupyterLite has to do it without a server: the
  * manifest first, then every page, then the files the pages refer to.
- * The trust hash is computed over the text files, as for a local
+ * A gist holding a tree file is downloaded by the tree instead, every
+ * file it lists put back at its path. The trust hash is computed over the text files, as for a local
  * workshop.
  */
 export async function fetchWorkshopFiles(
@@ -58,34 +74,13 @@ export async function fetchWorkshopFiles(
     throw new Error(`Cannot work out the repository from ${url}`);
   }
 
+  // A gist published by `jupyter workshop gist` holds its files flat,
+  // with a tree file saying where each one goes back.
   const base = rawBaseUrl(source);
-  const manifestSource = await fetchText(`${base}workshop.yaml`);
-  const manifest = parseManifest(manifestSource, 'workshop.yaml');
-  const texts: Record<string, string> = { 'workshop.yaml': manifestSource };
-
-  // Pages are required; files they mention are fetched when present.
-  for (const pagePath of manifest.pages) {
-    texts[pagePath] = await fetchText(`${base}${pagePath}`);
-  }
-
-  const pages = manifest.pages.map(pagePath =>
-    parsePage(texts[pagePath], { path: pagePath, variables: {} })
-  );
-  const binaries: Record<string, string> = {};
-
-  for (const path of referencedFiles(pages)) {
-    if (path in texts) {
-      continue;
-    }
-
-    const downloaded = await fetchOptional(`${base}${path}`);
-
-    if (downloaded?.text !== undefined) {
-      texts[path] = downloaded.text;
-    } else if (downloaded?.base64 !== undefined) {
-      binaries[path] = downloaded.base64;
-    }
-  }
+  const downloaded =
+    (source.host === 'gist.github.com' ? await downloadTree(base) : null) ??
+    (await downloadReferenced(base));
+  const { manifest, texts, binaries } = downloaded;
 
   // The directory is named after the workshop, like a server download,
   // unless the request names one.
@@ -141,6 +136,103 @@ export async function fetchWorkshopFiles(
   );
 
   return { path: target, name: request.name || manifest.name, sha256 };
+}
+
+/**
+ * Download the manifest, every page, and the files the pages refer to
+ * that exist, which is all a file-by-file download can find without a
+ * listing of the repository.
+ */
+async function downloadReferenced(base: string): Promise<IDownloadedWorkshop> {
+  const manifestSource = await fetchText(`${base}workshop.yaml`);
+  const manifest = parseManifest(manifestSource, 'workshop.yaml');
+  const texts: Record<string, string> = { 'workshop.yaml': manifestSource };
+
+  // Pages are required; files they mention are fetched when present.
+  for (const pagePath of manifest.pages) {
+    texts[pagePath] = await fetchText(`${base}${pagePath}`);
+  }
+
+  const pages = manifest.pages.map(pagePath =>
+    parsePage(texts[pagePath], { path: pagePath, variables: {} })
+  );
+  const binaries: Record<string, string> = {};
+
+  for (const path of referencedFiles(pages)) {
+    if (path in texts) {
+      continue;
+    }
+
+    const downloaded = await fetchOptional(`${base}${path}`);
+
+    if (downloaded?.text !== undefined) {
+      texts[path] = downloaded.text;
+    } else if (downloaded?.base64 !== undefined) {
+      binaries[path] = downloaded.base64;
+    }
+  }
+
+  return { manifest, texts, binaries };
+}
+
+/**
+ * Download the files a gist's tree file lists, each keyed by the path it
+ * goes back to, or return null when the gist has no tree file. The tree
+ * is validated first, so a path outside the workshop is refused before
+ * anything is downloaded, and gist files it does not list are left out.
+ */
+async function downloadTree(base: string): Promise<IDownloadedWorkshop | null> {
+  const listed = await fetchOptional(`${base}${TREE_FILE}`);
+
+  if (!listed) {
+    return null;
+  }
+
+  let data: unknown;
+
+  try {
+    data = JSON.parse(listed.text ?? '') as unknown;
+  } catch {
+    throw new Error(`${TREE_FILE} is not valid JSON`);
+  }
+
+  const tree = parseWorkshopTree(data);
+  const texts: Record<string, string> = {};
+  const binaries: Record<string, string> = {};
+
+  for (const entry of tree.files) {
+    if (entry.empty || entry.name === undefined) {
+      texts[entry.path] = '';
+
+      continue;
+    }
+
+    const content = await fetchText(`${base}${encodeURIComponent(entry.name)}`);
+
+    if (entry.encoding === 'base64') {
+      try {
+        binaries[entry.path] = cleanBase64(content);
+      } catch {
+        throw new Error(
+          `${entry.name}, holding ${entry.path}, is not valid base64`
+        );
+      }
+    } else {
+      texts[entry.path] = content;
+    }
+  }
+
+  const manifest = parseManifest(texts['workshop.yaml'], 'workshop.yaml');
+
+  for (const pagePath of manifest.pages) {
+    if (!(pagePath in texts)) {
+      throw new Error(
+        `Page ${pagePath} is not among the files ${TREE_FILE} lists`
+      );
+    }
+  }
+
+  return { manifest, texts, binaries };
 }
 
 /**

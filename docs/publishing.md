@@ -104,48 +104,72 @@ under test](cli.md#test).
 
 ## A workshop in a gist
 
-A small workshop, instructions and inline actions with at most a few
-text files alongside, fits in a [GitHub gist](https://gist.github.com).
-A gist is a git repository whose name is its id, and the extension
-fetches it the way it fetches any repository: the server downloads its
-archive, and JupyterLite reads its raw files. The one difference is that
-a gist holds no directories, so every file sits beside the manifest.
+A small workshop, instructions and inline actions with a few files
+alongside, fits in a [GitHub gist](https://gist.github.com). A gist is a
+git repository whose name is its id, and the extension fetches it the
+way it fetches any repository: the server downloads its archive, and
+JupyterLite reads its raw files. The one difference is that a gist
+holds no directories, so every file sits beside the manifest.
 
-`jupyter workshop gist` makes the flat copy. Each file keeps its name
-with the directory separators turned into `--`, which keeps the origin
-of a file visible, groups the pages together in the gist's alphabetical
-listing, and avoids clashes between directories; the manifest and the
-directive options that named a file are rewritten to match:
+`jupyter workshop gist` makes the flat copy. Each file is stored under
+its path with the directory separators turned into `--`, which keeps
+the origin of a file visible and groups a directory's files together in
+the gist's alphabetical listing, and a `workshop-tree.json` beside them
+maps every path back to the gist file that holds it:
 
 ```
 workshop.yaml
+workshop-tree.json
 pages--01-welcome.md
 pages--02-finish.md
-templates--notes.md
+files--data.csv
 ```
 
-```yaml
-pages:
-  - pages--01-welcome.md
-  - pages--02-finish.md
+```json
+{
+  "version": 1,
+  "files": [
+    { "path": "workshop.yaml", "name": "workshop.yaml" },
+    { "path": "pages/01-welcome.md", "name": "pages--01-welcome.md" },
+    { "path": "pages/02-finish.md", "name": "pages--02-finish.md" },
+    { "path": "files/data.csv", "name": "files--data.csv" }
+  ]
+}
 ```
 
-The command carries the manifest, the pages, the files the pages refer
-to with `from`, `script` or `path`, and the requirements file, lints
-the source and the flat copy, and writes the copy under `dist/gist/`.
-It also writes a `README.md`, which GitHub shows first on the gist
-page, with the workshop's details from the manifest and how to open it,
-including a button that launches it in JupyterLite when the manifest
-lists that frontend. With `--create` it makes the gist, secret unless
-`--public`, and prints its address; with `--update` it replaces the
-files of an existing one, as a new revision in the gist's history; see
-[gist](cli.md#gist) for the token it needs. A gist written by hand can
-use any names, since the extension treats page paths as given.
+Nothing in the workshop is rewritten. When the extension downloads a
+gist that holds a tree file, it puts every file back at its path before
+the workshop opens, so the manifest, the pages and any links between
+them work as written, and starter files under `files/` seed the
+workspace as they do from a repository. The tree is authoritative: a
+gist file it does not list, such as the generated `README.md`, is left
+out. Every path must stay inside the workshop directory and outside its
+`_workshop` state directory, and a tree that breaks that, or that lists
+one path twice, is refused before anything is written. The format is
+described by
+[`tree.schema.json`](https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/tree.schema.json).
 
-Two things cannot be a gist: starter files under `files/`, which are
-copied into the workspace as a directory when the workshop opens, and
-binary files, which the gists API does not carry. A workshop with
-either is refused.
+The command carries the files `jupyter workshop publish` would archive,
+less hidden files, editor droppings and the workshop's own `README.md`.
+The gists API carries text only, so a file that is not text, such as an
+image, is stored as base64 under a name ending `.base64` and marked so
+in the tree, and an empty file, which a gist cannot hold, is recorded in
+the tree alone. The command lints the source, writes the copy under
+`dist/gist/`, then puts the copy back together the way a download would
+and lints that. It also writes a `README.md`, which GitHub shows first
+on the gist page, with the workshop's details from the manifest and how
+to open it, including a button that launches it in JupyterLite when the
+manifest lists that frontend. With `--create` it makes the gist, secret
+unless `--public`, and prints its address; with `--update` it replaces
+the files of an existing one, as a new revision in the gist's history;
+see [gist](cli.md#gist) for the token it needs.
+
+A file's content can be edited on the gist page, but a file added or
+renamed there is not in the tree and is left out, so make such changes
+in the workshop and run the command again with `--update`. A gist
+written by hand needs no tree file: without one, its files are taken as
+they are, with the pages beside the manifest and the manifest naming
+them as they appear in the gist.
 
 The gist's page URL is the source, for the "Open Workshop from URL…"
 command, a `git` entry in a collection, or a launch link:

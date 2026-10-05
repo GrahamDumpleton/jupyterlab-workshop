@@ -30,8 +30,12 @@ A workshop is opened from one of these sources:
   name is its id, so its page URL
   `https://gist.github.com/owner/fee514f3051b532e3f790c2ae7068ed7` is
   the source, and the permalink of one of its revisions, with the commit
-  after the id, pins that revision. Gists hold no directories, so the
-  pages sit beside the manifest; see [A workshop in a
+  after the id, pins that revision. Gists hold no directories, so a
+  gist published by `jupyter workshop gist` carries a
+  `workshop-tree.json` saying where each file goes back. Its paths are
+  checked before anything is written: one outside the workshop
+  directory, or inside its `_workshop` state directory where the trust
+  record lives, refuses the whole download; see [A workshop in a
   gist](publishing.md#a-workshop-in-a-gist).
 
 - A direct `.zip` or `.tar.gz` URL, handled the same way.

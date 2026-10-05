@@ -1,6 +1,7 @@
 import catalog from './catalog.schema.json';
 import collection from './collection.schema.json';
 import events from './events.schema.json';
+import tree from './tree.schema.json';
 import schema from './workshop.schema.json';
 
 /** JSON Schema (draft 7) describing the `workshop.yaml` manifest. */
@@ -14,3 +15,6 @@ export const CATALOG_SCHEMA: Readonly<Record<string, unknown>> = catalog;
 
 /** JSON Schema (draft 7) describing the progress events a workshop reports. */
 export const EVENTS_SCHEMA: Readonly<Record<string, unknown>> = events;
+
+/** JSON Schema (draft 7) describing the tree file of a workshop in a gist. */
+export const TREE_SCHEMA: Readonly<Record<string, unknown>> = tree;

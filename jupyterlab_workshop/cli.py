@@ -13,6 +13,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,7 @@ from .install import DEFAULT_DIRECTORY, install_collection
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
+from .tree import TreeError, restore_tree
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -1192,22 +1194,13 @@ def command_gist(args: argparse.Namespace) -> int:
     directory = _workshop_dir(args.directory)
     lint_options = ["--frontend", args.frontend] if args.frontend else []
 
-    # The source is linted first, so what goes out has been checked, and
-    # the core bundle lists the files the pages refer to, which ride along.
+    # The source is linted first, so what goes out has been checked.
     if (status := _lint(directory, lint_options)) != 0:
         return status
-
-    listed = run_node(["files", str(directory)])
-
-    if listed.returncode != 0:
-        sys.stderr.write(listed.stderr or listed.stdout)
-
-        return listed.returncode
 
     try:
         flat = flatten_workshop(
             directory,
-            json.loads(listed.stdout)["files"],
             site=args.site,
             append_readme=args.append_readme,
             python=args.python,
@@ -1217,7 +1210,7 @@ def command_gist(args: argparse.Namespace) -> int:
         raise CliError(str(error)) from error
 
     for path, name in flat.renames.items():
-        print(f"renamed {path} -> {name}")
+        print(f"stored {path} as {name}")
 
     for path in flat.left_out:
         print(f"left out {path}")
@@ -1229,9 +1222,18 @@ def command_gist(args: argparse.Namespace) -> int:
 
     print(f"wrote {target}")
 
-    # The flat copy is linted as well, since the rewrite is what is published.
-    if (status := _lint(target, lint_options)) != 0:
-        raise CliError("The flat copy does not lint clean; see above")
+    # The flat copy is put back together the way a download of the gist
+    # would be, and that is linted, so what learners get has been checked.
+    with tempfile.TemporaryDirectory(prefix="workshop-gist-") as tmp:
+        restored = Path(tmp) / flat.name
+
+        try:
+            restore_tree(target, restored)
+        except TreeError as error:
+            raise CliError(f"The flat copy does not restore: {error}") from error
+
+        if (status := _lint(restored, lint_options)) != 0:
+            raise CliError("The restored flat copy does not lint clean; see above")
 
     if not args.create and not args.update:
         return 0
