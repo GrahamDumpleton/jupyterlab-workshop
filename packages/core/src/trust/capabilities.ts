@@ -16,7 +16,8 @@ export const CAPABILITY_NAMES: readonly Capability[] = [
   'install-packages',
   'kernel-exec',
   'auto-run',
-  'ui-settings'
+  'ui-settings',
+  'web-proxy'
 ];
 
 /** One-line explanations shown in the trust dialog. */
@@ -28,7 +29,9 @@ export const CAPABILITY_DESCRIPTIONS: Readonly<Record<Capability, string>> = {
   'install-packages': 'Install packages.',
   'kernel-exec': 'Run code in kernels, including in the background.',
   'auto-run': 'Run actions automatically without a click.',
-  'ui-settings': 'Change settings of the editor the workshop runs in.'
+  'ui-settings': 'Change settings of the editor the workshop runs in.',
+  'web-proxy':
+    'Show web apps the workshop starts through the Jupyter server, which forwards their port to the browser.'
 };
 
 /** A capability the pages use, with how often. */
@@ -58,9 +61,28 @@ export function actionCapability(type: string): Capability | null {
 }
 
 /**
+ * A URL that goes through the Jupyter server's web proxy
+ * (jupyter-server-proxy) to a port on the machine the server runs on:
+ * one built from `{{ jupyter_url }}` followed by `proxy/`, or an
+ * absolute URL whose path holds `/proxy/<port>/`, `/proxy/absolute/<port>/`
+ * or the `<host>:<port>` forms of either, which is how such a URL reads
+ * once the variable has its value.
+ */
+export function isProxyUrl(url: string): boolean {
+  if (/^\s*\{\{\s*jupyter_url\s*\}\}\s*proxy\//.test(url)) {
+    return true;
+  }
+
+  return /^https?:\/\/[^/]+\/(?:[^?#]*\/)?proxy\/(?:absolute\/)?(?:[^/:@?#]+:)?\d+(?:[/?#]|$)/i.test(
+    url.trim()
+  );
+}
+
+/**
  * The capability a particular directive needs, taking its options into
  * account: a verify that runs code needs the kernel, one that only looks
- * at files or the interface needs nothing.
+ * at files or the interface needs nothing, and a `url-open` of a page
+ * served through the Jupyter server's web proxy needs `web-proxy`.
  */
 export function effectiveCapability(
   type: string,
@@ -72,6 +94,10 @@ export function effectiveCapability(
     return substrate && (CODE_SUBSTRATES as string[]).includes(substrate)
       ? 'kernel-exec'
       : 'none';
+  }
+
+  if (type === 'url-open' && isProxyUrl(options.url ?? '')) {
+    return 'web-proxy';
   }
 
   return actionCapability(type);

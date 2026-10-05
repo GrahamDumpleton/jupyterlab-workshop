@@ -73,6 +73,7 @@ capabilities:
 | `kernel-exec`      | Running code in kernels, including background captures.              |
 | `auto-run`         | Actions with `auto` or `cascade` options that run without a click.   |
 | `ui-settings`      | Changing settings of the editor the workshop runs in.                |
+| `web-proxy`        | Showing a page through the Jupyter server's web proxy (`url-open`).  |
 
 Each capability is a name; none carries a value. Every one gates an
 action type, so the dialog shows only what the extension enforces. There

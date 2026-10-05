@@ -56,7 +56,10 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     user: 'learner',
     host: 'local',
     container: 'false',
-    frontend: 'jupyterlab'
+    frontend: 'jupyterlab',
+    jupyter_url: 'http://localhost:8888/',
+    jupyter_path: '/',
+    web_proxy: 'false'
   },
   macos: {
     platform: 'macos',
@@ -68,7 +71,10 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     user: 'learner',
     host: 'local',
     container: 'false',
-    frontend: 'jupyterlab'
+    frontend: 'jupyterlab',
+    jupyter_url: 'http://localhost:8888/',
+    jupyter_path: '/',
+    web_proxy: 'false'
   },
   windows: {
     platform: 'windows',
@@ -80,7 +86,10 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     user: 'learner',
     host: 'local',
     container: 'false',
-    frontend: 'jupyterlab'
+    frontend: 'jupyterlab',
+    jupyter_url: 'http://localhost:8888/',
+    jupyter_path: '/',
+    web_proxy: 'false'
   },
   emscripten: {
     platform: 'emscripten',
@@ -92,7 +101,10 @@ const BUILTINS: Readonly<Record<string, Variables>> = {
     user: 'web_user',
     host: 'static',
     container: 'false',
-    frontend: 'jupyterlite'
+    frontend: 'jupyterlite',
+    jupyter_url: 'http://localhost:8000/',
+    jupyter_path: '/',
+    web_proxy: 'false'
   }
 };
 

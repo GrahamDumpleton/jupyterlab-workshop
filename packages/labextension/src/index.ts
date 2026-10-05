@@ -108,7 +108,7 @@ import {
   PanelCloseAction,
   SettingsSetAction
 } from './actions/ui';
-import { UrlOpenAction, UrlPanes } from './actions/url';
+import { jupyterUrl, UrlOpenAction, UrlPanes } from './actions/url';
 import { AnalyticsRecorder, HeartbeatTimer } from './analytics';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
@@ -232,7 +232,8 @@ const managerPlugin: JupyterFrontEndPlugin<IWorkshopManager> = {
       settings: settingRegistry,
       features,
       kernelspecs: app.serviceManager.kernelspecs,
-      fileBrowser
+      fileBrowser,
+      jupyterUrl: jupyterUrl(app.serviceManager.serverSettings)
     });
 
     // Progress events go to the workshop's events file and any sink; the
@@ -554,7 +555,13 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     // browser reload and closed with the workshop.
     const panes = new UrlPanes({ app, layouts });
 
-    registry.register(new UrlOpenAction(panes));
+    registry.register(
+      new UrlOpenAction(
+        panes,
+        jupyterUrl(app.serviceManager.serverSettings),
+        () => manager.platform?.web_proxy === true
+      )
+    );
 
     app.commands.addCommand(CommandIDs.urlPane, {
       label: 'Workshop: URL Pane',

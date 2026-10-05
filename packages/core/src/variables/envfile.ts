@@ -23,6 +23,9 @@ export const BUILTIN_VARIABLES: readonly string[] = [
   'host',
   'container',
   'frontend',
+  'jupyter_url',
+  'jupyter_path',
+  'web_proxy',
   'missing_tools'
 ];
 

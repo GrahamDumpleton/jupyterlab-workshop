@@ -153,6 +153,8 @@ export class WorkshopManager implements IWorkshopManager {
     this._settings = options.settings ?? null;
     this._features = options.features ?? null;
     this._kernelspecs = options.kernelspecs ?? null;
+    this._jupyterUrl =
+      options.jupyterUrl ?? new URL('/', window.location.href).href;
     this._state = new StateStore(options.contents);
     this._envWriter = new Debouncer(() => this._writeEnvFiles(), 300);
     this._reloader = new Debouncer(() => this.reload(), 300);
@@ -421,7 +423,7 @@ export class WorkshopManager implements IWorkshopManager {
       const pathSep = platform.path_sep;
       const declared = this._collectDeclared(manifest, sources);
       const defaults: Variables = {
-        ...buildBuiltins(workshopPath, platform)
+        ...buildBuiltins(workshopPath, platform, this._jupyterUrl)
       };
 
       for (const definition of manifest.variables) {
@@ -573,7 +575,7 @@ export class WorkshopManager implements IWorkshopManager {
         fresh: !this._state.existed
       };
       this._store.load(
-        buildBuiltins(workshopPath, platform),
+        buildBuiltins(workshopPath, platform, this._jupyterUrl),
         manifest.variables,
         state.variables
       );
@@ -713,7 +715,7 @@ export class WorkshopManager implements IWorkshopManager {
       // so it is rebuilt; the decision itself stands.
       const declared = this._collectDeclared(manifest, sources);
       const defaults: Variables = {
-        ...buildBuiltins(workshop.path, platform)
+        ...buildBuiltins(workshop.path, platform, this._jupyterUrl)
       };
 
       for (const definition of manifest.variables) {
@@ -757,7 +759,7 @@ export class WorkshopManager implements IWorkshopManager {
       }
 
       this._store.load(
-        buildBuiltins(workshop.path, platform),
+        buildBuiltins(workshop.path, platform, this._jupyterUrl),
         manifest.variables,
         this._store.persistable()
       );
@@ -2443,6 +2445,7 @@ export class WorkshopManager implements IWorkshopManager {
         hub_user: '',
         host: 'local',
         container: false,
+        web_proxy: false,
         frontend: 'jupyterlab',
         frontend_version: '',
         instance_id: randomId()
@@ -2719,6 +2722,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _envRefresher: (() => Promise<void>) | null = null;
   private _reloader: Debouncer;
   private _kernelspecs: KernelSpec.IManager | null;
+  private _jupyterUrl: string;
   private _authoring = false;
   private _features: IFeaturePolicy | null;
   private _workshop: ILoadedWorkshop | null = null;
@@ -2766,6 +2770,12 @@ export namespace WorkshopManager {
      * registers a kernel so notebooks can be opened on it at once.
      */
     kernelspecs?: KernelSpec.IManager | null;
+
+    /**
+     * The Jupyter server's absolute address as the browser reaches it,
+     * for the `jupyter_url` and `jupyter_path` built-ins.
+     */
+    jupyterUrl?: string;
   }
 }
 
@@ -2795,7 +2805,8 @@ function emptyEnvironment(kernel: string): IEnvironmentStatus {
 
 function buildBuiltins(
   workshopPath: string,
-  platform: IPlatformInfo
+  platform: IPlatformInfo,
+  jupyterUrl: string
 ): Variables {
   return {
     platform: platform.os,
@@ -2807,7 +2818,10 @@ function buildBuiltins(
     user: platform.user,
     host: platform.host,
     container: platform.container ? 'true' : 'false',
-    frontend: platform.frontend
+    frontend: platform.frontend,
+    jupyter_url: jupyterUrl,
+    jupyter_path: new URL(jupyterUrl).pathname,
+    web_proxy: platform.web_proxy ? 'true' : 'false'
   };
 }
 

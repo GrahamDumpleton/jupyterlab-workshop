@@ -14,7 +14,8 @@ export type Capability =
   | 'install-packages'
   | 'kernel-exec'
   | 'auto-run'
-  | 'ui-settings';
+  | 'ui-settings'
+  | 'web-proxy';
 
 /** How the body of a directive is used. */
 export type BodyKind = 'required' | 'optional' | 'none' | 'markdown' | 'yaml';

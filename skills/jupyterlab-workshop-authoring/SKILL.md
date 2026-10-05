@@ -144,8 +144,10 @@ files inside the workspace only; the pages, manifest and `files/` are
 never writable), `kernel-exec` (run code in kernels; also needed by code
 checks), `install-packages` (needed by `environment`), `auto-run`
 (actions that run without a click: `:auto:` and `:cascade:`),
-`ui-settings`. Declare exactly what the pages use; lint reports both
-missing and unused capabilities.
+`ui-settings`, `web-proxy` (a `url-open` of a page served through the
+Jupyter server's web proxy, `{{ jupyter_url }}proxy/<port>/`). Declare
+exactly what the pages use; lint reports both missing and unused
+capabilities.
 
 Other fields: `instructions` (`side` and `width` of the instructions
 panel, workshop-wide), `sidebar` (the other sidebar on opening: `hidden`,
@@ -246,9 +248,12 @@ separator; `\{{` escapes. Built-ins: `platform` (`linux`, `macos`,
 `windows` or `emscripten` in JupyterLite), `frontend` (`jupyterlab` or
 `jupyterlite`), `shell`, `path_sep`, `home`, `user`, `workshop_dir`,
 `workspace`, `host` (`binder`, `codespaces`, `jupyterhub`, `local` or
-`static` for a JupyterLite site) and `container` (`true` inside a
-container). Values come from the manifest defaults, launch links,
-forms, captures and the variables panel.
+`static` for a JupyterLite site), `container` (`true` inside a
+container), `jupyter_url` (JupyterLab's own absolute address, ending in
+`/`), `jupyter_path` (its path, `/` or `/user/<name>/`) and `web_proxy`
+(`true` when jupyter-server-proxy is loaded). Values come from the
+manifest defaults, launch links, forms, captures and the variables
+panel.
 
 Conditional content: `{when}` blocks (` ```{when} track == "pip" `) and
 the `:when:` option on any directive. Conditions use `==`, `!=`, `in`,
@@ -285,7 +290,7 @@ the editor actions point at text.
 
 ### Links and web pages
 
-Four ways to point the learner at a web page, and when each fits:
+Five ways to point the learner at a web page, and when each fits:
 
 - A plain Markdown link, `[the docs](https://...)`, for a page the
   learner reads once. It opens in a new browser tab and JupyterLab stays
@@ -300,6 +305,16 @@ Four ways to point the learner at a web page, and when each fits:
   and nothing can detect that, so try each URL once. Build the URL from
   variables where a host or port can differ, `https://{{ app_host }}/`;
   the action waits until every variable in it has a value.
+
+- `url-open` with `:pane:` and `{{ jupyter_url }}proxy/{{ server_port }}/`
+  for an app the workshop starts, where the Jupyter server has
+  jupyter-server-proxy (Binder, a hub, a container image that installs
+  it): a loopback address only reaches the server when the browser is
+  on the same machine. It needs the `web-proxy` capability. Put it
+  under `:when: web_proxy`, with a loopback `url-open` beside it under
+  `:when: not web_proxy`, and tell an app that writes absolute links
+  its prefix, `{{ jupyter_path }}proxy/{{ server_port }}/`. See
+  `url-open` in `references/actions.md`.
 
 - `url-open` without `:pane:` when an action, rather than a link, should
   open the tab: once a variable is known, or as a step in a sequence.

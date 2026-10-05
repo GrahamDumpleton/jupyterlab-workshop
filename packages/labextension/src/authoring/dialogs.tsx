@@ -32,7 +32,8 @@ const CAPABILITIES: readonly string[] = [
   'kernel-exec',
   'install-packages',
   'auto-run',
-  'ui-settings'
+  'ui-settings',
+  'web-proxy'
 ];
 
 /**

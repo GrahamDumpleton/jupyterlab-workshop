@@ -41,6 +41,9 @@ except ImportError:
 #: Files whose presence marks a container runtime.
 CONTAINER_FILES = (".dockerenv", "run/.containerenv")
 
+#: The server extension that serves the web proxy at ``<base>/proxy/``.
+WEB_PROXY_EXTENSION = "jupyter_server_proxy"
+
 #: Words in the cgroup of process 1 that name a container runtime.
 CONTAINER_CGROUP_WORDS = ("docker", "kubepods", "containerd", "podman", "lxc")
 
@@ -66,6 +69,10 @@ class PlatformInfo:
 
     #: Whether the server runs inside a container.
     container: bool = False
+
+    #: Whether the server has the web proxy (jupyter-server-proxy) loaded,
+    #: which forwards ``<base>/proxy/<port>/`` to a port on its machine.
+    web_proxy: bool = False
 
     #: The frontend served: jupyterlab here; JupyterLite reports its own.
     frontend: str = FRONTEND
@@ -94,6 +101,7 @@ def detect_platform(
     root_dir: str,
     container: bool = False,
     instance_id: str = "",
+    web_proxy: bool = False,
 ) -> PlatformInfo:
     """Derive platform information from explicit inputs.
 
@@ -106,6 +114,7 @@ def detect_platform(
     none of them, a container reports ``container`` as its host so that
     sessions in one are told apart from those on a learner's own machine.
     ``instance_id`` identifies the running server; see :func:`instance_id`.
+    ``web_proxy`` is the result of :func:`has_web_proxy`.
     """
 
     os_name = _os_name(system)
@@ -123,7 +132,22 @@ def detect_platform(
         host=_host_name(environ, container),
         container=container,
         instance_id=instance_id,
+        web_proxy=web_proxy,
     )
+
+
+def has_web_proxy(extensions: Mapping[str, object]) -> bool:
+    """Whether the server's extensions include an enabled web proxy.
+
+    ``extensions`` is the server's extension manager's mapping of package
+    names to extension packages, each with an ``enabled`` attribute. The
+    proxy registers its routes when it loads, so an enabled package is
+    one whose ``proxy/`` addresses the server answers.
+    """
+
+    package = extensions.get(WEB_PROXY_EXTENSION)
+
+    return bool(getattr(package, "enabled", False))
 
 
 def detect_container(environ: Mapping[str, str], fs_root: Path) -> bool:
@@ -153,9 +177,13 @@ def detect_container(environ: Mapping[str, str], fs_root: Path) -> bool:
 
 
 def current_platform(
-    *, shell_command: Sequence[str] | None, root_dir: str
+    *, shell_command: Sequence[str] | None, root_dir: str, web_proxy: bool = False
 ) -> PlatformInfo:
-    """Detect the platform of the running process."""
+    """Detect the platform of the running process.
+
+    ``web_proxy`` comes from the server rather than the process, so the
+    caller works it out with :func:`has_web_proxy`.
+    """
 
     return detect_platform(
         system=platform_module.system(),
@@ -166,6 +194,7 @@ def current_platform(
         root_dir=root_dir,
         container=detect_container(os.environ, Path("/")),
         instance_id=instance_id(),
+        web_proxy=web_proxy,
     )
 
 

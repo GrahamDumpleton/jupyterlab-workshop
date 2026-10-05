@@ -38,7 +38,7 @@ from .environment import (
     remove_environment,
 )
 from .fetch import FetchError, fetch_workshop, parse_source, remove_workshop
-from .platform import current_platform
+from .platform import current_platform, has_web_proxy
 from .publish import PublishError, publish_workshop
 from .scaffold import TEMPLATES, slug, write_scaffold
 
@@ -91,9 +91,15 @@ class PlatformHandler(WorkshopHandler):
 
     @tornado.web.authenticated
     def get(self) -> None:
+        # The web proxy is another server extension, so it is the server's
+        # extension manager, not the process, that knows whether it loaded.
+        serverapp = self.serverapp
+        extensions = serverapp.extension_manager.extensions if serverapp else {}
+
         info = current_platform(
             shell_command=_configured_shell_command(self.settings),
             root_dir=str(self.root_dir),
+            web_proxy=has_web_proxy(extensions),
         )
 
         self.finish(json.dumps(info.to_dict()))

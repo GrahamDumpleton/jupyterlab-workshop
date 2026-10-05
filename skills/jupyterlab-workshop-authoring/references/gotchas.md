@@ -159,6 +159,18 @@ GIT_PAGER: cat }`; a workshop that teaches `less` leaves it unset and
   over http cannot be framed at all when JupyterLab itself is served
   over https; the action opens a new tab then, and lint warns.
 
+- **The app shows on the author's machine but not on Binder or a hub.**
+  `http://127.0.0.1:<port>/` reaches the server only when the browser
+  runs on the machine the server does. Where the Jupyter server has
+  jupyter-server-proxy, show the app through it instead, at
+  `{{ jupyter_url }}proxy/{{ server_port }}/` under `:when: web_proxy`,
+  with the `web-proxy` capability, and keep the loopback `url-open` for
+  `not web_proxy`. An app that writes absolute links (`/static/app.css`,
+  `/table?sort=x`) escapes the proxy's prefix and breaks; give it the
+  prefix, `{{ jupyter_path }}proxy/{{ server_port }}/`, through its own
+  setting (a base URL, root path or prefix option) when `web_proxy` is
+  true.
+
 - **A `url-open` that should run on its own does nothing.** A new
   browser tab is only allowed on a click, so an action with `:auto:`
   and no `:pane:` is refused by the browser. Give it a pane.

@@ -387,7 +387,8 @@
         "install-packages",
         "kernel-exec",
         "auto-run",
-        "ui-settings"
+        "ui-settings",
+        "web-proxy"
       ]
     },
     "analytics": {

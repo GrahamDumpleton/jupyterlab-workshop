@@ -87,7 +87,7 @@ learner need not watch.
 ## Capabilities and trust
 
 Every action type needs a capability: `terminal`, `write-files`,
-`kernel-exec`, `install-packages`, `ui-settings`, or none.
+`kernel-exec`, `install-packages`, `ui-settings`, `web-proxy`, or none.
 The manifest declares the capabilities the workshop uses, and an action
 whose capability is not declared never runs. When a workshop opens, the
 trust dialog shows the source, a content hash, the declared capabilities

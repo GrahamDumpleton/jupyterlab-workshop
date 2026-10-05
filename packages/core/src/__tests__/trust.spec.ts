@@ -6,6 +6,7 @@ import {
   declaredCapabilities,
   undeclaredCapabilities
 } from '../trust/capabilities';
+import { effectiveCapability, isProxyUrl } from '../trust/capabilities';
 import { decideAction } from '../trust/policy';
 
 const MANIFEST = `
@@ -84,8 +85,90 @@ describe('capabilities', () => {
   });
 });
 
+describe('isProxyUrl', () => {
+  it('knows a page addressed through the web proxy, before and after substitution', () => {
+    expect(isProxyUrl('{{ jupyter_url }}proxy/{{ server_port }}/')).toBe(true);
+    expect(isProxyUrl('{{jupyter_url}}proxy/8001/planets')).toBe(true);
+    expect(isProxyUrl('https://hub.example.org/user/ada/proxy/8001/')).toBe(
+      true
+    );
+    expect(isProxyUrl('http://localhost:8888/proxy/8001')).toBe(true);
+    expect(isProxyUrl('http://localhost:8888/proxy/absolute/8001/x?y=1')).toBe(
+      true
+    );
+    expect(isProxyUrl('https://hub.example.org/proxy/localhost:8001/')).toBe(
+      true
+    );
+
+    expect(isProxyUrl('{{ jupyter_url }}lab/tree/notes.md')).toBe(false);
+    expect(isProxyUrl('http://127.0.0.1:8001/')).toBe(false);
+    expect(isProxyUrl('https://example.com/proxy/settings')).toBe(false);
+    expect(isProxyUrl('https://example.com/?next=/proxy/8001/')).toBe(false);
+  });
+
+  it('makes a url-open of such a page need web-proxy', () => {
+    expect(
+      effectiveCapability('url-open', {
+        url: '{{ jupyter_url }}proxy/8001/',
+        pane: 'app'
+      })
+    ).toBe('web-proxy');
+    expect(
+      effectiveCapability('url-open', { url: 'http://127.0.0.1:8001/' })
+    ).toBe('none');
+  });
+});
+
 describe('decideAction', () => {
   const declared = ['terminal', 'write-files', 'kernel-exec', 'auto-run'];
+
+  it('gates a proxied page on the web-proxy capability', () => {
+    const options = { url: 'https://hub.example.org/user/ada/proxy/8001/' };
+
+    expect(
+      decideAction({
+        type: 'url-open',
+        options,
+        level: 'trusted',
+        automatic: false,
+        declared
+      })
+    ).toMatchObject({
+      kind: 'reject',
+      reason: expect.stringContaining('web-proxy')
+    });
+
+    const withProxy = [...declared, 'web-proxy'];
+
+    expect(
+      decideAction({
+        type: 'url-open',
+        options,
+        level: 'trusted',
+        automatic: false,
+        declared: withProxy
+      })
+    ).toEqual({ kind: 'run' });
+    expect(
+      decideAction({
+        type: 'url-open',
+        options,
+        level: 'restricted',
+        automatic: false,
+        declared: withProxy
+      })
+    ).toMatchObject({ kind: 'confirm' });
+    expect(
+      decideAction({
+        type: 'url-open',
+        options,
+        level: 'trusted',
+        automatic: false,
+        declared: withProxy,
+        disabled: ['web-proxy']
+      })
+    ).toMatchObject({ kind: 'skip' });
+  });
 
   it('runs everything when trusted', () => {
     expect(

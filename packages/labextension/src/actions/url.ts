@@ -1,5 +1,6 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { MainAreaWidget, WidgetTracker } from '@jupyterlab/apputils';
+import { ServerConnection } from '@jupyterlab/services';
 import { Widget } from '@lumino/widgets';
 
 import { LayoutManager } from '../layout';
@@ -194,8 +195,19 @@ export namespace UrlPanes {
 export class UrlOpenAction implements IActionImplementation {
   readonly type = 'url-open';
 
-  constructor(panes: UrlPanes) {
+  /**
+   * `jupyterUrl` is the server's absolute address, as `jupyterUrl()`
+   * gives it, and `hasWebProxy` says whether the server has a web proxy
+   * loaded, which a page addressed through its `proxy/` needs.
+   */
+  constructor(
+    panes: UrlPanes,
+    jupyterUrl: string,
+    hasWebProxy: () => boolean = () => false
+  ) {
     this._panes = panes;
+    this._jupyterUrl = jupyterUrl;
+    this._hasWebProxy = hasWebProxy;
   }
 
   describe(request: IActionRequest): string {
@@ -233,6 +245,18 @@ export class UrlOpenAction implements IActionImplementation {
       };
     }
 
+    // Without a web proxy the server answers its proxy/ addresses with
+    // a 404, which a pane would show as an error page of its own.
+    const proxy = new URL('proxy/', this._jupyterUrl).href;
+
+    if (url.startsWith(proxy) && !this._hasWebProxy()) {
+      return {
+        status: 'error',
+        message:
+          'This JupyterLab has no web proxy (jupyter-server-proxy), so it cannot show a page through one'
+      };
+    }
+
     // A page served over https cannot frame an http page; the browser
     // blocks it silently, so a new tab is the only way to show it.
     const pane = request.options.pane;
@@ -252,6 +276,18 @@ export class UrlOpenAction implements IActionImplementation {
   }
 
   private _panes: UrlPanes;
+  private _jupyterUrl: string;
+  private _hasWebProxy: () => boolean;
+}
+
+/**
+ * The absolute address of the Jupyter server the browser reaches, ending
+ * in a slash, such as `https://hub.example.org/user/ada/`: the base URL
+ * of the server settings resolved against the page's own address, so it
+ * holds behind a hub or a proxy that the server itself cannot see.
+ */
+export function jupyterUrl(settings: ServerConnection.ISettings): string {
+  return new URL(settings.baseUrl, window.location.href).href;
 }
 
 /**

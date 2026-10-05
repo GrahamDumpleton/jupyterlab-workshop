@@ -64,7 +64,8 @@ import {
   capabilityUses,
   cascades,
   declaredCapabilities,
-  isAutomatic
+  isAutomatic,
+  isProxyUrl
 } from '../trust/capabilities';
 import { dangerWarnings, mentionsAbsolutePath } from './danger';
 import { writeTargetProblem } from '../trust/paths';
@@ -136,6 +137,7 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintCapabilities(input, manifestPath, messages);
   lintLinks(input, manifestPath, messages);
   lintUrlOpen(input, messages);
+  lintProxyGuards(input, messages);
 
   return messages;
 }
@@ -217,6 +219,51 @@ function lintUrlOpen(input: ILintInput, messages: ILintMessage[]): void {
         });
       }
     }
+  }
+}
+
+/**
+ * A page shown through the Jupyter server's web proxy exists only where
+ * jupyter-server-proxy is installed, which a learner's own JupyterLab
+ * often is not and JupyterLite never is. A `url-open` of one should sit
+ * under a condition on `web_proxy`, as its own `when` option or in a
+ * `when` block around it, so that the page offers something else, such
+ * as the loopback address, where there is no proxy.
+ */
+function lintProxyGuards(input: ILintInput, messages: ILintMessage[]): void {
+  const guards = (condition: string | undefined): boolean =>
+    condition !== undefined && expressionNames(condition).includes('web_proxy');
+
+  const walk = (page: IPage, nodes: PageNode[], guarded: boolean): void => {
+    for (const node of nodes) {
+      if (node.kind === 'when') {
+        walk(page, node.nodes, guarded || guards(node.condition));
+      } else if (node.kind === 'directive') {
+        const covered = guarded || guards(node.options.when);
+
+        if (
+          node.name === 'url-open' &&
+          isProxyUrl(node.options.url ?? '') &&
+          !covered
+        ) {
+          messages.push({
+            level: 'warning',
+            rule: 'proxy-unguarded',
+            message: `"${node.id}" opens a page through the web proxy, which only a JupyterLab with jupyter-server-proxy has; put it under a condition on web_proxy so the page still works without one`,
+            path: page.path,
+            line: node.line
+          });
+        }
+
+        if (node.nodes) {
+          walk(page, node.nodes, covered);
+        }
+      }
+    }
+  };
+
+  for (const page of input.pages) {
+    walk(page, page.nodes, false);
   }
 }
 

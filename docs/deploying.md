@@ -152,6 +152,16 @@ JupyterLab with the workshops installed and trusted. It needs:
 
 - `binder/runtime.txt` selecting a Python the package supports.
 
+- `jupyter-server-proxy` in `binder/requirements.txt` as well, when a
+  workshop shows a web app it starts. In a Binder session the learner's
+  browser is not on the machine the app runs on, so a loopback address
+  cannot reach it; the proxy serves it at
+  `{{ jupyter_url }}proxy/<port>/` instead, and the `web_proxy` built-in
+  tells the workshop it is there. Installing it enables it, and it
+  forwards any port on the machine to anyone logged in to the server,
+  which in a Binder session is only its one visitor; see
+  [url-open](actions.md#interface-and-layout).
+
 - `binder/postBuild`, a script that writes an `overrides.json` into
   `$NB_PYTHON_PREFIX/share/jupyter/lab/settings/`:
 

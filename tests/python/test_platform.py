@@ -6,6 +6,7 @@ from jupyterlab_workshop.platform import (
     current_platform,
     detect_container,
     detect_platform,
+    has_web_proxy,
     instance_id,
 )
 
@@ -83,6 +84,7 @@ def test_to_dict_round_trips_all_fields() -> None:
         "hub_user": "",
         "host": "local",
         "container": False,
+        "web_proxy": False,
         "frontend": "jupyterlab",
         "frontend_version": FRONTEND_VERSION,
         "instance_id": "",
@@ -153,3 +155,17 @@ def test_detect_container_looks_for_runtime_markers(tmp_path: Path) -> None:
     cgroup.write_text("0::/kubepods/burstable/pod1/abc\n")
 
     assert detect_container({}, tmp_path) is True
+
+
+def test_web_proxy_is_an_enabled_jupyter_server_proxy() -> None:
+    class Package:
+        def __init__(self, enabled: bool) -> None:
+            self.enabled = enabled
+
+    assert has_web_proxy({"jupyter_server_proxy": Package(True)})
+    assert not has_web_proxy({"jupyter_server_proxy": Package(False)})
+    assert not has_web_proxy({"jupyterlab_workshop": Package(True)})
+    assert not has_web_proxy({})
+
+    assert not detect().web_proxy
+    assert detect(web_proxy=True).web_proxy

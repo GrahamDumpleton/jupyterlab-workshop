@@ -41,6 +41,13 @@ export interface IPlatformInfo {
   /** Whether the server runs inside a container. */
   container: boolean;
 
+  /**
+   * Whether the server has a web proxy (jupyter-server-proxy) loaded,
+   * which forwards `<base>/proxy/<port>/` to a port on its machine.
+   * Absent from a server too old to report it, and false in JupyterLite.
+   */
+  web_proxy?: boolean;
+
   /** The frontend in use: jupyterlab from a server, jupyterlite in the browser. */
   frontend: string;
 

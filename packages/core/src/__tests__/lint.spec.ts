@@ -1178,4 +1178,52 @@ describe('url-open', () => {
       )
     ).not.toContain('auto-new-tab');
   });
+
+  it('wants a proxied page declared and under a condition on web_proxy', () => {
+    const proxied =
+      '```{url-open}\n:id: app\n:url: {{ jupyter_url }}proxy/8001/\n:pane: app\n```\n';
+    const plain = MANIFEST.replace(
+      'capabilities:\n  - terminal\n  - write-files',
+      'capabilities: []'
+    );
+    const withProxy = plain.replace(
+      'capabilities: []',
+      'capabilities: [web-proxy]'
+    );
+    const found = (page: string, manifest: string): string[] =>
+      rules(page, manifest).filter(rule =>
+        [
+          'undeclared-capability',
+          'unused-capability',
+          'proxy-unguarded'
+        ].includes(rule)
+      );
+
+    expect(found(proxied, plain)).toEqual(
+      expect.arrayContaining(['undeclared-capability', 'proxy-unguarded'])
+    );
+    expect(found(proxied, withProxy)).toEqual(['proxy-unguarded']);
+
+    // Its own condition, or a when block around it, is enough.
+    expect(
+      found(
+        proxied.replace(':pane: app', ':pane: app\n:when: web_proxy'),
+        withProxy
+      )
+    ).toEqual([]);
+    expect(
+      found(
+        `\`\`\`\`{when} web_proxy == "true"\n${proxied}\`\`\`\`\n`,
+        withProxy
+      )
+    ).toEqual([]);
+
+    // A capability nothing uses is reported as usual.
+    expect(
+      found(
+        '```{url-open}\n:url: http://127.0.0.1:8001/\n:pane: app\n```\n',
+        withProxy
+      )
+    ).toEqual(['unused-capability']);
+  });
 });

@@ -68,7 +68,8 @@ list wins:
 
 1. **Built-ins** describe the machine and the session: `platform`,
    `frontend`, `shell`, `path_sep`, `workshop_dir`, `workspace`, `home`,
-   `user`, `host` and `container`, and `missing_tools` lists the required
+   `user`, `host`, `container`, `jupyter_url`, `jupyter_path` and
+   `web_proxy`, and `missing_tools` lists the required
    tools the [preflight check](checks.md#preflight) did not find. They
    cannot be changed. [Platforms](platforms.md) says what each holds.
 

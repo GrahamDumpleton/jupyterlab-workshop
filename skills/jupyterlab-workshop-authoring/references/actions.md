@@ -190,6 +190,40 @@ a hosted JupyterLab, where the address is the learner's own machine.
 Panes come back after the browser page reloads, at the last URL they
 were sent, and close with the workshop.
 
+A server the workshop starts can also be shown through the Jupyter
+server's web proxy,
+[jupyter-server-proxy](https://jupyter-server-proxy.readthedocs.io),
+which forwards `<base>/proxy/<port>/` to a port on the machine the
+server runs on. That address works wherever JupyterLab does, on Binder
+or a hub as much as on the learner's own machine, and is served over
+the same https as JupyterLab, so it shows in a pane where a loopback
+address cannot. The built-in variable `jupyter_url` is JupyterLab's own
+address, so the URL is `{{ jupyter_url }}proxy/{{ server_port }}/`. A
+`url-open` of such a URL needs the `web-proxy` capability, and the
+proxy is not installed everywhere, so the `web_proxy` built-in says
+whether it is: put the action under a condition on it and offer the
+loopback address otherwise, which lint checks (`proxy-unguarded`).
+Without the proxy, the action reports that it cannot show the page. An
+app behind the proxy sees requests under that path, so one that writes
+absolute links needs telling its prefix, `{{ jupyter_path }}proxy/{{
+server_port }}/`, the way Datasette's `base_url` setting takes it.
+
+````markdown
+```{url-open}
+:title: Open the app
+:when: web_proxy
+:url: {{ jupyter_url }}proxy/{{ server_port }}/
+:pane: app
+```
+
+```{url-open}
+:title: Open the app
+:when: not web_proxy
+:url: http://127.0.0.1:{{ server_port }}/
+:pane: app
+```
+````
+
 ## Guidance
 
 | Directive   | Capability | Body     | Options                             | Description                                         |

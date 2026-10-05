@@ -80,6 +80,7 @@ CAPABILITIES = [
     "kernel-exec",
     "auto-run",
     "ui-settings",
+    "web-proxy",
 ]
 
 

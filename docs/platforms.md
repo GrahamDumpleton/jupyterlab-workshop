@@ -76,6 +76,18 @@ You can install packages freely; nothing here outlives the session.
 ```
 ````
 
+Three describe the Jupyter server as the browser reaches it, for pages
+served through its web proxy. `jupyter_url` is JupyterLab's own
+address, absolute and ending in a slash, such as
+`https://hub.example.org/user/ada/`, worked out in the browser so that
+it holds behind a hub or a proxy the server cannot see; `jupyter_path`
+is the path part of it, `/user/ada/` there and `/` for a JupyterLab of
+its own. `web_proxy` is `true` when the server has
+[jupyter-server-proxy](https://jupyter-server-proxy.readthedocs.io)
+loaded, which serves `{{ jupyter_url }}proxy/<port>/` from a port on its
+machine, and `false` otherwise and in JupyterLite; see
+[url-open](actions.md#interface-and-layout) for showing a page through it.
+
 One more comes from the workshop rather than the machine:
 `missing_tools` is the list of the tools in `requires.tools` that the
 [preflight check](checks.md#preflight) did not find, so

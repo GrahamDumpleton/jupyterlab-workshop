@@ -6,6 +6,7 @@ import addFormats from 'ajv-formats';
 import { load } from 'js-yaml';
 
 import { COLLECTION_SCHEMA, EVENTS_SCHEMA, WORKSHOP_SCHEMA } from '../schema';
+import { CAPABILITY_NAMES } from '../trust/capabilities';
 
 const EXAMPLES = path.resolve(__dirname, '../../../../examples');
 
@@ -52,6 +53,18 @@ describe('workshop schema', () => {
         capabilities: ['teleport']
       })
     ).toBe(false);
+  });
+
+  it('knows every capability the parser does', () => {
+    expect(
+      validate({
+        apiVersion: 'jupyterlab-workshop/v1alpha1',
+        name: 'x',
+        title: 'X',
+        pages: ['a.md'],
+        capabilities: [...CAPABILITY_NAMES]
+      })
+    ).toBe(true);
   });
 
   it('knows the frontend axis and the resumable flag', () => {
