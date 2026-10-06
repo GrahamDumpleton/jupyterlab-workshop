@@ -27,6 +27,12 @@ export const QUESTION_TOOL = 'AskUserQuestion';
 /** The tool a drafting agent proposes a workshop with. */
 export const PROPOSE_TOOL = 'mcp__workshop__propose_workshop';
 
+/** The tools whose run may close the workshop when it passes. */
+export const RUN_TOOLS: readonly string[] = [
+  'mcp__workshop__run_workshop',
+  'mcp__workshop__run_page'
+];
+
 /** A file that was attached to a message, as the history keeps it. */
 export interface IAttachmentInfo {
   name: string;
@@ -147,6 +153,24 @@ export class ConversationModel {
     }
 
     return null;
+  }
+
+  /**
+   * Whether the tool call with this id was a run of the workshop that
+   * closed it on passing. The report puts `closed` first, so it is read
+   * even from a shortened result.
+   */
+  closedWorkshop(id: string): boolean {
+    const item = this._items.find(
+      entry => entry.type === 'tool' && entry.id === id
+    );
+
+    return (
+      item?.type === 'tool' &&
+      RUN_TOOLS.includes(item.name) &&
+      item.result?.ok === true &&
+      /"closed":\s*true/.test(item.result.summary.slice(0, 500))
+    );
   }
 
   /** Take in one message from the server. */

@@ -446,6 +446,18 @@ export class AuthorPanel extends ReactWidget {
       this._reveal();
     }
 
+    // A play-through that passed has closed the workshop, so this
+    // conversation, the one that asked for the run, comes back to the
+    // front: not whichever tab was left showing when the workshop's
+    // documents and terminals closed.
+    if (
+      message.type === 'event' &&
+      message.event.kind === 'tool-result' &&
+      this._model.closedWorkshop(String(message.event.id ?? ''))
+    ) {
+      this._options.reveal();
+    }
+
     if (message.type === 'opened') {
       for (const queued of this._queued.splice(0)) {
         this._connection.send(queued.text, queued.attachments);

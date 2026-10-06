@@ -249,32 +249,6 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
-    // When the workshop a Workshop Author panel works on closes, such as
-    // at the end of the agent's play-through of it, the conversation comes
-    // back to the front.
-    let authoring = manager.workshop?.path ?? null;
-
-    manager.changed.connect(() => {
-      const current = manager.workshop?.path ?? null;
-
-      if (authoring !== null && current === null) {
-        const closed = authoring;
-        const author = tracker.find(
-          panel =>
-            !panel.isDisposed &&
-            !panel.draft &&
-            panel.isAttached &&
-            panel.path === closed
-        );
-
-        if (author) {
-          shell.activateById(author.id);
-        }
-      }
-
-      authoring = current;
-    });
-
     // Restores a workshop's panel by its path, and a draft's by its id.
     app.commands.addCommand(RESTORE_COMMAND, {
       label: AUTHOR_TITLE,

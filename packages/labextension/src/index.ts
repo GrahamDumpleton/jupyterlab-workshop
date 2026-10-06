@@ -1588,7 +1588,9 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
               }
             }
 
-            const result = { ...report, closed };
+            // `closed` comes first so that it is read even where the
+            // report is shortened, as the agent's panel reads it.
+            const result = { closed, ...report };
 
             selfTestProgress = {
               ...selfTestProgress,

@@ -374,18 +374,55 @@ test.describe('Workshop Author playing a workshop', () => {
   }) => {
     test.setTimeout(120000);
 
+    // An older conversation about another workshop is open in a tab of
+    // its own, as one left over from earlier work would be.
+    await page.contents.uploadContent(
+      MANIFEST.replace('name: demo', 'name: other').replace(
+        'My demo',
+        'My other'
+      ),
+      'text',
+      `${LIBRARY}/personal/other/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# Other\n',
+      'text',
+      `${LIBRARY}/personal/other/pages/01.md`
+    );
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My other' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const other = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/other'
+    });
+
+    await expect(other.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+
+    // Its workshop is the one showing in the instructions panel, so that
+    // opening the other one closes it first.
+    await other.getByRole('button', { name: 'Open workshop' }).click();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Other'
+    );
     await openBrowser(page);
     await page
       .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
       .getByRole('button', { name: 'Edit with AI' })
       .click();
 
-    const author = page.locator('.jp-WorkshopAgent');
+    const author = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/demo'
+    });
     const input = author.locator('.jp-WorkshopAgent-input');
 
     await expect(input).toBeEnabled();
     await author.getByRole('button', { name: 'Open workshop' }).click();
-    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toBeVisible();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Start'
+    );
 
     // The agent plays the workshop, as it does to check a version.
     await input.fill('/tool run_workshop {}');
@@ -406,10 +443,11 @@ test.describe('Workshop Author playing a workshop', () => {
     await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
     await expect(
       page.locator('.lm-TabBar-tab.lm-mod-current', {
-        hasText: 'Workshop Author'
+        hasText: 'Workshop Author: demo'
       })
     ).toHaveCount(1);
     await expect(input).toBeVisible();
+    await expect(other).toBeHidden();
   });
 });
 
@@ -520,14 +558,30 @@ test.describe('Workshop Author creating a workshop', () => {
   test('drafts a workshop with the agent and creates it from the plan', async ({
     page
   }) => {
+    test.setTimeout(120000);
+
+    // A conversation about another workshop is already open in a tab.
     await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const older = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/demo'
+    });
+
+    await expect(older.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
     await page
       .locator('#jupyterlab-workshop-browser')
       .getByRole('button', { name: 'Create Workshop with AI…' })
       .click();
 
     // A draft: nothing exists yet, and there is no workshop to open.
-    const draft = page.locator('.jp-WorkshopAgent');
+    const draft = page.locator('.jp-WorkshopAgent', {
+      hasText: 'New workshop'
+    });
     const input = draft.locator('.jp-WorkshopAgent-input');
 
     await expect(draft.locator('.jp-WorkshopAgent-path')).toHaveText(
@@ -567,12 +621,14 @@ test.describe('Workshop Author creating a workshop', () => {
     // was said and the plan as the brief.
     await card.getByRole('button', { name: 'Create' }).click();
 
-    const author = page.locator('.jp-WorkshopAgent');
+    const author = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/git-basics'
+    });
 
     await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
       `${LIBRARY}/personal/git-basics`
     );
-    await expect(author).toHaveCount(1);
+    await expect(page.locator('.jp-WorkshopAgent')).toHaveCount(2);
     await expect(
       author.locator('.jp-WorkshopAgent-proposal .jp-WorkshopAgent-answer')
     ).toHaveText('The plan agreed.');
@@ -584,6 +640,27 @@ test.describe('Workshop Author creating a workshop', () => {
         `${LIBRARY}/personal/git-basics/workshop.yaml`
       )
     ).toBe(true);
+
+    // The agent plays the new workshop to check it; once that passes, the
+    // workshop closes and this conversation, not the older one, is in
+    // front.
+    const prompt = author.locator('.jp-WorkshopAgent-input');
+
+    await expect(prompt).toBeEnabled();
+    await author.getByRole('button', { name: 'Open workshop' }).click();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toBeVisible();
+    await prompt.fill('/tool run_workshop {}');
+    await prompt.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(1, { timeout: 60000 });
+    await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
+    await expect(
+      page.locator('.lm-TabBar-tab.lm-mod-current', {
+        hasText: 'Workshop Author: git-basics'
+      })
+    ).toHaveCount(1);
+    await expect(older).toBeHidden();
   });
 
   test('discards a draft, leaving nothing behind', async ({ page }) => {
