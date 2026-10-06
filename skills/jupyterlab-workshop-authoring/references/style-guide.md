@@ -12,8 +12,10 @@ time, so pages are short, concrete and ordered.
 - Start with the front matter `title`, then a single `#` heading that
   repeats it, then one or two sentences of context.
 
-- End every page with something the panel can confirm: a `verify`, a
-  `quiz` or a `form`, listed in the page's `requires`.
+- End a page that does something with a check the panel can confirm,
+  usually a `verify`, listed in the page's `requires`, as the audience
+  calls for (see "Who it is for" in `SKILL.md`). A page with nothing to
+  check does not need a quiz to fill the gap.
 
 - The first page states what the learner needs (tools, accounts) and the
   manifest declares them in `requires.tools`.
@@ -128,6 +130,11 @@ git init command above first"`.
   the panel stay in step.
 
 ## Quizzes and forms
+
+- Whether to have quizzes at all depends on who the workshop is for:
+  several for newcomers, few for experienced readers, none in a product
+  demonstration (see "Who it is for" in `SKILL.md`). Never quiz on what
+  the page has just said or the learner has just done.
 
 - One question per quiz, three or four options, an `explanation` for
   each wrong option that teaches something.

@@ -66,16 +66,24 @@ So, before running any of them:
 
 ## Workflow
 
-1. Outline: decide the 4 to 8 steps a learner takes and what proves each
-   step was done. Every page should end with something checkable.
+1. Audience and purpose: settle who the workshop is for and what it is
+   for before outlining it, since that decides how much it checks and
+   quizzes (see "Who it is for" below). Take both from the request when
+   it says. When it does not, and the subject leaves it open, ask the
+   user before writing anything rather than guessing; a question costs
+   less than a workshop pitched at the wrong person.
 
-2. Scaffold: `jupyter workshop init my-workshop --title "..."` (templates:
+2. Outline: decide the 4 to 8 steps a learner takes, and for each one
+   whether something should confirm it was done, as the audience calls
+   for.
+
+3. Scaffold: `jupyter workshop init my-workshop --title "..."` (templates:
    `starter`, `blank`, `notebook`; `--platform`, `--capability`,
    `--gating` set the manifest). Or write the manifest by hand from the
    schema (`jupyter workshop schema`).
 
-3. Write pages: prose that says why, then an action that does it, then a
-   `verify` that checks it. Keep one idea per action. Any `hint`, `when`
+4. Write pages: prose that says why, then an action that does it, then
+   a `verify` that checks it where the audience calls for one. Keep one idea per action. Any `hint`, `when`
    or other directive that holds a fenced block is fenced with four
    backticks. First read the
    sections of `references/gotchas.md` that match what the workshop
@@ -83,11 +91,11 @@ So, before running any of them:
    notebooks): each names a trap that only shows up in that kind of
    workshop and what the manifest or page does about it.
 
-4. Lint after every edit: `jupyter workshop lint my-workshop`. Fix every
+5. Lint after every edit: `jupyter workshop lint my-workshop`. Fix every
    error; read the warnings. `--platform windows` checks the Windows
    variants. `--json` gives findings with `fix` hints.
 
-5. Self-test: `jupyter workshop test my-workshop`. It runs every action,
+6. Self-test: `jupyter workshop test my-workshop`. It runs every action,
    check, quiz and form in a real JupyterLab and prints PASS, FAIL or SKIP
    per action. Fix failures and run again until it is green. It runs the
    workshop's commands on the user's machine for real, so apply the rule
@@ -97,12 +105,12 @@ So, before running any of them:
    JupyterLab with it open (`--trust trusted` skips the trust dialog,
    `--restart=force` starts it over).
 
-6. Publish when asked: `jupyter workshop publish my-workshop` writes an
+7. Publish when asked: `jupyter workshop publish my-workshop` writes an
    archive, its hash and a collection entry. For a repository holding
    several workshops, `jupyter workshop index` writes a `collection.json`
    listing them all instead (see below).
 
-7. Publish to a gist when asked, and only once lint is clean and the
+8. Publish to a gist when asked, and only once lint is clean and the
    self-test passes: `jupyter workshop gist my-workshop --create` (secret
    unless `--public`) makes the gist and records it in
    `_workshop/gist.json`; `--update` with no gist named then updates the
@@ -111,6 +119,39 @@ So, before running any of them:
    Give the user the gist's URL; it is the source for "Open Workshop
    from URL…" and launch links. A secret gist is still readable by
    anyone with the link, so make one public only when the user asks.
+
+## Who it is for
+
+The same subject makes a different workshop for a newcomer, for an
+experienced practitioner and for a product demonstration, and the
+difference is mostly in how much it checks and asks:
+
+- Someone new to the subject. Quizzes where the learner has to apply a
+  concept or predict what code will do, a `verify` after each hands-on
+  step, and pages gated on both (`requires`). The checks are part of
+  the teaching: a failure message and a quiz explanation say what went
+  wrong.
+
+- An experienced practitioner on a hard topic. A `verify` on real
+  outcomes, as a safety net rather than a test, and a quiz only where a
+  misunderstanding is likely and costly, such as a subtle behaviour the
+  rest of the workshop depends on. Gating is optional.
+
+- A product demonstration, or a workshop run in front of an audience.
+  No quizzes and no gating. A `verify` only where it guards a step the
+  next one depends on, such as a server that has to be up; otherwise
+  let the actions speak.
+
+Whatever the audience, never quiz on what the page has just said or
+the learner has just done ("which command did you just run?"). A quiz
+earns its place by making the learner think something through; one
+that only repeats the page reads as filler, and an experienced reader
+takes it as being talked down to.
+
+When the request does not say who the workshop is for, the subject and
+wording often do ("for my team's onboarding", "show off the new
+API"). When they do not, ask. If you must proceed without an answer,
+say which audience you assumed and why, so the user can correct it.
 
 ## Manifest (`workshop.yaml`)
 
