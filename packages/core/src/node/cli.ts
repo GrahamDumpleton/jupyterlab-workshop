@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { parseCatalog } from '../catalog';
 import { parseCollectionIndex } from '../collection';
@@ -40,7 +41,8 @@ export function lintDirectory(
   const workshop = loadWorkshopFiles(directory, options);
   const messages = lintWorkshop({
     manifest: workshop.manifest,
-    pages: workshop.pages
+    pages: workshop.pages,
+    exists: file => fs.existsSync(path.join(directory, file))
   });
 
   return {

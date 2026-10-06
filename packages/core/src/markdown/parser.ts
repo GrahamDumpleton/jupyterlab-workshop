@@ -23,10 +23,31 @@ export const ROLE_TOKEN = 'workshop_role';
 /** CSS class applied to rendered inline roles. */
 export const ROLE_CLASS = 'jp-Workshop-role';
 
+/** The attribute a rendered image names its workshop file by. */
+export const FILE_ATTRIBUTE = 'data-workshop-file';
+
+/** A file a page shows, such as an image, by its path in the workshop. */
+export interface IPageFile {
+  /** The file's path within the workshop directory. */
+  path: string;
+
+  /** One-based line within the page source where it is used. */
+  line: number;
+}
+
 /** Per-page state passed through markdown-it as the render environment. */
 export interface IRenderEnv {
   /** Stable id of the page, used to derive directive ids. */
   pageId: string;
+
+  /**
+   * Path of the page within the workshop, which the files it shows are
+   * resolved against; empty for text that is not a page.
+   */
+  pagePath: string;
+
+  /** The files the page shows, in page order. */
+  files: IPageFile[];
 
   /** Variables substituted into text and directives. */
   variables: Variables;
@@ -186,10 +207,13 @@ export function createRenderEnv(
   pathSep = '/',
   declared: ReadonlySet<string> = new Set(),
   platform?: string,
-  frontend?: string
+  frontend?: string,
+  pagePath = ''
 ): IRenderEnv {
   return {
     pageId,
+    pagePath,
+    files: [],
     variables,
     pathSep,
     declared,
@@ -199,6 +223,95 @@ export function createRenderEnv(
     problems: [],
     directiveCount: 0
   };
+}
+
+/**
+ * Point the images of one inline token's children at their workshop
+ * files, as they are written on the page.
+ *
+ * An image's source names a file in the workshop, relative to the page
+ * or, starting with `/`, to the workshop directory; a web URL is left
+ * alone. The source is taken off the tag, since the browser could only
+ * resolve it against the JupyterLab page, and the file's path within
+ * the workshop is put on it as `data-workshop-file` for the panel to
+ * serve from wherever the workshop is. The file is recorded in the
+ * environment so lint can check it exists; one that would reach outside
+ * the workshop is a problem, and shows as its alternative text.
+ */
+export function resolveImages(
+  token: MarkdownIt.Token,
+  line: number,
+  env: IRenderEnv
+): void {
+  for (const child of token.children ?? []) {
+    if (child.type !== 'image') {
+      continue;
+    }
+
+    const src = child.attrGet('src') ?? '';
+
+    if (src === '' || EXTERNAL_LINK.test(src) || /^data:/i.test(src)) {
+      continue;
+    }
+
+    child.attrs = (child.attrs ?? []).filter(([name]) => name !== 'src');
+
+    const file = resolveWorkshopFile(env.pagePath, src);
+
+    if (file === null) {
+      env.problems.push({
+        rule: 'file-outside-workshop',
+        line,
+        message: `The image "${src}" at line ${line} is outside the workshop directory, so it cannot be shown`
+      });
+
+      continue;
+    }
+
+    child.attrSet(FILE_ATTRIBUTE, file);
+    env.files.push({ path: file, line });
+  }
+}
+
+/**
+ * The path within the workshop of a file a page refers to, or null when
+ * the reference leaves the workshop. The reference is as written in
+ * Markdown, so it may be percent-encoded.
+ */
+export function resolveWorkshopFile(
+  pagePath: string,
+  reference: string
+): string | null {
+  let decoded = reference;
+
+  try {
+    decoded = decodeURIComponent(reference);
+  } catch {
+    // Not percent-encoded after all; taken as written.
+  }
+
+  const absolute = decoded.startsWith('/');
+  const base = absolute ? [] : pagePath.split('/').slice(0, -1);
+  const parts = [...base];
+
+  for (const part of decoded.split('/')) {
+    if (part === '' || part === '.') {
+      continue;
+    }
+
+    if (part === '..') {
+      if (parts.length === 0) {
+        return null;
+      }
+
+      parts.pop();
+      continue;
+    }
+
+    parts.push(part);
+  }
+
+  return parts.length > 0 ? parts.join('/') : null;
 }
 
 function directiveRule(state: MarkdownIt.StateCore): void {

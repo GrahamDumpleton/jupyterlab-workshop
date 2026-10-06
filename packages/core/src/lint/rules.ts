@@ -77,6 +77,13 @@ export interface ILintInput {
   manifest: IWorkshopManifest;
   pages: IPage[];
   manifestPath?: string;
+
+  /**
+   * Whether a file, by its path within the workshop, exists. Given where
+   * the workshop's files are at hand, as in the CLI, so a page showing
+   * a file the workshop does not have is reported.
+   */
+  exists?: (path: string) => boolean;
 }
 
 /** Action types whose body is a shell command or code worth scanning. */
@@ -138,8 +145,35 @@ export function lintWorkshop(input: ILintInput): ILintMessage[] {
   lintLinks(input, manifestPath, messages);
   lintUrlOpen(input, messages);
   lintProxyGuards(input, messages);
+  lintFiles(input, messages);
 
   return messages;
+}
+
+/**
+ * An image a page shows must be a file the workshop has, since the page
+ * is served from the workshop directory wherever it runs.
+ */
+function lintFiles(input: ILintInput, messages: ILintMessage[]): void {
+  const exists = input.exists;
+
+  if (!exists) {
+    return;
+  }
+
+  for (const page of input.pages) {
+    for (const file of page.files) {
+      if (!exists(file.path)) {
+        messages.push({
+          level: 'error',
+          rule: 'missing-file',
+          message: `The image "${file.path}" is not in the workshop`,
+          path: page.path,
+          line: file.line
+        });
+      }
+    }
+  }
 }
 
 /**

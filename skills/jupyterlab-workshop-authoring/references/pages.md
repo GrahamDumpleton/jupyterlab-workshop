@@ -178,6 +178,30 @@ the JupyterLab page, and a link that navigated it would take the whole
 session with it. A link to a heading on the same page, such as
 `[notes](#notes)`, stays in the panel.
 
+## Images
+
+An image is written with the usual Markdown syntax and names a file in
+the workshop directory, relative to the page, or to the workshop
+directory when it starts with `/`:
+
+```markdown
+![The pipeline, from source to report](../images/pipeline.png)
+![The same, from the workshop directory](/images/pipeline.png)
+```
+
+The file is served from wherever the workshop is: the server's files
+endpoint under JupyterLab, or the browser's own storage under
+JupyterLite, so the same page works in both. Keep images in a directory
+of the workshop's own, such as `images/`, and they are carried along
+when the workshop is published or archived; a file under `_workshop/`
+is the workshop's state and is not. An image whose path would leave the
+workshop directory is not shown, and lint reports it as
+`file-outside-workshop`; one that names a file the workshop does not
+have is reported by `jupyter workshop lint` as `missing-file`. A web
+address, `https://` or a `data:` URL, is loaded as written. Raw HTML
+is not rendered on pages, so an `<img>` tag written as HTML shows as
+text; the Markdown syntax produces the same tag.
+
 ## Conditional content
 
 The `{when}` directive takes a condition as its argument and shows its

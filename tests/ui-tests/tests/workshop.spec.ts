@@ -303,6 +303,78 @@ test.describe('workshop panel', () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test('shows an image from the workshop directory', async ({
+    page,
+    tmpPath
+  }) => {
+    const pictured = `${tmpPath}/pictured`;
+
+    // A 2 by 2 red PNG.
+    const png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGO4IycHRAwQCgAhpgRhTxp8CQAAAABJRU5ErkJggg==';
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: pictured',
+        'title: Pictured',
+        'version: 0.1.0',
+        'description: A page with an image.',
+        'pages:',
+        '  - pages/01-picture.md',
+        ''
+      ].join('\n'),
+      'text',
+      `${pictured}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      png,
+      'base64',
+      `${pictured}/images/square.png`
+    );
+    await page.contents.uploadContent(
+      [
+        '# Picture',
+        '',
+        'A square: ![A red square](../images/square.png)',
+        '',
+        'And again: ![The same square](/images/square.png)',
+        '',
+        'Gone: ![Not here](../images/missing.png)',
+        ''
+      ].join('\n'),
+      'text',
+      `${pictured}/pages/01-picture.md`
+    );
+    await openWorkshop(page, pictured);
+
+    const images = page.locator(`${PANEL} .jp-WorkshopPanel-prose img`);
+
+    await expect(images).toHaveCount(3);
+
+    // The files are served from the workshop, by whichever path form.
+    for (const index of [0, 1]) {
+      const image = images.nth(index);
+
+      await expect(image).toHaveAttribute(
+        'data-workshop-file',
+        'images/square.png'
+      );
+      await expect
+        .poll(() =>
+          image.evaluate(node => (node as HTMLImageElement).naturalWidth)
+        )
+        .toBe(2);
+    }
+
+    await expect(images.nth(2)).toHaveAttribute('alt', 'Not here');
+    await expect
+      .poll(() =>
+        images.nth(2).evaluate(node => (node as HTMLImageElement).naturalWidth)
+      )
+      .toBe(0);
+  });
+
   test('keeps the instructions on their side when a page opens them as a panel', async ({
     page,
     tmpPath

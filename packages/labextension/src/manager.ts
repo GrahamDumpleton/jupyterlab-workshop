@@ -1688,6 +1688,19 @@ export class WorkshopManager implements IWorkshopManager {
     return conditionHolds(condition, this.conditionValues);
   }
 
+  async fileUrl(path: string): Promise<string | null> {
+    const directory = this._workshop?.path ?? this._preview?.path;
+
+    if (directory === undefined) {
+      return null;
+    }
+
+    // The contents service knows how the workshop's files reach the
+    // browser: the server's files endpoint, or an object URL for a file
+    // held in the browser under JupyterLite.
+    return this._contents.getDownloadUrl(`${directory}/${path}`);
+  }
+
   get conditionValues(): Variables {
     // A page shown while the trust prompt is up was rendered with the
     // defaults, which is what its conditions are judged against too.

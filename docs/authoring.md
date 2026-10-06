@@ -256,9 +256,10 @@ The agent sees an image in the message itself and a text file as its
 text; a PDF it reads from the file. Every attachment is also saved under
 `_workshop/attachments/` in the workshop, where the agent may read it,
 and the message tells the agent where. So a file the workshop itself
-needs, such as data a page's actions work on, can be attached: ask, and
-the agent copies it into a directory of the workshop's own, since
-`_workshop/` is the workshop's state, not part of it. The files stay
+needs can be attached, an image for a page or data its actions work on:
+ask, and the agent copies it into a directory of the workshop's own,
+such as `images/`, since `_workshop/` is the workshop's state, not part
+of it. The files stay
 there until New conversation, which removes them with the conversation. While a new workshop is being drafted,
 attachments are saved with the draft, outside the library, and go to
 the workshop when it is created, or away with the draft when it is

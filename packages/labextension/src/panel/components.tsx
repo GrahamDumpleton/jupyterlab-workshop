@@ -3,6 +3,7 @@ import {
   actionDisplay,
   ActionDisposition,
   describeRequirement,
+  FILE_ATTRIBUTE,
   IDirectiveNode,
   IFormField,
   ILintMessage,
@@ -591,7 +592,12 @@ function Nodes({
       {nodes.map((node, position) => {
         if (node.kind === 'prose') {
           return (
-            <ProseBlock key={position} node={node} onClick={onProseClick} />
+            <ProseBlock
+              key={position}
+              node={node}
+              manager={manager}
+              onClick={onProseClick}
+            />
           );
         }
 
@@ -811,14 +817,55 @@ function AuthorGutter({
 
 function ProseBlock({
   node,
+  manager,
   onClick
 }: {
   node: IProseNode;
+  manager: IWorkshopManager;
   onClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
+  const container = useRef<HTMLDivElement>(null);
+
+  // An image names its file in the workshop; where that file is served
+  // from depends on where the workshop is, so the source is filled in
+  // once the markup is in the page.
+  useEffect(() => {
+    const images = Array.from(
+      container.current?.querySelectorAll<HTMLImageElement>(
+        `img[${FILE_ATTRIBUTE}]`
+      ) ?? []
+    );
+    const urls: string[] = [];
+    let cancelled = false;
+
+    for (const image of images) {
+      const file = image.getAttribute(FILE_ATTRIBUTE) ?? '';
+
+      void manager.fileUrl(file).then(url => {
+        if (cancelled || url === null) {
+          return;
+        }
+
+        urls.push(url);
+        image.src = url;
+      });
+    }
+
+    return () => {
+      cancelled = true;
+
+      for (const url of urls) {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      }
+    };
+  }, [node.html, manager]);
+
   // Pages are rendered with raw HTML disabled, so this is generated markup.
   return (
     <div
+      ref={container}
       className="jp-WorkshopPanel-prose jp-RenderedHTMLCommon"
       onClick={onClick}
       dangerouslySetInnerHTML={{ __html: node.html }}

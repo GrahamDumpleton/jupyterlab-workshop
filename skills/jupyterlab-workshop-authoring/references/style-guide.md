@@ -44,6 +44,15 @@ time, so pages are short, concrete and ordered.
 
 - No emdashes; use commas, colons or separate sentences.
 
+- An image, where one says more than words (a diagram of what is being
+  built, what the result should look like), is a file in the workshop's
+  `images/` directory, shown with `![what it shows](../images/name.png)`
+  from a page under `pages/`. Give it alternative text that says what
+  it shows. Never write an `<img>` tag, which pages show as text, and
+  never a `data:` URL. A file the person attached to a message is under
+  `_workshop/attachments/`, which is not part of the workshop: copy it
+  into `images/` first.
+
 ## Actions
 
 - One command per `execute` unless the commands only make sense

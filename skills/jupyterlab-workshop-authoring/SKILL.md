@@ -339,6 +339,16 @@ The full table with every option is in `references/actions.md`, and
 `references/pages.md` covers the page syntax, the common options and how
 the editor actions point at text.
 
+### Images
+
+Images are Markdown images naming a file in the workshop, relative to
+the page or to the workshop directory with a leading `/`:
+`![The pipeline](../images/pipeline.png)`. Keep them in `images/` and
+copy an attached file there before using it; `_workshop/` is never
+part of the workshop. Lint reports a path that leaves the workshop and
+a file the workshop does not have. See the style guide for when an
+image earns its place.
+
 ### Links and web pages
 
 Five ways to point the learner at a web page, and when each fits:

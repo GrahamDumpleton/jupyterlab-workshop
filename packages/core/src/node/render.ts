@@ -4,8 +4,12 @@
 
 import { ACTION_TYPES } from '../actions/catalog';
 import { IPage, PageNode } from '../format/page';
+import { FILE_ATTRIBUTE } from '../markdown/parser';
 import { escapeHtml } from '../util';
 import { ILoadedWorkshopFiles } from './workshop';
+
+/** The file attribute of a rendered image, as the panel would read it. */
+const FILE_PATTERN = new RegExp(`${FILE_ATTRIBUTE}="([^"]*)"`, 'g');
 
 const STYLE = `
 body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
@@ -82,7 +86,9 @@ function renderNodes(nodes: PageNode[]): string {
 
   for (const node of nodes) {
     if (node.kind === 'prose') {
-      parts.push(node.html);
+      // A standalone page has no server to serve the workshop's files, so
+      // an image points at its file relative to the workshop directory.
+      parts.push(node.html.replace(FILE_PATTERN, 'src="$1"'));
     } else if (node.kind === 'when') {
       parts.push(
         `<div class="workshop-when"><div class="workshop-when-condition">when ${escapeHtml(node.condition)}</div>${renderNodes(node.nodes)}</div>`

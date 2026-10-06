@@ -6,10 +6,12 @@ import {
   DIRECTIVE_TOKEN,
   IDirectiveMeta,
   IPageProblem,
+  IPageFile,
   IRenderEnv,
   assignDirectiveId,
   createRenderEnv,
-  getMarkdownParser
+  getMarkdownParser,
+  resolveImages
 } from '../markdown/parser';
 import { pathStem } from '../util';
 import { Variables } from '../variables/substitute';
@@ -93,6 +95,9 @@ export interface IPage {
 
   /** Mistakes in the source that lint reports as errors; see `IPageProblem`. */
   problems: IPageProblem[];
+
+  /** The files the page shows, such as images, for lint to check exist. */
+  files: IPageFile[];
 }
 
 /** Inputs to page parsing. */
@@ -131,7 +136,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     options.pathSep,
     new Set(options.declared ?? []),
     options.platform,
-    options.frontend
+    options.frontend,
+    path
   );
   const tokens = md.parse(body, env);
   const nodes = tokensToNodes(tokens, md, env, body, bodyLine);
@@ -143,7 +149,8 @@ export function parsePage(source: string, options: IParsePageOptions): IPage {
     frontmatter,
     nodes,
     warnings: env.warnings,
-    problems: env.problems
+    problems: env.problems,
+    files: env.files
   };
 }
 
@@ -248,6 +255,16 @@ function tokensToNodes(
   for (const token of tokens) {
     if (token.type === 'fence' || token.type === DIRECTIVE_TOKEN) {
       checkFences(token, lines, lineOffset, nested, env);
+    }
+
+    // Images are resolved here rather than by a parser rule, since only
+    // here is the line of a nested body known within the page.
+    if (token.type === 'inline') {
+      resolveImages(
+        token,
+        (token.map ? token.map[0] : 0) + lineOffset + 1,
+        env
+      );
     }
 
     if (token.type !== DIRECTIVE_TOKEN) {

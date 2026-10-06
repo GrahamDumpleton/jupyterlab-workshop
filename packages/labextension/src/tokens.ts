@@ -942,6 +942,13 @@ export interface IWorkshopManager {
   evaluate(condition: string): boolean;
 
   /**
+   * The URL at which a file of the current workshop, by its path within
+   * the workshop, is served to the browser: where an image on a page is
+   * loaded from. Null when no workshop is open.
+   */
+  fileUrl(path: string): Promise<string | null>;
+
+  /**
    * What conditions are judged against: the variables, and the progress
    * lists (`passed_checks`, `failed_checks`, `opened_hints` and
    * `done_actions`) worked out from what the learner has done.
