@@ -2331,24 +2331,61 @@
   gap: 8px;
 }
 
+/* The dialog opens wide enough for a paragraph of description, and can
+   be resized down only as far as the form still fits, and up to most of
+   the window. */
+.jp-WorkshopAgent-createDialog .jp-Dialog-content {
+  width: min(608px, 90vw);
+  min-width: min(31em, 90vw);
+  min-height: min(30em, 90vh);
+  max-height: 90vh;
+}
+
+/* The form fills the dialog, whatever size it is given. The description
+   takes whatever height is left, so the fields below it always show. */
 .jp-WorkshopAgent-create {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 420px;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
 }
 
 .jp-WorkshopAgent-createField {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 4px;
 }
 
+.jp-WorkshopAgent-createTopicField {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .jp-WorkshopAgent-createInput {
+  box-sizing: border-box;
+  width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--jp-border-color1);
   background: var(--jp-layout-color0);
   color: var(--jp-ui-font-color1);
   font-family: var(--jp-ui-font-family);
   font-size: var(--jp-ui-font-size1);
+}
+
+/* Sized by the dialog, not by a handle of its own, and wraps rather
+   than scrolls sideways. */
+.jp-WorkshopAgent-createTopic {
+  flex: 1 1 auto;
+  min-height: 4.5em;
+  overflow-x: hidden;
+  overflow-wrap: break-word;
+  resize: none;
+}
+
+.jp-WorkshopAgent-createHint {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
 }

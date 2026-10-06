@@ -8,7 +8,6 @@ import {
   Dialog,
   ICommandPalette,
   MainAreaWidget,
-  showDialog,
   showErrorMessage,
   WidgetTracker
 } from '@jupyterlab/apputils';
@@ -309,16 +308,24 @@ async function askForWorkshop(): Promise<{
   const nameLabel = document.createElement('label');
 
   body.addClass('jp-WorkshopAgent-create');
-  topicLabel.className = 'jp-WorkshopAgent-createField';
+  topicLabel.className =
+    'jp-WorkshopAgent-createField jp-WorkshopAgent-createTopicField';
   nameLabel.className = 'jp-WorkshopAgent-createField';
-  topic.className = 'jp-WorkshopAgent-createInput';
+  topic.className = 'jp-WorkshopAgent-createInput jp-WorkshopAgent-createTopic';
   name.className = 'jp-WorkshopAgent-createInput';
+
+  // The example is a hint below the box rather than its placeholder,
+  // which some browsers draw on one line, cut off at the box's edge.
+  const hint = document.createElement('span');
+
+  hint.className = 'jp-WorkshopAgent-createHint';
+  hint.textContent =
+    'For example: the basics of git for someone who has never used it, with a terminal, ending with a first commit.';
 
   topicLabel.textContent = 'What should the workshop teach?';
   topic.rows = 6;
-  topic.placeholder =
-    'For example: the basics of git for someone who has never used it, with a terminal, ending with a first commit';
-  topicLabel.appendChild(topic);
+  topic.placeholder = 'The topic, and who it is for';
+  topicLabel.append(topic, hint);
 
   nameLabel.textContent = 'Directory name (optional)';
   name.placeholder = 'Made from the description when left empty';
@@ -326,12 +333,18 @@ async function askForWorkshop(): Promise<{
 
   body.node.append(topicLabel, nameLabel);
 
-  const result = await showDialog({
+  // Made directly rather than through showDialog, so the dialog can carry
+  // a class giving it a size that fits the form.
+  const dialog = new Dialog({
     title: 'Create Workshop with AI',
     body,
     focusNodeSelector: 'textarea',
     buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Create' })]
   });
+
+  dialog.addClass('jp-WorkshopAgent-createDialog');
+
+  const result = await dialog.launch();
 
   if (!result.button.accept || !topic.value.trim()) {
     return null;
