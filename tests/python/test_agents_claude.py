@@ -320,26 +320,19 @@ def test_claude_does_not_remember_creating_a_gist(tmp_path: Path) -> None:
 def test_the_resume_command_brings_the_skill_and_the_tools(tmp_path: Path) -> None:
     from jupyterlab_workshop.agents.claude import resume_command
 
-    command = resume_command(
-        Path("/bin/claude"),
-        "abc",
-        tmp_path / "plugin",
-        Path("/bin/jupyter-workshop"),
-    )
+    cli = tmp_path / "bin" / "claude"
+    workshop_cli = tmp_path / "bin" / "jupyter-workshop"
+    command = resume_command(cli, "abc", tmp_path / "plugin", workshop_cli)
 
-    assert command[:3] == ["/bin/claude", "--resume", "abc"]
+    assert command[:3] == [str(cli), "--resume", "abc"]
     assert command[command.index("--plugin-dir") + 1] == str(tmp_path / "plugin")
 
     config = json.loads(command[command.index("--mcp-config") + 1])
 
     assert config["mcpServers"]["workshop"] == {
-        "command": "/bin/jupyter-workshop",
+        "command": str(workshop_cli),
         "args": ["mcp"],
     }
 
     # Without the skill or the workshop command, only the conversation.
-    assert resume_command(Path("/bin/claude"), "abc", None, None) == [
-        "/bin/claude",
-        "--resume",
-        "abc",
-    ]
+    assert resume_command(cli, "abc", None, None) == [str(cli), "--resume", "abc"]

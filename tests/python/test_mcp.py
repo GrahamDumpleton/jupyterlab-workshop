@@ -118,7 +118,7 @@ def test_relative_paths_resolve_against_the_base(tmp_path: Path) -> None:
     created, linted = _run(scenario())
 
     assert (tmp_path / "demo" / "workshop.yaml").is_file()
-    assert str(tmp_path / "demo") in created
+    assert json.loads(created)["directory"] == str(tmp_path / "demo")
     assert "no workshop.yaml" not in linted
 
 

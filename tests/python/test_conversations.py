@@ -5,7 +5,11 @@ from typing import Any
 
 import pytest
 
-from jupyterlab_workshop.conversations import AGENT_FILE, PROVIDER_VARIABLE
+from jupyterlab_workshop.conversations import (
+    AGENT_FILE,
+    PROVIDER_VARIABLE,
+    command_line,
+)
 
 MANIFEST = (
     "apiVersion: jupyterlab-workshop/v1alpha1\n"
@@ -58,7 +62,7 @@ async def test_agent_status_reports_the_provider(jp_fetch, library) -> None:
 
     assert status["provider"] == "fake"
     assert status["logged_in"] is True
-    assert status["login"] == "echo 'fake agent logged in'"
+    assert status["login"] == command_line(["echo", "fake agent logged in"])
 
     platform = json.loads((await jp_fetch("jupyterlab-workshop", "platform")).body)
 
@@ -132,7 +136,9 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
     terminal = (await _receive(again, "terminal"))[-1]
 
     assert terminal["cwd"] == "personal/demo"
-    assert terminal["command"] == f"echo 'fake conversation {record['session_id']}'"
+    assert terminal["command"] == command_line(
+        ["echo", f"fake conversation {record['session_id']}"]
+    )
     assert [e["kind"] for e in reopened["history"]] == [
         e["kind"] for e in record["history"]
     ]
