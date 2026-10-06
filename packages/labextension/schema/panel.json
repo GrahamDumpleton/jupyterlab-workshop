@@ -28,7 +28,7 @@
     "workshopsDirectory": {
       "type": "string",
       "title": "Workshops directory",
-      "description": "Directory, relative to the JupyterLab root, into which downloaded workshops are placed.",
+      "description": "Directory, relative to the JupyterLab root, into which downloaded workshops are placed; \".\" or an empty value is the root itself. When it holds a library.json registry it is a workshop library: downloads go under installed/, the owner's own workshops under personal/, projects under projects/, and the registry holds the subscriptions in place of the collections and catalogs settings.",
       "default": "workshops"
     },
     "defaultTrustLevel": {
@@ -84,7 +84,7 @@
     "disabledFeatures": {
       "type": "array",
       "title": "Disabled features",
-      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser; \"install-all\" removes the Install all button and Remove all menu item of a collection, leaving single installs; \"click-hint\" stops the first action of a workshop being pointed out to a learner who has clicked nothing.",
+      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser; \"install-all\" removes the Install all button and Remove all menu item of a collection, leaving single installs; \"click-hint\" stops the first action of a workshop being pointed out to a learner who has clicked nothing; \"library\" ignores a workshop library registry (library.json) in the workshops directory and never offers to make one, so the directory behaves as a plain one; \"personal\" hides the My workshops section of a workshop library.",
       "items": {
         "type": "string",
         "enum": [
@@ -98,7 +98,9 @@
           "close",
           "browse",
           "author",
-          "click-hint"
+          "click-hint",
+          "library",
+          "personal"
         ]
       },
       "default": []

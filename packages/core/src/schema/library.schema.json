@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/library.schema.json",
+  "title": "Workshop library",
+  "description": "The registry at the root of a workshop library, `library.json`: the collections and catalogs its owner subscribes to, in order, where each collection's workshops are installed, and the projects whose workshops it shows. A workshops directory holding this file is a library; one without it behaves as a plain workshops directory.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "collections": {
+      "type": "array",
+      "description": "Subscribed collections, in the order the browser lists them: http(s) URLs of collection indexes, or paths relative to the JupyterLab root. When present, the list takes the place of the collections in the JupyterLab settings, as a user's own settings do; when absent, the settings apply.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "description": "Subscribed catalogs, in order. When present, the list takes the place of the catalogs in the JupyterLab settings.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "directories": {
+      "type": "object",
+      "description": "The directory under `installed/` each collection's workshops are installed into, keyed by the collection's location. Chosen when the first workshop of a collection is installed, whether or not the library subscribes to it, and kept from then on so a later change to the collection does not move anything.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9.-]*$",
+        "maxLength": 80
+      }
+    },
+    "projects": {
+      "type": "array",
+      "description": "Projects that need saying something about. A directory under `projects/` is a project without an entry; an entry names a different workshops directory, or links in a directory kept outside the library.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "description": "The project's directory under `projects/`."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For a project linked in from outside the library, the absolute path of the directory `projects/<name>` links to."
+          },
+          "workshops": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The project's workshops directory, relative to the project. Defaults to `workshops`."
+          }
+        }
+      }
+    }
+  }
+}

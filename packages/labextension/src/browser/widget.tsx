@@ -1,6 +1,8 @@
 import {
   ICatalog,
   ICollectionEntry,
+  ILibrary,
+  normalizeWorkshopsDirectory,
   collectionTags,
   latestVersion,
   normalizeLocation,
@@ -23,6 +25,9 @@ import { ISignal, Signal } from '@lumino/signaling';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { workshopIcon } from '../icons';
+import { ILibraryProjectInfo } from '../library/scan';
+import { LibraryService } from '../library/service';
+import { planMigration, runMigration } from '../library/migrate';
 import {
   CommandIDs,
   IFeaturePolicy,
@@ -163,6 +168,13 @@ export namespace WorkshopBrowser {
 
     /** Current values of the settings the browser depends on. */
     readSettings: () => Promise<IBrowserSettings>;
+
+    /**
+     * The workshop library, when the extension has one. In a library the
+     * browser shows the owner's own workshops and the projects as well,
+     * and outside one it can offer to make the directory a library.
+     */
+    library?: LibraryService | null;
   }
 }
 
@@ -171,8 +183,15 @@ interface IContentProps extends WorkshopBrowser.IOptions {
 }
 
 function BrowserContent(props: IContentProps): JSX.Element {
-  const { manager, commands, features, store, readSettings, refreshSignal } =
-    props;
+  const {
+    manager,
+    commands,
+    features,
+    store,
+    readSettings,
+    refreshSignal,
+    library = null
+  } = props;
   const [collections, setCollections] = useState<ILoadedCollection[]>([]);
   const [catalogs, setCatalogs] = useState<ILoadedCatalog[]>([]);
   const [installed, setInstalled] = useState<IInstalledWorkshop[]>([]);
@@ -184,6 +203,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [platform, setPlatform] = useState(manager.platform?.os ?? '');
   const [frontend, setFrontend] = useState(manager.frontend);
   const [instance, setInstance] = useState(manager.platform?.instance_id ?? '');
+  const [registry, setRegistry] = useState<ILibrary | null>(null);
+  const [projects, setProjects] = useState<ILibraryProjectInfo[]>([]);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
 
   // Reload when asked, when a workshop is opened or closed, when the
   // subscribed sources change, or at first.
@@ -208,6 +230,29 @@ function BrowserContent(props: IContentProps): JSX.Element {
       setLoading(true);
 
       const settings = await readSettings();
+
+      // Whether the workshops directory is a library, and its projects.
+      // A registry that cannot be read is shown as a problem, and the
+      // directory is then listed as a plain one.
+      let loadedRegistry: ILibrary | null = null;
+      let loadedProjects: ILibraryProjectInfo[] = [];
+      let loadedLibraryError: string | null = null;
+
+      if (library) {
+        try {
+          loadedRegistry = await library.read(settings.workshopsDirectory);
+
+          if (loadedRegistry) {
+            loadedProjects = await library.projects(
+              loadedRegistry,
+              settings.workshopsDirectory
+            );
+          }
+        } catch (error) {
+          loadedLibraryError = errorMessage(error);
+        }
+      }
+
       const [subscribedCollections, subscribedCatalogs] = await Promise.all([
         store.list('collection'),
         store.list('catalog')
@@ -249,6 +294,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
         setPlatform(info?.os ?? '');
         setFrontend(info?.frontend ?? manager.frontend);
         setInstance(info?.instance_id ?? '');
+        setRegistry(loadedRegistry);
+        setProjects(loadedProjects);
+        setLibraryError(loadedLibraryError);
         setLoading(false);
       }
     };
@@ -258,7 +306,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [manager, readSettings, store, version]);
+  }, [manager, readSettings, store, library, version]);
 
   // Each collection's entries that are not installed yet, after the
   // search and tag filters; an installed workshop is listed once, under
@@ -295,33 +343,54 @@ function BrowserContent(props: IContentProps): JSX.Element {
   // subscribed collection, an ambiguous name, or a recorded collection
   // that is not subscribed. A collection with nothing installed has no
   // group here, since Available lists it.
-  const { installedGroups, otherInstalled } = useMemo(() => {
-    const byCollection = new Map<ILoadedCollection, IInstalledWorkshop[]>();
-    const rest: IInstalledWorkshop[] = [];
+  const { installedGroups, otherInstalled, personal, byProject } =
+    useMemo(() => {
+      const byCollection = new Map<ILoadedCollection, IInstalledWorkshop[]>();
+      const rest: IInstalledWorkshop[] = [];
+      const own: IInstalledWorkshop[] = [];
+      const inProjects = new Map<string, IInstalledWorkshop[]>();
 
-    for (const item of installed) {
-      const found = collectionOf(item, collections);
+      for (const item of installed) {
+        // A library's own and project workshops have sections of their own.
+        if (item.kind === 'personal') {
+          own.push(item);
 
-      if (found) {
-        const items = byCollection.get(found.collection) ?? [];
+          continue;
+        }
 
-        items.push(item);
-        byCollection.set(found.collection, items);
-      } else {
-        rest.push(item);
+        if (item.kind === 'project') {
+          const items = inProjects.get(item.project ?? '') ?? [];
+
+          items.push(item);
+          inProjects.set(item.project ?? '', items);
+
+          continue;
+        }
+
+        const found = collectionOf(item, collections);
+
+        if (found) {
+          const items = byCollection.get(found.collection) ?? [];
+
+          items.push(item);
+          byCollection.set(found.collection, items);
+        } else {
+          rest.push(item);
+        }
       }
-    }
 
-    return {
-      installedGroups: groups
-        .filter(group => byCollection.has(group.collection))
-        .map(group => ({
-          group,
-          items: byCollection.get(group.collection) ?? []
-        })),
-      otherInstalled: rest
-    };
-  }, [installed, collections, groups]);
+      return {
+        installedGroups: groups
+          .filter(group => byCollection.has(group.collection))
+          .map(group => ({
+            group,
+            items: byCollection.get(group.collection) ?? []
+          })),
+        otherInstalled: rest,
+        personal: own,
+        byProject: inProjects
+      };
+    }, [installed, collections, groups]);
 
   const allTags = useMemo(
     () => collectionTags(groups.flatMap(group => group.notInstalled)),
@@ -372,6 +441,14 @@ function BrowserContent(props: IContentProps): JSX.Element {
     ways.length === 0
       ? ''
       : ` You can ${ways.join(', ').replace(/, ([^,]*)$/, ' or $1')}.`;
+
+  // Outside a library the note says which directory is listed; in a
+  // library, where installs go is the library's business, not a name
+  // a learner needs.
+  const installedWhere =
+    registry !== null
+      ? ''
+      : ` under ${normalizeWorkshopsDirectory(directory) || 'the JupyterLab root'}`;
 
   const toggleTag = (tag: string): void =>
     setTags(current =>
@@ -540,6 +617,130 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
   };
 
+  // A plain workshops directory on a server can become a library, unless
+  // the subscriptions are locked, since the registry would hold them.
+  const canMakeLibrary =
+    library !== null &&
+    library.enabled &&
+    registry === null &&
+    libraryError === null &&
+    !loading &&
+    features.enabled('collections') &&
+    manager.backend.kind === 'server';
+
+  const makeLibrary = async (): Promise<void> => {
+    if (!library) {
+      return;
+    }
+
+    const ids = new Map(
+      collections.map(item => [item.url, item.index?.id] as const)
+    );
+    const plan = await planMigration({
+      contents: library.contents,
+      directory,
+      installed,
+      collections: await store.userList('collection'),
+      catalogs: await store.userList('catalog'),
+      ids,
+      openPath: manager.workshop?.path ?? null
+    });
+    const where =
+      normalizeWorkshopsDirectory(directory) || 'the JupyterLab root';
+    const result = await showDialog({
+      title: 'Make this a workshop library?',
+      body: (
+        <div className="jp-WorkshopBrowser-migration">
+          <p>
+            {where} becomes a workshop library: a library.json registry there
+            holds your subscriptions, downloads go under installed/, one
+            directory per collection, your own workshops under personal/ and
+            projects under projects/.
+          </p>
+          {plan.moves.length > 0 ? (
+            <>
+              <p>
+                These downloaded workshops move into their collection's
+                directory:
+              </p>
+              <ul>
+                {plan.moves.map(move => (
+                  <li key={move.from}>
+                    {move.title}: {move.from} to {move.to}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {plan.skipped.length > 0 ? (
+            <>
+              <p>These stay where they are:</p>
+              <ul>
+                {plan.skipped.map(item => (
+                  <li key={item.path}>
+                    {item.title}, because {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <p>Anything else in the directory is left as it is.</p>
+        </div>
+      ),
+      buttons: [
+        Dialog.cancelButton(),
+        Dialog.okButton({ label: 'Make library' })
+      ]
+    });
+
+    if (!result.button.accept) {
+      return;
+    }
+
+    try {
+      const failed = await runMigration(library.contents, plan, planned =>
+        library.create(planned, directory)
+      );
+
+      if (failed.length > 0) {
+        await showErrorMessage(
+          'Some workshops were not moved',
+          failed.map(item => `${item.title}: ${item.reason}`).join('\n')
+        );
+      }
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to make the workshop library',
+        errorMessage(error)
+      );
+    }
+
+    setVersion(value => value + 1);
+  };
+
+  const unlink = async (project: ILibraryProjectInfo): Promise<void> => {
+    const result = await showDialog({
+      title: `Unlink the project "${project.name}"?`,
+      body: `The link ${project.path} and its entry in the library go. Nothing at ${project.target ?? 'its target'} is touched.`,
+      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Unlink' })]
+    });
+
+    if (!result.button.accept) {
+      return;
+    }
+
+    try {
+      await manager.backend.unlinkProject(directory, project.name);
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to unlink the project',
+        errorMessage(error)
+      );
+    }
+
+    setVersion(value => value + 1);
+  };
+
   const manage = (tab: SourceKind): void => {
     void showCollectionsDialog({ manager, store, tab }).then(() =>
       setVersion(value => value + 1)
@@ -597,6 +798,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
             Collections…
           </button>
         ) : null}
+        {canMakeLibrary ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Keep your own workshops, downloads and projects apart, with your subscriptions in the directory"
+            onClick={() => void makeLibrary()}
+          >
+            Make this a workshop library…
+          </button>
+        ) : null}
         <button
           type="button"
           className="jp-Button jp-mod-styled jp-mod-minimal jp-WorkshopBrowser-refresh"
@@ -620,12 +831,73 @@ function BrowserContent(props: IContentProps): JSX.Element {
           ))}
         </div>
       ) : null}
+      {libraryError !== null ? (
+        <p className="jp-WorkshopBrowser-error">{libraryError}</p>
+      ) : null}
+      {registry !== null && features.enabled('personal') ? (
+        <>
+          <h2 className="jp-WorkshopBrowser-heading">My workshops</h2>
+          {personal.length === 0 ? (
+            <p className="jp-WorkshopBrowser-note">
+              {loading
+                ? 'Looking for your workshops…'
+                : 'Workshops you make for yourself will appear here.'}
+            </p>
+          ) : (
+            <InstalledGroup
+              section="personal"
+              title="Your own workshops"
+              count={personal.length}
+            >
+              {personal.map(item => renderInstalledCard(item, false))}
+            </InstalledGroup>
+          )}
+        </>
+      ) : null}
+      {registry !== null && projects.length > 0 ? (
+        <>
+          <h2 className="jp-WorkshopBrowser-heading">Projects</h2>
+          {projects.map(project => {
+            const items = byProject.get(project.name) ?? [];
+
+            return (
+              <InstalledGroup
+                key={project.name}
+                section="project"
+                collapseKey={project.name}
+                title={project.name}
+                count={items.length}
+                note={
+                  project.missing
+                    ? `Missing: ${project.target ?? project.path} is not there any more.`
+                    : items.length === 0
+                      ? `No workshops in ${project.workshops} yet.`
+                      : undefined
+                }
+                headerActions={
+                  project.missing && project.linked ? (
+                    <button
+                      type="button"
+                      className="jp-Button jp-mod-styled jp-mod-warn"
+                      onClick={() => void unlink(project)}
+                    >
+                      Unlink
+                    </button>
+                  ) : null
+                }
+              >
+                {items.map(item => renderInstalledCard(item, false))}
+              </InstalledGroup>
+            );
+          })}
+        </>
+      ) : null}
       <h2 className="jp-WorkshopBrowser-heading">Installed</h2>
-      {installed.length === 0 ? (
+      {installedGroups.length === 0 && otherInstalled.length === 0 ? (
         <p className="jp-WorkshopBrowser-note">
           {loading
             ? 'Looking for installed workshops…'
-            : `No workshops are installed under ${directory || 'the JupyterLab root'} yet.${installHints}`}
+            : `No workshops are installed${installedWhere} yet.${installHints}`}
         </p>
       ) : (
         <>
@@ -1004,6 +1276,11 @@ function InstalledGroup({
   group,
   count,
   onRemoveAll,
+  section = 'installed',
+  collapseKey,
+  title = 'Other workshops',
+  note,
+  headerActions,
   children
 }: {
   /** The collection the workshops belong to; none for the rest. */
@@ -1014,16 +1291,31 @@ function InstalledGroup({
 
   /** Remove every workshop installed from the collection, when allowed. */
   onRemoveAll?: () => void;
+
+  /** The section the group is in, which keeps its collapse state apart. */
+  section?: GroupSection;
+
+  /** What the collapse state is kept under, when not the collection. */
+  collapseKey?: string;
+
+  /** The heading when there is no collection. */
+  title?: string;
+
+  /** A line shown in place of the cards, such as why there are none. */
+  note?: string;
+
+  /** Buttons for the heading beside its menu. */
+  headerActions?: React.ReactNode;
   children: React.ReactNode;
 }): JSX.Element {
   const collection = group?.collection;
-  const location = collection?.url ?? '';
+  const location = collapseKey ?? collection?.url ?? '';
   const [collapsed, setCollapsed] = useState(() =>
-    readCollapsed('installed', location)
+    readCollapsed(section, location)
   );
   const toggle = (): void => {
     setCollapsed(current => {
-      writeCollapsed('installed', location, !current);
+      writeCollapsed(section, location, !current);
 
       return !current;
     });
@@ -1050,24 +1342,32 @@ function InstalledGroup({
     >
       <GroupHeader
         collection={collection}
-        title="Other workshops"
+        title={title}
         count={countText}
         collapsed={collapsed}
         onToggle={toggle}
         actions={
-          canRemoveAll ? (
-            <GroupMenu
-              items={[
-                {
-                  label: `Remove all ${removable === 1 ? 'installed workshop' : `${removable} installed workshops`}…`,
-                  warn: true,
-                  run: onRemoveAll ?? ((): void => undefined)
-                }
-              ]}
-            />
+          headerActions || canRemoveAll ? (
+            <>
+              {headerActions}
+              {canRemoveAll ? (
+                <GroupMenu
+                  items={[
+                    {
+                      label: `Remove all ${removable === 1 ? 'installed workshop' : `${removable} installed workshops`}…`,
+                      warn: true,
+                      run: onRemoveAll ?? ((): void => undefined)
+                    }
+                  ]}
+                />
+              ) : null}
+            </>
           ) : null
         }
       />
+      {!collapsed && note !== undefined ? (
+        <p className="jp-WorkshopBrowser-note">{note}</p>
+      ) : null}
       {!collapsed ? (
         <div className="jp-WorkshopBrowser-cards">{children}</div>
       ) : null}
@@ -1676,7 +1976,7 @@ function suggestedCollections(
 }
 
 /** Which section a group's collapse state belongs to. */
-type GroupSection = 'available' | 'installed';
+type GroupSection = 'available' | 'installed' | 'personal' | 'project';
 
 /**
  * The storage key of a group's collapse state. The Available keys predate
@@ -1685,6 +1985,11 @@ type GroupSection = 'available' | 'installed';
  * collapsing one section's group leaves the other's open.
  */
 function collapsedKey(section: GroupSection, url: string): string {
+  // A project's key is its name, which is not a location.
+  if (section === 'personal' || section === 'project') {
+    return `${COLLAPSED_KEY}${section}:${url}`;
+  }
+
   const location = url === '' ? '' : normalizeLocation(url);
 
   return section === 'installed'

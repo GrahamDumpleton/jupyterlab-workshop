@@ -88,12 +88,18 @@ palette and the matching launch link parameter.
 | `browse`         | The browse button, the launcher card and "Browse Workshops", for an image that runs a single workshop.                                                                                                                       |
 | `author`         | The edit button, author mode and its commands, and the "New Workshop" launcher card. A workshop marked as the learner's own opens as a learner would see it.                                                                 |
 | `click-hint`     | The hint that the first action of a workshop can be clicked, shown to a learner who has clicked nothing: a pulsing ring and a "Click to run" label on that action.                                                           |
+| `library`        | [Workshop libraries](library.md): a `library.json` in the workshops directory is ignored and "Make this a workshop library…" is not offered, so the directory behaves as a plain one.                                        |
+| `personal`       | The My workshops section of a workshop library.                                                                                                                                                                              |
 
 The workshops under `workshopsDirectory` stay openable with
 `open-directory` disabled, from the browser or a `workshop=<path>` launch
 link, and the browser's Install and Update buttons keep working with
 `open-url` disabled, because those sources come from the subscribed
 collections.
+A deployment needs none of these to keep [workshop libraries](library.md)
+out of its way: a workshops directory without `library.json` is a plain
+one, and the library's sections and its offer to make one appear only
+in a library or where subscribing is allowed.
 Restart stays available whatever is disabled, since it is how a learner
 starts over when Remove is gone; see [Using
 workshops](using.md#starting-over-and-clearing-up).

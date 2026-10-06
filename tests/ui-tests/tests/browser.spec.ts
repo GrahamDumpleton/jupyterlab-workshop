@@ -1839,6 +1839,373 @@ test.describe('locked-down browser', () => {
   });
 });
 
+test.describe('deployment set up as a workshop repository sets up Binder', () => {
+  // The overrides every workshop repository writes for Binder and
+  // Codespaces. Nothing in them names a workshop library, so a release
+  // that adds one must leave what they show exactly as it was. They also
+  // set `browseOnStart`, left out here because it replaces the launcher
+  // Galata waits for, and it only decides what is shown first.
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        collections: [COLLECTION_FILE],
+        workshopsDirectory: WORKSHOPS_DIR,
+        trustPolicy: { forcedLevel: 'trusted' },
+        disabledFeatures: [
+          'open-directory',
+          'open-url',
+          'collections',
+          'catalogs',
+          'remove',
+          'author'
+        ]
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await removeFixtures(page);
+  });
+
+  test('installs from a launch link flat and shows no library', async ({
+    page
+  }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?collection=${COLLECTION_FILE}&workshop=pandas-intro`)
+      .catch(() => undefined);
+
+    // The trust level is forced, so the workshop opens without a dialog.
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('Pandas for beginners', { timeout: 60000 });
+
+    // The install lands directly in the workshops directory, as before,
+    // and nothing is created that would make the directory a library.
+    expect(
+      await page.contents.fileExists(
+        `${WORKSHOPS_DIR}/pandas-intro/workshop.yaml`
+      )
+    ).toBe(true);
+    expect(
+      await page.contents.fileExists(`${WORKSHOPS_DIR}/library.json`)
+    ).toBe(false);
+    expect(
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/installed`)
+    ).toBe(false);
+
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    // Installed groups the download and the local workshop of the same
+    // name under the collection, which leaves nothing to offer as
+    // available.
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-heading', { hasText: 'Installed' })
+    ).toHaveCount(1);
+
+    const group = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'Test collection'
+    });
+
+    await expect(group).toContainText('2 of 2 installed');
+    await expect(
+      group.locator('.jp-WorkshopBrowser-card', {
+        hasText: 'Pandas for beginners'
+      })
+    ).toHaveCount(1);
+    await expect(
+      group.locator('.jp-WorkshopBrowser-card', {
+        hasText: 'Git from the command line'
+      })
+    ).toHaveCount(1);
+
+    // None of what a library adds appears.
+    for (const text of ['My workshops', 'Projects']) {
+      await expect(
+        browser.locator('.jp-WorkshopBrowser-heading', { hasText: text })
+      ).toHaveCount(0);
+    }
+    await expect(
+      browser.getByRole('button', { name: 'Make this a workshop library…' })
+    ).toHaveCount(0);
+  });
+});
+
+test.describe('deployment that disables workshop libraries', () => {
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        collections: [COLLECTION_FILE],
+        workshopsDirectory: WORKSHOPS_DIR,
+        disabledFeatures: ['library']
+      }
+    }
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await removeFixtures(page);
+  });
+
+  test('ignores a registry the directory happens to hold', async ({ page }) => {
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1, collections: [] }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    // The registry's empty list would hide the configured collection;
+    // ignored, the collection is listed and installs go in flat.
+    await browser
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'Pandas for beginners' })
+      .getByRole('button', { name: 'Install' })
+      .click();
+    await expect
+      .poll(() =>
+        page.contents.fileExists(`${WORKSHOPS_DIR}/pandas-intro/workshop.yaml`)
+      )
+      .toBe(true);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-heading', {
+        hasText: 'My workshops'
+      })
+    ).toHaveCount(0);
+  });
+});
+
+/** The library's hash-named directory for the test collection, which has no id. */
+const COLLECTION_DIRECTORY = 'b5c3661';
+
+/** Upload a small workshop of one page. */
+async function uploadWorkshop(
+  page: Page,
+  path: string,
+  name: string,
+  title: string
+): Promise<void> {
+  await page.contents.uploadContent(
+    MANIFEST(name, title, '1.0.0'),
+    'text',
+    `${path}/workshop.yaml`
+  );
+  await page.contents.uploadContent(
+    `---\ntitle: Start\n---\n\n# ${title}\n`,
+    'text',
+    `${path}/pages/01.md`
+  );
+}
+
+test.describe('workshop library', () => {
+  test.beforeEach(async ({ page }) => {
+    await uploadFixtures(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await removeFixtures(page);
+  });
+
+  test('shows its own sections, installs into a collection directory and trusts its own workshops', async ({
+    page
+  }) => {
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/personal/mine`,
+      'mine',
+      'My own workshop'
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/projects/repo/workshops/draft`,
+      'draft',
+      'A draft in a project'
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const headings = browser.locator('.jp-WorkshopBrowser-heading');
+
+    await expect(headings).toHaveText([
+      'My workshops',
+      'Projects',
+      'Installed',
+      'Available'
+    ]);
+
+    // The owner's workshop and the project's are in their sections, and
+    // the local git-basics is still matched to the collection.
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', { hasText: 'repo' })
+    ).toContainText('A draft in a project');
+    await expect(
+      browser
+        .locator('.jp-WorkshopBrowser-group', {
+          hasText: 'Your own workshops'
+        })
+        .locator('.jp-WorkshopBrowser-card')
+    ).toHaveText([/My own workshop/]);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-installed', {
+        hasText: 'Test collection'
+      })
+    ).toContainText('Git from the command line');
+
+    // Installing puts the workshop in the collection's own directory,
+    // recorded in the registry, and subscribes nothing new.
+    await browser
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'Pandas for beginners' })
+      .getByRole('button', { name: 'Install' })
+      .click();
+    await expect
+      .poll(() =>
+        page.contents.fileExists(
+          `${WORKSHOPS_DIR}/installed/${COLLECTION_DIRECTORY}/pandas-intro/workshop.yaml`
+        )
+      )
+      .toBe(true);
+
+    const registry = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/library.json?content=1&type=file&format=text`
+    );
+
+    expect(JSON.parse(String((await registry.json()).content))).toEqual({
+      version: 1,
+      directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
+    });
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group.jp-mod-installed', {
+        hasText: 'Test collection'
+      })
+    ).toContainText('Pandas for beginners');
+
+    // The owner's workshop opens without asking about trust.
+    await browser
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My own workshop' })
+      .getByRole('button', { name: 'Open' })
+      .click();
+    await expect(
+      page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
+    ).toHaveText('My own workshop');
+    await expect(page.locator('.jp-Dialog .jp-WorkshopTrust')).toHaveCount(0);
+  });
+
+  test('makes a plain directory a library, moving what was downloaded', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    await browser
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'Pandas for beginners' })
+      .getByRole('button', { name: 'Install' })
+      .click();
+    await expect
+      .poll(() =>
+        page.contents.fileExists(`${WORKSHOPS_DIR}/pandas-intro/workshop.yaml`)
+      )
+      .toBe(true);
+
+    await browser
+      .getByRole('button', { name: 'Make this a workshop library…' })
+      .click();
+
+    const dialog = page.locator('.jp-Dialog');
+    const moved = `${WORKSHOPS_DIR}/installed/${COLLECTION_DIRECTORY}/pandas-intro`;
+
+    await expect(dialog).toContainText(
+      `Pandas for beginners: ${WORKSHOPS_DIR}/pandas-intro to ${moved}`
+    );
+    await dialog.getByRole('button', { name: 'Make library' }).click();
+
+    // The download moved and the local workshop stayed; the registry
+    // carries over the subscription the settings held.
+    await expect
+      .poll(() => page.contents.fileExists(`${moved}/workshop.yaml`))
+      .toBe(true);
+    expect(
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/${WORKSHOP}`)
+    ).toBe(true);
+
+    const registry = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/library.json?content=1&type=file&format=text`
+    );
+
+    expect(JSON.parse(String((await registry.json()).content))).toEqual({
+      version: 1,
+      collections: [COLLECTION_FILE],
+      directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
+    });
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-heading', {
+        hasText: 'My workshops'
+      })
+    ).toHaveCount(1);
+    await expect(
+      browser.getByRole('button', { name: 'Make this a workshop library…' })
+    ).toHaveCount(0);
+  });
+});
+
+test.describe('empty workshop library', () => {
+  // Spelled with a leading "./", as a setting naming the root as "."
+  // would be; in a library the notes name no directories at all.
+  test.use({
+    mockSettings: {
+      ...galata.DEFAULT_SETTINGS,
+      [PLUGIN]: {
+        defaultWorkshop: '',
+        workshopsDirectory: './test-library'
+      }
+    }
+  });
+
+  test.afterEach(async ({ page }) => {
+    if (await page.contents.directoryExists('test-library')) {
+      await page.contents.deleteDirectory('test-library');
+    }
+  });
+
+  test('says what goes where without naming directories', async ({ page }) => {
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1 }),
+      'text',
+      'test-library/library.json'
+    );
+    await openBrowser(page);
+
+    const notes = page.locator(
+      '#jupyterlab-workshop-browser .jp-WorkshopBrowser-note'
+    );
+
+    await expect(notes.first()).toHaveText(
+      'Workshops you make for yourself will appear here.'
+    );
+    await expect(notes.nth(1)).toContainText('No workshops are installed yet.');
+  });
+});
+
 /** A collection for Install all: two good archives, a bad hash, one for Lite only. */
 const BULK_FILE = 'bulk-collection.json';
 

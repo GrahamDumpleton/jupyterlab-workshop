@@ -86,14 +86,15 @@ Lists page ids, titles, paths and requirements.
 ## schema
 
 ```
-jupyter workshop schema [--collection | --catalog | --events]
+jupyter workshop schema [--collection | --catalog | --events | --library]
 ```
 
 Prints the JSON schema of `workshop.yaml`, for editors and validators,
 or with `--collection` the schema of a collection index file, with
-`--catalog` the schema of a catalog, or with `--events` the schema of
+`--catalog` the schema of a catalog, with `--events` the schema of
 the [progress events](analytics.md) a workshop reports, for a service
-that receives them.
+that receives them, or with `--library` the schema of a
+[workshop library](library.md#the-registry)'s `library.json`.
 
 ## publish
 
@@ -266,6 +267,103 @@ is for JupyterLab only; by default every entry is installed, since the
 person building an image knows its platform. One line is printed per workshop and a count at the end, and
 the exit status is 1 when any download failed, so a build stops on a
 missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
+
+In a [workshop library](library.md), each workshop goes in its
+collection's own directory under `installed/`, and the library is
+subscribed to the collection.
+
+## library
+
+```
+jupyter workshop library [DIR] [--init-only] [--collection URL...] [--trust LEVEL] [--port PORT] [--no-browser] [--fresh] [--token TOKEN] [-- ARGS...]
+```
+
+Starts JupyterLab with a [workshop library](library.md) as its root,
+creating the library the first time. `DIR` defaults to the
+`JUPYTER_WORKSHOP_LIBRARY` environment variable when it is set, and
+otherwise to `~/Workshops`. The library's registry is `library.json` in
+`DIR`, and `workshopsDirectory` is set to `.` for the session, so the
+root is the library. A linked project whose link has gone while its
+repository is still there is relinked first. `--init-only` creates the
+library and stops; the other options are those of [launch](#launch),
+and arguments after `--` go to `jupyter lab`.
+
+## subscribe and unsubscribe
+
+```
+jupyter workshop subscribe LOCATION [--catalog] [--root ROOT] [--directory DIR | --library]
+jupyter workshop unsubscribe LOCATION [--catalog] [--root ROOT] [--directory DIR | --library]
+```
+
+Adds a collection, or with `--catalog` a catalog, to a workshop
+library's subscriptions, or removes it. `LOCATION` is the index's URL
+or a path relative to the JupyterLab root, matched however it is
+spelled. The library is `--directory` (`workshops`) under `--root` (the
+current directory), or with `--library` the default library that
+[library](#library) opens. A directory that is not a library is
+refused, since outside a library subscriptions live in the JupyterLab
+settings, which the workshop browser changes.
+
+## list
+
+```
+jupyter workshop list [--json] [--root ROOT] [--directory DIR | --library]
+```
+
+Lists the installed workshops, with where each is, its version and its
+progress, and in a library its subscriptions. In a library each
+workshop has its kind: `installed`, `personal` or `project`. `--json`
+prints an object with `directory`, `library` (whether it is one),
+`collections` and `catalogs` (the registry's lists, or null when the
+settings apply) and `workshops`, the records the browser reads; the
+shape is stable for scripts to rely on.
+
+## update
+
+```
+jupyter workshop update [NAME...] [--yes] [--root ROOT] [--directory DIR | --library]
+```
+
+Installs the newest version a collection lists of each workshop
+installed from it, where that differs from the installed version, as
+the browser's Update button does. `NAME` is a workshop's name or its
+path, and every installed workshop is checked when none is given; a
+name two installs share must be given as a path. Updating replaces the
+workshop, which resets its progress, so the command lists the updates
+and asks first; `--yes` goes ahead without asking, and is needed when
+there is no terminal to ask at.
+
+## remove
+
+```
+jupyter workshop remove NAME... [--yes] [--root ROOT] [--directory DIR | --library]
+```
+
+Removes installed workshops as the browser's Remove button does: a
+downloaded workshop is deleted, and any other, a local directory, a
+library's own workshop or a project's, loses only its recorded
+progress, `_workshop/`, keeping its files. It lists what it will do and
+asks first unless given `--yes`.
+
+## project
+
+```
+jupyter workshop project link PATH [--name NAME] [--workshops DIR] [--root ROOT] [--directory DIR]
+jupyter workshop project unlink NAME [--root ROOT] [--directory DIR]
+jupyter workshop project list [--json] [--root ROOT] [--directory DIR]
+```
+
+Manages the [projects](library.md#projects) of a workshop library. A
+repository cloned under the library's `projects/` is a project without
+any of these; `link` brings in one kept elsewhere, as a symbolic link,
+or a directory junction on Windows, at `projects/NAME` (the
+repository's directory name by default), recorded in the registry.
+`--workshops` names its workshops directory when it is not
+`workshops`. `unlink` removes a linked project's link and entry, never
+its files, and works when the repository has gone. `list` shows each
+project as cloned, linked or missing; `--json` prints them as an
+object with a `projects` list. These commands act on the default
+library unless `--root` or `--directory` name another.
 
 ## kernels
 

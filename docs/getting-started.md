@@ -82,6 +82,19 @@ setup. Workshops that declare an [environment](environment.md) of their
 own still create it beside themselves, so the tool's environment stays
 as installed.
 
+To keep everything in one place instead, whichever directory you start
+from, use a [workshop library](library.md):
+
+```
+jupyter-workshop library
+```
+
+starts JupyterLab on `~/Workshops`, or the directory
+`JUPYTER_WORKSHOP_LIBRARY` names, creating it the first time. The
+library keeps what you install by collection, the workshops you make
+for yourself, and the repositories you write workshops in, with your
+subscriptions in the library rather than your JupyterLab settings.
+
 The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers
 three buttons: Browse workshops, Open a directory and Open from URL.
@@ -248,3 +261,6 @@ it runs on.
 - [Finding and installing workshops](collections.md) covers the browser,
   collections, catalogs and launch links for handing a workshop to
   learners.
+
+- [Workshop libraries](library.md) keep your installed workshops, your
+  own and your projects in one directory.

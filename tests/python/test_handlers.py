@@ -463,3 +463,142 @@ async def test_bridge_round_trip_and_timeout(jp_fetch):
         )
 
     assert refused.value.code == 400
+
+
+async def test_fetch_into_the_root_when_the_directory_is_given_as_dot(
+    jp_fetch, jp_root_dir, archive_url
+):
+    # Only a missing directory takes the default; "." is the root, where
+    # a workshop library opened by `jupyter workshop library` lives.
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "fetch",
+        method="POST",
+        body=json.dumps({"source": {"archive": archive_url}, "directory": "."}),
+    )
+
+    assert json.loads(response.body)["path"] == "demo"
+    assert (jp_root_dir / "demo" / "workshop.yaml").is_file()
+
+    response = await jp_fetch(
+        "jupyterlab-workshop", "workshops", params={"directory": "."}
+    )
+
+    assert [item["path"] for item in json.loads(response.body)["workshops"]] == ["demo"]
+
+
+async def test_endpoints_reach_a_workshop_in_a_linked_project(
+    jp_fetch, jp_root_dir, tmp_path
+):
+    from tornado.httpclient import HTTPClientError
+
+    from jupyterlab_workshop.library import empty_library, link_project, write_library
+
+    repo = tmp_path / "outside-the-root" / "repo"
+    workshop = repo / "workshops" / "draft"
+    library = jp_root_dir / "workshops"
+
+    workshop.mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(MANIFEST)
+    (workshop / "data.txt").write_text("one\n")
+    write_library(library, "", empty_library())
+    link_project(library, repo)
+
+    path = "workshops/projects/repo/workshops/draft"
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "checkpoints",
+        method="POST",
+        body=json.dumps({"workshop": path, "name": "start"}),
+    )
+
+    assert json.loads(response.body)["name"] == "start"
+    assert (workshop / "_workshop" / "snapshots").is_dir()
+
+    # The listing the browser asks for is the plain one: a library is
+    # scanned by the browser itself.
+    response = await jp_fetch(
+        "jupyterlab-workshop", "workshops", params={"directory": "workshops"}
+    )
+
+    assert json.loads(response.body)["workshops"] == []
+
+    # A link the registry does not vouch for stays outside.
+    stray = tmp_path / "stray"
+
+    (stray / "ws").mkdir(parents=True)
+    (stray / "ws" / "workshop.yaml").write_text(MANIFEST)
+    (library / "projects" / "stray").symlink_to(stray, target_is_directory=True)
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "checkpoints",
+            params={"workshop": "workshops/projects/stray/ws"},
+        )
+
+    assert error.value.code == 400
+
+    # And a download cannot be removed from inside the project.
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "workshops",
+            method="DELETE",
+            params={"path": path},
+        )
+
+    assert error.value.code == 400
+    assert (workshop / "workshop.yaml").is_file()
+
+
+async def test_projects_endpoint_lists_and_unlinks_a_missing_project(
+    jp_fetch, jp_root_dir, tmp_path
+):
+    import shutil
+
+    from tornado.httpclient import HTTPClientError
+
+    from jupyterlab_workshop.library import (
+        empty_library,
+        is_link,
+        link_project,
+        write_library,
+    )
+
+    repo = tmp_path / "gone" / "repo"
+    library = jp_root_dir / "workshops"
+
+    repo.mkdir(parents=True)
+    write_library(library, "", empty_library())
+    link_project(library, repo)
+    shutil.rmtree(repo)
+
+    response = await jp_fetch(
+        "jupyterlab-workshop", "projects", params={"directory": "workshops"}
+    )
+    (project,) = json.loads(response.body)["projects"]
+
+    assert project["name"] == "repo"
+    assert project["missing"] is True
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "projects",
+        method="DELETE",
+        params={"directory": "workshops", "name": "repo"},
+    )
+
+    assert json.loads(response.body)["unlinked"]["name"] == "repo"
+    assert not is_link(library / "projects" / "repo")
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "projects",
+            method="DELETE",
+            params={"directory": "workshops", "name": "repo"},
+        )
+
+    assert error.value.code == 400

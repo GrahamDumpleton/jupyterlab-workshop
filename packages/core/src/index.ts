@@ -18,6 +18,7 @@ export * from './format/progress';
 export * from './format/variants';
 export * from './hash';
 export * from './launch/link';
+export * from './library';
 export * from './lint';
 export * from './lite';
 export * from './versions';

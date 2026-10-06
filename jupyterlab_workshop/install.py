@@ -11,15 +11,36 @@ parameter so the tests need no network.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from .collection import CollectionError, list_installed, load_collection
-from .fetch import Downloader, FetchError, fetch_workshop, parse_source
+from .collection import (
+    CollectionError,
+    collection_hash,
+    list_installed,
+    load_collection,
+    same_location,
+)
+from .fetch import (
+    Downloader,
+    FetchError,
+    _resolve_inside,
+    fetch_workshop,
+    parse_source,
+    remove_tree,
+    remove_workshop,
+)
+from .library import (
+    INSTALLED_DIRECTORY,
+    LibraryError,
+    assign_collection_directory,
+    is_library,
+    normalize_workshops_directory,
+    update_library,
+)
 
 #: Where the browser installs to when the settings do not say.
 DEFAULT_DIRECTORY = "workshops"
@@ -41,38 +62,6 @@ class InstallOutcome:
     detail: str
 
 
-def normalize_location(location: str) -> str:
-    """The form of a collection location the browser compares by.
-
-    Mirrors the core package: surrounding space and trailing slashes go,
-    and for an http(s) URL the scheme and host are lower-cased.
-    """
-
-    trimmed = location.strip().rstrip("/")
-    parts = urlsplit(trimmed)
-
-    if parts.scheme.lower() not in {"http", "https"}:
-        return trimmed
-
-    query = f"?{parts.query}" if parts.query else ""
-
-    return f"{parts.scheme.lower()}://{parts.netloc.lower()}{parts.path}{query}"
-
-
-def same_location(a: str, b: str) -> bool:
-    """Whether two collection locations name the same collection."""
-
-    return normalize_location(a) == normalize_location(b)
-
-
-def collection_hash(location: str) -> str:
-    """The short hash the browser appends to a directory name on a clash."""
-
-    digest = hashlib.sha256(normalize_location(location).encode("utf-8"))
-
-    return digest.hexdigest()[:7]
-
-
 def is_installed_from(record: dict[str, Any], collection: str, name: str) -> bool:
     """Whether an installed record is a collection's entry of that name.
 
@@ -81,7 +70,9 @@ def is_installed_from(record: dict[str, Any], collection: str, name: str) -> boo
     as the browser does.
     """
 
-    if record.get("name") != name:
+    # A workshop library's own and project workshops are never a
+    # collection's, whatever they are called.
+    if record.get("name") != name or record.get("kind") in {"personal", "project"}:
         return False
 
     recorded = record.get("collection")
@@ -104,6 +95,96 @@ def install_name(
     )
 
     return f"{name}-{collection_hash(collection)}" if clash else name
+
+
+def install_destination(
+    root_dir: Path,
+    directory: str,
+    collection: str,
+    collection_id: str | None,
+    name: str,
+    installed: Sequence[dict[str, Any]],
+) -> tuple[str, str]:
+    """Where a collection's workshop is installed: the directory, relative
+    to the root, and the name of the workshop's directory within it.
+
+    In a workshop library each collection has a directory of its own
+    under ``installed/``, chosen from its id the first time and recorded
+    in the registry, so workshops of the same name from two collections
+    never clash. In a plain workshops directory the workshop goes
+    directly in it, named as the browser names it there.
+    """
+
+    if not is_library(root_dir, directory):
+        return directory, install_name(name, collection, installed)
+
+    chosen: dict[str, str] = {}
+
+    def change(library: dict[str, Any]) -> dict[str, Any]:
+        chosen["directory"], updated = assign_collection_directory(
+            library, collection, collection_id
+        )
+
+        return updated
+
+    update_library(root_dir, directory, change)
+
+    parts = [normalize_workshops_directory(directory), INSTALLED_DIRECTORY]
+
+    return "/".join(part for part in [*parts, chosen["directory"]] if part), name
+
+
+def subscribe(
+    root_dir: Path, directory: str, location: str, kind: str = "collections"
+) -> bool:
+    """Add a collection or catalog to a workshop library's subscriptions.
+
+    ``kind`` is ``collections`` or ``catalogs``. A location the library
+    already subscribes to, however it is spelled, is left where it is.
+    Returns whether the subscriptions changed. Raises LibraryError when
+    the directory is not a library.
+    """
+
+    added: list[bool] = []
+
+    def change(library: dict[str, Any]) -> dict[str, Any]:
+        current = list(library.get(kind) or [])
+
+        if any(same_location(item, location) for item in current):
+            return library
+
+        added.append(True)
+
+        return {**library, kind: [*current, location]}
+
+    update_library(root_dir, directory, change)
+
+    return bool(added)
+
+
+def unsubscribe(
+    root_dir: Path, directory: str, location: str, kind: str = "collections"
+) -> bool:
+    """Remove a collection or catalog from a workshop library's
+    subscriptions, matched however it is spelled. Returns whether it was
+    subscribed. Raises LibraryError when the directory is not a library."""
+
+    removed: list[bool] = []
+
+    def change(library: dict[str, Any]) -> dict[str, Any]:
+        current = list(library.get(kind) or [])
+        kept = [item for item in current if not same_location(item, location)]
+
+        if len(kept) == len(current):
+            return library
+
+        removed.append(True)
+
+        return {**library, kind: kept}
+
+    update_library(root_dir, directory, change)
+
+    return bool(removed)
 
 
 def collection_location(location: str, root_dir: Path) -> tuple[str, str, Path]:
@@ -164,9 +245,19 @@ def install_collection(
 
     try:
         index = load_collection(load_as, load_root, downloader)
-        installed = list_installed(root_dir, directory)
+        installed = list_installed(root_dir, directory, library=True)
     except CollectionError as error:
         raise FetchError(str(error)) from error
+
+    collection_id = str(index.get("id") or "") or None
+
+    # In a workshop library an install subscribes to its collection, so
+    # the browser lists it and orders its workshops by the collection.
+    if is_library(root_dir, directory):
+        try:
+            subscribe(root_dir, directory, recorded)
+        except LibraryError as error:
+            raise FetchError(str(error)) from error
 
     wanted = set(only)
     unknown = wanted - {
@@ -222,15 +313,18 @@ def install_collection(
 
         try:
             source = parse_source(spec)
+            destination, directory_name = install_destination(
+                root_dir, directory, recorded, collection_id, name, installed
+            )
             result = fetch_workshop(
                 source,
                 root_dir,
-                directory,
-                name=install_name(name, recorded, installed),
+                destination,
+                name=directory_name,
                 downloader=downloader,
                 collection=recorded,
             )
-        except FetchError as error:
+        except (FetchError, LibraryError) as error:
             note(InstallOutcome(name, title, "failed", str(error)))
 
             continue
@@ -240,3 +334,157 @@ def install_collection(
         note(InstallOutcome(name, title, "installed", result.path))
 
     return outcomes
+
+
+@dataclass(frozen=True)
+class Update:
+    """A newer version of an installed workshop that its collection offers."""
+
+    #: The installed workshop's record, as ``list_installed`` gives it.
+    record: dict[str, Any]
+
+    #: The collection entry's newest version.
+    version: str
+
+    #: Where that version is fetched from, as the index gives it.
+    source: dict[str, Any]
+
+
+def select_installed(
+    records: Sequence[dict[str, Any]], wanted: Sequence[str]
+) -> list[dict[str, Any]]:
+    """The installed records named by path or by workshop name, in the
+    order named; all of them when nothing is named.
+
+    A name two installs share, such as the same workshop from two
+    collections in a library, is refused as ambiguous, so the caller
+    names the path instead.
+    """
+
+    if not wanted:
+        return list(records)
+
+    chosen: list[dict[str, Any]] = []
+
+    for item in wanted:
+        by_path = [record for record in records if record["path"] == item]
+        matches = by_path or [record for record in records if record["name"] == item]
+
+        if not matches:
+            raise FetchError(f"No installed workshop is called {item}")
+
+        if len(matches) > 1:
+            paths = ", ".join(record["path"] for record in matches)
+
+            raise FetchError(f"{item} is ambiguous; name one of {paths}")
+
+        if matches[0] not in chosen:
+            chosen.append(matches[0])
+
+    return chosen
+
+
+def find_updates(
+    root_dir: Path,
+    records: Sequence[dict[str, Any]],
+    downloader: Downloader | None = None,
+) -> list[Update]:
+    """The installed workshops whose collection offers another version.
+
+    Only workshops installed from a collection can be updated, as in the
+    browser, and only when the newest version the collection lists
+    differs from the installed one. Each collection is read once.
+    """
+
+    indexes: dict[str, dict[str, Any] | None] = {}
+    updates: list[Update] = []
+
+    for record in records:
+        location = record.get("collection")
+
+        if not location or record.get("kind") in {"personal", "project"}:
+            continue
+
+        if location not in indexes:
+            try:
+                indexes[location] = load_collection(location, root_dir, downloader)
+            except CollectionError:
+                indexes[location] = None
+
+        index = indexes[location]
+
+        if index is None:
+            continue
+
+        entry = next(
+            (
+                item
+                for item in index.get("workshops", [])
+                if item.get("name") == record["name"]
+            ),
+            None,
+        )
+        versions = (entry or {}).get("versions") or []
+
+        if not versions or not isinstance(versions[0], dict):
+            continue
+
+        newest = versions[0]
+        version = str(newest.get("version") or "")
+
+        if version and version != record.get("version"):
+            spec = dict(newest.get("source") or {})
+
+            if newest.get("sha256"):
+                spec["sha256"] = newest["sha256"]
+
+            updates.append(Update(record, version, spec))
+
+    return updates
+
+
+def apply_update(
+    root_dir: Path, update: Update, downloader: Downloader | None = None
+) -> str:
+    """Install the newer version in place of the installed one.
+
+    The workshop is fetched into the same directory under the same name,
+    replacing it, which resets its progress as the browser's Update does.
+    Returns the path it is installed at.
+    """
+
+    path = str(update.record["path"])
+    parent, _, name = path.rpartition("/")
+    result = fetch_workshop(
+        parse_source(update.source),
+        root_dir,
+        parent,
+        name=name,
+        overwrite=True,
+        downloader=downloader,
+        collection=str(update.record.get("collection") or ""),
+    )
+
+    return result.path
+
+
+def remove_installed(root_dir: Path, record: dict[str, Any]) -> str:
+    """Remove an installed workshop as the browser does.
+
+    A workshop the extension downloaded is deleted whole. Any other, a
+    local directory, the library owner's own or a project's, may hold
+    work that is nowhere else, so only its recorded progress goes.
+    Returns what was removed: the workshop's path, or its state directory.
+    """
+
+    source = record.get("source")
+
+    if isinstance(source, dict) and source.get("kind") not in {None, "local"}:
+        return remove_workshop(root_dir, str(record["path"]))
+
+    state = _resolve_inside(root_dir, str(record["path"])) / "_workshop"
+
+    if state.is_dir():
+        remove_tree(state)
+
+    return f"{record['path']}/_workshop"

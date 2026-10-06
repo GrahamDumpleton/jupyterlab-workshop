@@ -20,6 +20,7 @@ from jupyterlab_workshop.collection import (
     https_remote,
     index_repository,
     list_installed,
+    list_projects,
     load_collection,
     parse_collection,
 )
@@ -250,6 +251,164 @@ def test_list_installed_describes_workshops_with_progress(tmp_path: Path) -> Non
 
     with pytest.raises(CollectionError, match="outside"):
         list_installed(tmp_path, "../up")
+
+
+def test_list_installed_records_keep_their_fields_outside_a_library(
+    tmp_path: Path,
+) -> None:
+    # The records the browser, the CLI and the MCP tools read today; a
+    # directory that is not a workshop library must keep giving exactly
+    # these, with nothing added.
+    _write_workshop(tmp_path / "workshops" / "beta", "beta", done=1)
+
+    (record,) = list_installed(tmp_path, "workshops")
+
+    assert sorted(record) == [
+        "collection",
+        "currentPage",
+        "description",
+        "done",
+        "frontends",
+        "instanceId",
+        "name",
+        "pages",
+        "path",
+        "platforms",
+        "resumable",
+        "sha256",
+        "source",
+        "started",
+        "tags",
+        "title",
+        "trust",
+        "version",
+    ]
+
+
+def _write_library(root: Path, registry: dict[str, Any]) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "library.json").write_text(json.dumps(registry))
+
+
+def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
+    library = tmp_path / "lib"
+
+    _write_library(library, {"version": 1})
+    _write_workshop(library / "flat-download", "flat-download", done=1)
+    _write_workshop(library / "flat-local", "flat-local")
+    _write_workshop(library / "installed" / "example.org-c" / "alpha", "alpha")
+    _write_workshop(library / "personal" / "mine", "mine")
+    _write_workshop(library / "projects" / "repo" / "workshops" / "draft", "draft")
+
+    # The endpoint's call sees a plain workshops directory, as before.
+    plain = list_installed(tmp_path, "lib")
+
+    assert [record["name"] for record in plain] == ["flat-download", "flat-local"]
+    assert all("kind" not in record for record in plain)
+
+    scanned = {
+        record["name"]: record for record in list_installed(tmp_path, "lib", True)
+    }
+
+    assert {name: record["kind"] for name, record in scanned.items()} == {
+        "alpha": "installed",
+        "draft": "project",
+        "flat-download": "installed",
+        "flat-local": None,
+        "mine": "personal",
+    }
+    assert scanned["draft"]["project"] == "repo"
+    assert scanned["draft"]["path"] == "lib/projects/repo/workshops/draft"
+    assert scanned["alpha"]["path"] == "lib/installed/example.org-c/alpha"
+
+    # Asking for the layout of a directory with no registry changes nothing.
+    assert list_installed(tmp_path, "lib/personal", True)[0].keys() == (plain[0].keys())
+
+
+def test_list_installed_follows_the_project_workshops_directory(
+    tmp_path: Path,
+) -> None:
+    _write_library(
+        tmp_path,
+        {"version": 1, "projects": [{"name": "repo", "workshops": "examples"}]},
+    )
+    _write_workshop(tmp_path / "projects" / "repo" / "examples" / "one", "one")
+    _write_workshop(tmp_path / "projects" / "repo" / "workshops" / "not", "not")
+
+    records = list_installed(tmp_path, ".", True)
+
+    assert [(record["name"], record["path"]) for record in records] == [
+        ("one", "projects/repo/examples/one")
+    ]
+
+
+def test_list_installed_does_not_look_inside_a_workshop(tmp_path: Path) -> None:
+    _write_library(tmp_path, {"version": 1})
+
+    # A workshop that happens to be called "personal" is listed once at
+    # the top, not treated as the personal tree.
+    _write_workshop(tmp_path / "personal", "personal")
+    _write_workshop(tmp_path / "personal" / "inner", "inner")
+
+    assert [record["name"] for record in list_installed(tmp_path, "", True)] == [
+        "personal"
+    ]
+
+
+def test_list_installed_reports_a_broken_registry(tmp_path: Path) -> None:
+    (tmp_path / "library.json").write_text('{"version": 9}')
+
+    # The plain listing never reads the registry.
+    assert list_installed(tmp_path, ".") == []
+
+    with pytest.raises(CollectionError, match="unsupported version"):
+        list_installed(tmp_path, ".", True)
+
+
+def test_list_projects_lists_directories_links_and_missing_links(
+    tmp_path: Path,
+) -> None:
+    library = tmp_path / "lib"
+    outside = tmp_path / "elsewhere" / "linked-repo"
+    gone = tmp_path / "elsewhere" / "gone-repo"
+
+    outside.mkdir(parents=True)
+    gone.mkdir(parents=True)
+    (library / "projects" / "cloned").mkdir(parents=True)
+    (library / "projects" / "linked").symlink_to(outside, target_is_directory=True)
+    (library / "projects" / "dangling").symlink_to(gone, target_is_directory=True)
+    gone.rmdir()
+
+    _write_library(
+        library,
+        {
+            "version": 1,
+            "projects": [
+                {"name": "linked", "target": outside.as_posix()},
+                {"name": "dangling", "target": gone.as_posix()},
+                {"name": "unmade", "target": (tmp_path / "x").as_posix()},
+                {"name": "cloned", "workshops": "examples"},
+            ],
+        },
+    )
+
+    projects = {project["name"]: project for project in list_projects(tmp_path, "lib")}
+
+    assert sorted(projects) == ["cloned", "dangling", "linked", "unmade"]
+    assert projects["cloned"] == {
+        "name": "cloned",
+        "path": "lib/projects/cloned",
+        "workshops": "examples",
+        "target": None,
+        "linked": False,
+        "missing": False,
+    }
+    assert projects["linked"]["linked"] is True
+    assert projects["linked"]["missing"] is False
+    assert projects["dangling"]["missing"] is True
+    assert projects["unmade"]["missing"] is True
+
+    assert list_projects(tmp_path, "elsewhere") == []
 
 
 def test_describe_installed_counts_only_the_visible_pages(tmp_path: Path) -> None:

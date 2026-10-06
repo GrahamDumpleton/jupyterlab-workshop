@@ -33,7 +33,13 @@ import {
   renderEnvCmd,
   renderEnvFish,
   renderEnvPs1,
-  renderEnvSh
+  renderEnvSh,
+  assignCollectionDirectory,
+  ILibrary,
+  INSTALLED_DIRECTORY,
+  isOwnLibraryPath,
+  joinLibraryPath,
+  normalizeWorkshopsDirectory
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
@@ -55,6 +61,8 @@ import {
   writeTextFile
 } from './actions/contents';
 import { leaveDirectory } from './cleanup';
+import { listLibrary } from './library/scan';
+import { LibraryService } from './library/service';
 import { readSettingList } from './settings';
 import { StateStore, WORKSHOP_STATE_DIR } from './state';
 import {
@@ -205,6 +213,20 @@ export class WorkshopManager implements IWorkshopManager {
    */
   set collectionSources(sources: (() => Promise<string[]>) | null) {
     this._collectionSources = sources;
+  }
+
+  /**
+   * The workshop library, when the extension has one. Listing a
+   * workshops directory that is a library scans its layout, through the
+   * contents API on either frontend; any other directory is listed by
+   * the backend as before.
+   */
+  set library(library: LibraryService | null) {
+    this._library = library;
+  }
+
+  get library(): LibraryService | null {
+    return this._library;
   }
 
   get workshop(): ILoadedWorkshop | null {
@@ -784,7 +806,7 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   async fetch(request: IFetchRequest): Promise<IFetchResult> {
-    return this._backend.fetch(request);
+    return this._backend.fetch(await this._libraryDestination(request));
   }
 
   track(kind: string, data: Record<string, unknown> = {}): void {
@@ -927,6 +949,20 @@ export class WorkshopManager implements IWorkshopManager {
   }
 
   async installed(directory: string): Promise<IInstalledWorkshop[]> {
+    // A registry that cannot be read is reported, and the directory is
+    // listed as a plain one, so a broken file never hides everything.
+    let registry: ILibrary | null = null;
+
+    try {
+      registry = this._library ? await this._library.read(directory) : null;
+    } catch (error) {
+      console.warn(error);
+    }
+
+    if (registry !== null) {
+      return listLibrary(this._contents, directory, registry);
+    }
+
     return this._backend.installed(directory);
   }
 
@@ -2594,6 +2630,77 @@ export class WorkshopManager implements IWorkshopManager {
    * the learner's stored choice, then the prompt. `onPrompt` runs just
    * before the learner is asked, and not at all when nothing asks.
    */
+  /**
+   * Where a download from a collection goes in a workshop library: the
+   * collection's own directory under `installed/`, chosen from its id
+   * the first time and recorded in the registry. Any other request, or
+   * one outside a library, is left as it is.
+   */
+  private async _libraryDestination(
+    request: IFetchRequest
+  ): Promise<IFetchRequest> {
+    const library = this._library;
+    const collection = request.collection;
+
+    if (!library || !collection) {
+      return request;
+    }
+
+    const directory = normalizeWorkshopsDirectory(request.directory);
+
+    if (
+      directory !==
+        normalizeWorkshopsDirectory(await library.workshopsDirectory()) ||
+      (await library.read(directory)) === null
+    ) {
+      return request;
+    }
+
+    // The id names the directory; an index that cannot be read now
+    // still installs, under the location's hash.
+    let id: string | undefined;
+
+    try {
+      id = (await this.fetchCollection(collection)).id;
+    } catch (error) {
+      console.warn(`Unable to read the collection ${collection}`, error);
+    }
+
+    let chosen = '';
+
+    await library.update(current => {
+      const assigned = assignCollectionDirectory(current, collection, id);
+
+      chosen = assigned.directory;
+
+      return assigned.library;
+    }, directory);
+
+    return {
+      ...request,
+      directory: joinLibraryPath(directory, INSTALLED_DIRECTORY, chosen)
+    };
+  }
+
+  // Whether a local workshop is one of the library owner's own.
+  private async _isOwnLibraryWorkshop(path: string): Promise<boolean> {
+    const library = this._library;
+
+    if (!library) {
+      return false;
+    }
+
+    try {
+      if ((await library.read()) === null) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+
+    return isOwnLibraryPath(await library.workshopsDirectory(), path);
+  }
+
   private async _resolveTrust(
     summary: ITrustSummary,
     onPrompt?: () => void
@@ -2620,6 +2727,16 @@ export class WorkshopManager implements IWorkshopManager {
 
     if (
       policy.trustedSources.some(prefix => summary.sourceKey.startsWith(prefix))
+    ) {
+      return decision('trusted');
+    }
+
+    // In a workshop library, the owner's own workshops and projects are
+    // trusted by where they are, when nothing was downloaded there. This
+    // is not the authored marker, which would also open them for editing.
+    if (
+      summary.source.kind === 'local' &&
+      (await this._isOwnLibraryWorkshop(summary.source.url))
     ) {
       return decision('trusted');
     }
@@ -2712,6 +2829,7 @@ export class WorkshopManager implements IWorkshopManager {
   private _collectionTitle = '';
   private _offered: IAnalyticsBlock | null = null;
   private _collectionSources: (() => Promise<string[]>) | null = null;
+  private _library: LibraryService | null = null;
   private _indexes = new Map<string, ICollectionIndex | null>();
   private _finished = false;
   private _pageEnteredAt = 0;

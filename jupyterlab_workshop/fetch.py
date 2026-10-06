@@ -489,6 +489,13 @@ def remove_workshop(root_dir: Path, path: str) -> str:
     if target == root_dir.resolve():
         raise FetchError("Refusing to remove the server root directory")
 
+    # A workshop behind a project link lives in someone's own repository,
+    # which removing a download must never reach into.
+    if target != target.resolve():
+        raise FetchError(
+            f"{path} is in a linked project; remove it from the project itself"
+        )
+
     if not target.is_dir():
         raise FetchError(f"{path} is not a directory")
 
@@ -636,22 +643,47 @@ def _check_name(name: str) -> str:
 
 
 def _resolve_inside(root_dir: Path, relative: str) -> Path:
+    # The library module imports this one, so it is imported here.
+    from .library import linked_project_path
+
     root = root_dir.resolve()
-    parts = [part for part in relative.replace("\\", "/").split("/") if part]
+    parts = [
+        part for part in relative.replace("\\", "/").split("/") if part not in {"", "."}
+    ]
 
     if any(part == ".." for part in parts):
         raise FetchError(f"{relative} is outside the server root directory")
 
     target = root.joinpath(*parts).resolve() if parts else root
 
-    if target != root and root not in target.parents:
-        raise FetchError(f"{relative} is outside the server root directory")
+    if target == root or root in target.parents:
+        return target
 
-    return target
+    # A workshop library may link in a project kept elsewhere; a path
+    # behind such a link is inside the root as far as the library's
+    # owner is concerned, when the registry vouches for the link.
+    linked = linked_project_path(root, parts)
+
+    if linked is not None:
+        return linked
+
+    raise FetchError(f"{relative} is outside the server root directory")
 
 
 def _relative(root_dir: Path, target: Path) -> str:
-    return target.resolve().relative_to(root_dir.resolve()).as_posix()
+    root = root_dir.resolve()
+
+    try:
+        return target.resolve().relative_to(root).as_posix()
+    except ValueError:
+        pass
+
+    # Behind a project link the resolved path is outside the root, but
+    # the path through the link is not.
+    try:
+        return target.relative_to(root).as_posix()
+    except ValueError as error:
+        raise FetchError(f"{target} is outside the server root directory") from error
 
 
 def _temp_parent(parent: Path) -> str | None:

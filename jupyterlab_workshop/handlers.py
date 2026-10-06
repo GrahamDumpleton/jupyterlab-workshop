@@ -30,14 +30,26 @@ from .checks import (
     restore_checkpoint,
     run_script,
 )
-from .collection import CollectionError, list_installed, load_collection
+from .collection import (
+    CollectionError,
+    list_installed,
+    list_projects,
+    load_collection,
+)
 from .environment import (
     EnvironmentSetupError,
     create_environment,
     environment_status,
     remove_environment,
 )
-from .fetch import FetchError, fetch_workshop, parse_source, remove_workshop
+from .fetch import (
+    FetchError,
+    _resolve_inside,
+    fetch_workshop,
+    parse_source,
+    remove_workshop,
+)
+from .library import LibraryError, linked_project_path, unlink_project
 from .platform import current_platform, has_web_proxy
 from .publish import PublishError, publish_workshop
 from .scaffold import TEMPLATES, slug, write_scaffold
@@ -62,12 +74,20 @@ class WorkshopHandler(APIHandler):
         root = self.root_dir.resolve()
         resolved = (root / path).resolve()
 
-        if resolved != root and root not in resolved.parents:
+        if resolved == root or root in resolved.parents:
+            return resolved
+
+        # A project a workshop library links in from elsewhere counts as
+        # inside, when the library's registry vouches for the link.
+        parts = [part for part in path.replace("\\", "/").split("/") if part]
+        linked = None if ".." in parts else linked_project_path(root, parts)
+
+        if linked is None:
             raise tornado.web.HTTPError(
                 400, f"The {what} must be inside the JupyterLab root directory"
             )
 
-        return resolved
+        return linked
 
     def body_json(self) -> dict[str, Any]:
         """The request body as a mapping, or an empty mapping."""
@@ -111,7 +131,14 @@ class FetchHandler(WorkshopHandler):
     @tornado.web.authenticated
     async def post(self) -> None:
         body = self.body_json()
-        directory = str(body.get("directory") or DEFAULT_WORKSHOPS_DIRECTORY)
+
+        # Only a missing directory takes the default: an empty one, or
+        # ".", is the root itself, where a workshop library may live.
+        raw_directory = body.get("directory")
+        directory = (
+            DEFAULT_WORKSHOPS_DIRECTORY if raw_directory is None else str(raw_directory)
+        )
+
         name = str(body.get("name") or "")
         collection = str(body.get("collection") or "")
         overwrite = bool(body.get("overwrite", False))
@@ -169,6 +196,42 @@ class WorkshopsHandler(WorkshopHandler):
             raise tornado.web.HTTPError(400, str(error)) from error
 
         self.finish(json.dumps({"removed": removed}))
+
+
+class ProjectsHandler(WorkshopHandler):
+    """List a workshop library's projects and unlink a linked one.
+
+    Unlinking has to happen here rather than through the contents API:
+    deleting a linked directory there could reach the files it links to,
+    and a link whose target has gone is not listed there at all.
+    """
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
+
+        try:
+            projects = list_projects(self.root_dir, directory)
+        except CollectionError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"projects": projects}))
+
+    @tornado.web.authenticated
+    def delete(self) -> None:
+        directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
+        name = self.get_argument("name", "")
+
+        if not name:
+            raise tornado.web.HTTPError(400, "A name query argument is required")
+
+        try:
+            library_dir = _resolve_inside(self.root_dir, directory)
+            removed = unlink_project(library_dir, name)
+        except (FetchError, LibraryError) as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"unlinked": removed}))
 
 
 class VerifyHandler(WorkshopHandler):
@@ -580,6 +643,7 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "platform"), PlatformHandler),
         (url_path_join(base_url, API_NAMESPACE, "fetch"), FetchHandler),
         (url_path_join(base_url, API_NAMESPACE, "workshops"), WorkshopsHandler),
+        (url_path_join(base_url, API_NAMESPACE, "projects"), ProjectsHandler),
         (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
         (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
         (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),

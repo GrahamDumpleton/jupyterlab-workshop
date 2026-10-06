@@ -89,6 +89,14 @@ export class ServerBackend implements IWorkshopBackend {
     );
   }
 
+  async unlinkProject(directory: string, name: string): Promise<void> {
+    await requestAPI<{ unlinked: unknown }>(
+      `projects?directory=${encodeURIComponent(directory)}&name=${encodeURIComponent(name)}`,
+      this._settings,
+      { method: 'DELETE' }
+    );
+  }
+
   async checkpoint(
     workshop: string,
     name: string,

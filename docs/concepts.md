@@ -135,7 +135,9 @@ A collection is a published list of workshops, a JSON index that the
 `jupyter workshop publish`, `collection` and `index` commands build; a
 catalog is a published list of collections, so one URL can point at
 everything an organisation offers. There are no subscriptions out of
-the box.
+the box. A [workshop library](library.md) keeps all of these in one
+directory: downloads by collection, your own workshops, and projects,
+with the subscriptions in a registry of its own.
 [Finding and installing workshops](collections.md) covers the browser,
 collections, catalogs, launch links and deployments such as Binder.
 
@@ -154,6 +156,10 @@ Everything the extension records about a workshop lives in a
 | `events.jsonl`              | [Progress events](analytics.md), one per line.                             |
 | `environment.json`, `venv/` | An [isolated environment](environment.md), when the workshop asks for one. |
 | `recordings/`               | Sessions recorded in author mode.                                          |
+
+A [workshop library](library.md) adds one file of its own,
+`library.json`, at its root, holding its subscriptions and where each
+collection installs.
 
 Restart refills the workspace and forgets the progress; Reset Progress
 keeps the files; Remove deletes a downloaded workshop altogether. The trust decision is kept in JupyterLab's own state

@@ -1,0 +1,31 @@
+{
+  "comment": "Shared by library.spec.ts and tests/python/test_library.py so that the browser and the command line choose the same directory names.",
+  "slugs": [
+    [
+      "grahamdumpleton.me/jupyterlab-workshop-showcase",
+      "grahamdumpleton.me-jupyterlab-workshop-showcase"
+    ],
+    [
+      "github.com/GrahamDumpleton/jupyterlab-workshop/examples",
+      "github.com-grahamdumpleton-jupyterlab-workshop-examples"
+    ],
+    ["Example.org//Course__One", "example.org-course-one"],
+    ["--weird--", "weird"],
+    ["x.y.", "x.y"],
+    ["ünïcode/kurs", "n-code-kurs"],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    ["CON", null],
+    ["con.example/x", null],
+    ["lpt9", null],
+    ["///", null]
+  ],
+  "hashes": [
+    ["https://example.org/course/collection.json", "858442f"],
+    ["collections/first-steps/collection.json", "55cef29"],
+    ["https://EXAMPLE.org/Course/collection.json/", "1a3c8da"],
+    ["test-collection.json", "b5c3661"]
+  ]
+}

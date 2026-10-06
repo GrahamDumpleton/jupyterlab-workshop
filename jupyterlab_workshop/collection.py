@@ -14,6 +14,7 @@ workshops in a repository.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -128,6 +129,38 @@ class CollectionMetadata:
 
         if ordered:
             index["ordered"] = True
+
+
+def normalize_location(location: str) -> str:
+    """The form of a collection location the browser compares by.
+
+    Mirrors the core package: surrounding space and trailing slashes go,
+    and for an http(s) URL the scheme and host are lower-cased.
+    """
+
+    trimmed = location.strip().rstrip("/")
+    parts = urlsplit(trimmed)
+
+    if parts.scheme.lower() not in {"http", "https"}:
+        return trimmed
+
+    query = f"?{parts.query}" if parts.query else ""
+
+    return f"{parts.scheme.lower()}://{parts.netloc.lower()}{parts.path}{query}"
+
+
+def same_location(a: str, b: str) -> bool:
+    """Whether two collection locations name the same collection."""
+
+    return normalize_location(a) == normalize_location(b)
+
+
+def collection_hash(location: str) -> str:
+    """The short hash the browser appends to a directory name on a clash."""
+
+    digest = hashlib.sha256(normalize_location(location).encode("utf-8"))
+
+    return digest.hexdigest()[:7]
 
 
 def load_collection(
@@ -591,14 +624,27 @@ def https_remote(remote: str) -> str:
     return remote.removesuffix(".git").rstrip("/")
 
 
-def list_installed(root_dir: Path, directory: str) -> list[dict[str, Any]]:
+def list_installed(
+    root_dir: Path, directory: str, library: bool = False
+) -> list[dict[str, Any]]:
     """Describe every workshop directory directly under ``directory``.
 
     Each record carries the manifest summary, the download source and the
     collection it was installed from when the workshop was fetched, and
     the learner's progress from the state file. Records are in title
     order; the frontend orders them by collection.
+
+    With ``library`` true and the directory a workshop library, the
+    library's layout is scanned as well, the workshops under
+    ``installed/``, ``personal/`` and each project, and every record
+    gains a ``kind``: ``installed``, ``personal`` or ``project`` (with the
+    project's name), or None for a local directory at the top. Without
+    it, or without a registry, the records are exactly those of a plain
+    workshops directory, which is what the server's endpoint returns,
+    since the browser scans a library itself.
     """
+
+    from .library import LibraryError, read_library
 
     try:
         parent = _resolve_inside(root_dir, directory)
@@ -607,6 +653,90 @@ def list_installed(root_dir: Path, directory: str) -> list[dict[str, Any]]:
 
     if not parent.is_dir():
         return []
+
+    try:
+        registry = read_library(root_dir, directory) if library else None
+    except LibraryError as error:
+        raise CollectionError(str(error)) from error
+
+    records = _scan_workshops(root_dir, parent)
+
+    if registry is not None:
+        for record in records:
+            record["kind"] = "installed" if record["source"] else None
+
+        records.extend(_scan_library(root_dir, parent, registry))
+
+    records.sort(key=lambda record: str(record.get("title", "")).lower())
+
+    return records
+
+
+def list_projects(root_dir: Path, directory: str) -> list[dict[str, Any]]:
+    """The projects of a workshop library, in name order.
+
+    A project is a directory under ``projects/``, or an entry in the
+    registry naming one. Each record has the ``name``, the ``path`` of its
+    directory relative to the root, its ``workshops`` directory, the
+    ``target`` a linked project points to, whether it is ``linked``, and
+    whether it is ``missing``: a link whose target has gone, or a
+    registered link that is not there. Empty when the directory is not a
+    library.
+    """
+
+    from .library import (
+        PROJECTS_DIRECTORY,
+        LibraryError,
+        is_link,
+        project_entry,
+        project_workshops,
+        read_library,
+    )
+
+    try:
+        parent = _resolve_inside(root_dir, directory)
+        registry = read_library(root_dir, directory)
+    except (FetchError, LibraryError) as error:
+        raise CollectionError(str(error)) from error
+
+    if registry is None:
+        return []
+
+    projects_dir = parent / PROJECTS_DIRECTORY
+    names = {
+        child.name
+        for child in (projects_dir.iterdir() if projects_dir.is_dir() else [])
+        if not child.name.startswith(".") and (child.is_dir() or is_link(child))
+    }
+    names |= {
+        str(project["name"])
+        for project in registry.get("projects") or []
+        if project.get("target")
+    }
+
+    records: list[dict[str, Any]] = []
+
+    for name in sorted(names):
+        entry = project_entry(registry, name)
+        path = projects_dir / name
+        linked = is_link(path)
+
+        records.append(
+            {
+                "name": name,
+                "path": _join_relative(root_dir, parent, PROJECTS_DIRECTORY, name),
+                "workshops": project_workshops(entry),
+                "target": entry.get("target"),
+                "linked": linked or bool(entry.get("target")),
+                "missing": not path.is_dir(),
+            }
+        )
+
+    return records
+
+
+def _scan_workshops(root_dir: Path, parent: Path) -> list[dict[str, Any]]:
+    """The records of the workshop directories directly under ``parent``."""
 
     records: list[dict[str, Any]] = []
 
@@ -619,9 +749,64 @@ def list_installed(root_dir: Path, directory: str) -> list[dict[str, Any]]:
             if record is not None:
                 records.append(record)
 
-    records.sort(key=lambda record: str(record.get("title", "")).lower())
+    return records
+
+
+def _scan_library(
+    root_dir: Path, parent: Path, registry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """The records of a library's own layout, each with its kind."""
+
+    from .library import (
+        INSTALLED_DIRECTORY,
+        PERSONAL_DIRECTORY,
+        PROJECTS_DIRECTORY,
+        project_entry,
+        project_workshops,
+    )
+
+    def scan(directory: Path, kind: str, project: str | None = None) -> None:
+        # A directory holding a manifest is a workshop of its own and is
+        # listed at its own level, so it is never looked inside.
+        if not directory.is_dir() or (directory / MANIFEST_FILE).is_file():
+            return
+
+        for record in _scan_workshops(root_dir, directory):
+            record["kind"] = kind
+
+            if project is not None:
+                record["project"] = project
+
+            records.append(record)
+
+    records: list[dict[str, Any]] = []
+    installed = parent / INSTALLED_DIRECTORY
+
+    if installed.is_dir() and not (installed / MANIFEST_FILE).is_file():
+        for collection in sorted(installed.iterdir()):
+            if not collection.name.startswith("."):
+                scan(collection, "installed")
+
+    scan(parent / PERSONAL_DIRECTORY, "personal")
+
+    projects = parent / PROJECTS_DIRECTORY
+
+    if projects.is_dir() and not (projects / MANIFEST_FILE).is_file():
+        for project in sorted(projects.iterdir()):
+            if project.name.startswith(".") or not project.is_dir():
+                continue
+
+            workshops = project_workshops(project_entry(registry, project.name))
+
+            scan(project / workshops, "project", project.name)
 
     return records
+
+
+def _join_relative(root_dir: Path, parent: Path, *parts: str) -> str:
+    base = _relative(root_dir, parent)
+
+    return "/".join(part for part in [base, *parts] if part and part != ".")
 
 
 def describe_installed(root_dir: Path, workshop: Path) -> dict[str, Any] | None:

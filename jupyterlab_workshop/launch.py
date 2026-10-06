@@ -126,6 +126,11 @@ class LaunchOptions:
     #: Install every workshop of ``collections`` before starting.
     install: bool = False
 
+    #: The workshops directory for the session, relative to the root, or
+    #: None to leave the installed setting as it is. ``jupyter workshop
+    #: library`` sets ``.``, making the root the library.
+    workshops_directory: str | None = None
+
     #: Further arguments for ``jupyter lab``.
     lab_args: Sequence[str] = ()
 
@@ -349,6 +354,9 @@ def launch_overrides(
     if browse:
         panel["browseOnStart"] = True
 
+    if options.workshops_directory is not None:
+        panel["workshopsDirectory"] = options.workshops_directory
+
     if panel:
         overrides[PANEL_PLUGIN] = panel
 
@@ -373,7 +381,11 @@ def install_collections(
     panel = installed_overrides().get(PANEL_PLUGIN)
     directory = DEFAULT_DIRECTORY
 
-    if isinstance(panel, Mapping) and panel.get("workshopsDirectory"):
+    # An empty value, like ".", is the root itself, as the browser reads
+    # it; only a setting that is absent takes the default.
+    if options.workshops_directory is not None:
+        directory = options.workshops_directory
+    elif isinstance(panel, Mapping) and panel.get("workshopsDirectory") is not None:
         directory = str(panel["workshopsDirectory"])
 
     for collection in options.collections:

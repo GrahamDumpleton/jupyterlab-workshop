@@ -1,4 +1,8 @@
-import { normalizeLocation } from '@jupyterlab-workshop/core';
+import {
+  ILibrary,
+  mergeSources,
+  normalizeLocation
+} from '@jupyterlab-workshop/core';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { IStateDB } from '@jupyterlab/statedb';
 import { ISignal, Signal } from '@lumino/signaling';
@@ -8,6 +12,7 @@ import {
   readUserSettingList,
   writeSettingList
 } from '../settings';
+import { LibraryService } from '../library/service';
 import { fetchForServer, saveForServer } from '../statedb';
 import { IFeaturePolicy } from '../tokens';
 
@@ -19,6 +24,12 @@ export type SourceKind = 'collection' | 'catalog';
 
 /** The setting each kind is stored in. */
 const SETTING: Record<SourceKind, string> = {
+  collection: 'collections',
+  catalog: 'catalogs'
+};
+
+/** The key of a workshop library's registry each kind is kept under. */
+const REGISTRY_KEY: Record<SourceKind, 'collections' | 'catalogs'> = {
   collection: 'collections',
   catalog: 'catalogs'
 };
@@ -35,11 +46,12 @@ export interface ISubscribedSource {
 
   /**
    * `user` for the learner's own settings, `defaults` for the shipped
-   * defaults or an administrator's overrides, `session` for a launch
-   * link, which is kept in the workspace's saved state until it is
-   * subscribed to or removed.
+   * defaults or an administrator's overrides, `library` for the
+   * registry of the workshop library, `session` for a launch link,
+   * which is kept in the workspace's saved state until it is subscribed
+   * to or removed.
    */
-  origin: 'user' | 'defaults' | 'session';
+  origin: 'user' | 'defaults' | 'library' | 'session';
 }
 
 /**
@@ -47,6 +59,11 @@ export interface ISubscribedSource {
  * settings lists, plus any a launch link added for the session.
  * Subscribing and unsubscribing write the user's settings; a launch
  * link's source is subscribed to the same way.
+ *
+ * In a workshop library the registry takes the place of the user's
+ * settings: once it has a list of a kind, that list replaces the
+ * defaults, as a list in the user's settings does, and subscribing
+ * writes the registry. The defaults and the session work as before.
  *
  * The session's sources are saved in the state database, when there is
  * one, so a reload of the page keeps the ordering a link gave the
@@ -58,6 +75,7 @@ export class SourceStore {
     this._settings = options.settingRegistry;
     this._features = options.features;
     this._stateDB = options.stateDB ?? null;
+    this._library = options.library ?? null;
   }
 
   /** Emitted when a source is added for the session, subscribed to or unsubscribed from. */
@@ -72,30 +90,21 @@ export class SourceStore {
   async list(kind: SourceKind): Promise<ISubscribedSource[]> {
     await this._restore();
 
+    const registry = await this._registry();
+    const own = registry?.[REGISTRY_KEY[kind]];
+
+    if (own !== undefined) {
+      return mergeSources(own, 'library', this._session[kind]);
+    }
+
     const configured = await readSettingList(this._settings, SETTING[kind]);
     const user = await readUserSettingList(this._settings, SETTING[kind]);
-    const seen = new Set<string>();
-    const sources: ISubscribedSource[] = [];
-    const add = (url: string, origin: ISubscribedSource['origin']): void => {
-      const key = normalizeLocation(url);
 
-      if (key === '' || seen.has(key)) {
-        return;
-      }
-
-      seen.add(key);
-      sources.push({ url, origin });
-    };
-
-    for (const url of configured) {
-      add(url, user !== null ? 'user' : 'defaults');
-    }
-
-    for (const url of this._session[kind]) {
-      add(url, 'session');
-    }
-
-    return sources;
+    return mergeSources(
+      configured,
+      user !== null ? 'user' : 'defaults',
+      this._session[kind]
+    );
   }
 
   /**
@@ -137,17 +146,16 @@ export class SourceStore {
   }
 
   /**
-   * Subscribe to a source in the user's settings, keeping whatever the
-   * settings already list. A source the session added is promoted.
+   * Subscribe to a source in the user's settings, or the library's
+   * registry in a workshop library, keeping whatever is listed already.
+   * A source the session added is promoted.
    */
   async subscribe(kind: SourceKind, url: string): Promise<void> {
     this._assertAllowed(kind);
 
-    const current = await readSettingList(this._settings, SETTING[kind]);
-
-    if (!current.some(item => sameLocation(item, url))) {
-      await writeSettingList(this._settings, SETTING[kind], [...current, url]);
-    }
+    await this._changeConfigured(kind, current =>
+      current.some(item => sameLocation(item, url)) ? null : [...current, url]
+    );
 
     this._session[kind] = this._session[kind].filter(
       item => !sameLocation(item, url)
@@ -158,8 +166,8 @@ export class SourceStore {
 
   /**
    * Unsubscribe from a source: drop it from the session list, or from
-   * the user's settings, where removing one that the defaults supplied
-   * writes the shortened list as the user's own.
+   * the user's settings or the library's registry, where removing one
+   * that the defaults supplied writes the shortened list as their own.
    */
   async unsubscribe(kind: SourceKind, url: string): Promise<void> {
     this._assertAllowed(kind);
@@ -171,11 +179,7 @@ export class SourceStore {
     );
 
     if (this._session[kind].length === before) {
-      const current = await readSettingList(this._settings, SETTING[kind]);
-
-      await writeSettingList(
-        this._settings,
-        SETTING[kind],
+      await this._changeConfigured(kind, current =>
         current.filter(item => !sameLocation(item, url))
       );
     } else {
@@ -185,9 +189,69 @@ export class SourceStore {
     this._changed.emit();
   }
 
+  /**
+   * The list of a kind the user set in their own settings, or null when
+   * the defaults or an administrator's overrides supply it. Making a
+   * directory a library carries this over, and leaves the defaults to
+   * keep applying.
+   */
+  async userList(kind: SourceKind): Promise<string[] | null> {
+    return readUserSettingList(this._settings, SETTING[kind]);
+  }
+
   /** Whether the settings allow changing sources of a kind. */
   canChange(kind: SourceKind): boolean {
-    return this._features.enabled(FEATURE[kind]) && this._settings !== null;
+    return (
+      this._features.enabled(FEATURE[kind]) &&
+      (this._settings !== null || this._library !== null)
+    );
+  }
+
+  /**
+   * Change the configured list of a kind: the library's registry when
+   * the workshops directory is a library, else the user's settings. The
+   * change starts from what is listed now, the defaults included, and
+   * returns the new list, or null to leave it alone.
+   */
+  private async _changeConfigured(
+    kind: SourceKind,
+    change: (current: string[]) => string[] | null
+  ): Promise<void> {
+    const key = REGISTRY_KEY[kind];
+    const configured = await readSettingList(this._settings, SETTING[kind]);
+
+    if ((await this._registry()) !== null && this._library) {
+      await this._library.update(library => {
+        const next = change(library[key] ?? configured);
+
+        return next === null ? library : { ...library, [key]: next };
+      });
+
+      return;
+    }
+
+    const next = change(configured);
+
+    if (next !== null) {
+      await writeSettingList(this._settings, SETTING[kind], next);
+    }
+  }
+
+  // The library's registry, or null outside a library; a registry that
+  // cannot be read is reported and treated as no library, so the browser
+  // still lists what the settings say.
+  private async _registry(): Promise<ILibrary | null> {
+    if (!this._library) {
+      return null;
+    }
+
+    try {
+      return await this._library.read();
+    } catch (error) {
+      console.warn(error);
+
+      return null;
+    }
   }
 
   private _assertAllowed(kind: SourceKind): void {
@@ -246,6 +310,7 @@ export class SourceStore {
   private _settings: ISettingRegistry | null;
   private _features: IFeaturePolicy;
   private _stateDB: IStateDB | null;
+  private _library: LibraryService | null;
   private _restored: Promise<void> | null = null;
   private _session: Record<SourceKind, string[]> = {
     collection: [],
@@ -261,6 +326,9 @@ export namespace SourceStore {
 
     /** Where the session's sources are kept across reloads, when given. */
     stateDB?: IStateDB | null;
+
+    /** The workshop library, whose registry holds the user's own lists. */
+    library?: LibraryService | null;
   }
 }
 

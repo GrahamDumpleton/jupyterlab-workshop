@@ -90,7 +90,7 @@ pages *args:
     mkdir -p site/schemas/v1alpha1
     cp github-pages/index.html site/index.html
     touch site/.nojekyll
-    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json packages/core/src/schema/events.schema.json packages/core/src/schema/tree.schema.json site/schemas/v1alpha1/
+    cp packages/core/src/schema/workshop.schema.json packages/core/src/schema/collection.schema.json packages/core/src/schema/catalog.schema.json packages/core/src/schema/events.schema.json packages/core/src/schema/tree.schema.json packages/core/src/schema/library.schema.json site/schemas/v1alpha1/
     uv run jupyter workshop lite examples/hello-jupyterlab --out site/demo "$@"
     # The launcher carries no workshop and lives under the Python version
     # its kernel provides, so launch links written against it keep that

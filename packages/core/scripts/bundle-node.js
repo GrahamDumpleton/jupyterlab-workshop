@@ -57,7 +57,8 @@ rspack(
       'workshop.schema.json',
       'collection.schema.json',
       'catalog.schema.json',
-      'events.schema.json'
+      'events.schema.json',
+      'library.schema.json'
     ]) {
       fs.copyFileSync(
         path.join(root, 'src/schema', name),

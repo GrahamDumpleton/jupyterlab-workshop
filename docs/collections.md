@@ -196,7 +196,9 @@ collection lands in `workshops/git-basics-<hash>`,
 where the hash is the first seven characters of the SHA-256 of the
 collection's location, the way a short commit hash abbreviates a commit.
 The same collection always maps to the same directory, so reinstalling
-finds it. The directory name never shows in the browser, which shows
+finds it. In a [workshop library](library.md#installing-into-a-library)
+each collection installs into a directory of its own instead, so there
+is no suffix. The directory name never shows in the browser, which shows
 titles, but it is what the file browser, a terminal and a launch link
 written against the path would show, which is a reason to hand out
 [collection links](#launch-links) rather than installed paths.
@@ -545,7 +547,8 @@ URL.
 
 ## Installed workshops and the server
 
-The list in the browser comes from `GET jupyterlab-workshop/workshops`,
+Outside a [workshop library](library.md), the list in the browser comes
+from `GET jupyterlab-workshop/workshops`,
 which describes every directory under the workshops directory that holds
 a `workshop.yaml`, reading `_workshop/source.json` and
 `_workshop/state.json` for the source, the collection it was installed
@@ -553,4 +556,9 @@ from, and the progress. Collections are read through
 `GET jupyterlab-workshop/collection?url=…` and catalogs through
 `GET jupyterlab-workshop/catalog?url=…`, which returns the catalog with
 its relative locations resolved. All refuse paths outside the JupyterLab
-root.
+root, other than those behind a project link a library's registry
+vouches for. In a library the browser reads `library.json` and scans
+the library's layout itself through the contents API, the same way on
+JupyterLab and JupyterLite; `GET jupyterlab-workshop/projects` lists a
+library's projects and `DELETE jupyterlab-workshop/projects?name=…`
+unlinks one.

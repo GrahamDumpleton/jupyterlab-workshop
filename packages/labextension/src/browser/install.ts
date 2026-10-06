@@ -1,22 +1,12 @@
 import {
+  collectionHash,
   ICollectionEntry,
-  latestVersion,
-  normalizeLocation,
-  sha256
+  latestVersion
 } from '@jupyterlab-workshop/core';
 import { CommandRegistry } from '@lumino/commands';
 
 import { CommandIDs, IFetchRequest, IInstalledWorkshop } from '../tokens';
 import { sameLocation } from './sources';
-
-/**
- * A short hash of a collection location, the way a short commit hash
- * abbreviates a commit: the first seven hex characters of the SHA-256
- * of the normalised location.
- */
-export function collectionHash(collection: string): string {
-  return sha256(normalizeLocation(collection)).slice(0, 7);
-}
 
 /**
  * Whether an installed workshop is the one a collection lists: the same
@@ -28,7 +18,13 @@ export function isInstalledFrom(
   collection: string,
   name: string
 ): boolean {
-  if (item.name !== name) {
+  // A workshop library's own and project workshops are never a
+  // collection's, whatever they are called.
+  if (
+    item.name !== name ||
+    item.kind === 'personal' ||
+    item.kind === 'project'
+  ) {
     return false;
   }
 
@@ -49,8 +45,11 @@ export function installName(
   collection: string,
   installed: readonly IInstalledWorkshop[]
 ): string {
+  // In a workshop library every record has a kind, and each collection
+  // installs into a directory of its own, so names never clash there.
   const clash = installed.some(
     item =>
+      item.kind === undefined &&
       item.name === entry.name &&
       item.collection !== null &&
       !sameLocation(item.collection, collection)

@@ -86,6 +86,11 @@ export class LiteBackend implements IWorkshopBackend {
     return removeInstalled(this._contents, path);
   }
 
+  async unlinkProject(): Promise<void> {
+    // A site's files live in the browser, where nothing is linked in.
+    throw new Error('JupyterLite has no linked projects to unlink');
+  }
+
   async checkpoint(
     workshop: string,
     name: string,

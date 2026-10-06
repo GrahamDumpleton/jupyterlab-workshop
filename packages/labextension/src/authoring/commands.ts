@@ -10,7 +10,10 @@ import {
   draftFromRecording,
   draftManifest,
   insertBlock,
+  joinLibraryPath,
   newPagePath,
+  normalizeWorkshopsDirectory,
+  PERSONAL_DIRECTORY,
   newPageSource,
   parseDirectiveContent,
   parseDirectiveInfo,
@@ -37,6 +40,7 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ReadonlyJSONObject, ReadonlyJSONValue } from '@lumino/coreutils';
 
 import { readTextFile, writeTextFile } from '../actions/contents';
+import { LibraryService } from '../library/service';
 import { requestAPI } from '../request';
 import { newWorkshopIcon } from '../icons';
 import { pacingFrom, runCurrentPage, summarize } from '../selftest';
@@ -268,7 +272,12 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
             gating: String(args.gating ?? 'soft'),
             ci: args.ci === true
           }
-        : await showNewWorkshopDialog(`${directory}/new-workshop`);
+        : await showNewWorkshopDialog(
+            joinLibraryPath(
+              await newWorkshopParent(manager, directory),
+              'new-workshop'
+            )
+          );
 
       if (!request) {
         return;
@@ -829,7 +838,10 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
       const choice = await showRecordingDialog(
         steps,
         manager.workshop !== null,
-        `${directory}/recorded-${stamp.slice(0, 16)}`
+        joinLibraryPath(
+          await newWorkshopParent(manager, directory),
+          `recorded-${stamp.slice(0, 16)}`
+        )
       );
 
       if (choice.mode === 'discard') {
@@ -1072,4 +1084,29 @@ function stringList(value: unknown): string[] | null {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : null;
+}
+
+/**
+ * Where a new workshop goes by default: the workshops directory, or in a
+ * workshop library its `personal/` tree, since a workshop someone makes
+ * there is their own.
+ */
+async function newWorkshopParent(
+  manager: IWorkshopManager,
+  directory: string
+): Promise<string> {
+  const library =
+    (manager as { library?: LibraryService | null }).library ?? null;
+  let inLibrary = false;
+
+  try {
+    inLibrary = library !== null && (await library.read(directory)) !== null;
+  } catch {
+    inLibrary = false;
+  }
+
+  return joinLibraryPath(
+    normalizeWorkshopsDirectory(directory),
+    inLibrary ? PERSONAL_DIRECTORY : ''
+  );
 }

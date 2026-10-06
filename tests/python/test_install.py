@@ -6,14 +6,13 @@ from pathlib import Path
 import pytest
 
 from jupyterlab_workshop import cli
+from jupyterlab_workshop.collection import collection_hash, normalize_location
 from jupyterlab_workshop.fetch import FetchError
 from jupyterlab_workshop.install import (
-    collection_hash,
     collection_location,
     install_collection,
     install_name,
     is_installed_from,
-    normalize_location,
 )
 
 MANIFEST = (
@@ -256,3 +255,103 @@ def test_install_command_reports_and_fails_on_a_bad_source(
         == 2
     )
     assert "There is no collection file" in capsys.readouterr().err
+
+
+def test_install_collection_into_a_library_gives_each_collection_a_directory(
+    tmp_path: Path,
+) -> None:
+    from jupyterlab_workshop.library import empty_library, read_library, write_library
+
+    write_library(tmp_path, "workshops", empty_library())
+
+    mine = write_collection(tmp_path, [entry("alpha", "Alpha", "https://h/a.tgz")])
+    index = json.loads(mine.read_text())
+
+    mine.write_text(json.dumps({**index, "id": "example.org/course"}))
+
+    # Another collection, with the same id and a workshop of the same name.
+    other = tmp_path / "other" / "collection.json"
+
+    other.parent.mkdir()
+    other.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "id": "example.org/course",
+                "title": "Other",
+                "workshops": [entry("alpha", "Alpha", "https://h/b.tgz")],
+            }
+        )
+    )
+
+    def downloader(_: str) -> bytes:
+        return archive_for("alpha", "Alpha")
+
+    first = install_collection(str(mine), tmp_path, downloader=downloader)
+    second = install_collection(str(other), tmp_path, downloader=downloader)
+    again = install_collection(str(mine), tmp_path, downloader=downloader)
+
+    suffix = collection_hash("other/collection.json")
+
+    assert [item.detail for item in first] == [
+        "workshops/installed/example.org-course/alpha"
+    ]
+    assert [item.detail for item in second] == [
+        f"workshops/installed/example.org-course-{suffix}/alpha"
+    ]
+    assert [item.status for item in again] == ["skipped"]
+
+    # The registry records both directories and subscribes to both, in
+    # the order they were installed from.
+    assert read_library(tmp_path, "workshops") == {
+        "version": 1,
+        "collections": ["collections/collection.json", "other/collection.json"],
+        "directories": {
+            "collections/collection.json": "example.org-course",
+            "other/collection.json": f"example.org-course-{suffix}",
+        },
+    }
+
+
+def test_install_destination_outside_a_library_is_the_plain_name(
+    tmp_path: Path,
+) -> None:
+    from jupyterlab_workshop.install import install_destination
+
+    assert install_destination(
+        tmp_path, "workshops", "c.json", "example.org/c", "alpha", []
+    ) == ("workshops", "alpha")
+    assert not (tmp_path / "workshops" / "library.json").exists()
+
+
+def test_subscribe_and_unsubscribe_need_a_library_and_match_any_spelling(
+    tmp_path: Path,
+) -> None:
+    from jupyterlab_workshop.install import subscribe, unsubscribe
+    from jupyterlab_workshop.library import (
+        LibraryError,
+        empty_library,
+        read_library,
+        write_library,
+    )
+
+    with pytest.raises(LibraryError, match="not a workshop library"):
+        subscribe(tmp_path, ".", "https://example.org/c.json")
+
+    write_library(tmp_path, ".", empty_library())
+
+    assert subscribe(tmp_path, ".", "https://example.org/c.json") is True
+    assert subscribe(tmp_path, ".", "https://EXAMPLE.org/c.json/") is False
+    assert subscribe(tmp_path, ".", "k.json", kind="catalogs") is True
+    assert read_library(tmp_path, ".") == {
+        "version": 1,
+        "collections": ["https://example.org/c.json"],
+        "catalogs": ["k.json"],
+    }
+
+    assert unsubscribe(tmp_path, ".", "https://example.org/c.json/") is True
+    assert unsubscribe(tmp_path, ".", "https://example.org/c.json") is False
+
+    # Unsubscribing from the last one leaves an empty list, which still
+    # takes the place of any defaults the settings name.
+    assert read_library(tmp_path, ".")["collections"] == []

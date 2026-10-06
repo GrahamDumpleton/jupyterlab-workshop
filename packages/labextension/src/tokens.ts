@@ -576,7 +576,20 @@ export interface IInstalledWorkshop {
    * empty when unknown; differs from the current one after a restart.
    */
   instanceId: string;
+
+  /**
+   * Where in a workshop library it lives: `installed` for a download,
+   * `personal` for the owner's own, `project` for one in a project, or
+   * null for a local directory at the top. Absent outside a library.
+   */
+  kind?: WorkshopKind | null;
+
+  /** The project it belongs to, for a workshop of kind `project`. */
+  project?: string;
 }
+
+/** Where in a workshop library a workshop lives. */
+export type WorkshopKind = 'installed' | 'personal' | 'project';
 
 /**
  * Whether the extension downloaded an installed workshop, as opposed to
@@ -599,7 +612,9 @@ export const FEATURES = [
   'close',
   'browse',
   'author',
-  'click-hint'
+  'click-hint',
+  'library',
+  'personal'
 ] as const;
 
 /** One of the removable features. */
@@ -1068,6 +1083,12 @@ export interface IWorkshopBackend {
 
   /** Delete a workshop directory. */
   removeInstalled(path: string): Promise<void>;
+
+  /**
+   * Remove a workshop library's linked project: the link under
+   * `projects/` and its registry entry, never what it links to.
+   */
+  unlinkProject(directory: string, name: string): Promise<void>;
 
   /** Snapshot a workshop's files and variables under a name. */
   checkpoint(

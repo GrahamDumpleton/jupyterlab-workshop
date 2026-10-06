@@ -35,6 +35,8 @@ from .collection import (
     checkout_root,
     guess_repository,
     index_repository,
+    list_installed,
+    list_projects,
     parse_collection,
 )
 from .collection import (
@@ -51,7 +53,30 @@ from .gist import (
     update_gist,
     write_flat,
 )
-from .install import DEFAULT_DIRECTORY, install_collection
+from .install import (
+    DEFAULT_DIRECTORY,
+    apply_update,
+    find_updates,
+    install_collection,
+    remove_installed,
+    select_installed,
+    subscribe,
+    unsubscribe,
+)
+from .library import (
+    DEFAULT_LIBRARY_NAME,
+    LIBRARY_VARIABLE,
+    LibraryError,
+    default_library,
+    empty_library,
+    is_library,
+    library_directory,
+    link_project,
+    read_library,
+    repair_links,
+    unlink_project,
+    write_library,
+)
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
@@ -68,6 +93,8 @@ COLLECTION_SCHEMA_FILE = PACKAGE_DIR / "schema" / "collection.schema.json"
 CATALOG_SCHEMA_FILE = PACKAGE_DIR / "schema" / "catalog.schema.json"
 
 EVENTS_SCHEMA_FILE = PACKAGE_DIR / "schema" / "events.schema.json"
+
+LIBRARY_SCHEMA_FILE = PACKAGE_DIR / "schema" / "library.schema.json"
 
 PLATFORMS = ["linux", "macos", "windows"]
 
@@ -232,6 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the progress events schema instead",
     )
+    kind.add_argument(
+        "--library",
+        action="store_true",
+        help="print the workshop library registry schema instead",
+    )
     schema.set_defaults(func=command_schema)
 
     collection = commands.add_parser(
@@ -337,6 +369,159 @@ def build_parser() -> argparse.ArgumentParser:
         "listing none supports jupyterlab only (default: install every workshop)",
     )
     install.set_defaults(func=command_install)
+
+    library = commands.add_parser(
+        "library",
+        help="start JupyterLab on your workshop library",
+        description=(
+            "Start JupyterLab with a workshop library as its root: a directory "
+            "holding library.json, with the workshops you install, the ones you "
+            "make yourself under personal/, and projects under projects/. The "
+            "library is created on first use. DIR defaults to "
+            f"${LIBRARY_VARIABLE} when set, else ~/{DEFAULT_LIBRARY_NAME}. "
+            "Arguments after -- are passed to jupyter lab."
+        ),
+    )
+    library.add_argument(
+        "directory",
+        nargs="?",
+        type=Path,
+        help=f"the library directory (default: ${LIBRARY_VARIABLE} or "
+        f"~/{DEFAULT_LIBRARY_NAME})",
+    )
+    library.add_argument(
+        "--init-only",
+        action="store_true",
+        help="create the library if needed and stop, without starting JupyterLab",
+    )
+    library.add_argument(
+        "--collection",
+        action="append",
+        default=[],
+        help="collection URL or collection.json to add for the session "
+        "(repeatable); subscribe to keep it",
+    )
+    library.add_argument(
+        "--trust",
+        choices=["trusted", "restricted", "ask"],
+        help="force the trust level for the session instead of asking",
+    )
+    library.add_argument(
+        "--port", type=int, help="port to serve on (default: a free one)"
+    )
+    library.add_argument(
+        "--no-browser", action="store_true", help="print the link without opening it"
+    )
+    library.add_argument(
+        "--fresh",
+        action="store_true",
+        help="use private JupyterLab workspaces and user settings, as test does",
+    )
+    library.add_argument("--token", help="token to serve with (default: a random one)")
+    library.set_defaults(func=command_library)
+
+    for verb, kind_help in (
+        ("subscribe", "subscribe a workshop library to a collection or catalog"),
+        ("unsubscribe", "unsubscribe a workshop library from a collection or catalog"),
+    ):
+        command = commands.add_parser(verb, help=kind_help)
+        command.add_argument(
+            "location",
+            help="collection or catalog index: a URL, or a path "
+            "relative to the JupyterLab root",
+        )
+        command.add_argument(
+            "--catalog",
+            action="store_true",
+            help="the location is a catalog rather than a collection",
+        )
+        _add_library_target_arguments(command)
+        command.set_defaults(
+            func=command_subscribe if verb == "subscribe" else command_unsubscribe
+        )
+
+    listing = commands.add_parser(
+        "list", help="list the installed workshops and the subscriptions"
+    )
+    listing.add_argument(
+        "--json", action="store_true", help="print the listing as JSON"
+    )
+    _add_library_target_arguments(listing)
+    listing.set_defaults(func=command_list)
+
+    update = commands.add_parser(
+        "update",
+        help="install newer versions of workshops their collections offer",
+        description=(
+            "Install the newest version a collection lists of each workshop "
+            "installed from it, where it differs from the installed one. The "
+            "workshop is replaced, so its progress is reset, as in the browser."
+        ),
+    )
+    update.add_argument(
+        "names",
+        nargs="*",
+        metavar="NAME",
+        help="workshop names or paths (default: all)",
+    )
+    update.add_argument(
+        "--yes", action="store_true", help="do not ask before resetting progress"
+    )
+    _add_library_target_arguments(update)
+    update.set_defaults(func=command_update)
+
+    remove = commands.add_parser(
+        "remove",
+        help="remove installed workshops",
+        description=(
+            "Remove installed workshops as the browser does: a downloaded one "
+            "is deleted, and any other, such as your own or a project's, loses "
+            "only its recorded progress."
+        ),
+    )
+    remove.add_argument(
+        "names", nargs="+", metavar="NAME", help="workshop names or paths"
+    )
+    remove.add_argument("--yes", action="store_true", help="do not ask before removing")
+    _add_library_target_arguments(remove)
+    remove.set_defaults(func=command_remove)
+
+    project = commands.add_parser(
+        "project",
+        help="manage the projects of a workshop library",
+        description=(
+            "A project is a repository whose workshops the library shows. One "
+            "cloned under projects/ needs nothing; one kept elsewhere is linked "
+            "in. These commands use the default library unless --root or "
+            "--directory name another."
+        ),
+    )
+    project_commands = project.add_subparsers(dest="project_command", required=True)
+    link = project_commands.add_parser(
+        "link", help="link in a directory kept outside the library"
+    )
+    link.add_argument("path", type=Path, help="the repository to link in")
+    link.add_argument(
+        "--name", help="the project's name under projects/ (default: its directory's)"
+    )
+    link.add_argument(
+        "--workshops",
+        help="its workshops directory, relative to it (default: workshops)",
+    )
+    _add_project_target_arguments(link)
+    link.set_defaults(func=command_project_link)
+    unlink = project_commands.add_parser(
+        "unlink", help="remove a linked project's link, leaving its files"
+    )
+    unlink.add_argument("name", help="the project's name under projects/")
+    _add_project_target_arguments(unlink)
+    unlink.set_defaults(func=command_project_unlink)
+    projects = project_commands.add_parser("list", help="list the projects")
+    projects.add_argument(
+        "--json", action="store_true", help="print the listing as JSON"
+    )
+    _add_project_target_arguments(projects)
+    projects.set_defaults(func=command_project_list)
 
     kernels = commands.add_parser(
         "kernels",
@@ -900,7 +1085,7 @@ def _check_index_file(file: Path, as_json: bool) -> int:
 
 
 def command_schema(args: argparse.Namespace) -> int:
-    """Print the manifest, collection, catalog or events schema."""
+    """Print the manifest, collection, catalog, events or library schema."""
 
     schema = (
         COLLECTION_SCHEMA_FILE
@@ -909,6 +1094,8 @@ def command_schema(args: argparse.Namespace) -> int:
         if args.catalog
         else EVENTS_SCHEMA_FILE
         if args.events
+        else LIBRARY_SCHEMA_FILE
+        if args.library
         else SCHEMA_FILE
     )
 
@@ -1140,6 +1327,389 @@ def command_install(args: argparse.Namespace) -> int:
     )
 
     return 1 if counts["failed"] else 0
+
+
+def _add_library_target_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that say which workshops directory a command acts on."""
+
+    parser.add_argument(
+        "--root",
+        type=Path,
+        help="the JupyterLab root the workshops directory sits under "
+        "(default: the current directory)",
+    )
+    parser.add_argument(
+        "--directory",
+        help=f"the workshops directory under the root (default: {DEFAULT_DIRECTORY})",
+    )
+    parser.add_argument(
+        "--library",
+        action="store_true",
+        help=f"act on the default workshop library, ${LIBRARY_VARIABLE} or "
+        f"~/{DEFAULT_LIBRARY_NAME}, instead of --root and --directory",
+    )
+
+
+def _add_project_target_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that say which library a project command acts on."""
+
+    parser.add_argument(
+        "--root",
+        type=Path,
+        help="the JupyterLab root the library sits under "
+        "(default: the default library itself)",
+    )
+    parser.add_argument(
+        "--directory",
+        help="the library under the root (default: the root itself, or "
+        f"{DEFAULT_DIRECTORY} when --root is given)",
+    )
+
+
+def _library_target(args: argparse.Namespace) -> tuple[Path, str]:
+    """The root and workshops directory a subscription command acts on:
+    the default library with --library, else --root and --directory."""
+
+    if args.library:
+        if args.root is not None or args.directory is not None:
+            raise CliError("--library cannot be combined with --root or --directory")
+
+        return default_library(), "."
+
+    return (
+        args.root if args.root is not None else Path.cwd(),
+        args.directory if args.directory is not None else DEFAULT_DIRECTORY,
+    )
+
+
+def _project_library(args: argparse.Namespace) -> Path:
+    """The library a project command acts on: the default library unless
+    --root or --directory name another."""
+
+    if args.root is None and args.directory is None:
+        return default_library()
+
+    root = args.root if args.root is not None else Path.cwd()
+    directory = args.directory if args.directory is not None else DEFAULT_DIRECTORY
+
+    return library_directory(root, directory)
+
+
+def _confirm(question: str, yes: bool) -> bool:
+    """Whether to go ahead: --yes, or the person answering yes."""
+
+    if yes:
+        return True
+
+    if not sys.stdin.isatty():
+        raise CliError(f"{question} Pass --yes to go ahead without asking.")
+
+    return input(f"{question} [y/N] ").strip().lower() in {"y", "yes"}
+
+
+def command_library(args: argparse.Namespace) -> int:
+    """Start JupyterLab on a workshop library, creating it on first use."""
+
+    from .launch import LaunchError, LaunchOptions, run_launch
+
+    directory = (args.directory or default_library()).expanduser()
+
+    try:
+        if not is_library(directory, "."):
+            directory.mkdir(parents=True, exist_ok=True)
+            write_library(directory, ".", empty_library())
+            print(f"created a workshop library at {directory}")
+
+        for name in repair_links(directory):
+            print(f"relinked the project {name}")
+    except (OSError, LibraryError) as error:
+        raise CliError(str(error)) from error
+
+    if args.init_only:
+        return 0
+
+    options = LaunchOptions(
+        root=directory,
+        workshops_directory=".",
+        collections=args.collection,
+        trust=args.trust,
+        port=args.port,
+        open_browser=not args.no_browser,
+        fresh=args.fresh,
+        token=args.token,
+        lab_args=tuple(args.passthrough),
+    )
+
+    try:
+        return run_launch(options)
+    except LaunchError as error:
+        raise CliError(str(error)) from error
+
+
+def command_subscribe(args: argparse.Namespace) -> int:
+    """Add a collection or catalog to a workshop library's subscriptions."""
+
+    root, directory = _library_target(args)
+    kind = "catalogs" if args.catalog else "collections"
+
+    try:
+        added = subscribe(root, directory, args.location, kind)
+    except LibraryError as error:
+        raise CliError(_not_a_library_hint(str(error))) from error
+
+    what = "catalog" if args.catalog else "collection"
+
+    print(
+        f"subscribed to the {what} {args.location}"
+        if added
+        else f"already subscribed to the {what} {args.location}"
+    )
+
+    return 0
+
+
+def command_unsubscribe(args: argparse.Namespace) -> int:
+    """Remove a collection or catalog from a workshop library's subscriptions."""
+
+    root, directory = _library_target(args)
+    kind = "catalogs" if args.catalog else "collections"
+
+    try:
+        removed = unsubscribe(root, directory, args.location, kind)
+    except LibraryError as error:
+        raise CliError(_not_a_library_hint(str(error))) from error
+
+    what = "catalog" if args.catalog else "collection"
+
+    if not removed:
+        raise CliError(f"not subscribed to the {what} {args.location}")
+
+    print(f"unsubscribed from the {what} {args.location}")
+
+    return 0
+
+
+def _not_a_library_hint(message: str) -> str:
+    # Subscriptions outside a library live in the browser's settings,
+    # which the command line cannot change.
+    if "not a workshop library" not in message:
+        return message
+
+    return (
+        f"{message}; subscriptions outside a workshop library are kept in the "
+        "JupyterLab settings, so change them in the workshop browser, or make "
+        "the directory a library there or with "
+        "jupyter workshop library DIR --init-only"
+    )
+
+
+def command_list(args: argparse.Namespace) -> int:
+    """List the installed workshops and, in a library, its subscriptions."""
+
+    root, directory = _library_target(args)
+
+    try:
+        registry = read_library(root, directory)
+        records = list_installed(root, directory, library=True)
+    except (LibraryError, CollectionError) as error:
+        raise CliError(str(error)) from error
+
+    location = library_directory(root, directory)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "directory": location.as_posix(),
+                    "library": registry is not None,
+                    "collections": (registry or {}).get("collections"),
+                    "catalogs": (registry or {}).get("catalogs"),
+                    "workshops": records,
+                },
+                indent=2,
+            )
+        )
+
+        return 0
+
+    if registry is None:
+        print(f"workshops directory {location} (not a workshop library)")
+    else:
+        print(f"workshop library {location}")
+
+        for key in ("collections", "catalogs"):
+            listed = registry.get(key)
+
+            if listed is None:
+                print(f"{key}: as the JupyterLab settings say")
+            else:
+                print(f"{key}: {', '.join(listed) if listed else 'none'}")
+
+    if not records:
+        print("no workshops installed")
+
+    for record in records:
+        kind = record.get("kind") or ("installed" if record["source"] else "local")
+        progress = f"{record['done']}/{record['pages']} pages"
+
+        print(
+            f"{kind:<9} {record['title']} {record['version'] or '-'} "
+            f"{record['path']} ({progress})"
+        )
+
+    return 0
+
+
+def command_update(args: argparse.Namespace) -> int:
+    """Install newer versions of workshops their collections offer."""
+
+    root, directory = _library_target(args)
+
+    try:
+        records = select_installed(
+            list_installed(root, directory, library=True), args.names
+        )
+        updates = find_updates(root, records)
+    except (CollectionError, FetchError, LibraryError) as error:
+        raise CliError(str(error)) from error
+
+    if not updates:
+        print("everything is up to date")
+
+        return 0
+
+    for update in updates:
+        print(
+            f"{update.record['title']} {update.record['version'] or '-'} -> "
+            f"{update.version} ({update.record['path']})"
+        )
+
+    if not _confirm(
+        "Updating replaces each workshop and resets its progress. Update?",
+        args.yes,
+    ):
+        return 1
+
+    failed = 0
+
+    for update in updates:
+        try:
+            print(f"updated {apply_update(root, update)}")
+        except FetchError as error:
+            failed += 1
+            print(f"failed {update.record['path']}: {error}")
+
+    return 1 if failed else 0
+
+
+def command_remove(args: argparse.Namespace) -> int:
+    """Remove installed workshops as the browser does."""
+
+    root, directory = _library_target(args)
+
+    try:
+        records = select_installed(
+            list_installed(root, directory, library=True), args.names
+        )
+    except (CollectionError, FetchError, LibraryError) as error:
+        raise CliError(str(error)) from error
+
+    for record in records:
+        downloaded = isinstance(record["source"], dict) and record["source"].get(
+            "kind"
+        ) not in {None, "local"}
+        what = (
+            "the directory and its progress"
+            if downloaded
+            else "its progress; the files stay"
+        )
+
+        print(f"{record['title']} ({record['path']}): {what}")
+
+    if not _confirm("Remove these?", args.yes):
+        return 1
+
+    for record in records:
+        try:
+            print(f"removed {remove_installed(root, record)}")
+        except FetchError as error:
+            raise CliError(str(error)) from error
+
+    return 0
+
+
+def command_project_link(args: argparse.Namespace) -> int:
+    """Link a directory kept outside a library in as a project."""
+
+    library = _project_library(args)
+
+    try:
+        entry = link_project(library, args.path, args.name, args.workshops)
+    except LibraryError as error:
+        raise CliError(_not_a_library_hint(str(error))) from error
+
+    target = Path(entry["target"])
+    ignore = target / ".gitignore"
+
+    print(f"linked {library / 'projects' / entry['name']} to {target}")
+
+    # A workshop records its progress in _workshop/ beside its pages,
+    # which a repository should not commit.
+    if (target / ".git").exists() and (
+        not ignore.is_file() or "_workshop" not in ignore.read_text("utf-8")
+    ):
+        print(
+            "note: the repository's .gitignore does not ignore _workshop/, "
+            "where workshops record progress"
+        )
+
+    return 0
+
+
+def command_project_unlink(args: argparse.Namespace) -> int:
+    """Remove a linked project's link and registry entry."""
+
+    library = _project_library(args)
+
+    try:
+        entry = unlink_project(library, args.name)
+    except LibraryError as error:
+        raise CliError(str(error)) from error
+
+    print(f"unlinked {args.name}; nothing at {entry.get('target')} was touched")
+
+    return 0
+
+
+def command_project_list(args: argparse.Namespace) -> int:
+    """List a workshop library's projects."""
+
+    library = _project_library(args)
+
+    try:
+        projects = list_projects(library, ".")
+    except CollectionError as error:
+        raise CliError(str(error)) from error
+
+    if args.json:
+        print(json.dumps({"projects": projects}, indent=2))
+
+        return 0
+
+    if not projects:
+        print("no projects")
+
+    for project in projects:
+        state = (
+            "missing"
+            if project["missing"]
+            else ("linked" if project["linked"] else "cloned")
+        )
+        target = f" -> {project['target']}" if project["target"] else ""
+
+        print(f"{project['name']} ({state}){target}")
+
+    return 0
 
 
 def command_kernels(args: argparse.Namespace) -> int:

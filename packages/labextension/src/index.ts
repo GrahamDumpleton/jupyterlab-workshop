@@ -118,6 +118,7 @@ import { showCollectionsDialog } from './browser/dialog';
 import { installEntry } from './browser/install';
 import { loadCollection, nextAfter } from './browser/match';
 import { SourceStore } from './browser/sources';
+import { LibraryService } from './library/service';
 import {
   BROWSER_ID,
   IBrowserSettings,
@@ -847,7 +848,20 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     // The browser lists the subscribed collections and the installed
     // workshops in the main area. A launch link can add a collection or
     // a catalog for the session.
-    const store = new SourceStore({ settingRegistry, features, stateDB });
+    const library = new LibraryService({
+      contents: app.serviceManager.contents,
+      features,
+      settingRegistry
+    });
+
+    (manager as WorkshopManager).library = library;
+
+    const store = new SourceStore({
+      settingRegistry,
+      features,
+      stateDB,
+      library
+    });
     const readBrowserSettings = async (): Promise<IBrowserSettings> => ({
       workshopsDirectory: await workshopsDirectory()
     });
@@ -925,7 +939,8 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             commands: app.commands,
             features,
             store,
-            readSettings: readBrowserSettings
+            readSettings: readBrowserSettings,
+            library
           });
         }
 
