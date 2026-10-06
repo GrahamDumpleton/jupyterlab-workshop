@@ -1103,6 +1103,93 @@ test.describe('workshop panel', () => {
     expect(await kernels()).not.toContain(kernelName);
   });
 
+  test('keeps the records about a workshop across a reset and a restart', async ({
+    page,
+    tmpPath
+  }) => {
+    const target = `${tmpPath}/kept`;
+    const records = ['source.json', 'agent.json', 'gist.json'];
+
+    await page.contents.uploadContent(
+      [
+        'apiVersion: jupyterlab-workshop/v1alpha1',
+        'name: kept',
+        'title: Kept',
+        'pages: [pages/01.md]',
+        ''
+      ].join('\n'),
+      'text',
+      `${target}/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# Only page\n',
+      'text',
+      `${target}/pages/01.md`
+    );
+
+    // What the download, Workshop Author and the gist command would have
+    // written; a local source record, so the trust dialog is as usual.
+    await page.contents.uploadContent(
+      '{"source": {"kind": "local"}}\n',
+      'text',
+      `${target}/_workshop/source.json`
+    );
+    await page.contents.uploadContent(
+      '{"provider": "claude", "history": []}\n',
+      'text',
+      `${target}/_workshop/agent.json`
+    );
+    await page.contents.uploadContent(
+      '{"id": "abc", "url": "https://gist.github.com/ada/abc"}\n',
+      'text',
+      `${target}/_workshop/gist.json`
+    );
+    await openWorkshop(page, target);
+
+    const panel = page.locator(PANEL);
+    const dialog = page.locator('.jp-Dialog');
+    const state = `${target}/_workshop/state.json`;
+    const kept = async (): Promise<boolean[]> =>
+      Promise.all(
+        records.map(name =>
+          page.contents.fileExists(`${target}/_workshop/${name}`)
+        )
+      );
+    const run = (command: string): Promise<unknown> =>
+      page.evaluate((id: string) => {
+        const exposed = window as unknown as IExposedApp;
+
+        return exposed.jupyterapp.commands.execute(id, {});
+      }, command);
+
+    await expect.poll(() => page.contents.fileExists(state)).toBe(true);
+
+    // Reset Progress forgets progress, not the records.
+    const reset = run('workshop:reset');
+
+    await dialog.getByRole('button', { name: 'Reset', exact: true }).click();
+    await reset;
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText('Kept');
+    expect(await kept()).toEqual([true, true, true]);
+
+    // Nor does Restart, which empties the rest of the state directory.
+    await page.contents.uploadContent(
+      'scratch\n',
+      'text',
+      `${target}/_workshop/leftover.txt`
+    );
+
+    const restart = run('workshop:restart');
+
+    await dialog.getByRole('button', { name: 'Restart', exact: true }).click();
+    await restart;
+    await expect(panel.locator('.jp-WorkshopPanel-title')).toHaveText('Kept');
+    expect(await kept()).toEqual([true, true, true]);
+    expect(
+      await page.contents.fileExists(`${target}/_workshop/leftover.txt`)
+    ).toBe(false);
+  });
+
   test('fills the workspace and refills it on restart', async ({
     page,
     tmpPath

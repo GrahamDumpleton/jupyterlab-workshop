@@ -1,6 +1,6 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { Event, ServerConnection } from '@jupyterlab/services';
-import { ReadonlyJSONObject } from '@lumino/coreutils';
+import { ReadonlyJSONObject, UUID } from '@lumino/coreutils';
 
 import { requestAPI } from '../request';
 import { CommandIDs, IWorkshopManager, errorMessage } from '../tokens';
@@ -8,6 +8,12 @@ import { CommandIDs, IWorkshopManager, errorMessage } from '../tokens';
 /** Schema id of the bridge events the server emits. */
 export const BRIDGE_SCHEMA_ID =
   'https://grahamdumpleton.github.io/jupyterlab-workshop/bridge/v1';
+
+/**
+ * The id of this browser tab, which a bridge request names as its target
+ * to be run here and in no other tab. It lasts as long as the page.
+ */
+export const BRIDGE_CLIENT_ID: string = UUID.uuid4();
 
 /** Commands answered even when no workshop is open in author mode. */
 const ALWAYS: ReadonlySet<string> = new Set([
@@ -44,10 +50,30 @@ export class BridgeListener {
     const requestId = String(emission.request_id ?? '');
     const command = String(emission.command ?? '');
     const args = isObject(emission.args) ? emission.args : {};
+    const target = String(emission.target ?? '');
 
-    // Other tabs may answer too; only a session editing a workshop acts on
+    if (!requestId) {
+      return;
+    }
+
+    // A request aimed at a tab is that tab's alone. Otherwise other tabs
+    // may answer too, and only a session editing a workshop acts on
     // requests that change it.
-    if (!requestId || (!this._manager.authoring && !ALWAYS.has(command))) {
+    if (target && target !== BRIDGE_CLIENT_ID) {
+      return;
+    }
+
+    if (!this._manager.authoring && !ALWAYS.has(command)) {
+      // A request aimed at this tab is answered, so the tool hears at once
+      // what is missing rather than waiting out its timeout.
+      if (target) {
+        void this._answer({
+          request_id: requestId,
+          error:
+            'This tab has no workshop open in author mode; open it with open_workshop first'
+        });
+      }
+
       return;
     }
 
@@ -73,6 +99,10 @@ export class BridgeListener {
       body = { request_id: requestId, error: errorMessage(error) };
     }
 
+    await this._answer(body);
+  }
+
+  private async _answer(body: Record<string, unknown>): Promise<void> {
     try {
       await requestAPI('bridge/result', this._serverSettings, {
         method: 'POST',

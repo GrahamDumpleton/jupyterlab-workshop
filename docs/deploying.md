@@ -90,6 +90,7 @@ palette and the matching launch link parameter.
 | `click-hint`     | The hint that the first action of a workshop can be clicked, shown to a learner who has clicked nothing: a pulsing ring and a "Click to run" label on that action.                                                           |
 | `library`        | [Workshop libraries](library.md): a `library.json` in the workshops directory is ignored and "Make this a workshop library…" is not offered, so the directory behaves as a plain one.                                        |
 | `personal`       | The My workshops section of a workshop library.                                                                                                                                                                              |
+| `ai-authoring`   | [Workshop Author](authoring.md#workshop-author), the AI agent that writes and revises the workshops of a library's owner: its browser button and launcher card, Edit with AI on cards, and its commands.                     |
 
 The workshops under `workshopsDirectory` stay openable with
 `open-directory` disabled, from the browser or a `workshop=<path>` launch
@@ -99,7 +100,10 @@ collections.
 A deployment needs none of these to keep [workshop libraries](library.md)
 out of its way: a workshops directory without `library.json` is a plain
 one, and the library's sections and its offer to make one appear only
-in a library or where subscribing is allowed.
+in a library or where subscribing is allowed. Nor does
+[Workshop Author](authoring.md#workshop-author) need disabling: it
+appears only in a library, and only on a server with the `ai` extra
+installed, which a deployment's requirements do not include.
 Restart stays available whatever is disabled, since it is how a learner
 starts over when Remove is gone; see [Using
 workshops](using.md#starting-over-and-clearing-up).

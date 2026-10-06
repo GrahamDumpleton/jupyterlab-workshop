@@ -1,10 +1,12 @@
 import {
   assignCollectionDirectory,
+  COLLECTIONS_DIRECTORY,
   emptyLibrary,
   ILibrary,
-  INSTALLED_DIRECTORY,
   joinLibraryPath,
-  normalizeWorkshopsDirectory
+  normalizeWorkshopsDirectory,
+  STANDALONE_DIRECTORY,
+  standaloneDirectory
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
@@ -13,7 +15,10 @@ import { ensureDirectory, getIfExists } from '../actions/contents';
 import { WORKSHOP_STATE_DIR } from '../state';
 import { IInstalledWorkshop, isDownloaded } from '../tokens';
 
-/** One downloaded workshop the migration moves under `installed/`. */
+/**
+ * One downloaded workshop the migration moves, under `collections/` or
+ * `standalone/`.
+ */
 export interface IMigrationMove {
   title: string;
   from: string;
@@ -39,8 +44,10 @@ export interface IMigrationPlan {
  * What making a workshops directory a library would do, without doing
  * it: the registry to write, carrying over the subscriptions the user
  * made in their settings (the defaults are left to keep applying), and
- * which downloaded workshops move into their collection's directory
- * under `installed/`. A workshop with an isolated environment stays,
+ * which downloaded workshops move: into their collection's directory
+ * under `collections/`, or under `standalone/` for one downloaded from a
+ * URL of its own, named as a download there would be. A workshop with an
+ * isolated environment stays,
  * since the environment and its kernel hold absolute paths a move would
  * break, and so does the one open now. Local directories stay where
  * they are, as their own.
@@ -75,11 +82,11 @@ export async function planMigration(options: {
   const skipped: IMigrationSkip[] = [];
 
   for (const item of options.installed) {
-    // Only what sits directly in the workshops directory, downloaded
-    // from a collection, has a place under installed/.
+    // Only downloads sitting directly in the workshops directory move;
+    // a local directory stays, as the owner's own.
     if (
       !isDownloaded(item) ||
-      item.collection === null ||
+      item.source === null ||
       PathExt.dirname(item.path) !== base
     ) {
       continue;
@@ -105,6 +112,20 @@ export async function planMigration(options: {
       continue;
     }
 
+    if (item.collection === null) {
+      moves.push({
+        title: item.title,
+        from: item.path,
+        to: joinLibraryPath(
+          base,
+          STANDALONE_DIRECTORY,
+          standaloneDirectory(item.name, item.source)
+        )
+      });
+
+      continue;
+    }
+
     const assigned = assignCollectionDirectory(
       library,
       item.collection,
@@ -117,7 +138,7 @@ export async function planMigration(options: {
       from: item.path,
       to: joinLibraryPath(
         base,
-        INSTALLED_DIRECTORY,
+        COLLECTIONS_DIRECTORY,
         assigned.directory,
         item.name
       )

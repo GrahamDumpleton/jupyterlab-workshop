@@ -27,6 +27,14 @@ extension and JupyterLab.
   browser. The author mode test drives the editing commands with explicit
   arguments (`draft`, `title`) so no dialog needs answering.
 
+- Workshop Author, the AI agent, is tested against the fake provider in
+  `jupyterlab_workshop/agents/fake.py`, which answers by rule (`/ask`,
+  `/tool`, `/slow`, `/fail`) and never reaches a model. The Galata server
+  config forces it through `JUPYTERLAB_WORKSHOP_AGENT_PROVIDER=fake`, and
+  the pytest suite uses it directly or through the same variable. The
+  Claude provider's own tests build SDK message objects and need the
+  `ai` extra; nothing in the suites calls a real model.
+
 - `examples/` are the workshops used as fixtures by the UI tests. Keep
   them working; they are also the demo.
 

@@ -164,7 +164,10 @@ mybinder.org through the project's [Binder
 launcher](collections.md#launch-links). With `--create` it makes the gist, secret
 unless `--public`, and prints its address; with `--update` it replaces
 the files of an existing one, as a new revision in the gist's history;
-see [gist](cli.md#gist) for the token it needs.
+see [gist](cli.md#gist) for the token it needs. The gist is recorded in
+the workshop's `_workshop/gist.json`, so a later `--update` with no gist
+named goes to the same one, and so does [Workshop
+Author](authoring.md#workshop-author) when asked to publish again.
 
 A file's content can be edited on the gist page, but a file added or
 renamed there is not in the tree and is left out, so make such changes

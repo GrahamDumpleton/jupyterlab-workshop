@@ -18,7 +18,7 @@ import hashlib
 import json
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -758,11 +758,11 @@ def _scan_library(
     """The records of a library's own layout, each with its kind."""
 
     from .library import (
-        INSTALLED_DIRECTORY,
+        COLLECTIONS_DIRECTORY,
         PERSONAL_DIRECTORY,
         PROJECTS_DIRECTORY,
+        STANDALONE_DIRECTORY,
         project_entry,
-        project_workshops,
     )
 
     def scan(directory: Path, kind: str, project: str | None = None) -> None:
@@ -780,13 +780,16 @@ def _scan_library(
             records.append(record)
 
     records: list[dict[str, Any]] = []
-    installed = parent / INSTALLED_DIRECTORY
+    collections = parent / COLLECTIONS_DIRECTORY
 
-    if installed.is_dir() and not (installed / MANIFEST_FILE).is_file():
-        for collection in sorted(installed.iterdir()):
+    if collections.is_dir() and not (collections / MANIFEST_FILE).is_file():
+        for collection in sorted(collections.iterdir()):
             if not collection.name.startswith("."):
                 scan(collection, "installed")
 
+    # Workshops downloaded from a URL of their own are installed too, with
+    # no collection to group them by.
+    scan(parent / STANDALONE_DIRECTORY, "installed")
     scan(parent / PERSONAL_DIRECTORY, "personal")
 
     projects = parent / PROJECTS_DIRECTORY
@@ -796,11 +799,122 @@ def _scan_library(
             if project.name.startswith(".") or not project.is_dir():
                 continue
 
-            workshops = project_workshops(project_entry(registry, project.name))
+            entry = project_entry(registry, project.name)
+            listed: dict[str, dict[str, Any]] = {}
 
-            scan(project / workshops, "project", project.name)
+            # A workshop listed in two collections is one record, shown in
+            # each of its sections.
+            for index, (title, paths) in enumerate(project_sections(project, entry)):
+                for position, path in enumerate(paths):
+                    record = listed.get(path)
+
+                    if record is None:
+                        record = describe_installed(
+                            root_dir, project / path if path else project
+                        )
+
+                        if record is None:
+                            continue
+
+                        record.update(kind="project", project=project.name, sections=[])
+                        listed[path] = record
+                        records.append(record)
+
+                    record["sections"].append(
+                        {"title": title, "index": index, "position": position}
+                    )
 
     return records
+
+
+def project_sections(
+    project: Path, entry: Mapping[str, Any]
+) -> list[tuple[str | None, list[str]]]:
+    """The workshops of a project, in sections, by their paths in it.
+
+    The first rule that finds anything decides. A ``workshops`` directory
+    named in the project's registry entry wins, as a choice made on
+    purpose. Then the project's own index: each collection its top-level
+    ``catalog.json`` lists inside it, in catalog order, or else its
+    top-level ``collection.json``, each a section titled after the
+    collection with its workshops in index order, followed by a section
+    with no title for workshops under ``workshops/`` no index lists yet.
+    Then the project itself when it is a workshop, then the workshops
+    directly under ``workshops/``, then those at the top of the project.
+    Only these files and directories are read, never anything deeper, so
+    a submodule with workshops of its own is not taken for the project's.
+    The browser's ``projectSections`` follows the same rules.
+    """
+
+    from .library import (
+        DEFAULT_PROJECT_WORKSHOPS,
+        PROJECT_CATALOG,
+        PROJECT_COLLECTION,
+        catalog_collections,
+        collection_title,
+        collection_workshops,
+    )
+
+    def is_workshop(path: str) -> bool:
+        return ((project / path) if path else project).joinpath(MANIFEST_FILE).is_file()
+
+    def workshops_in(path: str) -> list[str]:
+        directory = (project / path) if path else project
+
+        if not directory.is_dir():
+            return []
+
+        if is_workshop(path):
+            return [path]
+
+        return [
+            "/".join(part for part in (path, child.name) if part)
+            for child in sorted(directory.iterdir())
+            if not child.name.startswith(".")
+            and child.is_dir()
+            and (child / MANIFEST_FILE).is_file()
+        ]
+
+    explicit = entry.get("workshops")
+
+    if isinstance(explicit, str) and explicit:
+        return [(None, workshops_in(explicit.strip("/")))]
+
+    sections: list[tuple[str | None, list[str]]] = []
+
+    for collection in catalog_collections(
+        _read_json(project / PROJECT_CATALOG), PROJECT_CATALOG
+    ):
+        index = _read_json(project / collection["path"])
+        paths = [path for path in collection_workshops(index) if is_workshop(path)]
+
+        if paths:
+            sections.append((collection_title(index, collection["title"]), paths))
+
+    if not sections:
+        index = _read_json(project / PROJECT_COLLECTION)
+        paths = [path for path in collection_workshops(index) if is_workshop(path)]
+
+        if paths:
+            sections.append((collection_title(index, project.name), paths))
+
+    if sections:
+        listed = {path for _, paths in sections for path in paths}
+        rest = [
+            path
+            for path in workshops_in(DEFAULT_PROJECT_WORKSHOPS)
+            if path not in listed
+        ]
+
+        return [*sections, (None, rest)] if rest else sections
+
+    if is_workshop(""):
+        return [(None, [""])]
+
+    if (project / DEFAULT_PROJECT_WORKSHOPS).is_dir():
+        return [(None, workshops_in(DEFAULT_PROJECT_WORKSHOPS))]
+
+    return [(None, workshops_in(""))]
 
 
 def _join_relative(root_dir: Path, parent: Path, *parts: str) -> str:

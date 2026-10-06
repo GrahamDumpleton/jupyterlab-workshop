@@ -1,13 +1,16 @@
 import {
   cleanBase64,
   hashFiles,
+  IDownloadSource,
   IWorkshopManifest,
+  mayReplaceDownload,
   parseForgeUrl,
   parseManifest,
   parsePage,
   parseWorkshopTree,
   rawBaseUrl,
   referencedFiles,
+  standaloneDirectory,
   TREE_FILE
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
@@ -82,12 +85,35 @@ export async function fetchWorkshopFiles(
     (await downloadReferenced(base));
   const { manifest, texts, binaries } = downloaded;
 
+  const recorded: IDownloadSource = {
+    kind: 'git',
+    url: `https://${source.host}/${source.owner}/${source.repo}`,
+    subdir: source.subdir
+  };
+
   // The directory is named after the workshop, like a server download,
-  // unless the request names one.
-  const target = PathExt.join(request.directory, request.name || manifest.name);
+  // unless the request names one, and for a library's standalone/ is
+  // followed by a short hash of the source, as the server names it.
+  const named = request.name || manifest.name;
+  const name = request.standalone
+    ? standaloneDirectory(named, recorded)
+    : named;
+  const target = PathExt.join(request.directory, name);
   const existing = await getIfExists(contents, target, false);
 
+  // Only a download of the same workshop is ever replaced.
   if (existing) {
+    const record = await readJson(
+      contents,
+      PathExt.join(target, WORKSHOP_STATE_DIR, SOURCE_FILE)
+    );
+
+    if (!mayReplaceDownload(record, recorded, request.collection)) {
+      throw new Error(
+        `${target} is in the way and is not a download of this workshop, so it is left as it is`
+      );
+    }
+
     if (!request.overwrite) {
       throw new ConflictError(`${target} already exists`);
     }
@@ -116,12 +142,7 @@ export async function fetchWorkshopFiles(
   // browser reads the collection from it to match installed workshops.
   const sha256 = hashFiles(texts);
   const record: Record<string, unknown> = {
-    source: {
-      kind: 'git',
-      url: `https://${source.host}/${source.owner}/${source.repo}`,
-      ref: source.ref,
-      subdir: source.subdir
-    },
+    source: { ...recorded, ref: source.ref },
     sha256
   };
 
@@ -135,7 +156,29 @@ export async function fetchWorkshopFiles(
     JSON.stringify(record, null, 2)
   );
 
-  return { path: target, name: request.name || manifest.name, sha256 };
+  return { path: target, name, sha256 };
+}
+
+/** A JSON file's value, or null when it is missing or unreadable. */
+async function readJson(
+  contents: Contents.IManager,
+  path: string
+): Promise<unknown> {
+  try {
+    const model = await getIfExists(contents, path, true);
+
+    // The contents API hands a .json file back parsed, and other servers
+    // as text.
+    if (!model) {
+      return null;
+    }
+
+    return typeof model.content === 'string'
+      ? (JSON.parse(model.content) as unknown)
+      : (model.content as unknown);
+  } catch {
+    return null;
+  }
 }
 
 /**

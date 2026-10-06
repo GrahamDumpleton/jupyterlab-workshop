@@ -66,6 +66,7 @@ import {
   showPublishResult,
   showRecordingDialog
 } from './dialogs';
+import { BRIDGE_CLIENT_ID } from './bridge';
 import { LINT_ID, LintWidget } from './lint';
 import { Recorder } from './recorder';
 
@@ -213,6 +214,7 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
     const workshop = manager.workshop;
 
     return {
+      client: BRIDGE_CLIENT_ID,
       workshop: workshop?.path ?? null,
       title: workshop?.manifest.title ?? null,
       page: manager.currentPage?.id ?? null,

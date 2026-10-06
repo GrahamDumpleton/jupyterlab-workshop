@@ -48,6 +48,13 @@ export interface IPlatformInfo {
    */
   web_proxy?: boolean;
 
+  /**
+   * Whether the server has an AI agent installed (the `ai` extra), so
+   * Workshop Author can be offered. Absent from a server too old to
+   * report it, and false in JupyterLite.
+   */
+  agent?: boolean;
+
   /** The frontend in use: jupyterlab from a server, jupyterlite in the browser. */
   frontend: string;
 
@@ -586,6 +593,27 @@ export interface IInstalledWorkshop {
 
   /** The project it belongs to, for a workshop of kind `project`. */
   project?: string;
+
+  /**
+   * Where a project's workshop appears in the project: once for each
+   * section listing it, in the order of the project's own index.
+   */
+  sections?: IProjectSectionPlace[];
+}
+
+/** One place a workshop appears among its project's sections. */
+export interface IProjectSectionPlace {
+  /**
+   * The section's title, a collection's in the project's index, or null
+   * for a project without one and for workshops no index lists yet.
+   */
+  title: string | null;
+
+  /** The section's place among the project's sections. */
+  index: number;
+
+  /** The workshop's place in the section. */
+  position: number;
 }
 
 /** Where in a workshop library a workshop lives. */
@@ -614,7 +642,8 @@ export const FEATURES = [
   'author',
   'click-hint',
   'library',
-  'personal'
+  'personal',
+  'ai-authoring'
 ] as const;
 
 /** One of the removable features. */
@@ -965,6 +994,12 @@ export interface IFetchRequest {
 
   /** Location of the collection the workshop comes from, recorded with it. */
   collection?: string;
+
+  /**
+   * Name the directory for its source, appending a short hash of where
+   * the workshop comes from, as a library's `standalone/` does.
+   */
+  standalone?: boolean;
 }
 
 /** What a download produced. */
@@ -1172,6 +1207,8 @@ export namespace CommandIDs {
   export const createEnvironment = 'workshop:create-environment';
   export const authorMode = 'workshop:author-mode';
   export const newWorkshop = 'workshop:new';
+  export const createWithAI = 'workshop:create-with-ai';
+  export const editWithAI = 'workshop:edit-with-ai';
   export const applyLayout = 'workshop:apply-layout';
   export const editPage = 'workshop:edit-page';
   export const editManifest = 'workshop:edit-manifest';

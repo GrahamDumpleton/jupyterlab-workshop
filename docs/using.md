@@ -216,6 +216,13 @@ deal with it:
   at the first page with its layout applied again, keeping the files and
   the environment as they are.
 
+  Neither Restart nor Reset Progress touches the records kept about the
+  workshop rather than about progress through it: where it was
+  downloaded from (`source.json`), its [Workshop
+  Author](authoring.md#workshop-author) conversation (`agent.json`), and
+  the gist it was [published to](publishing.md#a-workshop-in-a-gist)
+  (`gist.json`). Remove deletes those along with everything else.
+
 - **Remove** ("Workshop: Remove…", or Remove on the card in the
   browser) lists what it will do before doing it: delete the workshop
   directory for a downloaded workshop (for a local directory only the

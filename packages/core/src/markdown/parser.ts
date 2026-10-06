@@ -154,6 +154,29 @@ export function renderInlineMarkdown(text: string): string {
   return inlineParser.renderInline(text);
 }
 
+let plainParser: MarkdownIt | undefined;
+
+/**
+ * Render standard Markdown to HTML, with none of the workshop rules.
+ *
+ * This is for text that is not a workshop page, such as the replies of
+ * an AI agent: directives stay as fenced code, roles as code spans, and
+ * nothing is substituted. Raw HTML is escaped and bare URLs are linked,
+ * and a link that leaves JupyterLab opens in a new tab, as on pages.
+ */
+export function renderPlainMarkdown(text: string): string {
+  if (!plainParser) {
+    plainParser = new MarkdownIt({
+      html: false,
+      linkify: true,
+      typographer: false
+    });
+    plainParser.renderer.rules.link_open = renderLinkOpen;
+  }
+
+  return plainParser.render(text);
+}
+
 /**
  * Create a fresh render environment for a page.
  */

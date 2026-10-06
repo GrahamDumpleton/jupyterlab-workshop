@@ -38,10 +38,11 @@ library and stops without starting JupyterLab; the other options,
 
 ```
 <library>/
-  library.json                    the registry
-  installed/<collection>/<name>/  workshops installed from a collection
-  personal/<name>/                your own workshops
-  projects/<repository>/          repositories, cloned in or linked
+  library.json                      the registry
+  collections/<collection>/<name>/  workshops installed from a collection
+  standalone/<name>-<hash>/         workshops downloaded from a URL of their own
+  personal/<name>/                  your own workshops
+  projects/<repository>/            repositories, cloned in or linked
 ```
 
 The workshop browser shows the library in sections, in this order:
@@ -51,7 +52,8 @@ The workshop browser shows the library in sections, in this order:
 - **Projects**, a group for each project with the workshops in it.
 
 - **Installed**, the downloaded workshops grouped by the collection
-  they came from, as in a plain directory.
+  they came from, as in a plain directory, with those downloaded from a
+  URL of their own under Other workshops.
 
 - **Available**, what the subscribed collections offer that is not
   installed.
@@ -105,17 +107,33 @@ changes, so `subscribe` and `unsubscribe` refuse a plain directory.
 
 ## Installing into a library
 
+Nothing is ever downloaded to the top of a library, where its own
+directories are.
+
 Each collection's workshops go in a directory of their own under
-`installed/`. Its name comes from the collection's `id`, so a
-collection with the id `example.org/course` installs into
-`installed/example.org-course/`; a collection with no id, or one whose
-id another collection's directory already has, uses the short hash of
-its location, as the clash suffix does outside a library. The choice
-is recorded in the registry the first time a workshop of the
-collection is installed, and kept, so a collection that later changes
-its id or its index never moves anything. Since every collection has
-its own directory, two collections that both offer a `git-basics` never
-compete for one.
+`collections/`, named from the collection's `id` followed by a short
+hash of its location, so a collection with the id `example.org/course`
+installs into something like `collections/example.org-course-858442f/`.
+A collection with no usable id gets the hash alone. The choice is
+recorded in the registry the first time a workshop of the collection is
+installed, and kept, so a collection that later changes its id or its
+index never moves anything. Since every collection has its own
+directory, two collections that both offer a `git-basics` never compete
+for one.
+
+A workshop downloaded from a URL of its own, with "Open Workshop from
+URL…" or a launch link that names no collection, goes under
+`standalone/`, named after the workshop followed by a short hash of
+where it came from: the URL and the directory in it, not the branch or
+revision. Downloading the same source again, at any revision, replaces
+it in place, and a workshop of the same name from anywhere else gets a
+directory of its own. The hashes are there to keep names apart; nothing
+asks you to choose or type them.
+
+A download only ever replaces a directory that holds a download of the
+same workshop, from the same source or installed from the same
+collection. Anything else in the way, a workshop of your own above all,
+is left alone and the download refused, in a library or not.
 
 `jupyter workshop install COLLECTION --root DIR --directory .` installs
 into a library the same way, and subscribes the library to the
@@ -131,6 +149,9 @@ the trust dialog, as long as they were not downloaded there. They open
 as a learner sees them; author mode is a button away as usual. In a
 library, the New Workshop dialog and a recording saved as a new
 workshop suggest a directory under `personal/`.
+[Workshop Author](authoring.md#workshop-author), the AI agent, writes
+the workshops it creates there too, and works on the workshops under
+`personal/` and in projects, never on downloaded ones.
 
 ## Projects
 
@@ -142,9 +163,60 @@ one you are writing workshops in to publish. Cloning a repository into
 git clone https://github.com/example-org/course-workshops ~/Workshops/projects/course-workshops
 ```
 
-Its workshops are expected in its `workshops/` directory. A repository
-that keeps them elsewhere, or one kept outside the library, is linked
-in:
+The library works out where a project's workshops are, taking the
+first of these that finds any:
+
+1. The workshops directory named in the project's registry entry, for a
+   repository whose workshops are somewhere the rules below would not
+   look (see linking, next).
+
+2. The repository's own index. A `catalog.json` at its top lists its
+   collections, and each collection's `collection.json` lists its
+   workshops, by the `subdir` of each entry's git source. Each
+   collection inside the repository becomes a section, in the catalog's
+   order, with its workshops in the index's order; a workshop two
+   collections list appears in both. Without a catalog, a
+   `collection.json` at the top gives a single section. Workshops under
+   `workshops/` that no index lists yet follow in a section of their
+   own, so a workshop you have just started shows before you run
+   `jupyter workshop index`.
+
+3. The repository itself, when it is a single workshop with its
+   `workshop.yaml` at the top.
+
+4. The workshops directly under its `workshops/` directory.
+
+5. The workshops directly at the top of the repository.
+
+Only those files and directories are read, never anything deeper, so a
+git submodule holding workshops of its own is not taken for the
+project's. Some layouts and how they are shown:
+
+```
+projects/wrapt-workshops/            sections, from the index
+  catalog.json                       lists the three collections
+  collections/
+    decorators/collection.json       Decorators with wrapt
+    monkey-patching/collection.json  Monkey patching with wrapt
+    object-proxies/collection.json   Object proxies with wrapt
+  workshops/                         every workshop, in one place
+  reference/jupyterlab-workshop/     a submodule, not looked in
+
+projects/course-workshops/           one section, from the index
+  collection.json
+  workshops/git-basics/
+  workshops/pandas-intro/
+
+projects/my-workshop/                the repository is the workshop
+  workshop.yaml
+  pages/
+
+projects/drafts/                     no index: the workshops in workshops/
+  workshops/first-try/
+```
+
+A repository that keeps its workshops somewhere else, or one kept
+outside the library, is linked in:
 
 ```
 jupyter workshop project link ~/src/course-workshops
@@ -186,7 +258,8 @@ shows what it will do and asks first:
   lists are left to keep applying.
 
 - Each downloaded workshop that recorded its collection moves into that
-  collection's directory under `installed/`, its progress with it.
+  collection's directory under `collections/`, its progress with it, and
+  each one downloaded from a URL of its own moves under `standalone/`.
 
 - A workshop with its own [isolated environment](environment.md) stays
   where it is, since the environment and its kernel hold paths a move
@@ -232,13 +305,13 @@ one, since its subscriptions come from the site it was built as.
 }
 ```
 
-| Key           | Holds                                                                                                                                         |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`     | Always `1`.                                                                                                                                   |
-| `collections` | Subscribed collections in order. Absent, the settings apply; present, even empty, it takes their place.                                       |
-| `catalogs`    | Subscribed catalogs, absent or present as for collections.                                                                                    |
-| `directories` | The directory under `installed/` for each collection location, chosen at its first install.                                                   |
-| `projects`    | Projects that need an entry: a linked one, with its `target`, or one whose workshops are not in `workshops/`, with its `workshops` directory. |
+| Key           | Holds                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`     | Always `1`.                                                                                                                                      |
+| `collections` | Subscribed collections in order. Absent, the settings apply; present, even empty, it takes their place.                                          |
+| `catalogs`    | Subscribed catalogs, absent or present as for collections.                                                                                       |
+| `directories` | The directory under `collections/` for each collection location, chosen at its first install.                                                    |
+| `projects`    | Projects that need an entry: a linked one, with its `target`, or one whose workshops the library would not find, with its `workshops` directory. |
 
 `jupyter workshop schema --library` prints its JSON schema, which is
 also published at

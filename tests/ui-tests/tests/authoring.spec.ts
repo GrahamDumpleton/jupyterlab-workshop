@@ -179,3 +179,91 @@ test.describe('author mode', () => {
     await expect(panel.locator('.jp-WorkshopPanel-author')).toHaveCount(0);
   });
 });
+
+interface IBridgeAnswer {
+  status: number;
+  client: string | null;
+  message: string;
+}
+
+test.describe('bridge targets', () => {
+  test('a request aimed at a tab runs only there', async ({ page }) => {
+    // Status is answered by any tab, so a request with no target, one
+    // aimed at this tab and one aimed at another show the filter alone.
+    const ask = (
+      target: string,
+      command = 'workshop:bridge-status'
+    ): Promise<IBridgeAnswer> =>
+      page.evaluate(
+        async ({ target, command }): Promise<IBridgeAnswer> => {
+          const app = (
+            window as unknown as {
+              jupyterapp: {
+                serviceManager: {
+                  serverSettings: { baseUrl: string; token: string };
+                };
+              };
+            }
+          ).jupyterapp;
+          const settings = app.serviceManager.serverSettings;
+          const xsrf = /_xsrf=([^;]+)/.exec(document.cookie)?.[1];
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+          };
+
+          if (xsrf) {
+            headers['X-XSRFToken'] = xsrf;
+          }
+
+          if (settings.token) {
+            headers['Authorization'] = `token ${settings.token}`;
+          }
+
+          const response = await fetch(
+            `${settings.baseUrl}jupyterlab-workshop/bridge`,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                command,
+                args: {},
+                timeout: 3,
+                ...(target ? { target } : {})
+              })
+            }
+          );
+          const body = (await response.json()) as {
+            result?: { client?: string };
+            message?: string;
+          };
+
+          return {
+            status: response.status,
+            client: body.result?.client ?? null,
+            message: body.message ?? ''
+          };
+        },
+        { target, command }
+      );
+
+    const open = await ask('');
+
+    expect(open.status).toBe(200);
+    expect(open.client).toBeTruthy();
+
+    const mine = await ask(open.client ?? '');
+
+    expect(mine).toMatchObject({ status: 200, client: open.client });
+
+    // A command that needs author mode, aimed at this tab without it, is
+    // refused at once rather than left to time out.
+    const refused = await ask(open.client ?? '', 'workshop:bridge-reset');
+
+    expect(refused.status).toBe(400);
+    expect(refused.message).toContain('open_workshop');
+
+    const elsewhere = await ask('another-tab');
+
+    expect(elsewhere.status).toBe(504);
+  });
+});

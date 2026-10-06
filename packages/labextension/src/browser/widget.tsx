@@ -206,6 +206,29 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [registry, setRegistry] = useState<ILibrary | null>(null);
   const [projects, setProjects] = useState<ILibraryProjectInfo[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [, setCommandsVersion] = useState(0);
+
+  // Workshop Author's commands become available once its plugin has asked
+  // the server whether an agent is installed, so redraw when they change.
+  useEffect(() => {
+    const redraw = (
+      _: CommandRegistry,
+      change: CommandRegistry.ICommandChangedArgs
+    ): void => {
+      if (
+        change.id === CommandIDs.createWithAI ||
+        change.id === CommandIDs.editWithAI
+      ) {
+        setCommandsVersion(value => value + 1);
+      }
+    };
+
+    commands.commandChanged.connect(redraw);
+
+    return () => {
+      commands.commandChanged.disconnect(redraw);
+    };
+  }, [commands]);
 
   // Reload when asked, when a workshop is opened or closed, when the
   // subscribed sources change, or at first.
@@ -571,6 +594,15 @@ function BrowserContent(props: IContentProps): JSX.Element {
         onRemove={
           features.enabled('remove') ? () => void remove(item) : undefined
         }
+        onEditWithAI={
+          (item.kind === 'personal' || item.kind === 'project') &&
+          commands.isVisible(CommandIDs.editWithAI)
+            ? () =>
+                void commands.execute(CommandIDs.editWithAI, {
+                  path: item.path
+                })
+            : undefined
+        }
         update={updateFor(item)}
       />
     );
@@ -617,6 +649,10 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
   };
 
+  // Workshop Author writes the owner's own workshops, so only in a library.
+  const canAuthorWithAI =
+    registry !== null && commands.isVisible(CommandIDs.createWithAI);
+
   // A plain workshops directory on a server can become a library, unless
   // the subscriptions are locked, since the registry would hold them.
   const canMakeLibrary =
@@ -653,16 +689,13 @@ function BrowserContent(props: IContentProps): JSX.Element {
         <div className="jp-WorkshopBrowser-migration">
           <p>
             {where} becomes a workshop library: a library.json registry there
-            holds your subscriptions, downloads go under installed/, one
-            directory per collection, your own workshops under personal/ and
-            projects under projects/.
+            holds your subscriptions, workshops from a collection go under
+            collections/, other downloads under standalone/, your own workshops
+            under personal/ and projects under projects/.
           </p>
           {plan.moves.length > 0 ? (
             <>
-              <p>
-                These downloaded workshops move into their collection's
-                directory:
-              </p>
+              <p>These downloaded workshops move:</p>
               <ul>
                 {plan.moves.map(move => (
                   <li key={move.from}>
@@ -798,6 +831,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
             Collections…
           </button>
         ) : null}
+        {canAuthorWithAI ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Describe a workshop and have Workshop Author, an AI agent, write it in My workshops"
+            onClick={() => void commands.execute(CommandIDs.createWithAI)}
+          >
+            Create Workshop with AI…
+          </button>
+        ) : null}
         {canMakeLibrary ? (
           <button
             type="button"
@@ -871,7 +914,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
                   project.missing
                     ? `Missing: ${project.target ?? project.path} is not there any more.`
                     : items.length === 0
-                      ? `No workshops in ${project.workshops} yet.`
+                      ? `No workshops found in ${project.path} yet.`
                       : undefined
                 }
                 headerActions={
@@ -886,7 +929,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
                   ) : null
                 }
               >
-                {items.map(item => renderInstalledCard(item, false))}
+                {renderProjectCards(items, item =>
+                  renderInstalledCard(item, false)
+                )}
               </InstalledGroup>
             );
           })}
@@ -1722,6 +1767,7 @@ function InstalledCard({
   onContinue,
   onRestart,
   onRemove,
+  onEditWithAI,
   update
 }: {
   item: IInstalledWorkshop;
@@ -1760,6 +1806,9 @@ function InstalledCard({
 
   /** Delete the workshop, when the settings allow removing. */
   onRemove?: () => void;
+
+  /** Revise the workshop with Workshop Author, for the owner's own. */
+  onEditWithAI?: () => void;
 
   /** The collection version to move to, when it differs from the installed one. */
   update?: { version: string; run: () => void };
@@ -1878,6 +1927,16 @@ function InstalledCard({
             Update to {update.version}
           </button>
         ) : null}
+        {onEditWithAI ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Revise this workshop in a conversation with Workshop Author, an AI agent"
+            onClick={onEditWithAI}
+          >
+            Edit with AI
+          </button>
+        ) : null}
         {onRemove ? (
           <button
             type="button"
@@ -1973,6 +2032,55 @@ function suggestedCollections(
   }
 
   return suggestions;
+}
+
+/**
+ * A project's workshop cards. A project whose own index groups its
+ * workshops shows each collection under its title, in the index's
+ * order, a workshop listed in two appearing in both, then those no
+ * index lists yet; any other project shows its workshops by title.
+ */
+function renderProjectCards(
+  items: readonly IInstalledWorkshop[],
+  render: (item: IInstalledWorkshop) => JSX.Element
+): React.ReactNode {
+  const places = items.flatMap(item =>
+    (item.sections ?? []).map(place => ({ item, place }))
+  );
+
+  if (!places.some(({ place }) => place.title !== null)) {
+    return items.map(render);
+  }
+
+  places.sort(
+    (a, b) =>
+      a.place.index - b.place.index || a.place.position - b.place.position
+  );
+
+  const nodes: React.ReactNode[] = [];
+  let current = -1;
+
+  for (const { item, place } of places) {
+    if (place.index !== current) {
+      current = place.index;
+      nodes.push(
+        <h3
+          key={`section:${place.index}`}
+          className="jp-WorkshopBrowser-section"
+        >
+          {place.title ?? 'Not in a collection'}
+        </h3>
+      );
+    }
+
+    nodes.push(
+      <React.Fragment key={`${place.index}:${item.path}`}>
+        {render(item)}
+      </React.Fragment>
+    );
+  }
+
+  return nodes;
 }
 
 /** Which section a group's collapse state belongs to. */

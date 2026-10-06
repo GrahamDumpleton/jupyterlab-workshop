@@ -3,10 +3,14 @@
 A library is the workshops directory, ``<JupyterLab root>/<workshops
 directory>``, when it holds ``library.json``. The registry records the
 collections and catalogs its owner subscribes to, in order, the
-directory under ``installed/`` each collection's workshops go into, and
-the projects whose workshops it shows. Downloaded workshops live under
-``installed/<collection>/``, the owner's own under ``personal/``, and
-repositories being worked on under ``projects/``. A workshops directory
+directory under ``collections/`` each collection's workshops go into,
+and the projects whose workshops it shows. Workshops installed from a
+collection live under ``collections/<collection>/``, workshops
+downloaded from a URL of their own under ``standalone/``, the owner's
+own under ``personal/``, and repositories being worked on under
+``projects/``. The directories under ``collections/`` and
+``standalone/`` always carry a short hash of where their workshops came
+from, so two sources never compete for a name. A workshops directory
 without the registry is a plain one and behaves exactly as before.
 
 The browser applies the same rules through the core package's
@@ -16,13 +20,14 @@ the shared test vectors check.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -34,8 +39,11 @@ LIBRARY_FILE = "library.json"
 #: The registry format version this package understands.
 LIBRARY_VERSION = 1
 
-#: Where downloaded workshops go, one directory per collection.
-INSTALLED_DIRECTORY = "installed"
+#: Where workshops installed from a collection go, a directory per collection.
+COLLECTIONS_DIRECTORY = "collections"
+
+#: Where workshops downloaded from a URL of their own go.
+STANDALONE_DIRECTORY = "standalone"
 
 #: Where the owner's own workshops go.
 PERSONAL_DIRECTORY = "personal"
@@ -45,6 +53,12 @@ PROJECTS_DIRECTORY = "projects"
 
 #: A project's workshops directory when its entry does not name one.
 DEFAULT_PROJECT_WORKSHOPS = "workshops"
+
+#: A catalog a project may hold at its top, listing its collections.
+PROJECT_CATALOG = "catalog.json"
+
+#: A collection index a project may hold at its top.
+PROJECT_COLLECTION = "collection.json"
 
 #: The environment variable naming the default library.
 LIBRARY_VARIABLE = "JUPYTER_WORKSHOP_LIBRARY"
@@ -109,6 +123,30 @@ def library_file(root_dir: Path, directory: str) -> Path:
     """Where the registry of a workshops directory is, or would be."""
 
     return library_directory(root_dir, directory) / LIBRARY_FILE
+
+
+def is_own_library_path(directory: str, path: str) -> bool:
+    """Whether a workshop path, relative to the root, is the library owner's:
+    under ``personal/``, or under ``projects/``, cloned there or linked in.
+
+    The same lexical rule as the browser's ``isOwnLibraryPath``, with the
+    same test vectors; whether the directory is a library at all, and
+    whether the workshop was downloaded, are for the caller to check.
+    """
+
+    base = normalize_workshops_directory(directory)
+    target = normalize_workshops_directory(path)
+
+    if ".." in target.split("/"):
+        return False
+
+    for tree in (PERSONAL_DIRECTORY, PROJECTS_DIRECTORY):
+        prefix = f"{base}/{tree}/" if base else f"{tree}/"
+
+        if target.startswith(prefix) and len(target) > len(prefix):
+            return True
+
+    return False
 
 
 def is_library(root_dir: Path, directory: str) -> bool:
@@ -264,25 +302,83 @@ def slugify_collection_id(collection_id: str) -> str | None:
     return slug
 
 
-def choose_collection_directory(
-    location: str, collection_id: str | None, taken: Iterable[str]
-) -> str:
-    """The directory under ``installed/`` for a collection that has none.
+def choose_collection_directory(location: str, collection_id: str | None) -> str:
+    """The directory under ``collections/`` for a collection that has none.
 
-    The slug of its id, with the location's hash appended when another
-    collection has that directory already, or the hash alone when there
-    is no usable id.
+    The slug of its id followed by the location's hash, or the hash alone
+    when there is no usable id. The hash makes it unique to the location,
+    whatever id another collection claims.
     """
 
     digest = collection_hash(location)
     slug = slugify_collection_id(collection_id) if collection_id else None
 
-    if slug is None:
-        return digest
+    return digest if slug is None else f"{slug}-{digest}"
 
-    used = {name.lower() for name in taken}
 
-    return f"{slug}-{digest}" if slug in used else slug
+def download_key(kind: str, url: str, subdir: str = "") -> str:
+    """What identifies a download, whatever revision of it was taken.
+
+    Its kind, its URL compared as collection locations are with any
+    ``.git`` dropped, and its subdirectory. A gist is named by its id
+    alone, since its owner can be left out of the URL. Two downloads with
+    the same key are the same workshop, so one may replace the other.
+    """
+
+    location = re.sub(r"\.git$", "", normalize_location(url))
+    gist = re.match(r"^https://gist\.github\.com/(?:[^/]+/)?([0-9a-fA-F]+)$", location)
+
+    if gist:
+        location = f"https://gist.github.com/{gist.group(1).lower()}"
+
+    path = "/".join(part for part in subdir.split("/") if part)
+
+    return f"{kind}:{location}#{path}" if path else f"{kind}:{location}"
+
+
+def standalone_directory(name: str, kind: str, url: str, subdir: str = "") -> str:
+    """The directory under ``standalone/`` for a workshop downloaded from a
+    URL of its own: its name followed by the short hash of its download
+    key, so the same source always lands in the same place and no other
+    can."""
+
+    digest = hashlib.sha256(download_key(kind, url, subdir).encode("utf-8"))
+
+    return f"{name}-{digest.hexdigest()[:7]}"
+
+
+def may_replace_download(
+    record: Any, kind: str, url: str, subdir: str = "", collection: str = ""
+) -> bool:
+    """Whether a directory's source record says it is a download that a new
+    download may replace: one from the same source, or one installed from
+    the same collection, as an update of it is. Anything else, a local
+    workshop above all, is never replaced."""
+
+    if not isinstance(record, dict) or not isinstance(record.get("source"), dict):
+        return False
+
+    recorded = record["source"]
+
+    if recorded.get("kind") not in {"git", "archive"} or not isinstance(
+        recorded.get("url"), str
+    ):
+        return False
+
+    if (
+        collection
+        and isinstance(record.get("collection"), str)
+        and normalize_location(record["collection"]) == normalize_location(collection)
+    ):
+        return True
+
+    recorded_subdir = recorded.get("subdir")
+
+    return download_key(
+        str(recorded["kind"]),
+        recorded["url"],
+        recorded_subdir if isinstance(recorded_subdir, str) else "",
+    ) == download_key(kind, url, subdir)
 
 
 def recorded_directory(library: Mapping[str, Any], location: str) -> str | None:
@@ -311,9 +407,7 @@ def assign_collection_directory(
         return recorded, dict(library)
 
     directories = dict(library.get("directories") or {})
-    directory = choose_collection_directory(
-        location, collection_id, directories.values()
-    )
+    directory = choose_collection_directory(location, collection_id)
 
     directories[location] = directory
 
@@ -334,6 +428,107 @@ def project_workshops(project: Mapping[str, Any]) -> str:
     """A project's workshops directory, relative to the project."""
 
     return str(project.get("workshops") or DEFAULT_PROJECT_WORKSHOPS)
+
+
+def project_path(base: str, target: str) -> str | None:
+    """The path inside a project that a location in one of its index files
+    names, resolved against the file's own path: None for a URL, an
+    absolute path, or anything that climbs out of the project. The
+    project itself is the empty string. Mirrors the browser's
+    ``projectPath``."""
+
+    if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith(
+        "/"
+    ):
+        return None
+
+    directory = base.rsplit("/", 1)[0] if "/" in base else ""
+    segments: list[str] = []
+
+    for part in f"{directory}/{target}".split("/"):
+        if part in {"", "."}:
+            continue
+
+        if part == "..":
+            if not segments:
+                return None
+
+            segments.pop()
+        else:
+            segments.append(part)
+
+    return "/".join(segments)
+
+
+def catalog_collections(catalog: Any, catalog_path: str) -> list[dict[str, str]]:
+    """The collections a project's catalog lists that are inside the
+    project, in catalog order, each as its ``path`` and ``title``. A
+    collection named by URL is somewhere else and left out; anything
+    unreadable is skipped rather than refusing the rest."""
+
+    if not isinstance(catalog, dict) or not isinstance(
+        catalog.get("collections"), list
+    ):
+        return []
+
+    found: list[dict[str, str]] = []
+
+    for item in catalog["collections"]:
+        if not isinstance(item, dict) or not isinstance(item.get("url"), str):
+            continue
+
+        path = project_path(catalog_path, item["url"])
+
+        if path:
+            title = item.get("title")
+            found.append(
+                {
+                    "path": path,
+                    "title": title if isinstance(title, str) and title else path,
+                }
+            )
+
+    return found
+
+
+def collection_workshops(collection: Any) -> list[str]:
+    """The directories, relative to the project, of the workshops a
+    collection index in it lists, in index order: each entry's newest
+    version, the first listed, names its directory with the ``subdir`` of
+    its git source, or the project itself with none. An entry fetched as
+    an archive, or one outside the project, is left out."""
+
+    if not isinstance(collection, dict) or not isinstance(
+        collection.get("workshops"), list
+    ):
+        return []
+
+    found: list[str] = []
+
+    for entry in collection["workshops"]:
+        versions = entry.get("versions") if isinstance(entry, dict) else None
+        newest = versions[0] if isinstance(versions, list) and versions else None
+        source = newest.get("source") if isinstance(newest, dict) else None
+
+        if not isinstance(source, dict) or not isinstance(source.get("git"), str):
+            continue
+
+        # A subdir is always within the repository, however it is written.
+        subdir = source.get("subdir")
+        path = project_path("", subdir.lstrip("/") if isinstance(subdir, str) else "")
+
+        if path is not None and path not in found:
+            found.append(path)
+
+    return found
+
+
+def collection_title(collection: Any, fallback: str) -> str:
+    """The title a collection index gives itself, or the fallback."""
+
+    title = collection.get("title") if isinstance(collection, dict) else None
+
+    return title if isinstance(title, str) and title else fallback
 
 
 def is_link(path: Path) -> bool:

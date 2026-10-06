@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from pathlib import Path
 from typing import Any
 
 import tornado
-from jupyter_server.base.handlers import APIHandler
+from jupyter_core.utils import ensure_async
+from jupyter_server.auth.decorator import ws_authenticated
+from jupyter_server.base.handlers import APIHandler, JupyterHandler
 from jupyter_server.utils import url_path_join
+from tornado import websocket
 from tornado.ioloop import IOLoop
 
 from .analytics import (
@@ -36,6 +40,12 @@ from .collection import (
     list_projects,
     load_collection,
 )
+from .conversations import (
+    CLEAR_COMMANDS,
+    Conversation,
+    ConversationError,
+    ConversationManager,
+)
 from .environment import (
     EnvironmentSetupError,
     create_environment,
@@ -59,6 +69,28 @@ API_NAMESPACE = "jupyterlab-workshop"
 DEFAULT_WORKSHOPS_DIRECTORY = "workshops"
 
 
+def under_root(root_dir: Path, path: str, what: str = "path") -> Path:
+    """Resolve a path relative to the root, refusing to leave it."""
+
+    root = root_dir.resolve()
+    resolved = (root / path).resolve()
+
+    if resolved == root or root in resolved.parents:
+        return resolved
+
+    # A project a workshop library links in from elsewhere counts as
+    # inside, when the library's registry vouches for the link.
+    parts = [part for part in path.replace("\\", "/").split("/") if part]
+    linked = None if ".." in parts else linked_project_path(root, parts)
+
+    if linked is None:
+        raise tornado.web.HTTPError(
+            400, f"The {what} must be inside the JupyterLab root directory"
+        )
+
+    return linked
+
+
 class WorkshopHandler(APIHandler):
     """Shared helpers for the workshop endpoints."""
 
@@ -71,23 +103,7 @@ class WorkshopHandler(APIHandler):
     def under_root(self, path: str, what: str = "path") -> Path:
         """Resolve a path relative to the root, refusing to leave it."""
 
-        root = self.root_dir.resolve()
-        resolved = (root / path).resolve()
-
-        if resolved == root or root in resolved.parents:
-            return resolved
-
-        # A project a workshop library links in from elsewhere counts as
-        # inside, when the library's registry vouches for the link.
-        parts = [part for part in path.replace("\\", "/").split("/") if part]
-        linked = None if ".." in parts else linked_project_path(root, parts)
-
-        if linked is None:
-            raise tornado.web.HTTPError(
-                400, f"The {what} must be inside the JupyterLab root directory"
-            )
-
-        return linked
+        return under_root(self.root_dir, path, what)
 
     def body_json(self) -> dict[str, Any]:
         """The request body as a mapping, or an empty mapping."""
@@ -122,7 +138,13 @@ class PlatformHandler(WorkshopHandler):
             web_proxy=has_web_proxy(extensions),
         )
 
-        self.finish(json.dumps(info.to_dict()))
+        # Whether an AI agent is installed, so the browser knows whether to
+        # offer Workshop Author without asking again. Not a workshop
+        # variable: it says what the server has, not where it runs.
+        manager = self.settings.get(CONVERSATIONS_KEY)
+        agent = isinstance(manager, ConversationManager) and agent_installed(manager)
+
+        self.finish(json.dumps({**info.to_dict(), "agent": agent}))
 
 
 class FetchHandler(WorkshopHandler):
@@ -142,6 +164,7 @@ class FetchHandler(WorkshopHandler):
         name = str(body.get("name") or "")
         collection = str(body.get("collection") or "")
         overwrite = bool(body.get("overwrite", False))
+        standalone = bool(body.get("standalone", False))
 
         try:
             source = parse_source(body.get("source") or {})
@@ -159,6 +182,7 @@ class FetchHandler(WorkshopHandler):
                     name=name,
                     overwrite=overwrite,
                     collection=collection,
+                    standalone=standalone,
                 ),
             )
         except FetchError as error:
@@ -584,6 +608,7 @@ class BridgeHandler(WorkshopHandler):
         command = str(body.get("command") or "")
         args = body.get("args") or {}
         timeout = float(body.get("timeout") or 60)
+        target = str(body.get("target") or "") or None
 
         if not command:
             raise tornado.web.HTTPError(400, "A command is required")
@@ -592,7 +617,7 @@ class BridgeHandler(WorkshopHandler):
             raise tornado.web.HTTPError(400, "args must be an object")
 
         try:
-            result = await self.bridge.request(command, args, timeout)
+            result = await self.bridge.request(command, args, timeout, target)
         except BridgeError as error:
             status = 504 if "answered" in str(error) else 400
 
@@ -623,6 +648,248 @@ class BridgeResultHandler(WorkshopHandler):
         self.finish(json.dumps({"resolved": resolved}))
 
 
+# Where the server keeps its conversation manager.
+CONVERSATIONS_KEY = "jupyterlab_workshop_conversations"
+
+# Turns in progress, held so they are not collected while they run.
+_TURNS: set[asyncio.Future[None]] = set()
+
+
+def agent_installed(manager: ConversationManager) -> bool:
+    """Whether the conversation manager's provider can run here."""
+
+    try:
+        return manager.provider.available()
+    except Exception:
+        return False
+
+
+class AgentStatusHandler(WorkshopHandler):
+    """Report whether Workshop Author can run, and how it is logged in."""
+
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        manager = self.settings.get(CONVERSATIONS_KEY)
+
+        if not isinstance(manager, ConversationManager):
+            raise tornado.web.HTTPError(500, "Conversations are not set up")
+
+        status = await manager.provider.status()
+
+        self.finish(json.dumps({**status.to_dict(), "login": manager.login_command()}))
+
+
+class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
+    """A websocket carrying one workshop's conversation with the agent.
+
+    The first message opens the conversation, naming the workshop; the
+    socket then receives everything that happens in it, starting with
+    what happened before, and sends messages, permission answers and
+    interrupts.
+    """
+
+    auth_resource = "contents"
+
+    conversation: Conversation | None = None
+
+    async def pre_get(self) -> None:
+        """Refuse a user who may not change files on this server."""
+
+        authorized = await ensure_async(
+            self.authorizer.is_authorized(self, self.current_user, "write", "contents")
+        )
+
+        if not authorized:
+            raise tornado.web.HTTPError(403)
+
+    @ws_authenticated
+    async def get(self, *args: Any, **kwargs: Any) -> None:
+        """Upgrade the request to a websocket."""
+
+        await self.pre_get()
+
+        result = super().get(*args, **kwargs)
+
+        if result is not None:
+            await result
+
+    @property
+    def manager(self) -> ConversationManager:
+        """The server's conversations."""
+
+        manager = self.settings.get(CONVERSATIONS_KEY)
+
+        if not isinstance(manager, ConversationManager):
+            raise ConversationError("Conversations are not set up")
+
+        return manager
+
+    @property
+    def root_dir(self) -> Path:
+        """The directory the server serves files from."""
+
+        return Path(os.path.expanduser(str(self.settings.get("server_root_dir", ""))))
+
+    async def on_message(self, message: str | bytes) -> None:
+        """Act on one message from the panel."""
+
+        try:
+            data = json.loads(message)
+        except ValueError:
+            await self._send({"type": "error", "message": "Not JSON"})
+
+            return
+
+        if not isinstance(data, dict):
+            return
+
+        try:
+            await self._handle(data)
+        except ConversationError as error:
+            await self._send({"type": "error", "message": str(error)})
+
+    def on_close(self) -> None:
+        """Stop sending this socket what happens."""
+
+        if self.conversation is not None:
+            self.conversation.detach(self._send)
+
+    async def _handle(self, data: dict[str, Any]) -> None:
+        kind = data.get("type")
+
+        if kind == "open":
+            await self._open(data)
+
+            return
+
+        conversation = self.conversation
+
+        if conversation is None:
+            raise ConversationError("Open a conversation first")
+
+        if kind == "send":
+            text = str(data.get("text") or "").strip()
+
+            if not text:
+                return
+
+            # Starting over is the panel's to do, so the history it shows
+            # goes with the agent's session.
+            if text.lower() in CLEAR_COMMANDS:
+                await self.manager.clear(conversation)
+            else:
+                self._start_turn(conversation, conversation.send(text))
+
+        elif kind == "compact":
+            self._start_turn(conversation, conversation.compact())
+
+        elif kind == "clear":
+            await self.manager.clear(conversation)
+
+        elif kind == "permission":
+            conversation.session.answer(
+                str(data.get("id") or ""),
+                bool(data.get("allow")),
+                bool(data.get("remember")),
+            )
+
+        elif kind == "interrupt":
+            await conversation.session.interrupt()
+
+        elif kind == "configure":
+            await self.manager.configure(
+                conversation,
+                str(data.get("model") or ""),
+                str(data.get("effort") or ""),
+            )
+
+        elif kind == "terminal":
+            await self._send(
+                {
+                    "type": "terminal",
+                    "cwd": conversation.path,
+                    "command": self.manager.terminal_command(conversation),
+                }
+            )
+
+        elif kind == "close":
+            await self.manager.close(conversation.path)
+
+            self.conversation = None
+
+            await self._send({"type": "closed"})
+
+    def _start_turn(
+        self, conversation: Conversation, turn: Coroutine[Any, Any, None]
+    ) -> None:
+        if conversation.running:
+            turn.close()
+
+            raise ConversationError("The agent is still working on the last message")
+
+        # The turn runs on its own, so permission answers and interrupts
+        # arriving meanwhile are read. The task is kept until it ends.
+        task = asyncio.ensure_future(turn)
+
+        _TURNS.add(task)
+        task.add_done_callback(_TURNS.discard)
+
+    async def _open(self, data: dict[str, Any]) -> None:
+        if self.conversation is not None:
+            raise ConversationError("This socket already has a conversation")
+
+        path = str(data.get("path") or "").strip().strip("/")
+        workshops_directory = str(data.get("directory") or "")
+
+        if not path:
+            raise ConversationError("A workshop path is required")
+
+        try:
+            directory = under_root(self.root_dir, path, "workshop")
+        except tornado.web.HTTPError as error:
+            raise ConversationError(str(error.log_message)) from error
+
+        await self._send({"type": "starting"})
+
+        try:
+            conversation = await self.manager.open(
+                path,
+                workshops_directory,
+                directory,
+                str(data.get("model") or ""),
+                str(data.get("effort") or ""),
+            )
+        except ConversationError:
+            raise
+        except Exception as error:
+            self.log.exception("Unable to start a conversation about %s", path)
+
+            raise ConversationError(f"The agent could not start: {error}") from error
+
+        self.conversation = conversation
+
+        conversation.attach(self._send, str(data.get("client") or ""))
+
+        await self._send(
+            {
+                "type": "opened",
+                "path": conversation.path,
+                "provider": conversation.provider,
+                "session_id": conversation.session.session_id,
+                "running": conversation.running,
+                "history": conversation.history,
+                "info": await conversation.info(),
+            }
+        )
+
+    async def _send(self, message: dict[str, Any]) -> None:
+        try:
+            await self.write_message(json.dumps(message))
+        except websocket.WebSocketClosedError:
+            if self.conversation is not None:
+                self.conversation.detach(self._send)
+
+
 def _string_list(value: object, field: str) -> list[str] | None:
     if value is None:
         return None
@@ -631,6 +898,23 @@ def _string_list(value: object, field: str) -> list[str] | None:
         raise tornado.web.HTTPError(400, f"{field} must be a list of strings")
 
     return list(value)
+
+
+def setup_conversations(server_app: Any, bridge: Bridge) -> ConversationManager:
+    """Create the server's conversation manager and keep it in the settings.
+
+    Nothing is started until a conversation is opened, so a server
+    without the `ai` extra pays nothing for it.
+    """
+
+    from .skill import skill_directory
+
+    root = Path(os.path.expanduser(str(server_app.root_dir)))
+    manager = ConversationManager(root, bridge, skill=skill_directory())
+
+    server_app.web_app.settings[CONVERSATIONS_KEY] = manager
+
+    return manager
 
 
 def setup_handlers(server_app: Any) -> None:
@@ -654,6 +938,11 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "init"), InitHandler),
         (url_path_join(base_url, API_NAMESPACE, "publish"), PublishHandler),
         (url_path_join(base_url, API_NAMESPACE, "bridge"), BridgeHandler),
+        (url_path_join(base_url, API_NAMESPACE, "agent", "status"), AgentStatusHandler),
+        (
+            url_path_join(base_url, API_NAMESPACE, "agent", "conversation"),
+            ConversationHandler,
+        ),
         (
             url_path_join(base_url, API_NAMESPACE, "bridge", "result"),
             BridgeResultHandler,

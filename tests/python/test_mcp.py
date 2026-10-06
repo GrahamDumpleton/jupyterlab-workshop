@@ -1,13 +1,22 @@
 import asyncio
 import json
 import shutil
+import threading
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import pytest
 from mcp.client import Client
 
 from jupyterlab_workshop import cli
-from jupyterlab_workshop.mcp import JupyterSession, create_server
+from jupyterlab_workshop.bridge import Bridge
+from jupyterlab_workshop.mcp import (
+    BridgeSession,
+    JupyterSession,
+    SessionError,
+    create_server,
+)
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None or not cli.NODE_BUNDLE.is_file(),
@@ -43,6 +52,7 @@ def test_tools_and_resources_are_listed() -> None:
         "test",
         "init",
         "publish",
+        "publish_gist",
         "index",
         "draft",
         "run_action",
@@ -88,6 +98,75 @@ def test_init_tool_writes_a_workshop_and_live_tools_need_a_session(
     assert "workshop.yaml" in created
     assert skill.startswith("---\nname: jupyterlab-workshop-authoring")
     assert "No running JupyterLab" in status
+
+
+@needs_node
+def test_relative_paths_resolve_against_the_base(tmp_path: Path) -> None:
+    # An agent inside Jupyter Server works in a workshop directory, not
+    # the server's current directory, and names paths relative to it.
+    server = create_server(lambda: None, base=tmp_path)
+
+    async def scenario() -> tuple[str, str]:
+        async with Client(server) as client:
+            created = await client.call_tool(
+                "init", {"directory": "demo", "template": "blank"}
+            )
+            linted = await client.call_tool("lint", {"directory": "demo"})
+
+            return _text(created), _text(linted)
+
+    created, linted = _run(scenario())
+
+    assert (tmp_path / "demo" / "workshop.yaml").is_file()
+    assert str(tmp_path / "demo") in created
+    assert "no workshop.yaml" not in linted
+
+
+@needs_node
+def test_publish_gist_tool_creates_then_updates_the_recorded_gist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def github(
+        method: str, url: str, body: Mapping[str, Any] | None, token: str
+    ) -> dict[str, Any]:
+        assert token == "tok"
+        calls.append((method, url))
+
+        return {"id": "abc", "html_url": "https://gist.github.com/ada/abc"}
+
+    monkeypatch.setenv("GH_TOKEN", "tok")
+
+    server = create_server(lambda: None, base=tmp_path, github=github)
+
+    async def scenario() -> list[Any]:
+        async with Client(server) as client:
+            await client.call_tool("init", {"directory": "demo", "template": "blank"})
+
+            first = await client.call_tool("publish_gist", {"directory": "demo"})
+            second = await client.call_tool("publish_gist", {"directory": "demo"})
+
+            # A workshop that does not lint is not sent.
+            (tmp_path / "demo" / "workshop.yaml").write_text("name: [\n")
+
+            broken = await client.call_tool("publish_gist", {"directory": "demo"})
+
+            return [json.loads(_text(result)) for result in (first, second, broken)]
+
+    first, second, broken = _run(scenario())
+
+    assert first["url"] == "https://gist.github.com/ada/abc"
+    assert first["created"] is True
+    assert first["public"] is False
+    assert second["created"] is False
+    assert [call[0] for call in calls] == ["POST", "PATCH", "GET", "PATCH"]
+
+    record = json.loads((tmp_path / "demo" / "_workshop" / "gist.json").read_text())
+
+    assert record["url"] == "https://gist.github.com/ada/abc"
+    assert broken["error"] == "The workshop does not lint clean"
+    assert len(calls) == 4
 
 
 def test_index_tool_writes_a_collection(tmp_path: Path) -> None:
@@ -275,6 +354,57 @@ def test_run_tools_pass_the_pace_and_limits_to_the_bridge() -> None:
     assert bodies[4]["command"] == "workshop:bridge-reset"
 
 
+def test_bridge_session_reaches_the_bridge_from_a_worker_thread() -> None:
+    # The live tools run in a worker thread, so the session hands each
+    # request to the server's loop, aimed at its tab, and answers as the
+    # bridge endpoint does.
+    bridge = Bridge(None)
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+
+    thread.start()
+
+    try:
+        session = BridgeSession(bridge=bridge, loop=loop, target="tab-1")
+        server = create_server(lambda: session)
+
+        async def answer() -> None:
+            while not bridge.pending():
+                await asyncio.sleep(0.01)
+
+            item = bridge.pending()[0]
+
+            assert item["target"] == "tab-1"
+            assert item["command"] == "workshop:bridge-status"
+
+            bridge.resolve(item["request_id"], result={"workshop": "demo"})
+
+        answered = asyncio.run_coroutine_threadsafe(answer(), loop)
+
+        async def scenario() -> str:
+            async with Client(server) as client:
+                return _text(await client.call_tool("session_status", {}))
+
+        text = _run(scenario())
+
+        answered.result(5)
+
+        assert json.loads(text) == {"result": {"workshop": "demo"}}
+
+        # A request nobody answers is reported, not raised to the agent.
+        with pytest.raises(SessionError, match="author mode"):
+            session.request(
+                "bridge", {"command": "workshop:x", "args": {}, "timeout": 0.05}
+            )
+
+        with pytest.raises(SessionError, match="Only the bridge"):
+            session.request("verify", {})
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(5)
+        loop.close()
+
+
 def test_session_requests_report_server_errors() -> None:
     session = JupyterSession(url="http://127.0.0.1:9", token="t")
 
@@ -292,3 +422,40 @@ def test_skill_reference_matches_the_docs(name: str) -> None:
         pytest.skip("needs the documentation in a checkout")
 
     assert reference.read_text() == docs.read_text()
+
+
+def test_bridge_session_gives_up_when_the_server_stops() -> None:
+    # A tool waiting on a browser when the server's loop stops returns at
+    # once, since the process cannot exit while the thread waits.
+    import time
+
+    bridge = Bridge(None)
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+
+    thread.start()
+
+    session = BridgeSession(bridge=bridge, loop=loop)
+    outcome: list[str] = []
+
+    def wait() -> None:
+        try:
+            session.request(
+                "bridge", {"command": "workshop:run-all", "args": {}, "timeout": 600}
+            )
+        except SessionError as error:
+            outcome.append(str(error))
+
+    waiter = threading.Thread(target=wait)
+    started = time.monotonic()
+
+    waiter.start()
+    time.sleep(0.2)
+    loop.call_soon_threadsafe(loop.stop)
+    waiter.join(5)
+
+    assert outcome == ["JupyterLab is shutting down"]
+    assert time.monotonic() - started < 3
+
+    thread.join(5)
+    loop.close()

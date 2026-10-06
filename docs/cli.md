@@ -112,7 +112,7 @@ same on every machine.
 ## gist
 
 ```
-jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update GIST]
+jupyter workshop gist my-workshop [--out dist/gist] [--create [--public] | --update [GIST]]
                                   [--token TOKEN] [--site URL | --python X.Y]
                                   [--binder URL | --no-binder]
                                   [--append-readme] [--frontend NAME]
@@ -172,7 +172,12 @@ button out.
 `--create` makes a new gist, secret unless `--public` is given, and
 `--update` replaces the files of an existing one, given by URL or id,
 removing any the flat copy no longer has. Each update is one revision
-in the gist's history, where removed files stay readable. Both need a
+in the gist's history, where removed files stay readable. Either way the
+gist is recorded in the workshop's `_workshop/gist.json` (its address,
+id, whether it is public, and when it was created and last updated), so
+`--update` with no gist named updates the recorded one; with nothing
+recorded it is an error. `--create` with a gist already recorded makes
+a new one and records that instead. Both need a
 GitHub token with
 the `gist` scope, from `--token`, else `GH_TOKEN` or `GITHUB_TOKEN`,
 else `gh auth token` for someone signed in to the `gh` command. See [A
@@ -269,7 +274,7 @@ the exit status is 1 when any download failed, so a build stops on a
 missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
 
 In a [workshop library](library.md), each workshop goes in its
-collection's own directory under `installed/`, and the library is
+collection's own directory under `collections/`, and the library is
 subscribed to the collection.
 
 ## library

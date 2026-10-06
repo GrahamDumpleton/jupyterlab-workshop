@@ -2,11 +2,17 @@
  * Workshop libraries. A library is a workshops directory holding a
  * `library.json` registry: the collections and catalogs its owner
  * subscribes to, where each collection's workshops are installed, and
- * the projects whose workshops it shows. Inside it, downloaded workshops
- * live under `installed/<collection>/`, the owner's own under
- * `personal/`, and repositories being worked on under `projects/`. A
- * directory without the registry is a plain workshops directory and
- * behaves as one always has.
+ * the projects whose workshops it shows. Inside it, workshops installed
+ * from a collection live under `collections/<collection>/`, workshops
+ * downloaded from a URL of their own under `standalone/`, the owner's
+ * own under `personal/`, and repositories being worked on under
+ * `projects/`. A directory without the registry is a plain workshops
+ * directory and behaves as one always has.
+ *
+ * The directories under `collections/` and `standalone/` always carry a
+ * short hash of where their workshops came from, so two sources never
+ * compete for a name. Nobody chooses or types these names; they keep the
+ * layout unambiguous.
  *
  * The Python package mirrors these rules in `jupyterlab_workshop/library.py`,
  * and the two must agree on the directory names they choose.
@@ -22,8 +28,11 @@ export const LIBRARY_FILE = 'library.json';
 /** The registry format version this package understands. */
 export const LIBRARY_VERSION = 1;
 
-/** Where downloaded workshops go, one directory per collection. */
-export const INSTALLED_DIRECTORY = 'installed';
+/** Where workshops installed from a collection go, a directory per collection. */
+export const COLLECTIONS_DIRECTORY = 'collections';
+
+/** Where workshops downloaded from a URL of their own go. */
+export const STANDALONE_DIRECTORY = 'standalone';
 
 /** Where the owner's own workshops go. */
 export const PERSONAL_DIRECTORY = 'personal';
@@ -89,7 +98,7 @@ export interface ILibrary {
   /** Subscribed catalogs in order, absent or present as for collections. */
   catalogs?: string[];
 
-  /** The directory under `installed/` for each collection location. */
+  /** The directory under `collections/` for each collection location. */
   directories?: Record<string, string>;
 
   /** Projects with something to say about them. */
@@ -170,10 +179,9 @@ export function serializeLibrary(library: ILibrary): string {
 }
 
 /**
- * The short hash of a collection location: the directory under
- * `installed/` when its id gives no usable name, and the suffix that
- * tells two clashing names apart, as it is for clashing installs
- * outside a library.
+ * The short hash of a collection location: the suffix of its directory
+ * under `collections/`, and the suffix that tells two clashing names
+ * apart for installs outside a library.
  */
 export function collectionHash(location: string): string {
   return sha256(normalizeLocation(location)).slice(0, 7);
@@ -208,26 +216,107 @@ export function slugifyCollectionId(id: string): string | null {
 }
 
 /**
- * The directory under `installed/` for a collection that has none yet:
- * the slug of its id, with the location's hash appended when another
- * collection already has that directory, or the hash alone when there
- * is no usable id. `taken` holds the directories already chosen.
+ * The directory under `collections/` for a collection that has none yet:
+ * the slug of its id followed by the location's hash, or the hash alone
+ * when there is no usable id. The hash makes it unique to the location,
+ * whatever id another collection claims.
  */
 export function chooseCollectionDirectory(
   location: string,
-  id: string | undefined,
-  taken: Iterable<string>
+  id: string | undefined
 ): string {
   const hash = collectionHash(location);
   const slug = id ? slugifyCollectionId(id) : null;
 
-  if (slug === null) {
-    return hash;
+  return slug === null ? hash : `${slug}-${hash}`;
+}
+
+/** Where a workshop was downloaded from, as its source record holds it. */
+export interface IDownloadSource {
+  /** `git` for a repository or gist, `archive` for an archive URL. */
+  kind: string;
+  url: string;
+
+  /** The directory of the repository or archive holding the workshop. */
+  subdir?: string;
+}
+
+/**
+ * What identifies a download, whatever revision of it was taken: its
+ * kind, its URL compared as collection locations are with any `.git`
+ * dropped, and its subdirectory. A gist is named by its id alone, since
+ * its owner can be left out of the URL. Two downloads with the same key
+ * are the same workshop, so one may replace the other.
+ */
+export function downloadKey(source: IDownloadSource): string {
+  let url = normalizeLocation(source.url).replace(/\.git$/, '');
+  const gist = /^https:\/\/gist\.github\.com\/(?:[^/]+\/)?([0-9a-fA-F]+)$/.exec(
+    url
+  );
+
+  if (gist) {
+    url = `https://gist.github.com/${gist[1].toLowerCase()}`;
   }
 
-  const used = new Set(Array.from(taken, name => name.toLowerCase()));
+  const subdir = (source.subdir ?? '')
+    .split('/')
+    .filter(part => part !== '')
+    .join('/');
 
-  return used.has(slug) ? `${slug}-${hash}` : slug;
+  return subdir ? `${source.kind}:${url}#${subdir}` : `${source.kind}:${url}`;
+}
+
+/**
+ * The directory under `standalone/` for a workshop downloaded from a URL
+ * of its own: its name followed by the short hash of its download key,
+ * so the same source always lands in the same place and no other can.
+ */
+export function standaloneDirectory(
+  name: string,
+  source: IDownloadSource
+): string {
+  return `${name}-${sha256(downloadKey(source)).slice(0, 7)}`;
+}
+
+/**
+ * Whether a directory's source record says it is a download that a new
+ * download may replace: one from the same source, or one installed from
+ * the same collection, as an update of it is. Anything else, a local
+ * workshop above all, is never replaced.
+ */
+export function mayReplaceDownload(
+  record: unknown,
+  source: IDownloadSource,
+  collection?: string
+): boolean {
+  if (!isRecord(record) || !isRecord(record.source)) {
+    return false;
+  }
+
+  const recorded = record.source;
+
+  if (
+    (recorded.kind !== 'git' && recorded.kind !== 'archive') ||
+    typeof recorded.url !== 'string'
+  ) {
+    return false;
+  }
+
+  if (
+    collection &&
+    typeof record.collection === 'string' &&
+    normalizeLocation(record.collection) === normalizeLocation(collection)
+  ) {
+    return true;
+  }
+
+  return (
+    downloadKey({
+      kind: recorded.kind,
+      url: recorded.url,
+      subdir: typeof recorded.subdir === 'string' ? recorded.subdir : ''
+    }) === downloadKey(source)
+  );
 }
 
 /**
@@ -266,11 +355,7 @@ export function assignCollectionDirectory(
   }
 
   const directories = library.directories ?? {};
-  const directory = chooseCollectionDirectory(
-    location,
-    id,
-    Object.values(directories)
-  );
+  const directory = chooseCollectionDirectory(location, id);
 
   return {
     directory,
@@ -388,6 +473,140 @@ export function mergeSources(
 /** The workshops directory of a project, relative to the project. */
 export function projectWorkshops(project: ILibraryProject): string {
   return project.workshops ?? DEFAULT_PROJECT_WORKSHOPS;
+}
+
+/** A catalog a project may hold at its top, listing its collections. */
+export const PROJECT_CATALOG = 'catalog.json';
+
+/** A collection index a project may hold at its top. */
+export const PROJECT_COLLECTION = 'collection.json';
+
+/** A collection a project's own catalog lists, found inside the project. */
+export interface IProjectCollection {
+  /** Where its index is, relative to the project. */
+  path: string;
+
+  /** What the catalog calls it. */
+  title: string;
+}
+
+/**
+ * The path inside a project that a location in one of its index files
+ * names, resolved against the file's own path: null for a URL, an
+ * absolute path, or anything that climbs out of the project. The
+ * project itself is the empty string.
+ */
+export function projectPath(base: string, target: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('/')) {
+    return null;
+  }
+
+  const directory = base.includes('/')
+    ? base.slice(0, base.lastIndexOf('/'))
+    : '';
+  const segments: string[] = [];
+
+  for (const part of `${directory}/${target}`.split('/')) {
+    if (part === '' || part === '.') {
+      continue;
+    }
+
+    if (part === '..') {
+      if (segments.length === 0) {
+        return null;
+      }
+
+      segments.pop();
+    } else {
+      segments.push(part);
+    }
+  }
+
+  return segments.join('/');
+}
+
+/**
+ * The collections a project's catalog lists that are inside the project,
+ * in catalog order. A collection the catalog names by URL is somewhere
+ * else, and left out. The catalog is read leniently: anything unreadable
+ * is skipped rather than refusing the rest.
+ */
+export function catalogCollections(
+  catalog: unknown,
+  catalogPath: string
+): IProjectCollection[] {
+  if (!isRecord(catalog) || !Array.isArray(catalog.collections)) {
+    return [];
+  }
+
+  const found: IProjectCollection[] = [];
+
+  for (const item of catalog.collections as unknown[]) {
+    if (!isRecord(item) || typeof item.url !== 'string') {
+      continue;
+    }
+
+    const path = projectPath(catalogPath, item.url);
+
+    if (path) {
+      found.push({
+        path,
+        title: typeof item.title === 'string' && item.title ? item.title : path
+      });
+    }
+  }
+
+  return found;
+}
+
+/**
+ * The directories, relative to the project, of the workshops a
+ * collection index in it lists, in index order: each entry's newest
+ * version, the first listed, names its directory with the `subdir` of
+ * its git source, or the project itself with none. An entry fetched as
+ * an archive, or one whose directory is outside the project, is left
+ * out.
+ */
+export function collectionWorkshops(collection: unknown): string[] {
+  if (!isRecord(collection) || !Array.isArray(collection.workshops)) {
+    return [];
+  }
+
+  const found: string[] = [];
+
+  for (const entry of collection.workshops as unknown[]) {
+    const versions = isRecord(entry) ? entry.versions : undefined;
+    const newest = Array.isArray(versions)
+      ? (versions[0] as unknown)
+      : undefined;
+    const source = isRecord(newest) ? newest.source : undefined;
+
+    if (!isRecord(source) || typeof source.git !== 'string') {
+      continue;
+    }
+
+    // A subdir is always within the repository, however it is written.
+    const subdir =
+      typeof source.subdir === 'string'
+        ? source.subdir.replace(/^\/+/, '')
+        : '';
+    const path = projectPath('', subdir);
+
+    if (path !== null && !found.includes(path)) {
+      found.push(path);
+    }
+  }
+
+  return found;
+}
+
+/** The title a collection index gives itself, or the fallback. */
+export function collectionTitle(collection: unknown, fallback: string): string {
+  return isRecord(collection) &&
+    typeof collection.title === 'string' &&
+    collection.title
+    ? collection.title
+    : fallback;
 }
 
 /**

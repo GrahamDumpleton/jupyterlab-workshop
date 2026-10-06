@@ -7,6 +7,13 @@ archive. The archive is downloaded, hashed, unpacked with
 path traversal guarded, put back into its directories when it is a gist
 holding a tree file (see ``tree``), and recorded in ``_workshop/source.json`` so the
 frontend can identify the workshop later.
+
+A download for a workshop library's ``standalone/`` directory is named for
+its source as well as the workshop, so two sources never compete for a
+name; the browser, which knows whether the library is in use, says
+where a download goes. An existing directory is only ever replaced by a
+download of the same workshop, so a download can never take the place
+of the owner's own work, wherever it is asked to go.
 """
 
 from __future__ import annotations
@@ -301,15 +308,19 @@ def fetch_workshop(
     overwrite: bool = False,
     downloader: Downloader | None = None,
     collection: str = "",
+    standalone: bool = False,
 ) -> FetchResult:
     """Download and unpack a workshop under ``root_dir/directory``.
 
     The workshop lands in a directory named after the manifest's ``name``
-    (or ``name`` when given). An existing directory is refused unless
-    ``overwrite`` is set. The ``collection`` the workshop was chosen from,
-    when given, is recorded with the source so the browser can match the
-    install to its entry later. The returned path is relative to
-    ``root_dir`` with forward slashes, as the contents API expects.
+    (or ``name`` when given), followed by a short hash of its source when
+    ``standalone`` is set. An existing directory that is a download of
+    the same workshop is refused unless ``overwrite`` is set, and
+    anything else is refused whatever ``overwrite`` says. The
+    ``collection`` the workshop was chosen from, when given, is recorded
+    with the source so the browser can match the install to its entry
+    later. The returned path is relative to ``root_dir`` with forward
+    slashes, as the contents API expects.
     """
 
     parent = _resolve_inside(root_dir, directory)
@@ -345,11 +356,23 @@ def fetch_workshop(
 
         manifest_name = read_manifest_name(staging / MANIFEST_FILE)
         target_name = _check_name(name or manifest_name)
+
+        if standalone:
+            target_name = _standalone_name(target_name, source)
+
         target = parent / target_name
 
         if target.exists():
+            relative = _relative(root_dir, target)
+
+            if not _replaceable(target, source, collection):
+                raise FetchError(
+                    f"{relative} is in the way and is not a download of this "
+                    "workshop, so it is left as it is"
+                )
+
             if not overwrite:
-                raise FetchError(f"{_relative(root_dir, target)} already exists")
+                raise FetchError(f"{relative} already exists")
 
             remove_tree(target)
 
@@ -630,6 +653,26 @@ def _clean_subdir(subdir: str) -> str:
         raise FetchError("The subdirectory must not contain . or .. components")
 
     return "/".join(parts)
+
+
+def _standalone_name(name: str, source: Source) -> str:
+    # The library module imports this one, so it is imported here.
+    from .library import standalone_directory
+
+    return standalone_directory(name, source.kind, source.url, source.subdir)
+
+
+def _replaceable(target: Path, source: Source, collection: str) -> bool:
+    from .library import may_replace_download
+
+    try:
+        record = json.loads((target / STATE_DIR / SOURCE_FILE).read_text("utf-8"))
+    except (OSError, ValueError):
+        return False
+
+    return may_replace_download(
+        record, source.kind, source.url, source.subdir, collection
+    )
 
 
 def _check_name(name: str) -> str:

@@ -1,7 +1,8 @@
 """An MCP server exposing the workshop tooling to AI agents.
 
 ``jupyter workshop mcp`` serves the tools over stdio. Lint, render, test,
-init, publish and draft work on directories and need nothing running.
+init, publish and draft work on directories and need nothing running;
+publish_gist sends a workshop to GitHub.
 The live tools (opening a workshop, running actions and checks against
 the session) reach a running JupyterLab through the server extension's
 bridge, and need the workshop open there in author mode.
@@ -9,9 +10,11 @@ bridge, and need the workshop open there in author mode.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -21,6 +24,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from .bridge import Bridge, BridgeError
 from .catalog import (
     CatalogError,
     CatalogMetadata,
@@ -46,10 +50,19 @@ from .collection import (
     load_collection,
     parse_collection,
 )
+from .gist import (
+    RECORD_FILE,
+    GistError,
+    Requester,
+    flatten_workshop,
+    resolve_token,
+    send_gist,
+    write_flat,
+)
 from .publish import PublishError, publish_workshop
 from .scaffold import slug, write_scaffold
-
-PACKAGE_DIR = Path(__file__).resolve().parent
+from .skill import skill_directory
+from .tree import STATE_DIR, TreeError, restore_tree
 
 SERVER_NAME = "jupyterlab-workshop"
 
@@ -109,6 +122,72 @@ class JupyterSession:
             raise SessionError(f"Unable to reach {self.url}: {error}") from error
 
 
+@dataclass(frozen=True)
+class BridgeSession:
+    """The bridge of the server this process is, reached without HTTP.
+
+    An agent running inside Jupyter Server uses this in place of a
+    `JupyterSession`, so the live tools need no server discovery or token
+    and their requests go to the one browser tab the agent works for.
+    Tools run in a worker thread, so the request is handed to the
+    server's event loop and waited on there.
+    """
+
+    bridge: Bridge
+    loop: asyncio.AbstractEventLoop
+    target: str | None = None
+
+    def request(
+        self,
+        endpoint: str,
+        body: dict[str, Any] | None = None,
+        timeout: float = 60.0,
+    ) -> Any:
+        """Run a bridge command, answering as the bridge endpoint would."""
+
+        if endpoint != "bridge" or body is None:
+            raise SessionError(
+                f"Only the bridge is reachable in-process, not {endpoint}"
+            )
+
+        command = str(body.get("command") or "")
+        args = body.get("args") or {}
+        limit = float(body.get("timeout") or timeout)
+
+        future = asyncio.run_coroutine_threadsafe(
+            self.bridge.request(command, args, limit, self.target), self.loop
+        )
+        deadline = time.monotonic() + limit + 5
+
+        # The wait is in short steps, so that a server shutting down, whose
+        # loop will never answer, does not leave this thread waiting out the
+        # whole limit: Python waits for it before the process can exit.
+        while True:
+            try:
+                return {"result": future.result(WAIT_STEP)}
+            except BridgeError as error:
+                raise SessionError(str(error)) from error
+            except TimeoutError as error:
+                if not self.loop.is_running() or self.loop.is_closed():
+                    future.cancel()
+
+                    raise SessionError("JupyterLab is shutting down") from error
+
+                if time.monotonic() > deadline:
+                    future.cancel()
+
+                    raise SessionError(
+                        f"No answer to {command} within {limit:g}s"
+                    ) from error
+
+
+# How often a wait on the bridge checks the server is still running.
+WAIT_STEP = 0.5
+
+# What the live tools send their requests through.
+LiveSession = JupyterSession | BridgeSession
+
+
 def discover_session(url: str = "", token: str = "") -> JupyterSession | None:
     """Find a running server: the one given, or the first this user runs."""
 
@@ -134,25 +213,34 @@ def discover_session(url: str = "", token: str = "") -> JupyterSession | None:
     return None
 
 
-def skill_directory() -> Path | None:
-    """Where the authoring skill files are, packaged or in a checkout."""
-
-    for candidate in (
-        PACKAGE_DIR / "skills" / "jupyterlab-workshop-authoring",
-        PACKAGE_DIR.parent / "skills" / "jupyterlab-workshop-authoring",
-    ):
-        if (candidate / "SKILL.md").is_file():
-            return candidate
-
-    return None
-
-
 def create_server(
-    session_factory: Callable[[], JupyterSession | None] = discover_session,
+    session_factory: Callable[[], LiveSession | None] = discover_session,
+    base: Path | None = None,
+    github: Requester | None = None,
 ) -> MCPServer:
-    """Build the MCP server with every tool and resource registered."""
+    """Build the MCP server with every tool and resource registered.
+
+    Relative paths given to the tools resolve against the base directory,
+    the current directory by default. An agent running inside Jupyter
+    Server works in a workshop directory that is not the server's own
+    current directory, so it is given that directory as the base.
+    `github` sends the gist tool's requests to the GitHub API, for tests.
+    """
 
     server = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS)
+
+    def here() -> Path:
+        return base if base is not None else Path.cwd()
+
+    def place(value: str) -> str:
+        # Without a base, paths stay as given, so the stdio server reports
+        # and records them as it always has. URLs pass through.
+        if base is None or not value or "://" in value:
+            return value
+
+        path = Path(value).expanduser()
+
+        return str(path if path.is_absolute() else base / path)
 
     def node_json(arguments: list[str]) -> Any:
         completed = run_node([*arguments, "--json"])
@@ -190,7 +278,7 @@ def create_server(
         """
 
         return node_json(
-            ["lint", directory, "--platform", platform, "--frontend", frontend]
+            ["lint", place(directory), "--platform", platform, "--frontend", frontend]
         )
 
     @server.tool()
@@ -202,7 +290,7 @@ def create_server(
     ) -> str:
         """Render the pages, or one page by id, to standalone HTML."""
 
-        arguments = ["render", directory]
+        arguments = ["render", place(directory)]
 
         if page:
             arguments.append(page)
@@ -217,7 +305,7 @@ def create_server(
     def pages(directory: str) -> Any:
         """List the pages of a workshop with ids, titles and requirements."""
 
-        completed = run_node(["pages", directory])
+        completed = run_node(["pages", place(directory)])
 
         if completed.returncode != 0:
             return {"error": completed.stderr.strip()}
@@ -245,7 +333,7 @@ def create_server(
         with tempfile.TemporaryDirectory(prefix="workshop-mcp-") as tmp:
             report = Path(tmp) / "report.json"
             options = SelfTestOptions(
-                directory=Path(directory).resolve(),
+                directory=Path(place(directory)).resolve(),
                 timeout=timeout,
                 trust=trust,
                 json_out=report,
@@ -285,7 +373,7 @@ def create_server(
         """Read a collection index from a URL or a local file."""
 
         try:
-            return load_collection(location, Path.cwd())
+            return load_collection(location, here())
         except CollectionError as error:
             return {"error": str(error)}
 
@@ -294,7 +382,7 @@ def create_server(
         """Read a catalog from a URL or a local file, with its locations resolved."""
 
         try:
-            return load_catalog(location, Path.cwd())
+            return load_catalog(location, here())
         except CatalogError as error:
             return {"error": str(error)}
 
@@ -320,7 +408,7 @@ def create_server(
         JupyterLab only.
         """
 
-        target = Path(directory)
+        target = Path(place(directory))
         chosen = name or slug(target.resolve().name)
 
         try:
@@ -345,11 +433,81 @@ def create_server(
         """Build the archive, its sha256 and a collection entry for a workshop."""
 
         try:
-            result = publish_workshop(Path(directory), Path(out), url)
+            result = publish_workshop(Path(place(directory)), Path(place(out)), url)
         except PublishError as error:
             return {"error": str(error)}
 
         return result.to_dict()
+
+    @server.tool()
+    def publish_gist(directory: str, create: bool = False, public: bool = False) -> Any:
+        """Publish a workshop as a GitHub gist, or update the gist it went to.
+
+        The workshop is linted, laid out flat, put back together as a
+        download would and linted again before anything is sent. The gist
+        is recorded in the workshop's _workshop/gist.json, so publishing
+        again updates the same gist. With create, a new gist is made even
+        when one is recorded; a new gist is secret unless public. Returns
+        the gist's URL, or the lint report or error that stopped it.
+        """
+
+        def clean(report: Any) -> bool:
+            # A workshop lint cannot read reports an error, not a count.
+            return isinstance(report, dict) and report.get("errors") == 0
+
+        source = Path(place(directory))
+        report = node_json(["lint", str(source)])
+
+        if not clean(report):
+            return {"error": "The workshop does not lint clean", "lint": report}
+
+        try:
+            flat = flatten_workshop(source)
+
+            # The flat copy must come back as the same workshop for a
+            # learner who downloads it.
+            with tempfile.TemporaryDirectory(prefix="workshop-gist-") as tmp:
+                written = write_flat(flat, Path(tmp) / "flat")
+                restored = Path(tmp) / "restored" / flat.name
+
+                restore_tree(written, restored)
+
+                check = node_json(["lint", str(restored)])
+
+                if not clean(check):
+                    return {
+                        "error": "The flat copy does not lint clean once restored",
+                        "lint": check,
+                    }
+
+            try:
+                token = resolve_token()
+            except GistError:
+                return {
+                    "error": "There is no GitHub token where JupyterLab runs: "
+                    "sign in with gh auth login in a terminal, or set GH_TOKEN "
+                    "before starting JupyterLab"
+                }
+
+            result = send_gist(
+                source,
+                flat,
+                token,
+                create=create,
+                public=public,
+                request=github,
+            )
+        except (GistError, TreeError) as error:
+            return {"error": str(error)}
+
+        return {
+            "url": result.url,
+            "created": result.created,
+            "public": result.public,
+            "record": str(source / STATE_DIR / RECORD_FILE),
+            "renamed": flat.renames,
+            "left_out": flat.left_out,
+        }
 
     @server.tool()
     def index(
@@ -383,9 +541,9 @@ def create_server(
         take in the order listed.
         """
 
-        searched = [Path(item) for item in directories or ["."]]
+        searched = [Path(place(item)) for item in directories or ["."]]
         root_path = (
-            Path(root) if root else checkout_root(searched[0]) or searched[0]
+            Path(place(root)) if root else checkout_root(searched[0]) or searched[0]
         ).resolve()
         guessed_repo, guessed_ref = guess_repository(root_path)
         chosen_repo = repo or guessed_repo
@@ -394,7 +552,7 @@ def create_server(
         if not chosen_repo:
             return {"error": f"{root} has no git origin; give repo"}
 
-        index_path = Path(out) if out else root_path / "collection.json"
+        index_path = Path(place(out)) if out else root_path / "collection.json"
         existing = None
         metadata = CollectionMetadata(
             title=title,
@@ -451,7 +609,7 @@ def create_server(
         title and the other fields describe the catalog itself.
         """
 
-        catalog_path = Path(path)
+        catalog_path = Path(place(path))
         existing = None
         metadata = CatalogMetadata(
             title=title,
@@ -469,7 +627,9 @@ def create_server(
                 )
 
             entries = refresh_entries(
-                catalog_path, collections or [], relative=relative
+                catalog_path,
+                [place(item) for item in collections or []],
+                relative=relative,
             )
             data = build_catalog(existing, entries, metadata)
         except CatalogError as error:
@@ -488,7 +648,7 @@ def create_server(
         becomes a new workshop otherwise.
         """
 
-        arguments = ["draft", recording, directory]
+        arguments = ["draft", place(recording), place(directory)]
 
         if name:
             arguments += ["--name", name]

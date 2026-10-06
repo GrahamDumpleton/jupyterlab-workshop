@@ -17,6 +17,7 @@ from jupyterlab_workshop.fetch import (
     remove_workshop,
     unpack_archive,
 )
+from jupyterlab_workshop.library import standalone_directory
 
 MANIFEST = (
     "apiVersion: jupyterlab-workshop/v1alpha1\n"
@@ -286,6 +287,100 @@ class TestFetchWorkshop:
         )
 
         assert not (tmp_path / "workshops" / "demo" / "stale.txt").exists()
+
+    def test_never_replaces_what_is_not_a_download_of_the_workshop(
+        self, tmp_path: Path
+    ) -> None:
+        data = make_tar({"workshop.yaml": MANIFEST})
+        mine = tmp_path / "workshops" / "demo"
+
+        # A local workshop of the same name is left alone, whatever the
+        # browser asks.
+        mine.mkdir(parents=True)
+        (mine / "workshop.yaml").write_text(MANIFEST)
+
+        with pytest.raises(FetchError, match="not a download of this workshop"):
+            fetch_workshop(
+                Source("archive", "https://x/ws.tar.gz"),
+                tmp_path,
+                "workshops",
+                overwrite=True,
+                downloader=lambda _: data,
+            )
+
+        assert (mine / "workshop.yaml").read_text() == MANIFEST
+        assert not (mine / "_workshop").exists()
+
+        # So is a download from elsewhere.
+        (mine / "_workshop").mkdir()
+        (mine / "_workshop" / "source.json").write_text(
+            json.dumps({"source": {"kind": "git", "url": "https://github.com/a/b"}})
+        )
+
+        with pytest.raises(FetchError, match="not a download of this workshop"):
+            fetch_workshop(
+                Source("git", "https://github.com/o/r"),
+                tmp_path,
+                "workshops",
+                overwrite=True,
+                downloader=lambda _: data,
+            )
+
+    def test_a_standalone_download_is_named_for_its_source(
+        self, tmp_path: Path
+    ) -> None:
+        data = make_tar({"workshop.yaml": MANIFEST})
+        source = Source("git", "https://github.com/o/r", ref="v1")
+        result = fetch_workshop(
+            source,
+            tmp_path,
+            "workshops/standalone",
+            downloader=lambda _: data,
+            standalone=True,
+        )
+
+        assert result.path == (
+            "workshops/standalone/"
+            + standalone_directory("demo", "git", "https://github.com/o/r")
+        )
+
+        # Another revision of the same source replaces it in place.
+        again = fetch_workshop(
+            Source("git", "https://github.com/o/r", ref="v2"),
+            tmp_path,
+            "workshops/standalone",
+            overwrite=True,
+            downloader=lambda _: data,
+            standalone=True,
+        )
+
+        assert again.path == result.path
+
+    def test_a_download_named_like_a_library_directory_cannot_replace_it(
+        self, tmp_path: Path
+    ) -> None:
+        library = tmp_path / "workshops"
+        own = library / "personal" / "mine"
+
+        own.mkdir(parents=True)
+        (own / "workshop.yaml").write_text(MANIFEST)
+        (library / "library.json").write_text('{"version": 1}\n')
+
+        # Sent to the top of the library, as where libraries are switched
+        # off, a workshop called personal still cannot take its place.
+        named = MANIFEST.replace("name: demo", "name: personal")
+        data = make_tar({"workshop.yaml": named})
+
+        with pytest.raises(FetchError, match="not a download of this workshop"):
+            fetch_workshop(
+                Source("git", "https://github.com/o/r"),
+                tmp_path,
+                "workshops",
+                overwrite=True,
+                downloader=lambda _: data,
+            )
+
+        assert (own / "workshop.yaml").is_file()
 
     def test_puts_a_gist_with_a_tree_file_back_together(self, tmp_path: Path) -> None:
         tree = {

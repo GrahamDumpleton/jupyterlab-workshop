@@ -110,6 +110,7 @@ import {
 } from './actions/ui';
 import { jupyterUrl, UrlOpenAction, UrlPanes } from './actions/url';
 import { AnalyticsRecorder, HeartbeatTimer } from './analytics';
+import { agentPlugin } from './agent/plugin';
 import { authoringPlugin } from './authoring/plugin';
 import { ServerBackend } from './backend';
 import { closeWorkshopWidgets } from './cleanup';
@@ -1938,5 +1939,6 @@ export default [
   layoutsPlugin,
   actionsPlugin,
   panelPlugin,
-  authoringPlugin
+  authoringPlugin,
+  agentPlugin
 ];

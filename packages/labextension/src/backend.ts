@@ -45,7 +45,8 @@ export class ServerBackend implements IWorkshopBackend {
       directory: request.directory,
       name: request.name ?? '',
       collection: request.collection ?? '',
-      overwrite: request.overwrite ?? false
+      overwrite: request.overwrite ?? false,
+      standalone: request.standalone ?? false
     };
 
     return requestAPI<IFetchResult>('fetch', this._settings, {

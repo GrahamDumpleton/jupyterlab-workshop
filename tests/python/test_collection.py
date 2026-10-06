@@ -296,7 +296,10 @@ def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
     _write_library(library, {"version": 1})
     _write_workshop(library / "flat-download", "flat-download", done=1)
     _write_workshop(library / "flat-local", "flat-local")
-    _write_workshop(library / "installed" / "example.org-c" / "alpha", "alpha")
+    _write_workshop(
+        library / "collections" / "example.org-c-1234567" / "alpha", "alpha"
+    )
+    _write_workshop(library / "standalone" / "beta-89abcde", "beta")
     _write_workshop(library / "personal" / "mine", "mine")
     _write_workshop(library / "projects" / "repo" / "workshops" / "draft", "draft")
 
@@ -312,6 +315,7 @@ def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
 
     assert {name: record["kind"] for name, record in scanned.items()} == {
         "alpha": "installed",
+        "beta": "installed",
         "draft": "project",
         "flat-download": "installed",
         "flat-local": None,
@@ -319,7 +323,8 @@ def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
     }
     assert scanned["draft"]["project"] == "repo"
     assert scanned["draft"]["path"] == "lib/projects/repo/workshops/draft"
-    assert scanned["alpha"]["path"] == "lib/installed/example.org-c/alpha"
+    assert scanned["alpha"]["path"] == "lib/collections/example.org-c-1234567/alpha"
+    assert scanned["beta"]["path"] == "lib/standalone/beta-89abcde"
 
     # Asking for the layout of a directory with no registry changes nothing.
     assert list_installed(tmp_path, "lib/personal", True)[0].keys() == (plain[0].keys())
@@ -660,3 +665,108 @@ def test_guess_repository_reads_the_checkout(tmp_path: Path) -> None:
     )
 
     assert guess_repository(tmp_path) == ("https://github.com/o/r", "main")
+
+
+def _index(title: str, names: list[str]) -> str:
+    return json.dumps(
+        {
+            "version": 1,
+            "title": title,
+            "workshops": [
+                {
+                    "name": name,
+                    "versions": [
+                        {
+                            "version": "1.0.0",
+                            "source": {
+                                "git": "https://github.com/o/course",
+                                "subdir": f"workshops/{name}",
+                            },
+                        }
+                    ],
+                }
+                for name in names
+            ],
+        }
+    )
+
+
+def test_a_project_is_listed_as_its_own_layout_says(tmp_path: Path) -> None:
+    library = tmp_path / "lib"
+    projects = library / "projects"
+
+    _write_library(
+        library,
+        {"version": 1, "projects": [{"name": "chosen", "workshops": "examples"}]},
+    )
+
+    # A catalog of two collections sharing a workshop, one workshop no
+    # index lists yet, and a nested repository that is not the project's.
+    course = projects / "course"
+
+    for name in ("one", "two", "three", "fresh"):
+        _write_workshop(course / "workshops" / name, name)
+
+    _write_workshop(course / "reference" / "other" / "workshops" / "ghost", "ghost")
+    (course / "catalog.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "collections": [
+                    {"url": "collections/a/collection.json", "title": "A"},
+                    {"url": "collections/b/collection.json", "title": "B"},
+                ],
+            }
+        )
+    )
+
+    for part, names in (("a", ["one", "two"]), ("b", ["three", "two"])):
+        index = course / "collections" / part / "collection.json"
+
+        index.parent.mkdir(parents=True)
+        index.write_text(_index(f"Part {part.upper()}", names))
+
+    # One collection at the top, a project that is one workshop, the
+    # default and the top-level layouts, and a registry choice that wins
+    # over an index the project also has.
+    single = projects / "single-index"
+
+    _write_workshop(single / "workshops" / "alpha", "alpha")
+    (single / "collection.json").write_text(_index("Only part", ["alpha"]))
+
+    _write_workshop(projects / "solo", "solo")
+    _write_workshop(projects / "plain" / "workshops" / "beta", "beta")
+    _write_workshop(projects / "flat" / "gamma", "gamma")
+    _write_workshop(projects / "chosen" / "examples" / "delta", "delta")
+    _write_workshop(projects / "chosen" / "workshops" / "epsilon", "epsilon")
+    (projects / "chosen" / "collection.json").write_text(_index("Ignored", ["epsilon"]))
+
+    records = list_installed(tmp_path, "lib", True)
+
+    def places(project: str) -> list[tuple[int, int, str | None, str]]:
+        return sorted(
+            (place["index"], place["position"], place["title"], record["name"])
+            for record in records
+            if record.get("project") == project
+            for place in record["sections"]
+        )
+
+    assert places("course") == [
+        (0, 0, "Part A", "one"),
+        (0, 1, "Part A", "two"),
+        (1, 0, "Part B", "three"),
+        (1, 1, "Part B", "two"),
+        (2, 0, None, "fresh"),
+    ]
+    assert [r["name"] for r in records if r.get("project") == "course"].count(
+        "two"
+    ) == 1
+    assert places("single-index") == [(0, 0, "Only part", "alpha")]
+    assert places("solo") == [(0, 0, None, "solo")]
+    assert places("plain") == [(0, 0, None, "beta")]
+    assert places("flat") == [(0, 0, None, "gamma")]
+    assert places("chosen") == [(0, 0, None, "delta")]
+
+    solo = next(record for record in records if record.get("project") == "solo")
+
+    assert solo["path"] == "lib/projects/solo"

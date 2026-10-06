@@ -46,11 +46,12 @@ from .fetch import FetchError
 from .gist import (
     BINDER_LAUNCHER,
     LAUNCHER_PYTHONS,
+    RECORD_FILE,
     GistError,
-    create_gist,
     flatten_workshop,
+    read_record,
     resolve_token,
-    update_gist,
+    send_gist,
     write_flat,
 )
 from .install import (
@@ -80,7 +81,7 @@ from .library import (
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
 from .scaffold import GATING, TEMPLATES, slug, write_scaffold
-from .tree import TreeError, restore_tree
+from .tree import STATE_DIR, TreeError, restore_tree
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -569,7 +570,10 @@ def build_parser() -> argparse.ArgumentParser:
     gist_target.add_argument(
         "--update",
         metavar="GIST",
-        help="replace the files of an existing gist, given by URL or id",
+        nargs="?",
+        const="",
+        help="replace the files of an existing gist, given by URL or id "
+        "(default the gist recorded in _workshop/gist.json)",
     )
     gist.add_argument(
         "--public",
@@ -1781,6 +1785,13 @@ def command_gist(args: argparse.Namespace) -> int:
     directory = _workshop_dir(args.directory)
     lint_options = ["--frontend", args.frontend] if args.frontend else []
 
+    # A bare --update means the gist the workshop was published to before.
+    if args.update == "" and read_record(directory) is None:
+        raise CliError(
+            f"No gist is recorded for {directory}: name one with --update GIST, "
+            "or make one with --create"
+        )
+
     # The source is linted first, so what goes out has been checked.
     if (status := _lint(directory, lint_options)) != 0:
         return status
@@ -1823,20 +1834,24 @@ def command_gist(args: argparse.Namespace) -> int:
         if (status := _lint(restored, lint_options)) != 0:
             raise CliError("The restored flat copy does not lint clean; see above")
 
-    if not args.create and not args.update:
+    if not args.create and args.update is None:
         return 0
 
     try:
         token = resolve_token(args.token)
-        result = (
-            create_gist(flat, token, public=args.public)
-            if args.create
-            else update_gist(args.update, flat, token)
+        result = send_gist(
+            directory,
+            flat,
+            token,
+            gist=args.update or "",
+            create=args.create,
+            public=args.public,
         )
     except GistError as error:
         raise CliError(str(error)) from error
 
     print(f"{'created' if result.created else 'updated'} {result.url}")
+    print(f"recorded in {directory / STATE_DIR / RECORD_FILE}")
 
     return 0
 

@@ -34,7 +34,7 @@ from .fetch import (
     remove_workshop,
 )
 from .library import (
-    INSTALLED_DIRECTORY,
+    COLLECTIONS_DIRECTORY,
     LibraryError,
     assign_collection_directory,
     is_library,
@@ -109,7 +109,7 @@ def install_destination(
     to the root, and the name of the workshop's directory within it.
 
     In a workshop library each collection has a directory of its own
-    under ``installed/``, chosen from its id the first time and recorded
+    under ``collections/``, chosen from its id the first time and recorded
     in the registry, so workshops of the same name from two collections
     never clash. In a plain workshops directory the workshop goes
     directly in it, named as the browser names it there.
@@ -129,7 +129,7 @@ def install_destination(
 
     update_library(root_dir, directory, change)
 
-    parts = [normalize_workshops_directory(directory), INSTALLED_DIRECTORY]
+    parts = [normalize_workshops_directory(directory), COLLECTIONS_DIRECTORY]
 
     return "/".join(part for part in [*parts, chosen["directory"]] if part), name
 

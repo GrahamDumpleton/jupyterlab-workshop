@@ -80,6 +80,143 @@ directory, so a recording can be redrafted after the fact.
 The draft is a starting point: rewrite the placeholders, merge steps,
 add checks, then lint and test.
 
+## Workshop Author
+
+Workshop Author is an AI agent inside JupyterLab that writes and
+revises your own workshops. You describe the workshop you want; it
+reads the [authoring skill](#the-authoring-skill), writes the manifest
+and the pages, lints them, plays the workshop in your session to check
+it works, and tells you when a version is ready to open. Then you carry
+on the conversation, asking for changes, and it makes them.
+
+It needs three things:
+
+- The `ai` extra, installed where JupyterLab runs, which brings in the
+  Claude Agent SDK:
+
+  ```
+  uv tool install "jupyterlab-workshop[lab,ai]"
+  ```
+
+- A [workshop library](library.md), since the workshops it writes are
+  your own and go under `personal/`. `jupyter workshop library` opens
+  one.
+
+- Claude Code logged in on the machine. Workshop Author uses whatever
+  Claude Code is logged in with, your Claude subscription, or
+  `ANTHROPIC_API_KEY` when that is set where JupyterLab was started. It
+  never asks for a password or a key of its own; when Claude Code is not
+  logged in, the panel offers Log in, which opens a terminal running
+  Claude Code's own login, and Check again.
+
+With all three, the browser has a "Create Workshop with AI…" button,
+the launcher a Workshop Author card, and each card under My workshops
+and Projects an Edit with AI button. Create asks what the workshop
+should teach and what to call its directory, scaffolds an empty
+workshop under `personal/`, and opens the conversation with your
+description as the first message. Edit with AI opens the conversation
+for that workshop, or goes back to it.
+
+The conversation is held by the server, not the page: reloading the
+page, or opening the same workshop's conversation in another tab, shows
+it again where it was, and a conversation left alone for half an hour
+is closed and picks up from where it stopped the next time it is
+opened. What was said is kept in the workshop's `_workshop/agent.json`.
+Stop ends the agent's turn; Open workshop opens the workshop in the
+instructions panel in author mode; Continue in terminal opens a terminal
+in the workshop's directory with the same conversation in Claude Code,
+with the authoring skill and the workshop tools.
+
+### What it may do without asking
+
+The agent works on the one workshop. Without asking, it reads and
+changes the files in that workshop's directory, reads the authoring
+skill, uses the [workshop tools](#what-the-tools-do), and searches and
+reads the web to research the topic. Its live tools act in the browser
+tab the conversation is open in, and no other.
+
+Anything else asks first, in the panel, with Allow, Always allow (for
+the rest of the conversation) and Deny: a file outside the workshop
+directory, and a shell command, except that on macOS and Linux a shell
+command runs inside a sandbox that keeps it to the workshop directory,
+and only a command that needs to leave the sandbox asks. Workshops
+downloaded into the library, from a collection or a URL of their own,
+are never read or changed, and a conversation is never started for one,
+since its directory could carry agent configuration from whoever wrote
+it.
+
+Publishing to a gist always asks, since it puts the workshop on GitHub.
+Ask the agent to publish the workshop as a gist and, once it is ready,
+it uses `publish_gist`: the first time that creates a secret gist (a
+public one only if you ask), and the request to create one offers no
+Always allow. The gist is recorded in the workshop's
+`_workshop/gist.json`, so asking again later updates the same gist, and
+an update can be allowed for the rest of the conversation. The GitHub
+token is found where JupyterLab runs, from `GH_TOKEN`, `GITHUB_TOKEN` or
+`gh auth login`; the agent never sees it. A workshop already published
+with `jupyter workshop gist --update GIST` has its gist recorded the
+same way.
+
+The agent runs with none of your own Claude Code configuration: your
+settings, plugins, hooks and MCP servers are not loaded, so it behaves
+the same on every machine.
+
+### The message box
+
+The bar along the foot of the message box has the panel's controls and
+says where the conversation stands:
+
+- Open workshop opens the workshop in the instructions panel, in author
+  mode, and Continue in terminal carries the conversation on in a
+  terminal.
+
+- The model the conversation answers with, chosen from the models Claude
+  Code offers your account; hovering over it names the model actually
+  answering. For a model that takes one, a second list sets the effort
+  it puts in. The model changes from the next message; a change of
+  effort restarts the conversation from where it is, keeping everything
+  said. Both are kept with the workshop's conversation. A new
+  conversation starts with the `ai.model` and `ai.effort` settings, or
+  the agent's defaults when they are empty.
+
+- How much of the model's context window the conversation fills, with
+  the token counts on hover, and Compact, which has the agent replace
+  the conversation so far with a summary of it, freeing the window for
+  more. The agent also compacts by itself when the window is nearly
+  full. Either way the status says Compacting while it runs, and a line
+  across the conversation marks where the summary took over.
+
+- What the conversation has cost so far, shown only when it runs on an
+  API key; on a subscription, usage counts against the plan's limits
+  instead.
+
+- Whether the agent is starting, working or ready, and Send, which
+  becomes Stop while the agent works.
+
+The account the agent answers on, a Claude plan or an API key, is shown
+at the top of the panel, beside New conversation, which, once confirmed,
+starts the workshop's conversation over: the agent forgets what was
+said and the conversation is cleared, while the workshop itself is left
+as it is.
+
+A message starting with `/` goes to Claude Code as one of its own
+commands: `/compact` with instructions of your own compacts with them
+in mind, and `/context` and `/cost` answer in the conversation. `/clear`
+does what New conversation does, without asking.
+
+```{note}
+Usage counts against whatever Claude Code is logged in with. When
+`ANTHROPIC_API_KEY` is set where JupyterLab was started, Claude Code
+uses it in place of a subscription and the usage is billed to that API
+account; the panel says so. The Claude Agent SDK's wheels carry Claude
+Code for macOS and Linux; on Windows, install Claude Code separately so
+that `claude` is on the path.
+```
+
+`ai-authoring` in [`disabledFeatures`](settings.md#deployment-settings)
+removes Workshop Author. A deployment needs nothing to keep it away,
+since it appears only with the `ai` extra and in a library.
+
 ## Tools for AI agents
 
 `jupyter workshop mcp` serves the workshop tooling over the Model
@@ -104,9 +241,12 @@ There are two kinds of tool, and they find the workshop differently.
 **File tools** work on a workshop directory on disk and need no
 JupyterLab at all. Each takes a `directory` argument on every call:
 `lint`, `render` (a page or the whole workshop as HTML), `pages` (the
-page list with ids and requirements), `init`, `publish`, `index`,
-`catalog`, `draft` (pages from a saved recording), `list_collection`,
-`list_catalog`, `get_schema` and `test`. The server keeps no notion of
+page list with ids and requirements), `init`, `publish`,
+`publish_gist` (as `jupyter workshop gist`: it creates a gist, or
+updates the one recorded for the workshop, with a GitHub token found
+where the server runs), `index`, `catalog`, `draft` (pages from a saved
+recording), `list_collection`, `list_catalog`, `get_schema` and
+`test`. The server keeps no notion of
 a current workshop, so the agent names the directory each time, as an
 absolute path or one relative to where the client started it.
 
@@ -114,7 +254,7 @@ absolute path or one relative to where the client started it.
 open in author mode, and take no directory. `open_workshop` opens a
 workshop in author mode, `session_status` reports what is open (the
 workshop, the current page, the trust level, whether a recording is on,
-and the lint counts), `run_action` runs one action that is not in any
+the lint counts, and the id of the tab that answered), `run_action` runs one action that is not in any
 page, `run_page` runs a page's actions, its checks, or both,
 `run_workshop` runs every page in order, `run_progress` reports how far
 a run started in the background has got, and `reset_workshop` forgets
@@ -172,7 +312,10 @@ extension, in one round trip per call:
    server. Tabs not in author mode ignore the request, so a tool can
    never drive a learner's session; only `open_workshop` and
    `session_status` are answered by any tab, since they are how author
-   mode gets turned on.
+   mode gets turned on. A request can instead name one tab by its id, and
+   then only that tab runs it, or says at once that it has no workshop in
+   author mode; a tool working on behalf of one tab uses this so that
+   other tabs in author mode are left alone.
 
 4. The server returns that result to the MCP server, and the tool
    returns it to the agent. When no tab answers within the tool's

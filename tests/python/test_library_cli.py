@@ -28,6 +28,15 @@ from jupyterlab_workshop.library import (
     write_library,
 )
 
+
+def course(root: Path) -> str:
+    """The directory the library chose for the course, under collections/."""
+
+    (directory,) = (read_library(root, ".") or {})["directories"].values()
+
+    return f"collections/{directory}"
+
+
 MANIFEST = (
     "apiVersion: jupyterlab-workshop/v1alpha1\n"
     "name: {name}\ntitle: {title}\nversion: {version}\npages: [pages/01.md]\n"
@@ -174,7 +183,7 @@ def test_install_collections_installs_into_the_library_it_is_given(
         report=lambda line: None,
     )
 
-    assert (tmp_path / "installed" / "example.org-course" / "alpha").is_dir()
+    assert (tmp_path / course(tmp_path) / "alpha").is_dir()
 
 
 def test_subscribe_unsubscribe_and_list_act_on_a_library(
@@ -228,7 +237,7 @@ def test_find_and_apply_updates_replace_an_older_install(tmp_path: Path) -> None
 
     assert update.version == "2.0"
     assert apply_update(tmp_path, update, downloader=downloader) == (
-        "installed/example.org-course/alpha"
+        f"{course(tmp_path)}/alpha"
     )
 
     (record,) = list_installed(tmp_path, ".", library=True)
@@ -273,11 +282,13 @@ def test_remove_deletes_a_download_and_keeps_a_local_workshop(tmp_path: Path) ->
     with pytest.raises(FetchError, match="ambiguous"):
         select_installed(records, ["alpha"])
 
-    (download,) = select_installed(records, ["installed/example.org-course/alpha"])
+    installed = f"{course(tmp_path)}/alpha"
+
+    (download,) = select_installed(records, [installed])
     (own,) = select_installed(records, ["personal/alpha"])
 
-    assert remove_installed(tmp_path, download) == "installed/example.org-course/alpha"
-    assert not (tmp_path / "installed" / "example.org-course" / "alpha").exists()
+    assert remove_installed(tmp_path, download) == installed
+    assert not (tmp_path / installed).exists()
 
     assert remove_installed(tmp_path, own) == "personal/alpha/_workshop"
     assert (mine / "workshop.yaml").is_file()

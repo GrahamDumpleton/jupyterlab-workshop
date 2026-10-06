@@ -1,6 +1,7 @@
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,23 +16,31 @@ from jupyterlab_workshop.library import (
     LIBRARY_VARIABLE,
     LibraryError,
     assign_collection_directory,
+    catalog_collections,
     choose_collection_directory,
+    collection_title,
+    collection_workshops,
     default_library,
+    download_key,
     empty_library,
     is_library,
     is_link,
+    is_own_library_path,
     library_file,
     link_project,
     linked_project_path,
+    may_replace_download,
     normalize_workshops_directory,
     parse_library,
     project_entry,
+    project_path,
     project_workshops,
     read_library,
     recorded_directory,
     repair_links,
     serialize_library,
     slugify_collection_id,
+    standalone_directory,
     unlink_project,
     update_library,
     write_library,
@@ -50,22 +59,120 @@ def test_slugs_agree_with_the_browser(collection_id: str, slug: str | None) -> N
     assert slugify_collection_id(collection_id) == slug
 
 
+@pytest.mark.parametrize(("directory", "path", "own"), VECTORS["ownPaths"])
+def test_own_paths_agree_with_the_browser(directory: str, path: str, own: bool) -> None:
+    assert is_own_library_path(directory, path) is own
+
+
 @pytest.mark.parametrize(("location", "digest"), VECTORS["hashes"])
 def test_hashes_agree_with_the_browser(location: str, digest: str) -> None:
     assert collection_hash(location) == digest
 
 
-def test_choose_collection_directory_falls_back_and_suffixes_a_clash() -> None:
-    location = "https://example.org/course/collection.json"
+@pytest.mark.parametrize(
+    ("location", "collection_id", "directory"), VECTORS["collectionDirectories"]
+)
+def test_collection_directories_agree_with_the_browser(
+    location: str, collection_id: str | None, directory: str
+) -> None:
+    assert choose_collection_directory(location, collection_id) == directory
 
-    assert choose_collection_directory(location, None, []) == "858442f"
-    assert choose_collection_directory(location, "CON", []) == "858442f"
-    assert choose_collection_directory(location, "example.org/c", []) == (
-        "example.org-c"
+
+@pytest.mark.parametrize(("kind", "url", "subdir", "key"), VECTORS["downloadKeys"])
+def test_download_keys_agree_with_the_browser(
+    kind: str, url: str, subdir: str, key: str
+) -> None:
+    assert download_key(kind, url, subdir) == key
+
+
+@pytest.mark.parametrize(
+    ("name", "kind", "url", "subdir", "directory"), VECTORS["standalone"]
+)
+def test_standalone_directories_agree_with_the_browser(
+    name: str, kind: str, url: str, subdir: str, directory: str
+) -> None:
+    assert standalone_directory(name, kind, url, subdir) == directory
+
+
+@pytest.mark.parametrize(("base", "target", "resolved"), VECTORS["projectPaths"])
+def test_project_paths_agree_with_the_browser(
+    base: str, target: str, resolved: str | None
+) -> None:
+    assert project_path(base, target) == resolved
+
+
+def test_a_project_index_is_read_for_what_is_inside_the_project() -> None:
+    catalog = {
+        "collections": [
+            {"url": "collections/a/collection.json", "title": "Part A"},
+            {"url": "https://example.org/collection.json", "title": "Elsewhere"},
+            {"url": "collections/b/collection.json"},
+            {"title": "No URL"},
+        ]
+    }
+
+    assert catalog_collections(catalog, "catalog.json") == [
+        {"path": "collections/a/collection.json", "title": "Part A"},
+        {
+            "path": "collections/b/collection.json",
+            "title": "collections/b/collection.json",
+        },
+    ]
+    assert catalog_collections("nonsense", "catalog.json") == []
+
+    def source(subdir: str | None = None) -> dict[str, Any]:
+        return {
+            "versions": [
+                {"source": {"git": "https://github.com/o/r", "subdir": subdir}}
+            ]
+        }
+
+    collection = {
+        "title": "Part A",
+        "workshops": [
+            source("workshops/one"),
+            source("/workshops/two/"),
+            source("workshops/one"),
+            source(),
+            source("../outside"),
+            {"versions": [{"source": {"archive": "https://x/w.zip"}}]},
+            {"versions": []},
+        ],
+    }
+
+    assert collection_workshops(collection) == ["workshops/one", "workshops/two", ""]
+    assert collection_title(collection, "fallback") == "Part A"
+    assert collection_title({}, "fallback") == "fallback"
+
+
+def test_only_a_download_of_the_same_workshop_may_be_replaced() -> None:
+    record = {
+        "source": {
+            "kind": "git",
+            "url": "https://GitHub.com/o/r.git",
+            "ref": "v1",
+            "subdir": "w",
+        }
+    }
+
+    # The same source at another revision is the same workshop.
+    assert may_replace_download(record, "git", "https://github.com/o/r", "w")
+    assert not may_replace_download(record, "git", "https://github.com/o/r", "x")
+
+    # A collection's update may come from another URL.
+    installed = {**record, "collection": "https://example.org/collection.json"}
+    update = ("archive", "https://example.org/w-2.zip")
+
+    assert may_replace_download(
+        installed, *update, collection="https://EXAMPLE.org/collection.json/"
     )
-    assert choose_collection_directory(
-        location, "example.org/c", ["Example.org-c"]
-    ) == ("example.org-c-858442f")
+    assert not may_replace_download(installed, *update)
+
+    # A local workshop, or no record at all, is never replaced.
+    local = {"source": {"kind": "local", "url": "."}}
+
+    assert not may_replace_download(local, "git", "https://github.com/o/r")
+    assert not may_replace_download(None, "git", "https://github.com/o/r")
 
 
 def test_assign_collection_directory_records_once_and_keeps_it() -> None:
@@ -73,15 +180,15 @@ def test_assign_collection_directory_records_once_and_keeps_it() -> None:
         empty_library(), "https://Example.org/c.json", "example.org/c"
     )
 
-    assert directory == "example.org-c"
-    assert library["directories"] == {"https://Example.org/c.json": "example.org-c"}
+    assert directory == f"example.org-c-{collection_hash('https://Example.org/c.json')}"
+    assert library["directories"] == {"https://Example.org/c.json": directory}
 
     # A later install keeps the directory, even with a different id.
     again, unchanged = assign_collection_directory(
         library, "https://example.org/c.json/", "another/id"
     )
 
-    assert again == "example.org-c"
+    assert again == directory
     assert unchanged == library
     assert recorded_directory(library, "elsewhere.json") is None
 

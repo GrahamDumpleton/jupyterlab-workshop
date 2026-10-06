@@ -1,18 +1,31 @@
 import {
+  catalogCollections,
+  collectionTitle,
+  collectionWorkshops,
+  COLLECTIONS_DIRECTORY,
+  DEFAULT_PROJECT_WORKSHOPS,
   ILibrary,
-  INSTALLED_DIRECTORY,
+  ILibraryProject,
   joinLibraryPath,
   normalizeWorkshopsDirectory,
   PERSONAL_DIRECTORY,
+  PROJECT_CATALOG,
+  PROJECT_COLLECTION,
   projectEntry,
   projectWorkshops,
-  PROJECTS_DIRECTORY
+  PROJECTS_DIRECTORY,
+  STANDALONE_DIRECTORY
 } from '@jupyterlab-workshop/core';
 import { Contents } from '@jupyterlab/services';
 
-import { getIfExists } from '../actions/contents';
+import { getIfExists, readIfExists } from '../actions/contents';
 import { describeInstalled, listInstalled, MANIFEST_FILE } from '../installed';
-import { IInstalledWorkshop, isDownloaded, WorkshopKind } from '../tokens';
+import {
+  IInstalledWorkshop,
+  IProjectSectionPlace,
+  isDownloaded,
+  WorkshopKind
+} from '../tokens';
 
 /** A project of a workshop library, as the browser shows it. */
 export interface ILibraryProjectInfo {
@@ -41,8 +54,9 @@ export interface ILibraryProjectInfo {
 /**
  * Every workshop of a library, each with its kind: the plain listing of
  * the workshops directory, where a download counts as installed and a
- * local directory has no kind, then the workshops under `installed/`,
- * `personal/` and each project. Mirrors the command line's scan.
+ * local directory has no kind, then the workshops under `collections/`
+ * and `standalone/`, which are installed, `personal/` and each
+ * project. Mirrors the command line's scan.
  */
 export async function listLibrary(
   contents: Contents.IManager,
@@ -75,16 +89,61 @@ export async function listLibrary(
 
   for (const collection of await subdirectories(
     contents,
-    joinLibraryPath(base, INSTALLED_DIRECTORY)
+    joinLibraryPath(base, COLLECTIONS_DIRECTORY)
   )) {
     await scan(collection.path, 'installed');
   }
 
+  await scan(joinLibraryPath(base, STANDALONE_DIRECTORY), 'installed');
+
   await scan(joinLibraryPath(base, PERSONAL_DIRECTORY), 'personal');
 
   for (const project of await listProjects(contents, directory, library)) {
-    if (!project.missing) {
-      await scan(project.workshops, 'project', project.name);
+    if (project.missing) {
+      continue;
+    }
+
+    const listed = new Map<string, IInstalledWorkshop>();
+    const sections = await projectSections(
+      contents,
+      project.path,
+      projectEntry(library, project.name)
+    );
+
+    // A workshop listed in two collections is one record, shown in each
+    // of its sections.
+    for (const [index, section] of sections.entries()) {
+      for (const [position, path] of section.paths.entries()) {
+        let record = listed.get(path);
+
+        if (!record) {
+          const described = await describeInstalled(
+            contents,
+            joinLibraryPath(project.path, path)
+          );
+
+          if (!described) {
+            continue;
+          }
+
+          record = {
+            ...described,
+            kind: 'project',
+            project: project.name,
+            sections: []
+          };
+          listed.set(path, record);
+          records.push(record);
+        }
+
+        const place: IProjectSectionPlace = {
+          title: section.title,
+          index,
+          position
+        };
+
+        record.sections?.push(place);
+      }
     }
   }
 
@@ -93,6 +152,142 @@ export async function listLibrary(
   );
 
   return records;
+}
+
+/** A section of a project's workshops, by their paths in the project. */
+export interface IProjectSection {
+  title: string | null;
+  paths: string[];
+}
+
+/**
+ * The workshops of a project, in sections. The first rule that finds
+ * anything decides. A `workshops` directory named in the project's
+ * registry entry wins, as a choice made on purpose. Then the project's
+ * own index: each collection its top-level `catalog.json` lists inside
+ * it, in catalog order, or else its top-level `collection.json`, each a
+ * section titled after the collection with its workshops in index
+ * order, followed by a section with no title for workshops under
+ * `workshops/` no index lists yet. Then the project itself when it is a
+ * workshop, then the workshops directly under `workshops/`, then those
+ * at the top of the project. Nothing deeper is read, so a submodule
+ * with workshops of its own is not taken for the project's. Mirrors the
+ * command line's `project_sections`.
+ */
+export async function projectSections(
+  contents: Contents.IManager,
+  projectPath: string,
+  entry: ILibraryProject
+): Promise<IProjectSection[]> {
+  const at = (path: string): string => joinLibraryPath(projectPath, path);
+
+  const isWorkshop = async (path: string): Promise<boolean> =>
+    (await getIfExists(
+      contents,
+      joinLibraryPath(at(path), MANIFEST_FILE),
+      false
+    )) !== null;
+
+  const workshopsIn = async (path: string): Promise<string[]> => {
+    if (await isWorkshop(path)) {
+      return [path];
+    }
+
+    const children = await subdirectories(contents, at(path));
+    const found: string[] = [];
+
+    for (const child of [...children].sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )) {
+      const relative = joinLibraryPath(path, child.name);
+
+      if (await isWorkshop(relative)) {
+        found.push(relative);
+      }
+    }
+
+    return found;
+  };
+
+  const readJson = async (path: string): Promise<unknown> => {
+    try {
+      const text = await readIfExists(contents, at(path));
+
+      return text === null ? null : (JSON.parse(text) as unknown);
+    } catch {
+      return null;
+    }
+  };
+
+  const listedIn = async (index: unknown): Promise<string[]> => {
+    const found: string[] = [];
+
+    for (const path of collectionWorkshops(index)) {
+      if (await isWorkshop(path)) {
+        found.push(path);
+      }
+    }
+
+    return found;
+  };
+
+  if (entry.workshops) {
+    return [
+      {
+        title: null,
+        paths: await workshopsIn(entry.workshops.replace(/^\/+|\/+$/g, ''))
+      }
+    ];
+  }
+
+  const sections: IProjectSection[] = [];
+
+  for (const collection of catalogCollections(
+    await readJson(PROJECT_CATALOG),
+    PROJECT_CATALOG
+  )) {
+    const index = await readJson(collection.path);
+    const paths = await listedIn(index);
+
+    if (paths.length > 0) {
+      sections.push({ title: collectionTitle(index, collection.title), paths });
+    }
+  }
+
+  if (sections.length === 0) {
+    const index = await readJson(PROJECT_COLLECTION);
+    const paths = await listedIn(index);
+
+    if (paths.length > 0) {
+      sections.push({
+        title: collectionTitle(index, projectPath.split('/').pop() ?? ''),
+        paths
+      });
+    }
+  }
+
+  if (sections.length > 0) {
+    const listed = new Set(sections.flatMap(section => section.paths));
+    const rest = (await workshopsIn(DEFAULT_PROJECT_WORKSHOPS)).filter(
+      path => !listed.has(path)
+    );
+
+    return rest.length > 0
+      ? [...sections, { title: null, paths: rest }]
+      : sections;
+  }
+
+  if (await isWorkshop('')) {
+    return [{ title: null, paths: [''] }];
+  }
+
+  if (await getIfExists(contents, at(DEFAULT_PROJECT_WORKSHOPS), false)) {
+    return [
+      { title: null, paths: await workshopsIn(DEFAULT_PROJECT_WORKSHOPS) }
+    ];
+  }
+
+  return [{ title: null, paths: await workshopsIn('') }];
 }
 
 /**

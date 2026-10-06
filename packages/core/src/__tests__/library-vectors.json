@@ -1,5 +1,5 @@
 {
-  "comment": "Shared by library.spec.ts and tests/python/test_library.py so that the browser and the command line choose the same directory names.",
+  "comment": "Shared by library.spec.ts and tests/python/test_library.py so that the browser and the command line choose the same directory names and agree on which workshops are the library owner's, and which downloads are the same workshop.",
   "slugs": [
     [
       "grahamdumpleton.me/jupyterlab-workshop-showcase",
@@ -27,5 +27,131 @@
     ["collections/first-steps/collection.json", "55cef29"],
     ["https://EXAMPLE.org/Course/collection.json/", "1a3c8da"],
     ["test-collection.json", "b5c3661"]
+  ],
+  "ownPaths": [
+    ["workshops", "workshops/personal/mine", true],
+    ["workshops", "workshops/projects/repo/workshops/x", true],
+    [".", "personal/mine", true],
+    ["", "projects/repo/workshops/x", true],
+    ["./", "personal/a/b", true],
+    ["workshops", "workshops/personal", false],
+    ["workshops", "workshops/personal/", false],
+    ["workshops", "workshops/collections/c/alpha", false],
+    ["workshops", "workshops/alpha", false],
+    ["workshops", "elsewhere/personal/x", false],
+    ["workshops", "workshops/personal/../collections/c/x", false]
+  ],
+  "downloadKeys": [
+    [
+      "git",
+      "https://github.com/Owner/Repo",
+      "",
+      "git:https://github.com/Owner/Repo"
+    ],
+    [
+      "git",
+      "https://GitHub.com/Owner/Repo.git/",
+      "",
+      "git:https://github.com/Owner/Repo"
+    ],
+    [
+      "git",
+      "https://github.com/Owner/Repo",
+      "/workshops/git-basics/",
+      "git:https://github.com/Owner/Repo#workshops/git-basics"
+    ],
+    [
+      "git",
+      "https://gist.github.com/ada/FEE514f3051b532e3f790c2ae7068ed7",
+      "",
+      "git:https://gist.github.com/fee514f3051b532e3f790c2ae7068ed7"
+    ],
+    [
+      "git",
+      "https://gist.github.com/fee514f3051b532e3f790c2ae7068ed7",
+      "",
+      "git:https://gist.github.com/fee514f3051b532e3f790c2ae7068ed7"
+    ],
+    [
+      "archive",
+      "https://example.org/w.zip",
+      "",
+      "archive:https://example.org/w.zip"
+    ],
+    [
+      "archive",
+      "https://example.org/w.zip",
+      "inner",
+      "archive:https://example.org/w.zip#inner"
+    ]
+  ],
+  "standalone": [
+    [
+      "git-basics",
+      "git",
+      "https://github.com/Owner/Repo",
+      "",
+      "git-basics-21b3841"
+    ],
+    [
+      "git-basics",
+      "git",
+      "https://gist.github.com/ada/FEE514f3051b532e3f790c2ae7068ed7",
+      "",
+      "git-basics-621cbd0"
+    ],
+    [
+      "git-basics",
+      "archive",
+      "https://example.org/w.zip",
+      "",
+      "git-basics-0258326"
+    ],
+    [
+      "git-basics",
+      "archive",
+      "https://example.org/w.zip",
+      "inner",
+      "git-basics-998ca8b"
+    ]
+  ],
+  "collectionDirectories": [
+    ["https://example.org/course/collection.json", null, "858442f"],
+    ["https://example.org/course/collection.json", "CON", "858442f"],
+    [
+      "https://example.org/course/collection.json",
+      "example.org/c",
+      "example.org-c-858442f"
+    ],
+    [
+      "test-collection.json",
+      "Example.org//Course__One",
+      "example.org-course-one-b5c3661"
+    ]
+  ],
+  "projectPaths": [
+    [
+      "catalog.json",
+      "collections/a/collection.json",
+      "collections/a/collection.json"
+    ],
+    [
+      "catalog.json",
+      "./collections/a/collection.json",
+      "collections/a/collection.json"
+    ],
+    [
+      "collections/a/collection.json",
+      "../b/collection.json",
+      "collections/b/collection.json"
+    ],
+    ["", "workshops/x", "workshops/x"],
+    ["", "/workshops/x/", null],
+    ["", "", ""],
+    ["", ".", ""],
+    ["catalog.json", "../elsewhere/collection.json", null],
+    ["", "https://example.org/collection.json", null],
+    ["", "/etc/passwd", null],
+    ["", "workshops/../../x", null]
   ]
 }

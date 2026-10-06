@@ -1898,7 +1898,7 @@ test.describe('deployment set up as a workshop repository sets up Binder', () =>
       await page.contents.fileExists(`${WORKSHOPS_DIR}/library.json`)
     ).toBe(false);
     expect(
-      await page.contents.directoryExists(`${WORKSHOPS_DIR}/installed`)
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/collections`)
     ).toBe(false);
 
     await openBrowser(page);
@@ -2021,6 +2021,110 @@ test.describe('workshop library', () => {
     await removeFixtures(page);
   });
 
+  test('groups a project by its own index and lists a project that is one workshop', async ({
+    page
+  }) => {
+    const course = `${WORKSHOPS_DIR}/projects/course`;
+    const index = (title: string, names: string[]): string =>
+      JSON.stringify({
+        version: 1,
+        title,
+        workshops: names.map(name => ({
+          name,
+          title: name,
+          versions: [
+            {
+              version: '1.0.0',
+              source: {
+                git: 'https://github.com/example/course',
+                subdir: `workshops/${name}`
+              }
+            }
+          ]
+        }))
+      });
+
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+
+    // A catalog of two collections, sharing a workshop, one workshop no
+    // index lists yet, and a nested repository whose workshops are not
+    // the project's.
+    await page.contents.uploadContent(
+      JSON.stringify({
+        version: 1,
+        title: 'Course',
+        collections: [
+          { url: 'collections/a/collection.json', title: 'Part A' },
+          { url: 'collections/b/collection.json', title: 'Part B' }
+        ]
+      }),
+      'text',
+      `${course}/catalog.json`
+    );
+    await page.contents.uploadContent(
+      index('Part A', ['one', 'two']),
+      'text',
+      `${course}/collections/a/collection.json`
+    );
+    await page.contents.uploadContent(
+      index('Part B', ['three', 'two']),
+      'text',
+      `${course}/collections/b/collection.json`
+    );
+
+    for (const [name, title] of [
+      ['one', 'First'],
+      ['two', 'Second'],
+      ['three', 'Third'],
+      ['fresh', 'Not indexed yet']
+    ]) {
+      await uploadWorkshop(page, `${course}/workshops/${name}`, name, title);
+    }
+
+    await uploadWorkshop(
+      page,
+      `${course}/reference/other/workshops/ghost`,
+      'ghost',
+      'Somebody else'
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/projects/solo`,
+      'solo',
+      'A workshop of its own'
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const group = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'course'
+    });
+
+    // Each collection in catalog order, its workshops in index order, a
+    // workshop in both shown in both, then what no index lists.
+    await expect(group.locator('.jp-WorkshopBrowser-section')).toHaveText([
+      'Part A',
+      'Part B',
+      'Not in a collection'
+    ]);
+    await expect(group.locator('.jp-WorkshopBrowser-cardTitle')).toHaveText([
+      /First/,
+      /Second/,
+      /Third/,
+      /Second/,
+      /Not indexed yet/
+    ]);
+    await expect(group).not.toContainText('Somebody else');
+
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', { hasText: 'solo' })
+    ).toContainText('A workshop of its own');
+  });
+
   test('shows its own sections, installs into a collection directory and trusts its own workshops', async ({
     page
   }) => {
@@ -2080,7 +2184,7 @@ test.describe('workshop library', () => {
     await expect
       .poll(() =>
         page.contents.fileExists(
-          `${WORKSHOPS_DIR}/installed/${COLLECTION_DIRECTORY}/pandas-intro/workshop.yaml`
+          `${WORKSHOPS_DIR}/collections/${COLLECTION_DIRECTORY}/pandas-intro/workshop.yaml`
         )
       )
       .toBe(true);
@@ -2132,7 +2236,7 @@ test.describe('workshop library', () => {
       .click();
 
     const dialog = page.locator('.jp-Dialog');
-    const moved = `${WORKSHOPS_DIR}/installed/${COLLECTION_DIRECTORY}/pandas-intro`;
+    const moved = `${WORKSHOPS_DIR}/collections/${COLLECTION_DIRECTORY}/pandas-intro`;
 
     await expect(dialog).toContainText(
       `Pandas for beginners: ${WORKSHOPS_DIR}/pandas-intro to ${moved}`

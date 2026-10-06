@@ -36,7 +36,8 @@ import {
   renderEnvSh,
   assignCollectionDirectory,
   ILibrary,
-  INSTALLED_DIRECTORY,
+  COLLECTIONS_DIRECTORY,
+  STANDALONE_DIRECTORY,
   isOwnLibraryPath,
   joinLibraryPath,
   normalizeWorkshopsDirectory
@@ -127,6 +128,18 @@ const ENVIRONMENT_ENTRIES: ReadonlySet<string> = new Set([
   'venv',
   ENVIRONMENT_RECORD,
   'environment.log'
+]);
+
+/**
+ * State directory entries that are records about the workshop rather than
+ * progress through it: where it was downloaded from, the Workshop Author
+ * conversation, and the gist it was published to. Restart and Reset
+ * Progress keep them; removing the workshop does not.
+ */
+const RECORD_ENTRIES: ReadonlySet<string> = new Set([
+  'source.json',
+  'agent.json',
+  'gist.json'
 ]);
 
 interface IStoredState {
@@ -1195,11 +1208,12 @@ export class WorkshopManager implements IWorkshopManager {
     await this._state.unload();
 
     // Progress goes, the files stay, and so does the environment, which
-    // is part of the workshop's setup rather than of its progress.
+    // is part of the workshop's setup rather than of its progress, and so
+    // do the records about the workshop.
     await deleteChildrenExcept(
       this._contents,
       PathExt.join(path, WORKSHOP_STATE_DIR),
-      ENVIRONMENT_ENTRIES
+      new Set([...ENVIRONMENT_ENTRIES, ...RECORD_ENTRIES])
     );
 
     this._workshop = null;
@@ -1246,8 +1260,13 @@ export class WorkshopManager implements IWorkshopManager {
     // broken, and a venv they can pip into is one of the things that can
     // be. The server removes it, unregistering the kernel rather than
     // leaving one that points at a deleted Python.
+    // Only the records about the workshop are kept.
     await this._removeEnvironmentFiles(target);
-    await deleteTree(this._contents, PathExt.join(target, WORKSHOP_STATE_DIR));
+    await deleteChildrenExcept(
+      this._contents,
+      PathExt.join(target, WORKSHOP_STATE_DIR),
+      RECORD_ENTRIES
+    );
 
     // Reopening as a launch does applies the layout again, so the window
     // looks as it did the first time.
@@ -2631,10 +2650,11 @@ export class WorkshopManager implements IWorkshopManager {
    * before the learner is asked, and not at all when nothing asks.
    */
   /**
-   * Where a download from a collection goes in a workshop library: the
-   * collection's own directory under `installed/`, chosen from its id
-   * the first time and recorded in the registry. Any other request, or
-   * one outside a library, is left as it is.
+   * Where a download goes in a workshop library: a collection's workshop
+   * into the collection's own directory under `collections/`, chosen
+   * from its id the first time and recorded in the registry, and any
+   * other under `standalone/`, named for its source. Outside a library,
+   * or where libraries are switched off, a request is left as it is.
    */
   private async _libraryDestination(
     request: IFetchRequest
@@ -2642,7 +2662,7 @@ export class WorkshopManager implements IWorkshopManager {
     const library = this._library;
     const collection = request.collection;
 
-    if (!library || !collection) {
+    if (!library) {
       return request;
     }
 
@@ -2654,6 +2674,16 @@ export class WorkshopManager implements IWorkshopManager {
       (await library.read(directory)) === null
     ) {
       return request;
+    }
+
+    // A workshop from a URL of its own goes under standalone/, named for
+    // its source by whichever backend downloads it.
+    if (!collection) {
+      return {
+        ...request,
+        directory: joinLibraryPath(directory, STANDALONE_DIRECTORY),
+        standalone: true
+      };
     }
 
     // The id names the directory; an index that cannot be read now
@@ -2678,7 +2708,7 @@ export class WorkshopManager implements IWorkshopManager {
 
     return {
       ...request,
-      directory: joinLibraryPath(directory, INSTALLED_DIRECTORY, chosen)
+      directory: joinLibraryPath(directory, COLLECTIONS_DIRECTORY, chosen)
     };
   }
 

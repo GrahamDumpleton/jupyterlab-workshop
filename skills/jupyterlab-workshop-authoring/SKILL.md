@@ -102,6 +102,16 @@ So, before running any of them:
    several workshops, `jupyter workshop index` writes a `collection.json`
    listing them all instead (see below).
 
+7. Publish to a gist when asked, and only once lint is clean and the
+   self-test passes: `jupyter workshop gist my-workshop --create` (secret
+   unless `--public`) makes the gist and records it in
+   `_workshop/gist.json`; `--update` with no gist named then updates the
+   recorded one. Over MCP, `publish_gist` does both: it updates the
+   recorded gist, or creates one when there is none or `create` is set.
+   Give the user the gist's URL; it is the source for "Open Workshop
+   from URL…" and launch links. A secret gist is still readable by
+   anyone with the link, so make one public only when the user asks.
+
 ## Manifest (`workshop.yaml`)
 
 ```yaml
@@ -728,8 +738,8 @@ runs into draft pages (`jupyter workshop record` turns a saved recording
 into pages). Edits to the files re-render the panel as they are saved.
 
 Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
-`init`, `publish`, `index`, `catalog`, `draft`, `get_schema`,
-`list_collection` and `list_catalog`
+`init`, `publish`, `publish_gist`, `index`, `catalog`, `draft`,
+`get_schema`, `list_collection` and `list_catalog`
 work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`,
 `run_workshop`, `run_progress` and `reset_workshop` act on a running
 JupyterLab that has the workshop open in author mode. That JupyterLab

@@ -26,6 +26,7 @@ async def test_platform_endpoint_reports_the_server_environment(jp_fetch, jp_roo
         "host",
         "container",
         "web_proxy",
+        "agent",
         "frontend",
         "frontend_version",
         "instance_id",

@@ -17,6 +17,9 @@ workshop, with a launch button for a JupyterLite site when the manifest
 lists that frontend and one for the project's Binder launcher. The flat
 copy is written to a directory and, when asked, sent to GitHub through
 the gists API.
+
+The gist a workshop was sent to is recorded in its ``_workshop/gist.json``,
+so a later publish updates the same gist without being told which.
 """
 
 from __future__ import annotations
@@ -29,7 +32,8 @@ import shutil
 import subprocess
 import textwrap
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -39,9 +43,12 @@ from urllib.request import Request, urlopen
 from .checks import satisfies_version
 from .fetch import USER_AGENT
 from .publish import PUBLISH_EXCLUDES, WORKSPACE_DIR, PublishError, read_manifest
-from .tree import BASE64, TREE_FILE, TreeEntry, tree_document
+from .tree import BASE64, STATE_DIR, TREE_FILE, TreeEntry, tree_document
 
 MANIFEST_FILE = "workshop.yaml"
+
+#: The record of the gist a workshop was published to, in its state directory.
+RECORD_FILE = "gist.json"
 
 #: Stands in for the directory separator in a gist file name.
 SEPARATOR = "--"
@@ -168,6 +175,119 @@ class GistResult:
     id: str
     url: str
     created: bool
+
+    #: Whether the gist is public; a secret one is reachable by its link.
+    public: bool = False
+
+
+@dataclass(frozen=True)
+class GistRecord:
+    """The gist a workshop was published to, as its state directory keeps it."""
+
+    id: str
+    url: str
+    public: bool
+
+    #: When the gist was created and last updated, as ISO 8601 times.
+    created: str
+    updated: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """The record as written to the file."""
+
+        return asdict(self)
+
+
+def read_record(directory: Path) -> GistRecord | None:
+    """The gist a workshop was published to, or None when it has none.
+
+    A record that cannot be read counts as none, so publishing again
+    creates a gist rather than failing.
+    """
+
+    try:
+        data = json.loads(
+            (directory / STATE_DIR / RECORD_FILE).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+
+    if not isinstance(data, dict) or not data.get("id") or not data.get("url"):
+        return None
+
+    return GistRecord(
+        id=str(data["id"]),
+        url=str(data["url"]),
+        public=data.get("public") is True,
+        created=str(data.get("created") or ""),
+        updated=str(data.get("updated") or ""),
+    )
+
+
+def write_record(directory: Path, result: GistResult) -> GistRecord:
+    """Record the gist a workshop was just published to.
+
+    Publishing to the gist already recorded keeps its creation time;
+    any other gist replaces the record.
+    """
+
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    previous = read_record(directory)
+    created = (
+        previous.created
+        if previous is not None and previous.id == result.id and not result.created
+        else now
+    )
+    record = GistRecord(
+        id=result.id,
+        url=result.url,
+        public=result.public,
+        created=created,
+        updated=now,
+    )
+
+    state = directory / STATE_DIR
+
+    state.mkdir(parents=True, exist_ok=True)
+    (state / RECORD_FILE).write_text(
+        json.dumps(record.to_dict(), indent=2) + "\n", encoding="utf-8"
+    )
+
+    return record
+
+
+def send_gist(
+    directory: Path,
+    flat: FlatWorkshop,
+    token: str,
+    gist: str = "",
+    create: bool = False,
+    public: bool = False,
+    request: Requester | None = None,
+) -> GistResult:
+    """Send a workshop to GitHub and record the gist it went to.
+
+    With ``create`` a new gist is made, secret unless ``public``. With a
+    ``gist`` named, that one is updated. Otherwise the gist recorded for
+    the workshop is updated, or a new one made when there is none.
+    """
+
+    send = request or github_request
+    target = gist
+
+    if not create and not target:
+        record = read_record(directory)
+        target = record.url if record is not None else ""
+
+    result = (
+        update_gist(target, flat, token, send)
+        if target
+        else create_gist(flat, token, public=public, request=send)
+    )
+
+    write_record(directory, result)
+
+    return result
 
 
 def flat_name(path: str) -> str:
@@ -633,7 +753,7 @@ def create_gist(
             token,
         )
 
-    return GistResult(id=identifier, url=url, created=True)
+    return GistResult(id=identifier, url=url, created=True, public=public)
 
 
 def update_gist(
@@ -664,7 +784,10 @@ def update_gist(
     )
 
     return GistResult(
-        id=identifier, url=str(reply.get("html_url", "")) or url, created=False
+        id=identifier,
+        url=str(reply.get("html_url", "")) or url,
+        created=False,
+        public=existing.get("public") is True,
     )
 
 

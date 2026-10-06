@@ -84,7 +84,7 @@
     "disabledFeatures": {
       "type": "array",
       "title": "Disabled features",
-      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser; \"install-all\" removes the Install all button and Remove all menu item of a collection, leaving single installs; \"click-hint\" stops the first action of a workshop being pointed out to a learner who has clicked nothing; \"library\" ignores a workshop library registry (library.json) in the workshops directory and never offers to make one, so the directory behaves as a plain one; \"personal\" hides the My workshops section of a workshop library.",
+      "description": "Parts of the extension to remove for a locked-down deployment, typically set through overrides.json. Each key removes every entry point for a feature: panel buttons, browser buttons and sections, launcher cards, palette commands and launch link parameters. \"open-directory\" and \"open-url\" leave the workshops of the subscribed collections and the installed ones openable; \"collections\" and \"catalogs\" stop learners changing their subscriptions, leaving the settings to say what is subscribed to; \"available\" hides the Available section of the browser; \"install-all\" removes the Install all button and Remove all menu item of a collection, leaving single installs; \"click-hint\" stops the first action of a workshop being pointed out to a learner who has clicked nothing; \"library\" ignores a workshop library registry (library.json) in the workshops directory and never offers to make one, so the directory behaves as a plain one; \"personal\" hides the My workshops section of a workshop library; \"ai-authoring\" removes Workshop Author, the AI agent that writes and revises your own workshops, which otherwise appears only in a workshop library on a server with the ai extra installed.",
       "items": {
         "type": "string",
         "enum": [
@@ -100,7 +100,8 @@
           "author",
           "click-hint",
           "library",
-          "personal"
+          "personal",
+          "ai-authoring"
         ]
       },
       "default": []
@@ -181,6 +182,28 @@
           "description": "Whether events carry the JupyterHub user name (\"hub\") or no identity (\"none\").",
           "enum": ["none", "hub"],
           "default": "none"
+        }
+      },
+      "default": {}
+    },
+    "ai": {
+      "type": "object",
+      "title": "AI",
+      "description": "Workshop Author, the AI agent that writes and revises your own workshops in a workshop library. It appears only on a server with the ai extra installed, and uses the credentials Claude Code has where JupyterLab was started.",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "title": "Model",
+          "description": "The model a new Workshop Author conversation starts with, such as sonnet, opus or claude-sonnet-5. Leave empty for the agent's default. The panel can change it for one workshop's conversation.",
+          "default": ""
+        },
+        "effort": {
+          "type": "string",
+          "title": "Effort",
+          "description": "How much effort a new Workshop Author conversation starts with, for models that take an effort level. Leave empty for the model's default. The panel can change it for one workshop's conversation.",
+          "enum": ["", "low", "medium", "high", "xhigh", "max"],
+          "default": ""
         }
       },
       "default": {}

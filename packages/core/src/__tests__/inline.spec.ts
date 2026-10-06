@@ -1,4 +1,4 @@
-import { renderInlineMarkdown } from '../markdown/parser';
+import { renderInlineMarkdown, renderPlainMarkdown } from '../markdown/parser';
 
 describe('renderInlineMarkdown', () => {
   it('renders code spans and emphasis', () => {
@@ -61,5 +61,20 @@ describe('renderInlineMarkdown', () => {
     expect(renderInlineMarkdown('{var}`repo_dir`')).toBe(
       '{var}<code>repo_dir</code>'
     );
+  });
+});
+
+describe('renderPlainMarkdown', () => {
+  it('renders blocks without the workshop rules', () => {
+    const html = renderPlainMarkdown(
+      '# Done\n\nRun `{copy}` then:\n\n```{execute}\nls\n```\n\n<b>x</b> https://example.org'
+    );
+
+    expect(html).toContain('<h1>Done</h1>');
+    expect(html).toContain('<code>{copy}</code>');
+    expect(html).toContain('<pre><code class="language-{execute}">ls');
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(html).toContain('href="https://example.org"');
+    expect(html).toContain('target="_blank"');
   });
 });

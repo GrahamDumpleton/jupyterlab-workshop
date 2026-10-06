@@ -11,7 +11,7 @@ except ImportError:
     __version__ = "dev"
 
 from .bridge import setup_bridge
-from .handlers import setup_handlers
+from .handlers import setup_conversations, setup_handlers
 
 
 def _jupyter_labextension_paths() -> list[dict[str, str]]:
@@ -20,16 +20,27 @@ def _jupyter_labextension_paths() -> list[dict[str, str]]:
     return [{"src": "labextension", "dest": "@jupyterlab-workshop/labextension"}]
 
 
-def _jupyter_server_extension_points() -> list[dict[str, str]]:
-    """Declare this package as a Jupyter Server extension."""
+def _jupyter_server_extension_points() -> list[dict[str, Any]]:
+    """Declare this package as a Jupyter Server extension.
 
-    return [{"module": "jupyterlab_workshop"}]
+    The functions below do the work; the lifecycle application is there
+    for the stop hook a function does not get.
+    """
+
+    from .lifecycle import WorkshopLifecycle
+
+    return [
+        {"module": "jupyterlab_workshop"},
+        {"module": "jupyterlab_workshop", "app": WorkshopLifecycle},
+    ]
 
 
 def _load_jupyter_server_extension(server_app: Any) -> None:
     """Register the HTTP handlers that the frontend extension talks to."""
 
-    setup_bridge(server_app)
+    bridge = setup_bridge(server_app)
+
+    setup_conversations(server_app, bridge)
     setup_handlers(server_app)
     server_app.log.info("Registered jupyterlab_workshop server extension")
 

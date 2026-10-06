@@ -291,13 +291,16 @@ def test_install_collection_into_a_library_gives_each_collection_a_directory(
     second = install_collection(str(other), tmp_path, downloader=downloader)
     again = install_collection(str(mine), tmp_path, downloader=downloader)
 
-    suffix = collection_hash("other/collection.json")
+    # Each collection's directory carries the hash of its location, so the
+    # same id never puts two collections in one directory.
+    mine_dir = f"example.org-course-{collection_hash('collections/collection.json')}"
+    other_dir = f"example.org-course-{collection_hash('other/collection.json')}"
 
     assert [item.detail for item in first] == [
-        "workshops/installed/example.org-course/alpha"
+        f"workshops/collections/{mine_dir}/alpha"
     ]
     assert [item.detail for item in second] == [
-        f"workshops/installed/example.org-course-{suffix}/alpha"
+        f"workshops/collections/{other_dir}/alpha"
     ]
     assert [item.status for item in again] == ["skipped"]
 
@@ -307,8 +310,8 @@ def test_install_collection_into_a_library_gives_each_collection_a_directory(
         "version": 1,
         "collections": ["collections/collection.json", "other/collection.json"],
         "directories": {
-            "collections/collection.json": "example.org-course",
-            "other/collection.json": f"example.org-course-{suffix}",
+            "collections/collection.json": mine_dir,
+            "other/collection.json": other_dir,
         },
     }
 

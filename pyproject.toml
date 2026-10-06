@@ -39,7 +39,11 @@ test = [
     "playwright>=1.45",
 ]
 mcp = [
-    "mcp>=1.0",
+    "mcp>=2.0,<3",
+]
+ai = [
+    "claude-agent-sdk>=0.2.163,<0.3",
+    "mcp>=2.0,<3",
 ]
 lite = [
     "jupyterlite-core>=0.8.3,<0.9",
@@ -72,7 +76,8 @@ dev = [
     "ruff>=0.5",
     { include-group = "docs" },
     "playwright>=1.45",
-    "mcp>=1.0",
+    "mcp>=2.0,<3",
+    "claude-agent-sdk>=0.2.163,<0.3",
     "jupyterlite-core>=0.8.3,<0.9",
     "jupyterlite-pyodide-kernel>=0.8.5,<0.9",
     "jupyterlite-terminal>=1.6,<2",

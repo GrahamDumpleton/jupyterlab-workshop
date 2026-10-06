@@ -1190,6 +1190,19 @@
   gap: 12px;
 }
 
+/* A collection within a project, heading a row of its own in the grid. */
+.jp-WorkshopBrowser-section {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+  font-weight: 600;
+}
+
+.jp-WorkshopBrowser-section:first-child {
+  margin-top: 0;
+}
+
 .jp-WorkshopBrowser-card {
   display: flex;
   flex-direction: column;
@@ -1989,4 +2002,346 @@
 .jp-WorkshopEditor-pointedLine,
 .jp-WorkshopEditor-pointedText {
   background-color: color-mix(in srgb, var(--jp-warn-color1) 22%, transparent);
+}
+
+/* Workshop Author, the AI agent's conversation in the main area. */
+
+.jp-WorkshopAgent {
+  color: var(--jp-ui-font-color1);
+  background: var(--jp-layout-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopAgent-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.jp-WorkshopAgent-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 0 8px;
+  border-bottom: 1px solid var(--jp-border-color2);
+}
+
+.jp-WorkshopAgent-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.jp-WorkshopAgent-title h2 {
+  margin: 0;
+  font-size: var(--jp-ui-font-size3);
+  font-weight: 600;
+}
+
+.jp-WorkshopAgent-path {
+  overflow: hidden;
+  color: var(--jp-ui-font-color2);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-ui-font-size0);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jp-WorkshopAgent-setupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jp-WorkshopAgent-setup,
+.jp-WorkshopAgent-permission {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-warn-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
+}
+
+.jp-WorkshopAgent .jp-WorkshopAgent-setup p,
+.jp-WorkshopAgent .jp-WorkshopAgent-permission p {
+  margin: 4px 0;
+}
+
+.jp-WorkshopAgent-setup pre,
+.jp-WorkshopAgent-permission pre,
+.jp-WorkshopAgent-tool pre {
+  max-height: 16em;
+  margin: 4px 0;
+  padding: 6px 8px;
+  overflow: auto;
+  background: var(--jp-layout-color0);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.jp-WorkshopAgent-warning,
+.jp-WorkshopAgent-failure,
+.jp-WorkshopAgent-error {
+  color: var(--jp-error-color1);
+}
+
+.jp-WorkshopAgent-transcript {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  overflow: auto;
+}
+
+.jp-WorkshopAgent-hint,
+.jp-WorkshopAgent-note,
+.jp-WorkshopAgent-answer {
+  margin: 0;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+/* A rule across the transcript, with the words in the middle. */
+.jp-WorkshopAgent-compacted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAgent-compacted::before,
+.jp-WorkshopAgent-compacted::after {
+  flex: 1;
+  border-top: 1px solid var(--jp-border-color2);
+  content: '';
+}
+
+.jp-WorkshopAgent-user {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--jp-brand-color3);
+  white-space: pre-wrap;
+}
+
+/* The reply is styled as JupyterLab renders Markdown, through
+   jp-RenderedHTMLCommon, with its padding taken off. */
+.jp-WorkshopAgent-assistant {
+  padding: 0;
+  line-height: 1.5;
+}
+
+.jp-WorkshopAgent-assistant > :first-child {
+  margin-top: 0;
+}
+
+.jp-WorkshopAgent-assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.jp-WorkshopAgent-tool {
+  padding: 2px 8px;
+  border-left: 3px solid var(--jp-border-color1);
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAgent-tool.jp-mod-ok {
+  border-left-color: var(--jp-success-color1);
+}
+
+.jp-WorkshopAgent-tool.jp-mod-failed {
+  border-left-color: var(--jp-error-color1);
+}
+
+.jp-WorkshopAgent .jp-WorkshopAgent-tool summary {
+  overflow: hidden;
+  cursor: pointer;
+  font-family: var(--jp-code-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The composer is one box, like a chat client's: the text on top and a
+   bar of controls along its foot, so the send button sits with them
+   rather than beside a taller text area. */
+.jp-WorkshopAgent-composer {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 16px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 8px;
+  background: var(--jp-layout-color0);
+}
+
+.jp-WorkshopAgent-composer:focus-within {
+  border-color: var(--jp-brand-color1);
+}
+
+.jp-WorkshopAgent-input {
+  min-height: 3em;
+  max-height: 16em;
+  padding: 10px 12px 4px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+  resize: vertical;
+}
+
+/*
+ * The controls wrap among themselves when the panel is narrow, while the
+ * status and Send or Stop keep their place at the right, together.
+ */
+.jp-WorkshopAgent-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 4px 8px 8px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jp-WorkshopAgent-barControls {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.jp-WorkshopAgent-barEnd {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.jp-WorkshopAgent-barButton {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+  cursor: pointer;
+}
+
+.jp-WorkshopAgent-barButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.jp-WorkshopAgent-select {
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size1);
+  cursor: pointer;
+}
+
+.jp-WorkshopAgent-barButton:hover:not(:disabled),
+.jp-WorkshopAgent-select:hover:not(:disabled) {
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.jp-WorkshopAgent-barItem {
+  white-space: nowrap;
+}
+
+.jp-WorkshopAgent-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jp-WorkshopAgent-meter {
+  display: inline-block;
+  width: 36px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--jp-layout-color3);
+}
+
+.jp-WorkshopAgent-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--jp-brand-color1);
+}
+
+/* The status pushes the send button to the far end of the bar. */
+
+/* Wide enough for the longest state, so a change does not reflow the bar. */
+.jp-WorkshopAgent-barStatus {
+  min-width: 7.5em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.jp-WorkshopAgent-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 64px;
+}
+
+/* The icon takes the button's text colour, not the toolbar grey. */
+.jp-WorkshopAgent-send .jp-icon3[fill] {
+  fill: currentcolor;
+}
+
+.jp-WorkshopAgent-account {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAgent-headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jp-WorkshopAgent-create {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 420px;
+}
+
+.jp-WorkshopAgent-createField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jp-WorkshopAgent-createInput {
+  padding: 6px 8px;
+  border: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color0);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
 }

@@ -1,0 +1,665 @@
+"""Conversations with an AI agent about a workshop, held in the server.
+
+The agent runs inside Jupyter Server, not in the browser, so a
+conversation outlives the page that started it: reloading the page, or
+opening the panel in another tab, attaches to the same conversation and
+is sent what happened so far. There is one conversation per workshop.
+
+A conversation is only ever started for the library owner's own
+workshops, under `personal/` or in a project, never for an installed
+one: the agent runs with the workshop as its working directory, and a
+workshop someone else wrote could ship agent configuration that would
+then be obeyed. Each workshop keeps its conversation's id, and what was
+said, in `_workshop/agent.json`, so it carries on after a restart.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import shlex
+import subprocess
+import sys
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from .agents import get_provider
+from .agents.base import (
+    AgentEvent,
+    AgentProvider,
+    AgentSession,
+    Done,
+    StartOptions,
+)
+from .agents.policy import PermissionPolicy
+from .bridge import Bridge
+from .collection import STATE_DIR
+from .library import (
+    COLLECTIONS_DIRECTORY,
+    STANDALONE_DIRECTORY,
+    is_library,
+    is_own_library_path,
+    library_directory,
+)
+
+log = logging.getLogger(__name__)
+
+# The file a workshop's conversation is kept in, under _workshop/.
+AGENT_FILE = "agent.json"
+
+# The environment variable naming the provider, for tests.
+PROVIDER_VARIABLE = "JUPYTERLAB_WORKSHOP_AGENT_PROVIDER"
+
+# How long a conversation nobody is attached to stays open.
+IDLE_TIMEOUT = 30 * 60.0
+
+# How many events of a conversation are kept to show again.
+HISTORY_LIMIT = 500
+
+# How much of a tool call's input is kept in the history.
+INPUT_LIMIT = 2000
+
+Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+# Events shown as they happen but not kept in the history.
+_TRANSIENT = ("text-delta", "compacting")
+
+# What typed as a message starts the conversation over, as these do in
+# Claude Code.
+CLEAR_COMMANDS = ("/clear", "/reset", "/new")
+
+# Idle checks in progress, held so they are not collected while they run.
+_REAPING: set[asyncio.Future[None]] = set()
+
+
+class ConversationError(Exception):
+    """A conversation cannot be opened or used as asked."""
+
+
+@dataclass
+class Conversation:
+    """One workshop's conversation and who is watching it."""
+
+    # The workshop's path relative to the JupyterLab root, as the browser
+    # names it.
+    path: str
+
+    # The workshop directory on disk, which may lie behind a project link.
+    directory: Path
+
+    session: AgentSession
+
+    provider: str
+
+    # What the conversation was started with, for its terminal command.
+    options: StartOptions | None = None
+
+    # The model and effort chosen, empty for the agent's defaults.
+    model: str = ""
+    effort: str = ""
+
+    # What the conversation has cost so far, where the agent says.
+    cost: float = 0.0
+
+    # The browser tab the live tools act in: the last to attach.
+    client: str = ""
+
+    history: list[dict[str, Any]] = field(default_factory=list)
+
+    listeners: list[Listener] = field(default_factory=list)
+
+    running: bool = False
+
+    last_active: float = field(default_factory=time.monotonic)
+
+    created: str = field(default_factory=lambda: _now())
+
+    async def send(self, text: str) -> None:
+        """Send a message, telling every listener what happens."""
+
+        await self._turn(text, lambda: self.session.send(text))
+
+    async def compact(self) -> None:
+        """Summarize the conversation so far, to free the context window."""
+
+        await self._turn(None, self.session.compact)
+
+    async def reset(self) -> None:
+        """Tell every listener the conversation has started over."""
+
+        await self._broadcast({"type": "cleared"})
+        await self.publish_info()
+
+    async def _turn(
+        self, text: str | None, stream: Callable[[], AsyncIterator[AgentEvent]]
+    ) -> None:
+        if self.running:
+            raise ConversationError("The agent is still working on the last message")
+
+        self.running = True
+        self.last_active = time.monotonic()
+
+        if text is not None:
+            await self._publish({"kind": "user", "text": text})
+
+        await self._broadcast({"type": "state", "running": True})
+
+        try:
+            async for event in stream():
+                await self._publish(event.to_dict())
+
+                if isinstance(event, Done):
+                    self.cost += event.cost or 0.0
+
+                    break
+        except Exception as error:
+            log.exception("The conversation about %s failed", self.path)
+
+            await self._publish({"kind": "error", "message": str(error)})
+        finally:
+            self.running = False
+            self.last_active = time.monotonic()
+
+            self.save()
+
+            await self._broadcast({"type": "state", "running": False})
+            await self.publish_info()
+
+    async def info(self) -> dict[str, Any]:
+        """What the conversation runs on, as the panel's status bar shows it."""
+
+        try:
+            info = (await self.session.info()).to_dict()
+        except Exception:
+            log.debug("Unable to ask the agent what it runs on", exc_info=True)
+
+            info = {"model": self.model, "effort": self.effort, "models": []}
+
+        return {**info, "cost": self.cost}
+
+    async def publish_info(self) -> None:
+        """Tell every listener what the conversation runs on now."""
+
+        await self._broadcast({"type": "info", "info": await self.info()})
+
+    def save(self) -> None:
+        """Record the conversation in the workshop's agent.json."""
+
+        state = self.directory / STATE_DIR
+        data = {
+            "provider": self.provider,
+            "session_id": self.session.session_id,
+            "model": self.model,
+            "effort": self.effort,
+            "cost": self.cost,
+            "created": self.created,
+            "updated": _now(),
+            "history": self.history[-HISTORY_LIMIT:],
+        }
+
+        try:
+            state.mkdir(parents=True, exist_ok=True)
+
+            temporary = state / f".{AGENT_FILE}.tmp"
+            temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            os.replace(temporary, state / AGENT_FILE)
+        except OSError:
+            log.warning("Unable to save the conversation about %s", self.path)
+
+    def attach(self, listener: Listener, client: str) -> None:
+        """Start telling a listener what happens, its tab now the target."""
+
+        self.listeners.append(listener)
+        self.last_active = time.monotonic()
+
+        if client:
+            self.client = client
+
+    def detach(self, listener: Listener) -> None:
+        """Stop telling a listener."""
+
+        if listener in self.listeners:
+            self.listeners.remove(listener)
+
+        self.last_active = time.monotonic()
+
+    async def _publish(self, event: dict[str, Any]) -> None:
+        # Streamed pieces of a reply are sent but not kept: the complete
+        # block that follows them is. Nor is the start of a compaction,
+        # which only matters while it runs.
+        if event.get("kind") not in _TRANSIENT:
+            self.history.append(_shortened(event))
+
+            del self.history[:-HISTORY_LIMIT]
+
+        await self._broadcast({"type": "event", "event": event})
+
+    async def _broadcast(self, message: dict[str, Any]) -> None:
+        for listener in list(self.listeners):
+            try:
+                result = listener(message)
+
+                if result is not None:
+                    await result
+            except Exception:
+                log.debug("Dropping a conversation listener that failed")
+
+                self.detach(listener)
+
+
+class ConversationManager:
+    """The open conversations of a server, by workshop."""
+
+    def __init__(
+        self,
+        root_dir: Path,
+        bridge: Bridge | None,
+        provider: AgentProvider | None = None,
+        skill: Path | None = None,
+        idle_timeout: float = IDLE_TIMEOUT,
+    ) -> None:
+        self._root = root_dir
+        self._bridge = bridge
+        self._provider = provider
+        self._skill = skill
+        self._idle_timeout = idle_timeout
+        self._conversations: dict[str, Conversation] = {}
+        self._opening: dict[str, asyncio.Lock] = {}
+        self._reaper: asyncio.TimerHandle | None = None
+
+    @property
+    def provider(self) -> AgentProvider:
+        """The provider conversations are held with."""
+
+        if self._provider is None:
+            self._provider = get_provider(
+                os.environ.get(PROVIDER_VARIABLE, "") or "claude"
+            )
+
+        return self._provider
+
+    def open_paths(self) -> list[str]:
+        """The workshops with a conversation open."""
+
+        return list(self._conversations)
+
+    def running(self) -> list[str]:
+        """The workshops whose conversation has a turn in progress."""
+
+        return [
+            path
+            for path, conversation in self._conversations.items()
+            if conversation.running
+        ]
+
+    def get(self, path: str) -> Conversation | None:
+        """The open conversation about a workshop, if there is one."""
+
+        return self._conversations.get(path)
+
+    async def open(
+        self,
+        path: str,
+        workshops_directory: str,
+        directory: Path,
+        model: str = "",
+        effort: str = "",
+    ) -> Conversation:
+        """The conversation about a workshop, started or resumed if needed.
+
+        `directory` is the workshop on disk, already checked to be under
+        the root; `path` is the same workshop relative to the root. The
+        model and effort are the settings' defaults, used unless the
+        workshop's conversation has chosen its own.
+        """
+
+        self._check(path, workshops_directory, directory)
+
+        lock = self._opening.setdefault(path, asyncio.Lock())
+
+        async with lock:
+            existing = self._conversations.get(path)
+
+            if existing is not None:
+                return existing
+
+            conversation = await self._start(
+                path, workshops_directory, directory, model, effort
+            )
+
+            self._conversations[path] = conversation
+
+        self._start_reaper()
+
+        return conversation
+
+    async def configure(
+        self, conversation: Conversation, model: str, effort: str
+    ) -> None:
+        """Change the model or the effort, between turns.
+
+        A model changes in the running conversation. Effort is fixed when a
+        conversation starts, so a change of effort starts it again from
+        where it was, which keeps everything said so far.
+        """
+
+        if conversation.running:
+            raise ConversationError(
+                "Wait for the agent to finish before changing the model or effort"
+            )
+
+        if effort != conversation.effort and conversation.options is not None:
+            await conversation.session.close()
+
+            options = replace(
+                conversation.options,
+                resume=conversation.session.session_id,
+                model=model,
+                effort=effort,
+            )
+
+            conversation.session = await self.provider.start(options)
+            conversation.options = options
+
+        elif model != conversation.model:
+            await conversation.session.set_model(model)
+
+        conversation.model = model
+        conversation.effort = effort
+
+        conversation.save()
+
+        await conversation.publish_info()
+
+    async def clear(self, conversation: Conversation) -> None:
+        """Start a workshop's conversation over, forgetting what was said.
+
+        The agent starts a new session, with the same model and effort,
+        and the workshop's record keeps only the new one.
+        """
+
+        if conversation.running:
+            raise ConversationError(
+                "Wait for the agent to finish before starting a new conversation"
+            )
+
+        if conversation.options is None:
+            raise ConversationError("This conversation cannot be started over")
+
+        await conversation.session.close()
+
+        options = replace(
+            conversation.options,
+            resume=None,
+            model=conversation.model,
+            effort=conversation.effort,
+        )
+
+        conversation.session = await self.provider.start(options)
+        conversation.options = options
+        conversation.history = []
+        conversation.cost = 0.0
+        conversation.created = _now()
+
+        conversation.save()
+
+        await conversation.reset()
+
+    async def close(self, path: str) -> None:
+        """End a workshop's conversation, keeping its record."""
+
+        conversation = self._conversations.pop(path, None)
+
+        if conversation is not None:
+            conversation.save()
+
+            await conversation.session.close()
+
+    async def close_all(self) -> None:
+        """End every conversation."""
+
+        for path in list(self._conversations):
+            await self.close(path)
+
+        if self._reaper is not None:
+            self._reaper.cancel()
+            self._reaper = None
+
+    async def close_idle(self) -> list[str]:
+        """End the conversations nobody has watched for a while."""
+
+        now = time.monotonic()
+        idle = [
+            path
+            for path, conversation in self._conversations.items()
+            if not conversation.listeners
+            and not conversation.running
+            and now - conversation.last_active > self._idle_timeout
+        ]
+
+        for path in idle:
+            await self.close(path)
+
+        return idle
+
+    def _check(self, path: str, workshops_directory: str, directory: Path) -> None:
+        # The library must exist, the workshop be its owner's, and nothing
+        # downloaded: the same rule that trusts a workshop by location.
+        if not is_library(self._root, workshops_directory):
+            raise ConversationError("Workshop Author works only in a workshop library")
+
+        if not is_own_library_path(workshops_directory, path):
+            raise ConversationError(
+                "Workshop Author works only on your own workshops, under "
+                "personal/ or in a project"
+            )
+
+        if not (directory / "workshop.yaml").is_file():
+            raise ConversationError(f"{path} is not a workshop")
+
+        if (directory / STATE_DIR / "source.json").is_file():
+            raise ConversationError(
+                f"{path} was downloaded from a collection, so it is not yours to edit"
+            )
+
+    async def _start(
+        self,
+        path: str,
+        workshops_directory: str,
+        directory: Path,
+        model: str,
+        effort: str,
+    ) -> Conversation:
+        from .agents.claude import sandbox_supported
+        from .mcp import BridgeSession, create_server
+
+        provider = self.provider
+        record = _read_record(directory)
+        resume = (
+            str(record.get("session_id") or "") or None
+            if record.get("provider") == provider.name
+            else None
+        )
+        # A choice made in this workshop's conversation outlasts the defaults.
+        if "model" in record:
+            model = str(record.get("model") or "")
+
+        if "effort" in record:
+            effort = str(record.get("effort") or "")
+
+        library = library_directory(self._root, workshops_directory)
+        loop = asyncio.get_running_loop()
+        conversation_holder: list[Conversation] = []
+
+        # The live tools reach the tab watching the conversation, through
+        # the bridge in this process, whichever tab that is by then.
+        def session_factory() -> BridgeSession | None:
+            if self._bridge is None:
+                return None
+
+            client = conversation_holder[0].client if conversation_holder else ""
+
+            return BridgeSession(self._bridge, loop, client or None)
+
+        policy = PermissionPolicy(
+            workshop=directory,
+            readable=(self._skill,) if self._skill else (),
+            forbidden=(
+                library / COLLECTIONS_DIRECTORY,
+                library / STANDALONE_DIRECTORY,
+            ),
+            sandboxed=provider.name == "claude" and sandbox_supported(),
+        )
+        options = StartOptions(
+            directory=directory,
+            policy=policy,
+            instructions=instructions(path, directory),
+            tools=create_server(session_factory, base=directory),
+            skill=self._skill,
+            resume=resume,
+            model=model,
+            effort=effort,
+        )
+
+        session = await provider.start(options)
+        conversation = Conversation(
+            path=path,
+            directory=directory,
+            session=session,
+            provider=provider.name,
+            options=options,
+            model=model,
+            effort=effort,
+            cost=float(record.get("cost") or 0.0) if resume else 0.0,
+            history=list(record.get("history") or []) if resume else [],
+            created=str(record.get("created") or _now()) if resume else _now(),
+        )
+
+        conversation_holder.append(conversation)
+
+        return conversation
+
+    def terminal_command(self, conversation: Conversation) -> str | None:
+        """The line to type in a terminal to carry a conversation on there."""
+
+        session_id = conversation.session.session_id
+
+        if not session_id or conversation.options is None:
+            return None
+
+        parts = self.provider.terminal_command(session_id, conversation.options)
+
+        return command_line(parts) if parts else None
+
+    def login_command(self) -> str | None:
+        """The line to type in a terminal to log the agent in."""
+
+        parts = self.provider.login_command()
+
+        return command_line(parts) if parts else None
+
+    def _start_reaper(self) -> None:
+        # A timer, not a task, so a server stopping with conversations open
+        # leaves nothing pending behind it.
+        if self._reaper is not None:
+            return
+
+        loop = asyncio.get_running_loop()
+        interval = min(60.0, self._idle_timeout)
+
+        def tick() -> None:
+            self._reaper = None
+
+            async def reap() -> None:
+                await self.close_idle()
+
+                if self._conversations:
+                    self._start_reaper()
+
+            task = asyncio.ensure_future(reap())
+
+            _REAPING.add(task)
+            task.add_done_callback(_REAPING.discard)
+
+        self._reaper = loop.call_later(interval, tick)
+
+
+def instructions(path: str, directory: Path) -> str:
+    """What the agent is told about where it is and what it is for."""
+
+    return f"""You are Workshop Author, running inside JupyterLab. You write and
+revise one jupyterlab-workshop workshop: the directory {directory}, which
+is your working directory. The person you work for is watching their
+JupyterLab session in a browser while you work.
+
+Before writing or changing workshop files, use the
+jupyterlab-workshop:jupyterlab-workshop-authoring skill, and follow it.
+
+The workshop tools are the mcp__workshop__ tools; use them, not the
+jupyter workshop command in a shell, which the sandbox may stop. Paths you
+give the file tools (lint, render, pages, publish, draft) are relative to
+the workshop directory, so "." is this workshop. The live tools act in the person's own
+browser tab: open_workshop with the path "{path}" opens this workshop there
+in author mode, and run_page, run_workshop and reset_workshop then run it.
+
+A version of the workshop is ready to show when lint reports no errors and
+run_workshop at the fast pace passes. Do not say it is ready otherwise;
+say what failed and fix it. Once it is ready, say so, and the person can
+open it. Run the self-test tool, test, only when the person asks for it.
+
+When the person asks to publish or share the workshop as a gist, make
+sure it is ready first, then use publish_gist with the directory ".".
+It updates the gist the workshop was published to before, recorded in
+_workshop/gist.json, or creates a secret one; pass create only to make
+a new gist, and public only when the person asks for a public one. The
+person is asked to confirm. Give them the gist's URL.
+
+Stay inside the workshop directory. Anything outside it asks the person
+first; workshops downloaded into the library are never yours to read or
+change."""
+
+
+def command_line(parts: list[str]) -> str:
+    """A command quoted for the shell a terminal on this server runs."""
+
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(parts)
+
+    return shlex.join(parts)
+
+
+def _read_record(directory: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(
+            (directory / STATE_DIR / AGENT_FILE).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
+def _shortened(event: dict[str, Any]) -> dict[str, Any]:
+    # A tool call's input can hold a whole file; the history keeps enough
+    # to show what was done.
+    value = event.get("input")
+
+    if not isinstance(value, dict):
+        return event
+
+    text = json.dumps(value)
+
+    if len(text) <= INPUT_LIMIT:
+        return event
+
+    return {**event, "input": {"truncated": text[:INPUT_LIMIT] + "…"}}
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")

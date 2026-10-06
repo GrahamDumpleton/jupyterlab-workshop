@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from jupyterlab_workshop import cli
 from jupyterlab_workshop.gist import (
     BINDER_BADGE,
     BINDER_LAUNCHER,
@@ -14,6 +15,7 @@ from jupyterlab_workshop.gist import (
     GIST_URL_PLACEHOLDER,
     LAUNCHER_PYTHONS,
     LAUNCHER_SITE,
+    RECORD_FILE,
     FlatWorkshop,
     GistError,
     binder_link,
@@ -22,8 +24,10 @@ from jupyterlab_workshop.gist import (
     flatten_workshop,
     gist_id,
     launcher_site,
+    read_record,
     render_readme,
     resolve_token,
+    send_gist,
     update_gist,
     write_flat,
 )
@@ -514,3 +518,80 @@ def test_create_and_update_send_the_files() -> None:
             "old.md": None,
         },
     }
+
+
+class FakeGitHub:
+    """Stands in for the gists API: each POST makes a gist, numbered in hex."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self.public: dict[str, bool] = {}
+
+    def __call__(
+        self, method: str, url: str, body: Mapping[str, Any] | None, token: str
+    ) -> dict[str, Any]:
+        assert token == "tok"
+        self.calls.append((method, url))
+
+        if method == "POST":
+            identifier = f"a{len(self.public) + 1}"
+            self.public[identifier] = bool(body and body.get("public"))
+        else:
+            identifier = url.rsplit("/", 1)[-1]
+
+        return {
+            "id": identifier,
+            "html_url": f"https://gist.github.com/ada/{identifier}",
+            "public": self.public.get(identifier, False),
+            "files": {},
+        }
+
+
+def test_send_gist_records_the_gist_and_updates_it_next_time(tmp_path: Path) -> None:
+    directory = make_workshop(tmp_path / "demo")
+    flat = flatten_workshop(directory)
+    github = FakeGitHub()
+
+    assert read_record(directory) is None
+
+    # The first publish creates a gist and records it.
+    created = send_gist(directory, flat, "tok", public=True, request=github)
+    record = read_record(directory)
+
+    assert (created.created, created.public) == (True, True)
+    assert record is not None
+    assert (record.id, record.url, record.public) == (
+        "a1",
+        "https://gist.github.com/ada/a1",
+        True,
+    )
+    assert record.created == record.updated
+
+    # The next one updates the recorded gist without being told which.
+    github.calls.clear()
+    updated = send_gist(directory, flat, "tok", request=github)
+    after = read_record(directory)
+
+    assert not updated.created
+    assert github.calls[0] == ("GET", "https://api.github.com/gists/a1")
+    assert after is not None
+    assert (after.id, after.created, after.public) == ("a1", record.created, True)
+
+    # Asking to create makes a new gist and records that instead.
+    send_gist(directory, flat, "tok", create=True, request=github)
+
+    assert read_record(directory).id == "a2"  # type: ignore[union-attr]
+
+    # A record that cannot be read counts as none.
+    (directory / "_workshop" / RECORD_FILE).write_text("not json")
+
+    assert read_record(directory) is None
+
+
+def test_gist_update_with_nothing_recorded_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    directory = make_workshop(tmp_path / "demo")
+
+    assert cli.main(["gist", str(directory), "--update"]) != 0
+    assert "No gist is recorded" in capsys.readouterr().err
