@@ -24,10 +24,11 @@ import os
 import secrets
 import shutil
 import sys
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..attachments import Attachment, message_content
 from .base import (
     AgentEvent,
     AgentInfo,
@@ -245,7 +246,9 @@ class ClaudeSession:
 
         return self._session_id
 
-    async def send(self, text: str) -> AsyncIterator[AgentEvent]:
+    async def send(
+        self, text: str, attachments: Sequence[Attachment] = ()
+    ) -> AsyncIterator[AgentEvent]:
         """Send a message and stream what Claude does, up to `Done`."""
 
         self._interrupting = False
@@ -258,7 +261,12 @@ class ClaudeSession:
 
         self._events = events
 
-        await self._client.query(text)
+        # Words alone go as they are; with files attached the message is
+        # built block by block, which the SDK takes as a stream of one.
+        if attachments:
+            await self._client.query(_one(user_message(text, attachments)))
+        else:
+            await self._client.query(text)
 
         pump = asyncio.ensure_future(self._pump(events))
 
@@ -839,6 +847,20 @@ def _tool_handler(server: MCPServer, name: str) -> Any:
         }
 
     return handler
+
+
+def user_message(text: str, attachments: Sequence[Attachment]) -> dict[str, Any]:
+    """A message with files attached, as Claude Code reads one from its input."""
+
+    return {
+        "type": "user",
+        "message": {"role": "user", "content": message_content(text, attachments)},
+        "parent_tool_use_id": None,
+    }
+
+
+async def _one(message: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
+    yield message
 
 
 def _remember_key(name: str, data: dict[str, Any]) -> str:

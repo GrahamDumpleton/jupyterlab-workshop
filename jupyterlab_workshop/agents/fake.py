@@ -24,7 +24,9 @@ the panel handles without credentials or network:
 
 - `/compact` compacts the conversation, as the button does.
 
-Several can be given on separate lines and run in order.
+Several can be given on separate lines and run in order. A message with
+files attached is answered first with what was attached and where each
+was saved.
 """
 
 from __future__ import annotations
@@ -32,9 +34,10 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
+from ..attachments import Attachment
 from .base import (
     AgentEvent,
     AgentInfo,
@@ -97,6 +100,7 @@ class FakeSession:
         self._model = options.model
         self.closed = False
         self.received: list[str] = []
+        self.attached: list[Attachment] = []
 
     @property
     def session_id(self) -> str | None:
@@ -104,15 +108,27 @@ class FakeSession:
 
         return self._session_id
 
-    async def send(self, text: str) -> AsyncIterator[AgentEvent]:
+    async def send(
+        self, text: str, attachments: Sequence[Attachment] = ()
+    ) -> AsyncIterator[AgentEvent]:
         """Answer each line of the message by its rule."""
 
         self.received.append(text)
+        self.attached.extend(attachments)
         self._interrupted.clear()
+
+        if attachments:
+            yield Text(
+                "Attached: "
+                + "; ".join(
+                    f"{item.name} ({item.media_type}, {item.size} bytes) at {item.path}"
+                    for item in attachments
+                )
+            )
 
         lines = [line for line in text.strip().splitlines() if line.strip()]
 
-        for line in lines or [""]:
+        for line in lines or ([] if attachments else [""]):
             async for event in self._line(line.strip()):
                 yield event
 

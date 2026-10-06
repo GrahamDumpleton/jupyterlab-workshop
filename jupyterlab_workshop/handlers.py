@@ -23,6 +23,7 @@ from .analytics import (
     forward_events,
     identity_from_environment,
 )
+from .attachments import MESSAGE_LIMIT, AttachmentError, parse_attachments
 from .bridge import SETTINGS_KEY as BRIDGE_KEY
 from .bridge import Bridge, BridgeError
 from .catalog import CatalogError, load_catalog
@@ -694,6 +695,12 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
 
     conversation: Conversation | None = None
 
+    @property
+    def max_message_size(self) -> int:
+        """How large one message may be: room for the attachments, as base64."""
+
+        return MESSAGE_LIMIT * 4 // 3 + 1024 * 1024
+
     async def pre_get(self) -> None:
         """Refuse a user who may not change files on this server."""
 
@@ -772,15 +779,20 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
         if kind == "send":
             text = str(data.get("text") or "").strip()
 
-            if not text:
+            try:
+                attachments = parse_attachments(data.get("attachments"))
+            except AttachmentError as error:
+                raise ConversationError(str(error)) from error
+
+            if not text and not attachments:
                 return
 
             # Starting over is the panel's to do, so the history it shows
             # goes with the agent's session.
-            if text.lower() in CLEAR_COMMANDS:
+            if text.lower() in CLEAR_COMMANDS and not attachments:
                 await self.manager.clear(conversation)
             else:
-                self._start_turn(conversation, conversation.send(text))
+                self._start_turn(conversation, conversation.send(text, attachments))
 
         elif kind == "compact":
             self._start_turn(conversation, conversation.compact())

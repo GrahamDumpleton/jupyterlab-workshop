@@ -5,20 +5,35 @@ import {
   showDialog,
   UseSignal
 } from '@jupyterlab/apputils';
-import { ServerConnection } from '@jupyterlab/services';
+import { Contents, ServerConnection } from '@jupyterlab/services';
 import { stopIcon } from '@jupyterlab/ui-components';
+import { IDragEvent } from '@lumino/dragdrop';
 import { ISignal, Signal } from '@lumino/signaling';
 import * as React from 'react';
 
 import { requestAPI } from '../request';
 import { errorMessage } from '../tokens';
+import {
+  checkRoom,
+  describeSize,
+  IAttachment,
+  IPendingAttachment,
+  isLongPaste,
+  pastedText,
+  prepareAttachment,
+  releaseAttachment
+} from './attachments';
 import { AgentConnection, IAgentInfo, IAgentMessage } from './connection';
 import {
   ConversationModel,
+  IAttachmentInfo,
   IProposal,
   IQuestion,
   TranscriptItem
 } from './model';
+
+/** The mime type the file browser drags paths under. */
+const CONTENTS_MIME = 'application/x-jupyter-icontents';
 
 /** What the server says about the agent before a conversation starts. */
 export interface IAgentStatus {
@@ -102,15 +117,105 @@ export class AuthorPanel extends ReactWidget {
     return this._model;
   }
 
+  /** The files attached to the message being written, not yet sent. */
+  get pending(): readonly IPendingAttachment[] {
+    return this._pending;
+  }
+
+  /** What went wrong with the last file attached, if anything. */
+  get attachError(): string {
+    return this._attachError;
+  }
+
   /**
    * Send a message, as if typed. A message given before the conversation
    * has opened is sent once it has.
    */
-  send(text: string): void {
+  send(text: string, attachments: IAttachment[] = []): void {
     if (this._model.state === 'ready') {
-      this._connection.send(text);
+      this._connection.send(text, attachments);
     } else {
-      this._queued.push(text);
+      this._queued.push({ text, attachments });
+    }
+  }
+
+  /**
+   * Attach files to the message being written. Each is checked and made
+   * ready; one that cannot be attached is reported and the rest go on.
+   */
+  async attach(files: Iterable<{ blob: Blob; name: string }>): Promise<void> {
+    this._attachError = '';
+
+    for (const file of files) {
+      try {
+        const attachment = await prepareAttachment(file.blob, file.name);
+
+        checkRoom(this._pending, attachment);
+        this._pending = [...this._pending, attachment];
+      } catch (error) {
+        this._attachError = errorMessage(error);
+      }
+    }
+
+    this.update();
+  }
+
+  /** Attach pasted text as a file, named by how many have been. */
+  async attachText(text: string): Promise<void> {
+    this._pasted += 1;
+
+    try {
+      const attachment = await pastedText(text, this._pasted);
+
+      checkRoom(this._pending, attachment);
+      this._pending = [...this._pending, attachment];
+      this._attachError = '';
+    } catch (error) {
+      this._attachError = errorMessage(error);
+    }
+
+    this.update();
+  }
+
+  /** Take an attachment off the message being written. */
+  detach(index: number): void {
+    const [removed] = this._pending.splice(index, 1);
+
+    if (removed) {
+      releaseAttachment(removed);
+    }
+
+    this._pending = [...this._pending];
+    this._attachError = '';
+    this.update();
+  }
+
+  /** The attachments to send, and the composer cleared of them. */
+  takePending(): IAttachment[] {
+    const taken = this._pending.map(({ name, type, data }) => ({
+      name,
+      type,
+      data
+    }));
+
+    this._pending.forEach(releaseAttachment);
+    this._pending = [];
+    this._attachError = '';
+
+    return taken;
+  }
+
+  /** Files dragged from the file browser are attached on drop. */
+  handleEvent(event: Event): void {
+    switch (event.type) {
+      case 'lm-dragenter':
+      case 'lm-dragover':
+        this._dragOver(event as IDragEvent);
+        break;
+
+      case 'lm-drop':
+        this._drop(event as IDragEvent);
+        break;
     }
   }
 
@@ -119,8 +224,21 @@ export class AuthorPanel extends ReactWidget {
       return;
     }
 
+    this._pending.forEach(releaseAttachment);
     this._connection.dispose();
     super.dispose();
+  }
+
+  protected onAfterAttach(): void {
+    this.node.addEventListener('lm-dragenter', this);
+    this.node.addEventListener('lm-dragover', this);
+    this.node.addEventListener('lm-drop', this);
+  }
+
+  protected onBeforeDetach(): void {
+    this.node.removeEventListener('lm-dragenter', this);
+    this.node.removeEventListener('lm-dragover', this);
+    this.node.removeEventListener('lm-drop', this);
   }
 
   /**
@@ -142,7 +260,7 @@ export class AuthorPanel extends ReactWidget {
             panel={this}
             status={this._status}
             statusError={this._statusError}
-            onSend={text => this._connection.send(text)}
+            onSend={text => this._connection.send(text, this.takePending())}
             onStop={() => this._connection.interrupt()}
             onAnswer={(id, allow, remember) => {
               this._connection.answer(id, allow, remember);
@@ -202,6 +320,57 @@ export class AuthorPanel extends ReactWidget {
     if (result.button.accept) {
       this._connection.discard();
     }
+  }
+
+  private _dragOver(event: IDragEvent): void {
+    if (!this._options.contents || !event.mimeData.hasData(CONTENTS_MIME)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dropAction = 'copy';
+  }
+
+  private _drop(event: IDragEvent): void {
+    const contents = this._options.contents;
+    const paths = event.mimeData.getData(CONTENTS_MIME);
+
+    if (!contents || !Array.isArray(paths) || event.proposedAction === 'none') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dropAction = 'copy';
+
+    void this._attachPaths(contents, paths.map(String));
+  }
+
+  // Files from the file browser come through the contents API: binary
+  // ones as base64, text as text, notebooks as JSON. A directory is left.
+  private async _attachPaths(
+    contents: Contents.IManager,
+    paths: string[]
+  ): Promise<void> {
+    const files: { blob: Blob; name: string }[] = [];
+
+    for (const path of paths) {
+      try {
+        const model = await contents.get(path, { content: true });
+
+        if (model.type === 'directory') {
+          continue;
+        }
+
+        files.push({ blob: blobOf(model), name: lastSegment(path) });
+      } catch (error) {
+        this._attachError = `Unable to read ${path}: ${errorMessage(error)}`;
+        this.update();
+      }
+    }
+
+    await this.attach(files);
   }
 
   private _reveal(): void {
@@ -278,8 +447,8 @@ export class AuthorPanel extends ReactWidget {
     }
 
     if (message.type === 'opened') {
-      for (const text of this._queued.splice(0)) {
-        this._connection.send(text);
+      for (const queued of this._queued.splice(0)) {
+        this._connection.send(queued.text, queued.attachments);
       }
     }
   }
@@ -290,7 +459,10 @@ export class AuthorPanel extends ReactWidget {
   private _model = new ConversationModel();
   private _status: IAgentStatus | null = null;
   private _statusError = '';
-  private _queued: string[] = [];
+  private _queued: { text: string; attachments: IAttachment[] }[] = [];
+  private _pending: IPendingAttachment[] = [];
+  private _attachError = '';
+  private _pasted = 0;
 }
 
 export namespace AuthorPanel {
@@ -314,6 +486,9 @@ export namespace AuthorPanel {
 
     /** Bring the panel to the front, for something that needs an answer. */
     reveal: () => void;
+
+    /** The contents API, for files dragged in from the file browser. */
+    contents?: Contents.IManager;
   }
 }
 
@@ -357,9 +532,12 @@ function AuthorContent({
 }): JSX.Element {
   const model = panel.model;
   const [draft, setDraft] = React.useState('');
+  const [dragging, setDragging] = React.useState(false);
   const end = React.useRef<HTMLDivElement>(null);
+  const chooser = React.useRef<HTMLInputElement>(null);
   const ready = model.state === 'ready';
   const drafting = panel.draft !== '';
+  const pending = panel.pending;
 
   // Keep the newest entry in view as the conversation grows.
   React.useEffect(() => {
@@ -369,12 +547,55 @@ function AuthorContent({
   const submit = (): void => {
     const text = draft.trim();
 
-    if (!text || model.running || !ready) {
+    if ((!text && pending.length === 0) || model.running || !ready) {
       return;
     }
 
     onSend(text);
     setDraft('');
+  };
+
+  const attachFiles = (files: FileList | File[]): void => {
+    void panel.attach(
+      Array.from(files).map(file => ({ blob: file, name: file.name }))
+    );
+  };
+
+  // Files on the clipboard are attached; long text is attached as a file
+  // rather than put in the box; anything else is pasted as usual.
+  const paste = (event: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const files = Array.from(event.clipboardData.files);
+
+    if (files.length > 0) {
+      event.preventDefault();
+      attachFiles(files);
+
+      return;
+    }
+
+    const text = event.clipboardData.getData('text/plain');
+
+    if (isLongPaste(text)) {
+      event.preventDefault();
+      void panel.attachText(text);
+    }
+  };
+
+  const drop = (event: React.DragEvent<HTMLDivElement>): void => {
+    setDragging(false);
+
+    if (event.dataTransfer.files.length > 0) {
+      event.preventDefault();
+      attachFiles(event.dataTransfer.files);
+    }
+  };
+
+  const dragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (Array.from(event.dataTransfer.types).includes('Files')) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      setDragging(true);
+    }
   };
 
   return (
@@ -455,18 +676,57 @@ function AuthorContent({
         ))}
         <div ref={end} />
       </div>
-      <div className="jp-WorkshopAgent-composer">
+      <div
+        className={`jp-WorkshopAgent-composer${dragging ? ' jp-mod-dropTarget' : ''}`}
+        onDragOver={dragOver}
+        onDragLeave={() => setDragging(false)}
+        onDrop={drop}
+      >
+        {pending.length > 0 ? (
+          <ul className="jp-WorkshopAgent-attachments" aria-label="Attachments">
+            {pending.map((attachment, index) => (
+              <li
+                key={`${index}-${attachment.name}`}
+                className="jp-WorkshopAgent-attachment"
+                title={`${attachment.name}, ${describeSize(attachment.size)}`}
+              >
+                {attachment.preview ? (
+                  <img src={attachment.preview} alt="" />
+                ) : null}
+                <span className="jp-WorkshopAgent-attachmentName">
+                  {attachment.name}
+                </span>
+                <span className="jp-WorkshopAgent-attachmentSize">
+                  {describeSize(attachment.size)}
+                </span>
+                <button
+                  type="button"
+                  className="jp-WorkshopAgent-attachmentRemove"
+                  aria-label={`Remove ${attachment.name}`}
+                  title="Remove"
+                  onClick={() => panel.detach(index)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {panel.attachError ? (
+          <p className="jp-WorkshopAgent-attachError">{panel.attachError}</p>
+        ) : null}
         <textarea
           className="jp-WorkshopAgent-input"
           placeholder={
             ready
-              ? 'Message Workshop Author (Enter to send, Shift+Enter for a new line)'
+              ? 'Message Workshop Author (Enter to send, Shift+Enter for a new line, paste or drop files to attach)'
               : 'Waiting for the agent…'
           }
           rows={3}
           value={draft}
           disabled={!ready}
           onChange={event => setDraft(event.target.value)}
+          onPaste={paste}
           onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
@@ -476,6 +736,29 @@ function AuthorContent({
         />
         <div className="jp-WorkshopAgent-bar">
           <div className="jp-WorkshopAgent-barControls">
+            <input
+              ref={chooser}
+              type="file"
+              multiple
+              hidden
+              aria-label="Files to attach"
+              onChange={event => {
+                if (event.target.files) {
+                  attachFiles(event.target.files);
+                }
+
+                event.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="jp-WorkshopAgent-barButton"
+              title="Attach images, PDFs or text files to the message; they can also be pasted or dropped into the box, or dragged from the file browser"
+              disabled={!ready}
+              onClick={() => chooser.current?.click()}
+            >
+              Attach
+            </button>
             {drafting ? null : (
               <>
                 <button
@@ -547,7 +830,7 @@ function AuthorContent({
                 type="button"
                 className="jp-Button jp-mod-styled jp-mod-accept jp-WorkshopAgent-send"
                 title="Send (Enter)"
-                disabled={!ready || !draft.trim()}
+                disabled={!ready || (!draft.trim() && pending.length === 0)}
                 onClick={submit}
               >
                 Send
@@ -806,7 +1089,29 @@ function Entry({
 }): JSX.Element {
   switch (item.type) {
     case 'user':
-      return <div className="jp-WorkshopAgent-user">{item.text}</div>;
+      return (
+        <div className="jp-WorkshopAgent-user">
+          {item.text}
+          {item.attachments.length > 0 ? (
+            <ul className="jp-WorkshopAgent-attachments">
+              {item.attachments.map((attachment: IAttachmentInfo, index) => (
+                <li
+                  key={`${index}-${attachment.name}`}
+                  className="jp-WorkshopAgent-attachment"
+                  title={attachment.type}
+                >
+                  <span className="jp-WorkshopAgent-attachmentName">
+                    {attachment.name}
+                  </span>
+                  <span className="jp-WorkshopAgent-attachmentSize">
+                    {describeSize(attachment.size)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      );
 
     case 'assistant':
       return (
@@ -1201,6 +1506,27 @@ function describeInput(tool: string, input: Record<string, unknown>): string {
   }
 
   return JSON.stringify(input, null, 2);
+}
+
+/** A file from the contents API as a blob, typed as the server says. */
+function blobOf(model: Contents.IModel): Blob {
+  const type = model.mimetype ?? '';
+
+  if (model.format === 'base64') {
+    const bytes = Uint8Array.from(atob(String(model.content)), character =>
+      character.charCodeAt(0)
+    );
+
+    return new Blob([bytes], { type });
+  }
+
+  if (model.format === 'json') {
+    return new Blob([JSON.stringify(model.content, null, 1)], {
+      type: type || 'application/json'
+    });
+  }
+
+  return new Blob([String(model.content ?? '')], { type });
 }
 
 function lastSegment(path: string): string {

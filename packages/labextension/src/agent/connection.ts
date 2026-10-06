@@ -3,6 +3,7 @@ import { ServerConnection } from '@jupyterlab/services';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import { API_NAMESPACE } from '../request';
+import { IAttachment } from './attachments';
 
 /** One thing that happened in a conversation, as the server reports it. */
 export interface IAgentEvent {
@@ -141,9 +142,9 @@ export class AgentConnection {
     this._socket = socket;
   }
 
-  /** Send a message to the agent. */
-  send(text: string): void {
-    this._write({ type: 'send', text });
+  /** Send a message to the agent, with any files attached. */
+  send(text: string, attachments: IAttachment[] = []): void {
+    this._write({ type: 'send', text, attachments });
   }
 
   /** Answer a permission request. */

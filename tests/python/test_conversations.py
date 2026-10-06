@@ -393,6 +393,87 @@ async def test_a_conversation_can_be_started_over(
     again.close()
 
 
+async def test_files_attached_to_a_message_are_saved_and_shown(
+    jp_serverapp, jp_ws_fetch, library
+) -> None:
+    import base64
+
+    from jupyterlab_workshop.handlers import CONVERSATIONS_KEY
+
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+    )
+    await _receive(socket, "opened")
+
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * 8).decode("ascii")
+    notes = base64.b64encode(b"some notes").decode("ascii")
+
+    socket.write_message(
+        json.dumps(
+            {
+                "type": "send",
+                "text": "use these",
+                "attachments": [
+                    {"name": "shot.png", "type": "image/png", "data": png},
+                    {"name": "notes.txt", "type": "text/plain", "data": notes},
+                ],
+            }
+        )
+    )
+
+    events = _events(await _receive(socket, "info"))
+    attachments = library / "personal/demo/_workshop/attachments"
+
+    # The message shows what was attached, without the content, and the
+    # agent was given the files where they were saved.
+    assert events[0]["kind"] == "user"
+    assert events[0]["text"] == "use these"
+    assert events[0]["attachments"] == [
+        {"name": "shot.png", "type": "image/png", "size": 16},
+        {"name": "notes.txt", "type": "text/plain", "size": 10},
+    ]
+    assert (attachments / "shot.png").is_file()
+    assert (attachments / "notes.txt").read_text() == "some notes"
+
+    reply = next(e for e in events if e["kind"] == "text")
+
+    assert reply["text"].startswith("Attached: shot.png (image/png, 16 bytes) at ")
+    assert str(attachments / "notes.txt") in reply["text"]
+
+    session = jp_serverapp.web_app.settings[CONVERSATIONS_KEY].provider.sessions[-1]
+
+    assert [a.path for a in session.attached] == [
+        attachments / "shot.png",
+        attachments / "notes.txt",
+    ]
+
+    # A file that cannot be attached is refused, and nothing is sent.
+    socket.write_message(
+        json.dumps(
+            {
+                "type": "send",
+                "text": "and this",
+                "attachments": [
+                    {"name": "tool.exe", "type": "application/x-msdownload", "data": ""}
+                ],
+            }
+        )
+    )
+
+    assert "cannot be attached" in (await _receive(socket, "error"))[-1]["message"]
+    assert session.received == ["use these"]
+
+    # Starting over takes the attachments with it.
+    socket.write_message(json.dumps({"type": "clear"}))
+    await _receive(socket, "info")
+
+    assert not attachments.exists()
+
+    socket.close()
+
+
 async def test_stopping_the_server_closes_conversations(
     jp_serverapp, jp_ws_fetch, library
 ) -> None:
@@ -492,6 +573,23 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
     assert result["ok"] is True
     assert not (library / "personal" / "git-basics").exists()
 
+    # A file attached while drafting is saved with the draft, outside the
+    # library.
+    socket.write_message(
+        json.dumps(
+            {
+                "type": "send",
+                "text": "",
+                "attachments": [
+                    {"name": "outline.md", "type": "text/markdown", "data": "IyBIaQ=="}
+                ],
+            }
+        )
+    )
+    await _receive(socket, "info")
+
+    assert not list(library.rglob("outline.md"))
+
     # Create makes the workshop, and the panel is told where to go.
     socket.write_message(json.dumps({"type": "create"}))
 
@@ -535,6 +633,13 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
     )
 
     assert "1. Make a repository" in first["text"]
+
+    # The draft's attachment went with the workshop, and the brief says so.
+    assert (
+        library / "personal/git-basics/_workshop/attachments/outline.md"
+    ).read_text() == "# Hi"
+    assert "attached while drafting" in first["text"]
+    assert "outline.md" in first["text"]
 
     again.close()
 

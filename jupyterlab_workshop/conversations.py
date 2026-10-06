@@ -32,7 +32,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +47,12 @@ from .agents.base import (
     StartOptions,
 )
 from .agents.policy import PermissionPolicy
+from .attachments import (
+    ATTACHMENTS_DIR,
+    Attachment,
+    attachments_directory,
+    save_attachments,
+)
 from .bridge import Bridge
 from .collection import STATE_DIR
 from .drafting import (
@@ -153,10 +159,30 @@ class Conversation:
     # The workshops directory the draft's workshop is created in.
     workshops_directory: str = ""
 
-    async def send(self, text: str) -> None:
-        """Send a message, telling every listener what happens."""
+    async def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
+        """Send a message, with any files attached, telling every listener.
 
-        await self._turn(text, lambda: self.session.send(text))
+        The attachments are saved beside the conversation's record first,
+        so the agent can read them, and the history keeps what they were
+        but not their content.
+        """
+
+        if self.running:
+            raise ConversationError("The agent is still working on the last message")
+
+        try:
+            saved = save_attachments(self.directory, attachments)
+        except OSError as error:
+            raise ConversationError(
+                f"Unable to save the attachments: {error}"
+            ) from error
+
+        message: dict[str, Any] = {"kind": "user", "text": text}
+
+        if saved:
+            message["attachments"] = [item.describe() for item in saved]
+
+        await self._turn(message, lambda: self.session.send(text, saved))
 
     async def compact(self) -> None:
         """Summarize the conversation so far, to free the context window."""
@@ -170,7 +196,9 @@ class Conversation:
         await self.publish_info()
 
     async def _turn(
-        self, text: str | None, stream: Callable[[], AsyncIterator[AgentEvent]]
+        self,
+        message: dict[str, Any] | None,
+        stream: Callable[[], AsyncIterator[AgentEvent]],
     ) -> None:
         if self.running:
             raise ConversationError("The agent is still working on the last message")
@@ -178,8 +206,8 @@ class Conversation:
         self.running = True
         self.last_active = time.monotonic()
 
-        if text is not None:
-            await self._publish({"kind": "user", "text": text})
+        if message is not None:
+            await self._publish(message)
 
         await self._broadcast({"type": "state", "running": True})
 
@@ -435,7 +463,8 @@ class ConversationManager:
         """Start a workshop's conversation over, forgetting what was said.
 
         The agent starts a new session, with the same model and effort,
-        and the workshop's record keeps only the new one.
+        the workshop's record keeps only the new one, and the files
+        attached to the old one go with it.
         """
 
         if conversation.running:
@@ -447,6 +476,8 @@ class ConversationManager:
             raise ConversationError("This conversation cannot be started over")
 
         await conversation.session.close()
+
+        shutil.rmtree(attachments_directory(conversation.directory), ignore_errors=True)
 
         options = replace(
             conversation.options,
@@ -556,6 +587,10 @@ class ConversationManager:
             gating="soft" if proposal.gating else "off",
         )
 
+        # Files attached while drafting go to the workshop, where the
+        # agent may use them.
+        carried = _move_attachments(conversation.directory, directory)
+
         # The workshop's conversation starts where the draft left off, so
         # the panel shows the whole exchange and the plan agreed in it.
         created = await self.open(
@@ -575,7 +610,15 @@ class ConversationManager:
         await self.discard(conversation, announce=False)
         await conversation.announce({"type": "created", "path": path})
 
-        return created, brief(proposal)
+        text = brief(proposal)
+
+        if carried:
+            text += (
+                "\n\nThe files attached while drafting are now under "
+                f"{STATE_DIR}/{ATTACHMENTS_DIR}/ here: " + ", ".join(carried) + "."
+            )
+
+        return created, text
 
     async def discard(self, conversation: Conversation, announce: bool = True) -> None:
         """End a draft and remove its record."""
@@ -908,6 +951,15 @@ _workshop/gist.json, or creates a secret one; pass create only to make
 a new gist, and public only when the person asks for a public one. The
 person is asked to confirm. Give them the gist's URL.
 
+The person can attach files to a message: a screenshot, a diagram, a
+PDF, notes, a data file. Each is saved under {STATE_DIR}/{ATTACHMENTS_DIR}/
+in the workshop, and the message says where. An image is shown to you
+in the message as well; read a PDF from its file. When the person wants
+a file itself to be part of the workshop, such as data a page's actions
+use, copy it into a directory of the workshop's own; never refer to it
+where it was saved, since {STATE_DIR}/ is the workshop's state and not
+part of it.
+
 Stay inside the workshop directory. Anything outside it asks the person
 first; workshops downloaded into the library are never yours to read or
 change."""
@@ -920,6 +972,27 @@ def command_line(parts: list[str]) -> str:
         return subprocess.list2cmdline(parts)
 
     return shlex.join(parts)
+
+
+def _move_attachments(source: Path, target: Path) -> list[str]:
+    # The files attached in one conversation's directory move to another's,
+    # by name; the names moved are returned.
+    origin = attachments_directory(source)
+
+    if not origin.is_dir():
+        return []
+
+    destination = attachments_directory(target)
+    moved: list[str] = []
+
+    destination.mkdir(parents=True, exist_ok=True)
+
+    for entry in sorted(origin.iterdir()):
+        if entry.is_file():
+            shutil.move(str(entry), str(destination / entry.name))
+            moved.append(entry.name)
+
+    return moved
 
 
 def _read_record(directory: Path) -> dict[str, Any]:

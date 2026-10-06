@@ -12,7 +12,7 @@ Nothing here imports an optional dependency.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
 
+    from ..attachments import Attachment
     from .policy import PermissionPolicy
 
 
@@ -271,9 +272,12 @@ class AgentSession(Protocol):
     def session_id(self) -> str | None:
         """The id to resume the conversation by, once the agent has one."""
 
-    def send(self, text: str) -> AsyncIterator[AgentEvent]:
-        """Send a message and stream what the agent does.
+    def send(
+        self, text: str, attachments: Sequence[Attachment] = ()
+    ) -> AsyncIterator[AgentEvent]:
+        """Send a message, with any files attached, and stream what the agent does.
 
+        The attachments have been saved already, so each has its path.
         Every turn ends with `Done`, after an `Error` when it failed.
         """
 

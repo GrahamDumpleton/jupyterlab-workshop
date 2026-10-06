@@ -158,6 +158,7 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           effort: aiCache.effort
         }),
         openTerminal,
+        contents: app.serviceManager.contents,
         reveal: () => {
           if (!panel.isAttached) {
             shell.add(panel, 'main');

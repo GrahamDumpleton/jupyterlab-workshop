@@ -2193,6 +2193,83 @@
   border-color: var(--jp-brand-color1);
 }
 
+/* A file held over the box may be dropped into it. */
+.jp-WorkshopAgent-composer.jp-mod-dropTarget {
+  border-color: var(--jp-brand-color1);
+  border-style: dashed;
+  background: var(--jp-brand-color3);
+}
+
+/*
+ * The files attached to a message, as chips: above the box while it is
+ * written, under the words once sent.
+ */
+.jp-WorkshopAgent-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px 0;
+  list-style: none;
+}
+
+.jp-WorkshopAgent-user .jp-WorkshopAgent-attachments {
+  padding: 6px 0 0;
+}
+
+.jp-WorkshopAgent-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 12px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: var(--jp-ui-font-size0);
+  white-space: nowrap;
+}
+
+.jp-WorkshopAgent-attachment img {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.jp-WorkshopAgent-attachmentName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jp-WorkshopAgent-attachmentSize {
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-WorkshopAgent-attachmentRemove {
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jp-WorkshopAgent-attachmentRemove:hover {
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.jp-WorkshopAgent-attachError {
+  margin: 0;
+  padding: 8px 12px 0;
+  color: var(--jp-error-color1);
+  font-size: var(--jp-ui-font-size0);
+}
+
 .jp-WorkshopAgent-input {
   min-height: 3em;
   max-height: 16em;

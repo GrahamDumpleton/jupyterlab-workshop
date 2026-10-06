@@ -173,15 +173,20 @@ class _ScriptedClient:
     """Stands in for the SDK client, answering each query with one reply."""
 
     def __init__(self) -> None:
-        self.queries: list[str] = []
+        self.queries: list[Any] = []
 
-    async def query(self, text: str) -> None:
-        self.queries.append(text)
+    async def query(self, prompt: Any) -> None:
+        # A message with attachments comes as a stream of message dicts,
+        # as the SDK takes them.
+        if isinstance(prompt, str):
+            self.queries.append(prompt)
+        else:
+            self.queries.append([message async for message in prompt])
 
     async def receive_response(self) -> Any:
         from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-        yield AssistantMessage(content=[TextBlock(self.queries[-1])], model="m")
+        yield AssistantMessage(content=[TextBlock(str(self.queries[-1]))], model="m")
         yield ResultMessage(
             subtype="success",
             duration_ms=1,
@@ -220,6 +225,34 @@ def test_each_claude_turn_has_only_its_own_events(tmp_path: Path) -> None:
 
     assert first == [Text("first"), Done("abc", turns=1)]
     assert second == [Text("second"), Done("abc", turns=1)]
+
+
+def test_claude_is_sent_attachments_as_content_blocks(tmp_path: Path) -> None:
+    from jupyterlab_workshop.attachments import Attachment
+
+    client = _ScriptedClient()
+    session = ClaudeSession(
+        StartOptions(directory=tmp_path, policy=_policy(tmp_path)),
+        client=client,
+    )
+    shot = Attachment("shot.png", "image/png", b"\x89PNG", path=tmp_path / "shot.png")
+
+    async def turn() -> None:
+        async for event in session.send("look", [shot]):
+            if isinstance(event, Done):
+                break
+
+    asyncio.run(turn())
+
+    (message,) = client.queries[-1]
+    blocks = message["message"]["content"]
+
+    assert message["type"] == "user"
+    assert message["message"]["role"] == "user"
+    assert blocks[0] == {"type": "text", "text": "look"}
+    assert blocks[1]["type"] == "image"
+    assert blocks[1]["source"]["media_type"] == "image/png"
+    assert str(tmp_path / "shot.png") in blocks[2]["text"]
 
 
 def test_claude_permission_callback_follows_the_policy(tmp_path: Path) -> None:

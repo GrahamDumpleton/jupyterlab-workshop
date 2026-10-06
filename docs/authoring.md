@@ -194,6 +194,9 @@ the same on every machine.
 The bar along the foot of the message box has the panel's controls and
 says where the conversation stands:
 
+- Attach chooses files to send with the message; see
+  [Attaching files](#attaching-files).
+
 - Open workshop opens the workshop in the instructions panel, in author
   mode, and Continue in terminal carries the conversation on in a
   terminal.
@@ -231,6 +234,37 @@ A message starting with `/` goes to Claude Code as one of its own
 commands: `/compact` with instructions of your own compacts with them
 in mind, and `/context` and `/cost` answer in the conversation. `/clear`
 does what New conversation does, without asking.
+
+### Attaching files
+
+A message can carry files: a screenshot of what a page should look
+like, a diagram to use, a PDF of the slides a workshop follows, notes.
+Paste a file or an image into the message box, drop files onto it from
+the desktop, drag them from JupyterLab's file browser, or press Attach
+and choose them. Each shows as a chip above the box, with a cross to
+take it off, until the message is sent. Text pasted into the box goes
+into the box as usual, unless it is long (more than about two thousand
+characters or forty lines), in which case it is attached as a text file
+instead, as it would be in Claude Code.
+
+Images (PNG, JPEG, GIF and WebP), PDFs and text files can be attached,
+up to 5 MB for an image, 10 MB for a PDF and 1 MB for a text file, and
+at most 24 MB in one message. An image larger than the model would look
+at is shrunk before it is sent.
+
+The agent sees an image in the message itself and a text file as its
+text; a PDF it reads from the file. Every attachment is also saved under
+`_workshop/attachments/` in the workshop, where the agent may read it,
+and the message tells the agent where. So a file the workshop itself
+needs, such as data a page's actions work on, can be attached: ask, and
+the agent copies it into a directory of the workshop's own, since
+`_workshop/` is the workshop's state, not part of it. The files stay
+there until New conversation, which removes them with the conversation. While a new workshop is being drafted,
+attachments are saved with the draft, outside the library, and go to
+the workshop when it is created, or away with the draft when it is
+discarded. The conversation's record keeps each attachment's name,
+type and size, not its content, so after a reload the message shows
+what went with it.
 
 ```{note}
 Usage counts against whatever Claude Code is logged in with. When

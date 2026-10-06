@@ -232,6 +232,138 @@ test.describe('Workshop Author conversation', () => {
   });
 });
 
+test.describe('Workshop Author attachments', () => {
+  const LIBRARY = 'test-author-attach';
+
+  useLibrary(LIBRARY);
+
+  test('attaches pasted and chosen files and long pasted text to a message', async ({
+    page
+  }) => {
+    await openBrowser(page);
+    await page
+      .locator('#jupyterlab-workshop-browser')
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+    const input = author.locator('.jp-WorkshopAgent-input');
+    const chips = author.locator(
+      '.jp-WorkshopAgent-composer .jp-WorkshopAgent-attachment'
+    );
+
+    await expect(input).toBeEnabled();
+
+    // A file on the clipboard is attached rather than pasted; the words
+    // typed stay in the box.
+    await input.fill('look at this');
+    await input.evaluate(element => {
+      const transfer = new DataTransfer();
+
+      transfer.items.add(
+        new File(['\x89PNG\r\n\x1a\n' + '\0'.repeat(8)], 'shot.png', {
+          type: 'image/png'
+        })
+      );
+      element.dispatchEvent(
+        new ClipboardEvent('paste', {
+          clipboardData: transfer,
+          bubbles: true,
+          cancelable: true
+        })
+      );
+    });
+
+    await expect(chips).toHaveCount(1);
+    await expect(chips.first()).toContainText('shot.png');
+    await expect(input).toHaveValue('look at this');
+
+    // Long pasted text becomes a file too, and short text is pasted.
+    await input.evaluate(element => {
+      const paste = (text: string): void => {
+        const transfer = new DataTransfer();
+
+        transfer.setData('text/plain', text);
+        element.dispatchEvent(
+          new ClipboardEvent('paste', {
+            clipboardData: transfer,
+            bubbles: true,
+            cancelable: true
+          })
+        );
+      };
+
+      paste('line\n'.repeat(60));
+      paste('short');
+    });
+
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(1)).toContainText('pasted-text-1.txt');
+    await expect(input).toHaveValue('look at this');
+
+    // A file that is not an image, PDF or text is refused.
+    await author.getByLabel('Files to attach').setInputFiles({
+      name: 'tool.exe',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('MZ')
+    });
+
+    await expect(author.locator('.jp-WorkshopAgent-attachError')).toContainText(
+      'tool.exe cannot be attached'
+    );
+    await expect(chips).toHaveCount(2);
+
+    // One chosen with the button is attached, and a chip can be removed.
+    await author.getByLabel('Files to attach').setInputFiles({
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# Notes\n')
+    });
+
+    await expect(chips).toHaveCount(3);
+    await chips.nth(1).getByRole('button', { name: 'Remove' }).click();
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(1)).toContainText('notes.md');
+
+    // Sent, the message shows what went with it, the agent was given the
+    // files, and the composer is clear.
+    await input.press('Enter');
+
+    const sent = author.locator('.jp-WorkshopAgent-user');
+
+    await expect(sent).toContainText('look at this');
+    await expect(sent.locator('.jp-WorkshopAgent-attachment')).toHaveCount(2);
+    await expect(
+      sent.locator('.jp-WorkshopAgent-attachment').nth(1)
+    ).toContainText('notes.md');
+    await expect(
+      author.locator('.jp-WorkshopAgent-assistant').first()
+    ).toContainText('Attached: shot.png (image/png, 17 bytes) at ');
+    await expect(chips).toHaveCount(0);
+
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/demo/_workshop/attachments/notes.md`
+      )
+    ).toBe(true);
+
+    // After a reload the chips are still shown with the message.
+    await page.waitForTimeout(2000);
+    await page.reload({ waitForIsReady: false });
+    await page.evaluate(async () => {
+      await (window as unknown as { jupyterapp: { restored: Promise<void> } })
+        .jupyterapp.restored;
+    });
+
+    const restored = page.locator('.jp-WorkshopAgent');
+
+    await expect(
+      restored.locator('.jp-WorkshopAgent-user .jp-WorkshopAgent-attachment')
+    ).toHaveCount(2, { timeout: 30000 });
+  });
+});
+
 test.describe('Workshop Author playing a workshop', () => {
   const LIBRARY = 'test-author-play';
 

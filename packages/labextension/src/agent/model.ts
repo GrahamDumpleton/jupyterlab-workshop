@@ -27,9 +27,16 @@ export const QUESTION_TOOL = 'AskUserQuestion';
 /** The tool a drafting agent proposes a workshop with. */
 export const PROPOSE_TOOL = 'mcp__workshop__propose_workshop';
 
+/** A file that was attached to a message, as the history keeps it. */
+export interface IAttachmentInfo {
+  name: string;
+  type: string;
+  size: number;
+}
+
 /** One entry of the conversation as the panel shows it. */
 export type TranscriptItem =
-  | { type: 'user'; text: string }
+  | { type: 'user'; text: string; attachments: IAttachmentInfo[] }
   | { type: 'assistant'; text: string; streaming: boolean }
   | {
       type: 'tool';
@@ -241,7 +248,13 @@ export class ConversationModel {
 
     switch (event.kind) {
       case 'user':
-        this._push({ type: 'user', text: String(event.text ?? '') });
+        this._push({
+          type: 'user',
+          text: String(event.text ?? ''),
+          attachments: Array.isArray(event.attachments)
+            ? event.attachments.filter(isRecord).map(toAttachmentInfo)
+            : []
+        });
         break;
 
       case 'text-delta':
@@ -436,6 +449,14 @@ function toProposal(value: unknown): IProposal {
     outline: Array.isArray(input.outline) ? input.outline.map(String) : [],
     quizzes: input.quizzes === true,
     gating: input.gating === true
+  };
+}
+
+function toAttachmentInfo(value: Record<string, unknown>): IAttachmentInfo {
+  return {
+    name: String(value.name ?? ''),
+    type: String(value.type ?? ''),
+    size: typeof value.size === 'number' ? value.size : 0
   };
 }
 
