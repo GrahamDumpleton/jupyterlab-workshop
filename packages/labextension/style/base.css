@@ -2213,10 +2213,10 @@
 .jp-WorkshopAgent-bar {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
   padding: 4px 8px 8px;
   color: var(--jp-ui-font-color2);
-  font-size: var(--jp-ui-font-size1);
+  font-size: var(--jp-ui-font-size0);
 }
 
 .jp-WorkshopAgent-barControls {
@@ -2224,8 +2224,15 @@
   flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 4px 6px;
   min-width: 0;
+}
+
+/* Items kept together when the bar wraps. */
+.jp-WorkshopAgent-barGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .jp-WorkshopAgent-barEnd {
@@ -2236,12 +2243,12 @@
 }
 
 .jp-WorkshopAgent-barButton {
-  padding: 2px 6px;
+  padding: 2px 4px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--jp-ui-font-color2);
-  font-size: var(--jp-ui-font-size1);
+  font-size: inherit;
   cursor: pointer;
 }
 
@@ -2256,7 +2263,7 @@
   border-radius: 4px;
   background: transparent;
   color: var(--jp-ui-font-color1);
-  font-size: var(--jp-ui-font-size1);
+  font-size: inherit;
   cursor: pointer;
 }
 

@@ -367,16 +367,18 @@ function AuthorContent({
               disabled={!ready || model.running}
               onConfigure={onConfigure}
             />
-            <ContextMeter info={model.info} />
-            <button
-              type="button"
-              className="jp-WorkshopAgent-barButton"
-              title="Summarize the conversation so far, to free up the context window. The agent also does this by itself when the window fills."
-              disabled={!ready || model.running || !model.sessionId}
-              onClick={onCompact}
-            >
-              Compact
-            </button>
+            <span className="jp-WorkshopAgent-barGroup">
+              <ContextMeter info={model.info} />
+              <button
+                type="button"
+                className="jp-WorkshopAgent-barButton"
+                title="Summarize the conversation so far, to free up the context window. The agent also does this by itself when the window fills."
+                disabled={!ready || model.running || !model.sessionId}
+                onClick={onCompact}
+              >
+                Compact
+              </button>
+            </span>
             {status?.auth_method === 'api_key' && model.info?.cost ? (
               <span
                 className="jp-WorkshopAgent-barItem"
