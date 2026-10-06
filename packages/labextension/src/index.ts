@@ -1562,15 +1562,42 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             selfTestProgress = { ...selfTestProgress, ...progress };
           }
         }).then(
-          report => {
+          async report => {
+            // Asked to, a run that reached the end without a failure leaves
+            // the workshop as Finish does: its documents, panes and
+            // terminals closed. One that failed stays where it stopped, to
+            // be looked at.
+            let closed = false;
+
+            if (
+              args.close === true &&
+              manager.finished &&
+              report.failed === 0
+            ) {
+              await closeWorkshop();
+              closed = true;
+
+              // The instructions panel has nothing left to show, so its
+              // sidebar folds away, unless it was showing something else.
+              if (panel.isVisible) {
+                if (Array.from(shell.widgets('left')).includes(panel)) {
+                  shell.collapseLeft();
+                } else {
+                  shell.collapseRight();
+                }
+              }
+            }
+
+            const result = { ...report, closed };
+
             selfTestProgress = {
               ...selfTestProgress,
               current: null,
               running: false,
-              report
+              report: result
             };
 
-            return report;
+            return result;
           },
           (error: unknown) => {
             selfTestProgress = {

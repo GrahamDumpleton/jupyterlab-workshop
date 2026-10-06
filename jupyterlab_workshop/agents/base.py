@@ -191,6 +191,35 @@ class PermissionRequest(AgentEvent):
 
 
 @dataclass(frozen=True)
+class Question(AgentEvent):
+    """The agent asking the person to choose, one or more questions at once.
+
+    Each question has `question`, a short `header`, `options` of `label`
+    and `description`, and `multiSelect`. The session waits until
+    `AgentSession.answer_question` is called with the id.
+    """
+
+    kind: ClassVar[str] = "question"
+
+    id: str
+    questions: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PermissionWithdrawn(AgentEvent):
+    """A permission request the agent no longer waits on, unanswered.
+
+    Claude Code gives up on a request when the command behind it is
+    stopped, such as by its own time limit, and the agent carries on
+    without it.
+    """
+
+    kind: ClassVar[str] = "permission-withdrawn"
+
+    id: str
+
+
+@dataclass(frozen=True)
 class Compacting(AgentEvent):
     """The agent has begun summarizing the conversation to free context."""
 
@@ -253,6 +282,12 @@ class AgentSession(Protocol):
 
         With remember set, the same request is allowed for the rest of the
         conversation without asking again.
+        """
+
+    def answer_question(self, question_id: str, answers: dict[str, str] | None) -> bool:
+        """Answer the agent's questions, by question text; None declines.
+
+        False when the id is unknown or already answered.
         """
 
     def compact(self) -> AsyncIterator[AgentEvent]:

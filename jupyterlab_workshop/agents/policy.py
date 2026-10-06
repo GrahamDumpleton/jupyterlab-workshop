@@ -10,6 +10,10 @@ only where the agent's sandbox confines it.
 Publishing to a gist is the one workshop tool that always asks, since it
 puts the workshop on GitHub.
 
+While a new workshop is being drafted nothing exists to work on, so a
+read-only policy refuses every change to files and every command: the
+agent may read, research and propose, and nothing more.
+
 The policy is a pure function of the tool name and its input, so it is
 tested without any agent.
 """
@@ -59,6 +63,16 @@ WORKSHOP_TOOL_PREFIX = "mcp__workshop__"
 # The workshop tool that sends the workshop to GitHub.
 PUBLISH_GIST_TOOL = f"{WORKSHOP_TOOL_PREFIX}publish_gist"
 
+# What Claude Code asks for when a sandboxed command reaches the network.
+NETWORK_TOOL = "SandboxNetworkAccess"
+
+# Why a change is refused while a workshop is drafted.
+DRAFTING_REASON = (
+    "Nothing is written or run while a new workshop is being drafted. "
+    "Propose the workshop with propose_workshop; once the person creates "
+    "it, the workshop is yours to write."
+)
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -88,8 +102,14 @@ class PermissionPolicy:
     # Whether Bash runs inside the agent's sandbox.
     sandboxed: bool = False
 
+    # Whether nothing may be changed at all, while a workshop is drafted.
+    read_only: bool = False
+
     def decide(self, tool: str, data: dict[str, Any]) -> Decision:
         """Whether a tool call may go ahead without asking."""
+
+        if self.read_only and (tool in WRITE_TOOLS or tool == "Bash"):
+            return Decision("deny", DRAFTING_REASON, rememberable=False)
 
         if tool == PUBLISH_GIST_TOOL:
             return self._publish_decision(data)
@@ -110,6 +130,11 @@ class PermissionPolicy:
                 return Decision("allow")
 
             return Decision("ask", "Runs a command on this machine")
+
+        if tool == NETWORK_TOOL:
+            host = str(data.get("host") or "the network")
+
+            return Decision("ask", f"Lets a command reach {host} over the network")
 
         return Decision("ask", f"Uses {tool}")
 

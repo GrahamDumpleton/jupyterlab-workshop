@@ -4,7 +4,10 @@ const WORKSHOP = 'settle-check';
 
 interface IExposedApp {
   jupyterapp: {
-    commands: { execute(id: string, args: object): Promise<unknown> };
+    commands: {
+      execute(id: string, args: object): Promise<unknown>;
+      isEnabled(id: string): boolean;
+    };
   };
 }
 
@@ -172,6 +175,35 @@ test.describe('self-test', () => {
     // took longer than a single run of a contents predicate.
     expect(byId.get('first-file')?.seconds).toBeGreaterThan(1);
     expect(byId.get('second-file')?.seconds).toBeGreaterThan(1);
+  });
+
+  test('a run asked to close leaves the workshop as Finish does once it passes', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    const report = (await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:run-all', {
+        close: true
+      });
+    })) as IReport & { closed: boolean };
+
+    expect(report.failed).toBe(0);
+    expect(report.closed).toBe(true);
+
+    // The instructions panel's sidebar folds away with nothing to show.
+    await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
+
+    // No workshop is open any more, so there is nothing left to run.
+    const open = await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.isEnabled('workshop:run-all');
+    });
+
+    expect(open).toBe(false);
   });
 
   test('a paced run in the background highlights each action and reports through progress', async ({

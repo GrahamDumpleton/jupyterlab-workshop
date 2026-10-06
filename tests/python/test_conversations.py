@@ -433,3 +433,153 @@ async def test_stopping_the_server_closes_conversations(
         await waiting
 
     socket.close()
+
+
+PLAN = {
+    "title": "Git basics",
+    "name": "git-basics",
+    "audience": "newcomers",
+    "summary": "The first steps with git, for someone who has never used it.",
+    "outline": ["Make a repository", "Make the first commit"],
+    "quizzes": True,
+    "gating": True,
+}
+
+
+async def _draft(jp_ws_fetch: Any, draft: str = "0123abcd-ef45") -> Any:
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(json.dumps({"type": "open", "draft": draft, "directory": "."}))
+
+    opened = (await _receive(socket, "opened"))[-1]
+
+    assert opened["draft"] == draft
+    assert opened["history"] == []
+
+    return socket
+
+
+async def _turn(socket: Any, text: str) -> list[dict]:
+    socket.write_message(json.dumps({"type": "send", "text": text}))
+
+    return _events(await _receive(socket, "info"))
+
+
+async def test_a_workshop_is_drafted_and_created_from_the_plan(
+    jp_ws_fetch, library
+) -> None:
+    socket = await _draft(jp_ws_fetch)
+
+    # Creating before anything is proposed is refused.
+    socket.write_message(json.dumps({"type": "create"}))
+
+    refused = (await _receive(socket, "error"))[-1]
+
+    assert "Nothing has been proposed" in refused["message"]
+
+    # A plan that could not be created is an error the agent reads.
+    taken = {**PLAN, "name": "demo"}
+    events = await _turn(socket, f"/tool propose_workshop {json.dumps(taken)}")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is False
+    assert "personal/demo already exists" in result["summary"]
+
+    # A good plan is kept, and nothing exists in the library yet.
+    events = await _turn(socket, f"/tool propose_workshop {json.dumps(PLAN)}")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert not (library / "personal" / "git-basics").exists()
+
+    # Create makes the workshop, and the panel is told where to go.
+    socket.write_message(json.dumps({"type": "create"}))
+
+    created = (await _receive(socket, "created"))[-1]
+
+    assert created["path"] == "personal/git-basics"
+
+    manifest = (library / "personal/git-basics/workshop.yaml").read_text()
+
+    assert "title: Git basics" in manifest
+    assert "gating: soft" in manifest
+
+    socket.close()
+
+    # The workshop's conversation has what was said in the draft, then
+    # begins with the plan as its brief.
+    again = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    again.write_message(
+        json.dumps({"type": "open", "path": "personal/git-basics", "directory": "."})
+    )
+
+    reopened = (await _receive(again, "opened"))[-1]
+    kinds = [event["kind"] for event in reopened["history"]]
+
+    assert kinds.count("tool-call") == 2
+    assert {"kind": "note", "text": "Created personal/git-basics."} in reopened[
+        "history"
+    ]
+
+    if reopened["running"]:
+        await _receive(again, "info")
+
+    record = json.loads(
+        (library / "personal/git-basics/_workshop" / AGENT_FILE).read_text()
+    )
+    first = next(
+        event
+        for event in record["history"]
+        if event["kind"] == "user" and "Write the workshop we agreed" in event["text"]
+    )
+
+    assert "1. Make a repository" in first["text"]
+
+    again.close()
+
+
+async def test_a_draft_cannot_write_and_can_be_discarded(
+    jp_serverapp, jp_ws_fetch, library
+) -> None:
+    from jupyterlab_workshop.handlers import CONVERSATIONS_KEY
+
+    manager = jp_serverapp.web_app.settings[CONVERSATIONS_KEY]
+    socket = await _draft(jp_ws_fetch, "feed0000-0001")
+
+    await _turn(socket, "hello")
+
+    # The draft's policy refuses writes and commands, and its record lives
+    # outside the library.
+    conversation = manager.get("draft:feed0000-0001")
+    policy = conversation.options.policy
+
+    assert policy.decide("Write", {"file_path": "x.md"}).verdict == "deny"
+    assert policy.decide("Bash", {"command": "ls"}).verdict == "deny"
+    assert library not in conversation.directory.parents
+    assert (conversation.directory / "_workshop" / AGENT_FILE).is_file()
+
+    socket.write_message(json.dumps({"type": "discard"}))
+
+    await _receive(socket, "closed")
+
+    assert manager.get("draft:feed0000-0001") is None
+    assert not conversation.directory.exists()
+
+    socket.close()
+
+
+async def test_a_draft_needs_a_library_and_a_proper_id(
+    jp_ws_fetch, jp_root_dir, monkeypatch
+) -> None:
+    monkeypatch.setenv(PROVIDER_VARIABLE, "fake")
+
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps({"type": "open", "draft": "../x", "directory": "."})
+    )
+
+    assert (await _receive(socket, "error"))[-1]["message"] == "Not a draft id"
+
+    socket.close()

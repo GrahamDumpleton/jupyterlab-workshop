@@ -2,6 +2,31 @@ import { ISignal, Signal } from '@lumino/signaling';
 
 import { IAgentEvent, IAgentInfo, IAgentMessage } from './connection';
 
+/** The workshop the agent proposes while drafting. */
+export interface IProposal {
+  title: string;
+  name: string;
+  audience: string;
+  summary: string;
+  outline: string[];
+  quizzes: boolean;
+  gating: boolean;
+}
+
+/** One of the agent's questions, with the options to choose from. */
+export interface IQuestion {
+  question: string;
+  header: string;
+  multiSelect: boolean;
+  options: { label: string; description: string }[];
+}
+
+/** The tool the agent asks the person questions with. */
+export const QUESTION_TOOL = 'AskUserQuestion';
+
+/** The tool a drafting agent proposes a workshop with. */
+export const PROPOSE_TOOL = 'mcp__workshop__propose_workshop';
+
 /** One entry of the conversation as the panel shows it. */
 export type TranscriptItem =
   | { type: 'user'; text: string }
@@ -26,6 +51,25 @@ export type TranscriptItem =
     }
   | { type: 'error'; message: string }
   | { type: 'note'; text: string }
+  | {
+      type: 'question';
+      id: string;
+      questions: IQuestion[];
+
+      /** The answers given, by question; null when declined. */
+      answers?: Record<string, string> | null;
+
+      /** Whether the agent stopped waiting before an answer was given. */
+      expired?: boolean;
+    }
+  | {
+      type: 'proposal';
+      id: string;
+      plan: IProposal;
+
+      /** Whether the server accepted the plan, and why not if it did not. */
+      result?: { ok: boolean; summary: string };
+    }
   | {
       type: 'compacted';
 
@@ -83,6 +127,19 @@ export class ConversationModel {
   /** The id the conversation resumes by, once there is one. */
   get sessionId(): string | null {
     return this._sessionId;
+  }
+
+  /** The id of the plan Create would make: the last one accepted. */
+  get latestProposal(): string | null {
+    for (let index = this._items.length - 1; index >= 0; index--) {
+      const item = this._items[index];
+
+      if (item.type === 'proposal' && item.result?.ok) {
+        return item.id;
+      }
+    }
+
+    return null;
   }
 
   /** Take in one message from the server. */
@@ -153,6 +210,14 @@ export class ConversationModel {
     this._changed.emit();
   }
 
+  /** Record the person's answers to the agent's questions. */
+  answeredQuestion(id: string, answers: Record<string, string> | null): void {
+    this._items = this._items.map(item =>
+      item.type === 'question' && item.id === id ? { ...item, answers } : item
+    );
+    this._changed.emit();
+  }
+
   /** Record the person's answer to a permission request. */
   answered(id: string, allow: boolean): void {
     this._items = this._items.map(item =>
@@ -212,6 +277,23 @@ export class ConversationModel {
         break;
 
       case 'tool-call':
+        // The agent's questions are shown by their own card, from the
+        // question event, so the call itself is not shown again.
+        if (event.name === QUESTION_TOOL) {
+          break;
+        }
+
+        // A proposed plan is shown as a card to create from, not as a
+        // tool row.
+        if (event.name === PROPOSE_TOOL) {
+          this._push({
+            type: 'proposal',
+            id: String(event.id ?? ''),
+            plan: toProposal(event.input)
+          });
+          break;
+        }
+
         this._push({
           type: 'tool',
           id: String(event.id ?? ''),
@@ -222,7 +304,8 @@ export class ConversationModel {
 
       case 'tool-result':
         this._items = this._items.map(item =>
-          item.type === 'tool' && item.id === event.id
+          (item.type === 'tool' || item.type === 'proposal') &&
+          item.id === event.id
             ? {
                 ...item,
                 result: {
@@ -247,6 +330,32 @@ export class ConversationModel {
 
       case 'error':
         this._push({ type: 'error', message: String(event.message ?? '') });
+        break;
+
+      case 'question':
+        this._push({
+          type: 'question',
+          id: String(event.id ?? ''),
+          questions: Array.isArray(event.questions)
+            ? event.questions.map(toQuestion)
+            : []
+        });
+        break;
+
+      // The agent stopped waiting for an answer, so the request no longer
+      // offers one.
+      case 'permission-withdrawn':
+        this._items = this._items.map(item =>
+          item.type === 'permission' &&
+          item.id === event.id &&
+          item.answer === undefined
+            ? { ...item, answer: 'expired' }
+            : item.type === 'question' &&
+                item.id === event.id &&
+                item.answers === undefined
+              ? { ...item, expired: true }
+              : item
+        );
         break;
 
       case 'compacting':
@@ -284,7 +393,9 @@ export class ConversationModel {
     this._items = this._items.map(item =>
       item.type === 'permission' && item.answer === undefined
         ? { ...item, answer: 'expired' }
-        : item
+        : item.type === 'question' && item.answers === undefined
+          ? { ...item, expired: true }
+          : item
     );
   }
 
@@ -312,4 +423,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
+}
+
+function toProposal(value: unknown): IProposal {
+  const input = isRecord(value) ? value : {};
+
+  return {
+    title: String(input.title ?? ''),
+    name: String(input.name ?? ''),
+    audience: String(input.audience ?? ''),
+    summary: String(input.summary ?? ''),
+    outline: Array.isArray(input.outline) ? input.outline.map(String) : [],
+    quizzes: input.quizzes === true,
+    gating: input.gating === true
+  };
+}
+
+function toQuestion(value: unknown): IQuestion {
+  const input = isRecord(value) ? value : {};
+  const options = Array.isArray(input.options) ? input.options : [];
+
+  return {
+    question: String(input.question ?? ''),
+    header: String(input.header ?? ''),
+    multiSelect: input.multiSelect === true,
+    options: options.filter(isRecord).map(option => ({
+      label: String(option.label ?? ''),
+      description: String(option.description ?? '')
+    }))
+  };
 }

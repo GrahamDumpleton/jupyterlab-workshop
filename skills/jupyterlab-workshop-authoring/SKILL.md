@@ -783,7 +783,11 @@ Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
 `get_schema`, `list_collection` and `list_catalog`
 work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`,
 `run_workshop`, `run_progress` and `reset_workshop` act on a running
-JupyterLab that has the workshop open in author mode. That JupyterLab
+JupyterLab that has the workshop open in author mode. A `run_workshop`
+at the fast pace that passes closes the workshop afterwards, as Finish
+does (the report says `closed`), so call `open_workshop` again before
+running anything more; one with a failure stays open where it stopped.
+That JupyterLab
 is the one named by `--url` and `--token` on `jupyter workshop mcp`,
 else by `JUPYTER_SERVER_URL` and `JUPYTER_TOKEN`, else the first server
 `jupyter server list` reports, which with several running may be

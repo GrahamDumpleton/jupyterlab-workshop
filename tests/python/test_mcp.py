@@ -321,10 +321,16 @@ def test_run_tools_pass_the_pace_and_limits_to_the_bridge() -> None:
     texts = _run(scenario())
     bodies = [call["body"] for call in _RecordingSession.calls]
 
-    # A plain run keeps today's behaviour: no pauses, the long wait.
+    # A plain run has no pauses and the long wait, and leaves the
+    # workshop as Finish does once it passes.
     assert bodies[0] == {
         "command": "workshop:run-all",
-        "args": {"startDelay": 0.0, "stepDelay": 0.0, "pageDelay": 0.0},
+        "args": {
+            "startDelay": 0.0,
+            "stepDelay": 0.0,
+            "pageDelay": 0.0,
+            "close": True,
+        },
         "timeout": 1200.0,
     }
 

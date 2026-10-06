@@ -2331,43 +2331,58 @@
   gap: 8px;
 }
 
-/* The dialog opens wide enough for a paragraph of description, and can
-   be resized down only as far as the form still fits, and up to most of
-   the window. */
-.jp-WorkshopAgent-createDialog .jp-Dialog-content {
-  width: min(608px, 90vw);
-  min-width: min(31em, 90vw);
-  min-height: min(30em, 90vh);
-  max-height: 90vh;
+/* The agent's questions, answered by choosing or in the person's words. */
+.jp-WorkshopAgent-question {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-brand-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
 }
 
-/* The form fills the dialog, whatever size it is given. The description
-   takes whatever height is left, so the fields below it always show. */
-.jp-WorkshopAgent-create {
+.jp-WorkshopAgent-question fieldset {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-}
-
-.jp-WorkshopAgent-createField {
-  display: flex;
-  flex: none;
   flex-direction: column;
   gap: 4px;
+  margin: 0 0 10px;
+  padding: 0;
+  border: none;
 }
 
-.jp-WorkshopAgent-createTopicField {
-  flex: 1 1 auto;
-  min-height: 0;
+.jp-WorkshopAgent-question legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-weight: 600;
 }
 
-.jp-WorkshopAgent-createInput {
+.jp-WorkshopAgent-questionHeader {
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--jp-layout-color3);
+  font-size: var(--jp-ui-font-size0);
+  font-weight: normal;
+}
+
+.jp-WorkshopAgent-questionOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.jp-WorkshopAgent-questionDescription {
+  display: block;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAgent-questionOther {
   box-sizing: border-box;
   width: 100%;
-  padding: 6px 8px;
+  margin-top: 2px;
+  padding: 4px 6px;
   border: 1px solid var(--jp-border-color1);
   background: var(--jp-layout-color0);
   color: var(--jp-ui-font-color1);
@@ -2375,17 +2390,49 @@
   font-size: var(--jp-ui-font-size1);
 }
 
-/* Sized by the dialog, not by a handle of its own, and wraps rather
-   than scrolls sideways. */
-.jp-WorkshopAgent-createTopic {
-  flex: 1 1 auto;
-  min-height: 4.5em;
-  overflow-x: hidden;
-  overflow-wrap: break-word;
-  resize: none;
+/* A plan the agent proposes while drafting, with Create below it. */
+.jp-WorkshopAgent-proposal {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-brand-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
 }
 
-.jp-WorkshopAgent-createHint {
+.jp-WorkshopAgent-proposal.jp-mod-failed {
+  border-left-color: var(--jp-error-color1);
+}
+
+.jp-WorkshopAgent-proposal h3 {
+  margin: 0 0 6px;
+  font-size: var(--jp-ui-font-size2);
+}
+
+.jp-WorkshopAgent-proposal dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 6px;
+}
+
+.jp-WorkshopAgent-proposal dt {
   color: var(--jp-ui-font-color2);
-  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-WorkshopAgent-proposal dd {
+  margin: 0;
+}
+
+.jp-WorkshopAgent-proposalSummary {
+  margin: 6px 0;
+}
+
+.jp-WorkshopAgent-proposalOutline {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.jp-WorkshopAgent-proposal .jp-WorkshopAgent-setupActions {
+  align-items: center;
 }

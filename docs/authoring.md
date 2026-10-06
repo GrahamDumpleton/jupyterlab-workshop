@@ -111,11 +111,34 @@ It needs three things:
 
 With all three, the browser has a "Create Workshop with AI…" button,
 the launcher a Workshop Author card, and each card under My workshops
-and Projects an Edit with AI button. Create asks what the workshop
-should teach and what to call its directory, scaffolds an empty
-workshop under `personal/`, and opens the conversation with your
-description as the first message. Edit with AI opens the conversation
+and Projects an Edit with AI button. Edit with AI opens the conversation
 for that workshop, or goes back to it.
+
+### Creating a workshop
+
+Create Workshop with AI opens Workshop Author on a new workshop that
+does not exist yet. Say what it should teach and who it is for. The
+agent asks about whatever it cannot tell from that: what the workshop
+is for, and who will use it, whether people new to the subject,
+experienced practitioners, or an audience watching a product
+demonstration, which decides how much it checks and whether it has
+quizzes. A request it cannot make sense of is met with a question,
+never a guess.
+
+When it knows enough, it proposes a plan: a title, the directory under
+`personal/`, the audience, a summary, the pages in order, and whether
+there are quizzes and gating. Press Create on the plan to make the
+workshop, or reply with what to change and it proposes again. Until you
+press Create, nothing is written: the agent can read and search the
+web, but cannot change files or run commands, and the draft is kept by
+the server outside your library. Discard draft forgets it.
+
+Create makes the workshop under `personal/` and opens its own
+conversation, which starts with everything said in the draft and the
+plan as the agent's brief, and the agent goes on to write the workshop.
+A draft left alone keeps until it is discarded, or for 30 days.
+
+### The conversation
 
 The conversation is held by the server, not the page: reloading the
 page, or opening the same workshop's conversation in another tab, shows
@@ -134,6 +157,11 @@ changes the files in that workshop's directory, reads the authoring
 skill, uses the [workshop tools](#what-the-tools-do), and searches and
 reads the web to research the topic. Its live tools act in the browser
 tab the conversation is open in, and no other.
+
+When the agent needs to know something, it may ask in a card of its
+own: each question with its options, to choose one or several, a box to
+answer in your own words, and Submit or Skip. A question, like a
+request for permission, brings the panel to the front.
 
 Anything else asks first, in the panel, with Allow, Always allow (for
 the rest of the conversation) and Deny: a file outside the workshop
@@ -268,7 +296,13 @@ through in front of an audience. An agent asked to demonstrate or record
 a workshop picks the pace; the individual delays can be set as well when
 the timing matters. A long or paced run is started with `wait` off and
 followed through `run_progress`, which carries the report once the run
-finishes. The same pacing is available to
+finishes. At the `fast` pace, a run that reaches the end with nothing
+failed then leaves the workshop as Finish does, closing its documents,
+panes and terminals and folding away the instructions panel, so the
+session is left as it was found and Workshop Author's conversation
+comes back to the front; a run with a
+failure stays open where it stopped. `close` turns this on or off for
+any pace. The same pacing is available to
 [`jupyter workshop test`](cli.md#pacing-a-run-for-an-audience) for a
 recording that needs no agent.
 

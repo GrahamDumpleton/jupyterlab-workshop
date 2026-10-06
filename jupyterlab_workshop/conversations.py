@@ -11,6 +11,13 @@ one: the agent runs with the workshop as its working directory, and a
 workshop someone else wrote could ship agent configuration that would
 then be obeyed. Each workshop keeps its conversation's id, and what was
 said, in `_workshop/agent.json`, so it carries on after a restart.
+
+A new workshop starts as a draft: a conversation with no workshop behind
+it, held under `draft:<id>` and recorded in the server's data directory,
+in which the agent may only read, research and propose (see
+`drafting.py`). Creating the workshop from the plan moves what was said
+into the new workshop's conversation, which then begins with the plan
+as its brief.
 """
 
 from __future__ import annotations
@@ -19,7 +26,9 @@ import asyncio
 import json
 import logging
 import os
+import posixpath
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -40,8 +49,18 @@ from .agents.base import (
 from .agents.policy import PermissionPolicy
 from .bridge import Bridge
 from .collection import STATE_DIR
+from .drafting import (
+    DRAFT_PATTERN,
+    Proposal,
+    ProposalError,
+    brief,
+    check_proposal,
+    create_draft_server,
+    draft_instructions,
+)
 from .library import (
     COLLECTIONS_DIRECTORY,
+    PERSONAL_DIRECTORY,
     STANDALONE_DIRECTORY,
     is_library,
     is_own_library_path,
@@ -70,6 +89,12 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 # Events shown as they happen but not kept in the history.
 _TRANSIENT = ("text-delta", "compacting")
 
+# The key a draft's conversation is held under, before its workshop exists.
+DRAFT_PREFIX = "draft:"
+
+# How long an untouched draft's record is kept.
+DRAFT_LIFETIME = 30 * 24 * 60 * 60.0
+
 # What typed as a message starts the conversation over, as these do in
 # Claude Code.
 CLEAR_COMMANDS = ("/clear", "/reset", "/new")
@@ -87,7 +112,7 @@ class Conversation:
     """One workshop's conversation and who is watching it."""
 
     # The workshop's path relative to the JupyterLab root, as the browser
-    # names it.
+    # names it; `draft:<id>` for a workshop still being drafted.
     path: str
 
     # The workshop directory on disk, which may lie behind a project link.
@@ -119,6 +144,14 @@ class Conversation:
     last_active: float = field(default_factory=time.monotonic)
 
     created: str = field(default_factory=lambda: _now())
+
+    # The draft's id while the workshop is being drafted, and the plan
+    # last proposed for it.
+    draft: str = ""
+    proposal: Proposal | None = None
+
+    # The workshops directory the draft's workshop is created in.
+    workshops_directory: str = ""
 
     async def send(self, text: str) -> None:
         """Send a message, telling every listener what happens."""
@@ -192,7 +225,7 @@ class Conversation:
         """Record the conversation in the workshop's agent.json."""
 
         state = self.directory / STATE_DIR
-        data = {
+        data: dict[str, Any] = {
             "provider": self.provider,
             "session_id": self.session.session_id,
             "model": self.model,
@@ -202,6 +235,9 @@ class Conversation:
             "updated": _now(),
             "history": self.history[-HISTORY_LIMIT:],
         }
+
+        if self.draft:
+            data["proposal"] = self.proposal.to_dict() if self.proposal else None
 
         try:
             state.mkdir(parents=True, exist_ok=True)
@@ -228,6 +264,11 @@ class Conversation:
             self.listeners.remove(listener)
 
         self.last_active = time.monotonic()
+
+    async def announce(self, message: dict[str, Any]) -> None:
+        """Tell every listener something about the conversation itself."""
+
+        await self._broadcast(message)
 
     async def _publish(self, event: dict[str, Any]) -> None:
         # Streamed pieces of a reply are sent but not kept: the complete
@@ -263,8 +304,10 @@ class ConversationManager:
         provider: AgentProvider | None = None,
         skill: Path | None = None,
         idle_timeout: float = IDLE_TIMEOUT,
+        drafts: Path | None = None,
     ) -> None:
         self._root = root_dir
+        self._drafts = drafts
         self._bridge = bridge
         self._provider = provider
         self._skill = skill
@@ -283,6 +326,17 @@ class ConversationManager:
             )
 
         return self._provider
+
+    @property
+    def drafts_directory(self) -> Path:
+        """Where drafts are recorded: the server's data directory."""
+
+        if self._drafts is None:
+            from jupyter_core.paths import jupyter_data_dir
+
+            self._drafts = Path(jupyter_data_dir()) / "jupyterlab_workshop" / "drafts"
+
+        return self._drafts
 
     def open_paths(self) -> list[str]:
         """The workshops with a conversation open."""
@@ -404,12 +458,139 @@ class ConversationManager:
         conversation.session = await self.provider.start(options)
         conversation.options = options
         conversation.history = []
+        conversation.proposal = None
         conversation.cost = 0.0
         conversation.created = _now()
 
         conversation.save()
 
         await conversation.reset()
+
+    async def open_draft(
+        self,
+        draft: str,
+        workshops_directory: str,
+        model: str = "",
+        effort: str = "",
+    ) -> Conversation:
+        """The conversation drafting a new workshop, started or resumed.
+
+        `draft` is the id the panel made for it. Nothing is created in the
+        library until `create` is called with the plan the agent proposed.
+        """
+
+        if not DRAFT_PATTERN.match(draft):
+            raise ConversationError("Not a draft id")
+
+        if not is_library(self._root, workshops_directory):
+            raise ConversationError("Workshop Author works only in a workshop library")
+
+        key = DRAFT_PREFIX + draft
+        lock = self._opening.setdefault(key, asyncio.Lock())
+
+        async with lock:
+            existing = self._conversations.get(key)
+
+            if existing is not None:
+                return existing
+
+            self._prune_drafts()
+
+            conversation = await self._start_draft(
+                draft, workshops_directory, model, effort
+            )
+
+            self._conversations[key] = conversation
+
+        self._start_reaper()
+
+        return conversation
+
+    async def create(self, conversation: Conversation) -> tuple[Conversation, str]:
+        """Create the workshop a draft agreed on, and hand its conversation on.
+
+        The workshop is scaffolded empty under `personal/` with the plan's
+        name and title, and its conversation starts with what was said in
+        the draft. Returns that conversation and the brief to send it
+        first; the draft is closed and its record removed.
+        """
+
+        if not conversation.draft:
+            raise ConversationError("Only a draft creates a workshop")
+
+        if conversation.running:
+            raise ConversationError("Wait for the agent to finish before creating")
+
+        proposal = conversation.proposal
+
+        if proposal is None:
+            raise ConversationError(
+                "Nothing has been proposed yet: Workshop Author proposes a plan "
+                "once it knows what to make"
+            )
+
+        from .scaffold import write_scaffold
+
+        workshops_directory = conversation.workshops_directory
+        library = library_directory(self._root, workshops_directory)
+        personal = library / PERSONAL_DIRECTORY
+
+        try:
+            check_proposal(proposal, personal)
+        except ProposalError as error:
+            raise ConversationError(str(error)) from error
+
+        directory = personal / proposal.name
+        path = posixpath.normpath(
+            posixpath.join(
+                workshops_directory or ".", PERSONAL_DIRECTORY, proposal.name
+            )
+        )
+
+        write_scaffold(
+            directory,
+            proposal.name,
+            proposal.title,
+            ci=False,
+            template="blank",
+            gating="soft" if proposal.gating else "off",
+        )
+
+        # The workshop's conversation starts where the draft left off, so
+        # the panel shows the whole exchange and the plan agreed in it.
+        created = await self.open(
+            path,
+            workshops_directory,
+            directory,
+            conversation.model,
+            conversation.effort,
+        )
+
+        created.history = [
+            *conversation.history,
+            {"kind": "note", "text": f"Created {path}."},
+        ]
+        created.save()
+
+        await self.discard(conversation, announce=False)
+        await conversation.announce({"type": "created", "path": path})
+
+        return created, brief(proposal)
+
+    async def discard(self, conversation: Conversation, announce: bool = True) -> None:
+        """End a draft and remove its record."""
+
+        if not conversation.draft:
+            raise ConversationError("Only a draft can be discarded")
+
+        self._conversations.pop(conversation.path, None)
+
+        await conversation.session.close()
+
+        shutil.rmtree(conversation.directory, ignore_errors=True)
+
+        if announce:
+            await conversation.announce({"type": "closed"})
 
     async def close(self, path: str) -> None:
         """End a workshop's conversation, keeping its record."""
@@ -545,10 +726,117 @@ class ConversationManager:
 
         return conversation
 
+    async def _start_draft(
+        self,
+        draft: str,
+        workshops_directory: str,
+        model: str,
+        effort: str,
+    ) -> Conversation:
+        provider = self.provider
+        directory = self.drafts_directory / draft
+
+        directory.mkdir(parents=True, exist_ok=True)
+
+        record = _read_record(directory)
+        resume = (
+            str(record.get("session_id") or "") or None
+            if record.get("provider") == provider.name
+            else None
+        )
+
+        if "model" in record:
+            model = str(record.get("model") or "")
+
+        if "effort" in record:
+            effort = str(record.get("effort") or "")
+
+        library = library_directory(self._root, workshops_directory)
+        holder: list[Conversation] = []
+
+        # A plan that passes the checks is kept for the Create button.
+        def on_propose(proposal: Proposal) -> None:
+            if holder:
+                holder[0].proposal = proposal
+                holder[0].save()
+
+        # The agent may read and research, and nothing else: its working
+        # directory is the draft's own, empty but for the record.
+        policy = PermissionPolicy(
+            workshop=directory,
+            readable=(self._skill,) if self._skill else (),
+            forbidden=(
+                library / COLLECTIONS_DIRECTORY,
+                library / STANDALONE_DIRECTORY,
+            ),
+            read_only=True,
+        )
+        personal = posixpath.normpath(
+            posixpath.join(workshops_directory or ".", PERSONAL_DIRECTORY)
+        )
+        options = StartOptions(
+            directory=directory,
+            policy=policy,
+            instructions=draft_instructions(personal),
+            tools=create_draft_server(library / PERSONAL_DIRECTORY, on_propose),
+            skill=self._skill,
+            resume=resume,
+            model=model,
+            effort=effort,
+        )
+
+        session = await provider.start(options)
+        recorded = record.get("proposal") if resume else None
+        conversation = Conversation(
+            path=DRAFT_PREFIX + draft,
+            directory=directory,
+            session=session,
+            provider=provider.name,
+            options=options,
+            model=model,
+            effort=effort,
+            cost=float(record.get("cost") or 0.0) if resume else 0.0,
+            history=list(record.get("history") or []) if resume else [],
+            created=str(record.get("created") or _now()) if resume else _now(),
+            draft=draft,
+            proposal=Proposal.from_dict(recorded)
+            if isinstance(recorded, dict)
+            else None,
+            workshops_directory=workshops_directory,
+        )
+
+        holder.append(conversation)
+
+        return conversation
+
+    def _prune_drafts(self) -> None:
+        # Drafts nobody came back to are removed after a while, so the data
+        # directory does not fill with abandoned ideas.
+        now = time.time()
+        root = self.drafts_directory
+
+        if not root.is_dir():
+            return
+
+        for entry in root.iterdir():
+            key = DRAFT_PREFIX + entry.name
+
+            try:
+                old = now - entry.stat().st_mtime > DRAFT_LIFETIME
+            except OSError:
+                continue
+
+            if entry.is_dir() and old and key not in self._conversations:
+                shutil.rmtree(entry, ignore_errors=True)
+
     def terminal_command(self, conversation: Conversation) -> str | None:
         """The line to type in a terminal to carry a conversation on there."""
 
         session_id = conversation.session.session_id
+
+        # A draft has no workshop to carry on in.
+        if conversation.draft:
+            return None
 
         if not session_id or conversation.options is None:
             return None

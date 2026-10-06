@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ from jupyterlab_workshop.agents.base import (
     Done,
     Error,
     PermissionRequest,
+    PermissionWithdrawn,
+    Question,
     StartOptions,
     Text,
     TextDelta,
@@ -279,6 +282,134 @@ def test_claude_permission_callback_follows_the_policy(tmp_path: Path) -> None:
     assert isinstance(answers[2], PermissionResultAllow)
     assert isinstance(answers[3], PermissionResultAllow)
     assert session._events.empty()
+
+
+def test_claude_network_requests_are_described_and_withdrawn(
+    tmp_path: Path,
+) -> None:
+    from claude_agent_sdk import PermissionResultAllow
+    from claude_agent_sdk.types import ToolPermissionContext
+
+    policy = _policy(tmp_path)
+    session = ClaudeSession(
+        StartOptions(directory=policy.workshop, policy=policy), client=None
+    )
+
+    async def scenario() -> list[Any]:
+        seen: list[Any] = []
+
+        # Claude Code cancels a request it stops waiting for; the panel is
+        # told the request no longer stands.
+        pending = asyncio.ensure_future(
+            session.can_use_tool(
+                "SandboxNetworkAccess",
+                {"host": "pypi.org"},
+                ToolPermissionContext(tool_use_id="n1"),
+            )
+        )
+        request = await session._events.get()
+
+        seen.append(request)
+        pending.cancel()
+
+        with contextlib.suppress(asyncio.CancelledError):
+            await pending
+
+        seen.append(await session._events.get())
+
+        # Always allow for one host does not cover another.
+        async def ask(host: str, tool_use_id: str) -> Any:
+            waiting = asyncio.ensure_future(
+                session.can_use_tool(
+                    "SandboxNetworkAccess",
+                    {"host": host},
+                    ToolPermissionContext(tool_use_id=tool_use_id),
+                )
+            )
+            asked = await session._events.get()
+
+            session.answer(asked.id, allow=True, remember=True)
+
+            return await waiting
+
+        seen.append(await ask("pypi.org", "n2"))
+        seen.append(
+            await session.can_use_tool(
+                "SandboxNetworkAccess", {"host": "pypi.org"}, ToolPermissionContext()
+            )
+        )
+
+        other = asyncio.ensure_future(
+            session.can_use_tool(
+                "SandboxNetworkAccess",
+                {"host": "example.com"},
+                ToolPermissionContext(tool_use_id="n3"),
+            )
+        )
+
+        seen.append(await session._events.get())
+        other.cancel()
+
+        return seen
+
+    seen = asyncio.run(scenario())
+
+    assert isinstance(seen[0], PermissionRequest)
+    assert seen[0].reason == "Lets a command reach pypi.org over the network"
+    assert seen[1] == PermissionWithdrawn("n1")
+    assert isinstance(seen[2], PermissionResultAllow)
+    assert isinstance(seen[3], PermissionResultAllow)
+    assert isinstance(seen[4], PermissionRequest)
+    assert seen[4].id == "n3"
+
+
+def test_claude_questions_are_answered_by_the_person(tmp_path: Path) -> None:
+    from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+    from claude_agent_sdk.types import ToolPermissionContext
+
+    policy = _policy(tmp_path)
+    session = ClaudeSession(
+        StartOptions(directory=policy.workshop, policy=policy), client=None
+    )
+    data = {
+        "questions": [
+            {
+                "question": "Who is it for?",
+                "header": "Audience",
+                "multiSelect": False,
+                "options": [{"label": "Newcomers", "description": ""}],
+            }
+        ]
+    }
+
+    async def ask(answers: dict[str, str] | None) -> tuple[Any, Any]:
+        pending = asyncio.ensure_future(
+            session.can_use_tool(
+                "AskUserQuestion", data, ToolPermissionContext(tool_use_id="q1")
+            )
+        )
+        question = await session._events.get()
+
+        assert session.answer_question("q1", answers)
+        assert not session.answer_question("q1", answers)
+
+        return question, await pending
+
+    async def both() -> list[tuple[Any, Any]]:
+        return [await ask({"Who is it for?": "Newcomers"}), await ask(None)]
+
+    (question, allowed), (_, declined) = asyncio.run(both())
+
+    # The question goes to the panel, and the answers go back with the
+    # tool's input, as Claude Code's own prompt sends them.
+    assert question == Question("q1", data["questions"])
+    assert isinstance(allowed, PermissionResultAllow)
+    assert allowed.updated_input == {
+        **data,
+        "answers": {"Who is it for?": "Newcomers"},
+    }
+
+    assert isinstance(declined, PermissionResultDeny)
 
 
 def test_claude_does_not_remember_creating_a_gist(tmp_path: Path) -> None:

@@ -768,6 +768,7 @@ def create_server(
         action_timeout: float | None = None,
         wait: bool = True,
         timeout: float | None = None,
+        close: bool | None = None,
     ) -> Any:
         """Run every action of the open workshop in the live session and
         report the results, as the self-test does.
@@ -790,6 +791,13 @@ def create_server(
         how far it has got and, at the end, the report. Call
         reset_workshop first for a run from a clean start.
 
+        `close` leaves the workshop as Finish does once a run reaches the
+        end with nothing failed: its documents, panes and terminals are
+        closed and the person is back where they were. It defaults to
+        true at the fast pace and false at the others, where the audience
+        may want to see the end; a run with a failure always stays open
+        where it stopped. The report's `closed` says which happened.
+
         Everything runs for real, as the user, on the machine JupyterLab
         is running on, and not on a copy. Read every page first, and
         unless the user asked, call this only when nothing reaches
@@ -807,6 +815,9 @@ def create_server(
 
         if action_timeout is not None:
             args["actionTimeout"] = action_timeout
+
+        if close if close is not None else pace == "fast":
+            args["close"] = True
 
         # Started in the background, the command answers as soon as the
         # run is under way, so only a short wait is needed for that.

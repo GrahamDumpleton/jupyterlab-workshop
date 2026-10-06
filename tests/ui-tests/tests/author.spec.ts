@@ -12,7 +12,10 @@ pages:
 
 interface IExposedApp {
   jupyterapp: {
-    commands: { execute(id: string, args: object): Promise<unknown> };
+    commands: {
+      execute(id: string, args: object): Promise<unknown>;
+      isEnabled(id: string): boolean;
+    };
   };
 }
 
@@ -229,12 +232,160 @@ test.describe('Workshop Author conversation', () => {
   });
 });
 
+test.describe('Workshop Author playing a workshop', () => {
+  const LIBRARY = 'test-author-play';
+
+  useLibrary(LIBRARY);
+
+  test('a play-through that passes closes the workshop and returns to the conversation', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+    const input = author.locator('.jp-WorkshopAgent-input');
+
+    await expect(input).toBeEnabled();
+    await author.getByRole('button', { name: 'Open workshop' }).click();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toBeVisible();
+
+    // The agent plays the workshop, as it does to check a version.
+    await input.fill('/tool run_workshop {}');
+    await input.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(1, { timeout: 60000 });
+
+    // It reached the end with nothing failed, so the workshop was left as
+    // Finish leaves it, and the conversation is back in front.
+    const open = await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.isEnabled('workshop:run-all');
+    });
+
+    expect(open).toBe(false);
+    await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
+    await expect(
+      page.locator('.lm-TabBar-tab.lm-mod-current', {
+        hasText: 'Workshop Author'
+      })
+    ).toHaveCount(1);
+    await expect(input).toBeVisible();
+  });
+});
+
+test.describe('Workshop Author asking for permission', () => {
+  const LIBRARY = 'test-author-ask';
+
+  useLibrary(LIBRARY);
+
+  test('comes to the front for a request, and lets one go when the agent stops waiting', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+    const input = author.locator('.jp-WorkshopAgent-input');
+    const current = page.locator('.lm-TabBar-tab.lm-mod-current', {
+      hasText: 'Workshop Author'
+    });
+
+    await expect(input).toBeEnabled();
+
+    // The request arrives while another tab is in front.
+    await input.fill('/slow\n/ask');
+    await input.press('Enter');
+    await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
+    await expect(current).toHaveCount(0);
+
+    const request = author.locator('.jp-WorkshopAgent-permission').last();
+
+    await expect(current).toHaveCount(1, { timeout: 30000 });
+    await expect(request).toBeInViewport();
+    await request.getByRole('button', { name: 'Allow', exact: true }).click();
+    await expect(request).toContainText('Allowed.');
+
+    // A request the agent stops waiting for no longer offers an answer.
+    await expect(author.getByRole('button', { name: 'Send' })).toBeVisible();
+    await input.fill('/drop');
+    await input.press('Enter');
+
+    const dropped = author.locator('.jp-WorkshopAgent-permission').last();
+
+    await expect(dropped).toContainText('pypi.org over the network');
+    await expect(dropped).toContainText('No longer waiting.');
+    await expect(
+      dropped.getByRole('button', { name: 'Allow', exact: true })
+    ).toHaveCount(0);
+  });
+});
+
+test.describe('Workshop Author asking questions', () => {
+  const LIBRARY = 'test-author-question';
+
+  useLibrary(LIBRARY);
+
+  test('answers the agent by choosing, or in your own words', async ({
+    page
+  }) => {
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+    const input = author.locator('.jp-WorkshopAgent-input');
+
+    await expect(input).toBeEnabled();
+    await input.fill('/question');
+    await input.press('Enter');
+
+    // The questions come as a card of choices, not a permission request.
+    const card = author.locator('.jp-WorkshopAgent-question');
+    const submit = card.getByRole('button', { name: 'Submit' });
+
+    await expect(card).toContainText('Who is the workshop for?');
+    await expect(author.locator('.jp-WorkshopAgent-permission')).toHaveCount(0);
+    await expect(submit).toBeDisabled();
+
+    await card.getByRole('radio', { name: /Experienced/ }).check();
+    await expect(submit).toBeDisabled();
+
+    await card.getByRole('checkbox', { name: /Routing/ }).check();
+    await card
+      .getByLabel('Other answer to: Which topics should it cover?')
+      .fill('Deployment');
+    await submit.click();
+
+    await expect(card).toContainText('Answered.');
+    await expect(
+      author.locator('.jp-WorkshopAgent-assistant').last()
+    ).toHaveText(
+      'Who is the workshop for? Experienced; Which topics should it cover? Routing, Deployment'
+    );
+  });
+});
+
 test.describe('Workshop Author creating a workshop', () => {
   const LIBRARY = 'test-author-create';
 
   useLibrary(LIBRARY);
 
-  test('creates a workshop in My workshops from a description', async ({
+  test('drafts a workshop with the agent and creates it from the plan', async ({
     page
   }) => {
     await openBrowser(page);
@@ -243,24 +394,83 @@ test.describe('Workshop Author creating a workshop', () => {
       .getByRole('button', { name: 'Create Workshop with AI…' })
       .click();
 
-    const dialog = page.locator('.jp-Dialog');
+    // A draft: nothing exists yet, and there is no workshop to open.
+    const draft = page.locator('.jp-WorkshopAgent');
+    const input = draft.locator('.jp-WorkshopAgent-input');
 
-    await dialog.locator('textarea').fill('Git basics for beginners');
-    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect(draft.locator('.jp-WorkshopAgent-path')).toHaveText(
+      'New workshop, not created yet'
+    );
+    await expect(
+      draft.getByRole('button', { name: 'Open workshop' })
+    ).toHaveCount(0);
+    await expect(input).toBeEnabled();
+
+    // The agent proposes a plan, shown as a card with Create.
+    const plan = {
+      title: 'Git basics',
+      name: 'git-basics',
+      audience: 'newcomers',
+      summary: 'The first steps with git, for someone who has never used it.',
+      outline: ['Make a repository', 'Make the first commit'],
+      quizzes: true,
+      gating: true
+    };
+
+    await input.fill(`/tool propose_workshop ${JSON.stringify(plan)}`);
+    await input.press('Enter');
+
+    const card = draft.locator('.jp-WorkshopAgent-proposal');
+
+    await expect(card.locator('h3')).toHaveText('Git basics');
+    await expect(card).toContainText('personal/git-basics');
+    await expect(card).toContainText('People new to the subject');
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/git-basics/workshop.yaml`
+      )
+    ).toBe(false);
+
+    // Create makes the workshop, and its own panel carries on with what
+    // was said and the plan as the brief.
+    await card.getByRole('button', { name: 'Create' }).click();
 
     const author = page.locator('.jp-WorkshopAgent');
 
     await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
-      `${LIBRARY}/personal/git-basics-for-beginners`
+      `${LIBRARY}/personal/git-basics`
     );
-    await expect(author.locator('.jp-WorkshopAgent-user')).toContainText(
-      'Git basics for beginners'
+    await expect(author).toHaveCount(1);
+    await expect(
+      author.locator('.jp-WorkshopAgent-proposal .jp-WorkshopAgent-answer')
+    ).toHaveText('The plan agreed.');
+    await expect(author.locator('.jp-WorkshopAgent-user').last()).toContainText(
+      'Write the workshop we agreed'
     );
     expect(
       await page.contents.fileExists(
-        `${LIBRARY}/personal/git-basics-for-beginners/workshop.yaml`
+        `${LIBRARY}/personal/git-basics/workshop.yaml`
       )
     ).toBe(true);
+  });
+
+  test('discards a draft, leaving nothing behind', async ({ page }) => {
+    await openBrowser(page);
+    await page
+      .locator('#jupyterlab-workshop-browser')
+      .getByRole('button', { name: 'Create Workshop with AI…' })
+      .click();
+
+    const draft = page.locator('.jp-WorkshopAgent');
+
+    await expect(draft.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await draft.getByRole('button', { name: 'Discard draft' }).click();
+    await page
+      .locator('.jp-Dialog')
+      .getByRole('button', { name: 'Discard' })
+      .click();
+
+    await expect(draft).toHaveCount(0);
   });
 });
 

@@ -6,6 +6,12 @@ the panel handles without credentials or network:
 - A plain message is echoed back, streamed a word at a time.
 
 - `/ask` asks permission to run a Bash command and says what it was told.
+
+- `/question` asks two questions, one choice and one of several, and
+  says what was answered.
+
+- `/drop` asks permission, then stops waiting for the answer, as Claude
+  Code does when the command behind a request times out.
   `/ask TOOL {json}` asks about any tool as the policy would, without
   then using it.
 
@@ -39,12 +45,37 @@ from .base import (
     Error,
     ModelChoice,
     PermissionRequest,
+    PermissionWithdrawn,
+    Question,
     StartOptions,
     Text,
     TextDelta,
     ToolCall,
     ToolResult,
 )
+
+# The questions the fake agent asks for `/question`.
+FAKE_QUESTIONS: list[dict[str, Any]] = [
+    {
+        "question": "Who is the workshop for?",
+        "header": "Audience",
+        "multiSelect": False,
+        "options": [
+            {"label": "Newcomers", "description": "New to the subject"},
+            {"label": "Experienced", "description": "Know the basics already"},
+        ],
+    },
+    {
+        "question": "Which topics should it cover?",
+        "header": "Topics",
+        "multiSelect": True,
+        "options": [
+            {"label": "Routing", "description": ""},
+            {"label": "Templates", "description": ""},
+            {"label": "Testing", "description": ""},
+        ],
+    },
+]
 
 # The models the fake agent pretends to offer.
 FAKE_MODELS: tuple[ModelChoice, ...] = (
@@ -61,6 +92,7 @@ class FakeSession:
         self._options = options
         self._session_id = options.resume or f"fake-{secrets.token_hex(4)}"
         self._answers: dict[str, asyncio.Future[bool]] = {}
+        self._questions: dict[str, asyncio.Future[dict[str, str] | None]] = {}
         self._interrupted = asyncio.Event()
         self._model = options.model
         self.closed = False
@@ -110,6 +142,18 @@ class FakeSession:
             return False
 
         future.set_result(allow)
+
+        return True
+
+    def answer_question(self, question_id: str, answers: dict[str, str] | None) -> bool:
+        """Answer the questions the session is waiting on."""
+
+        future = self._questions.get(question_id)
+
+        if future is None or future.done():
+            return False
+
+        future.set_result(answers)
 
         return True
 
@@ -164,6 +208,40 @@ class FakeSession:
             allowed = await future
 
             yield Text("Allowed." if allowed else "Denied.")
+
+        elif line == "/question":
+            question = Question(id=secrets.token_hex(4), questions=FAKE_QUESTIONS)
+            pending: asyncio.Future[dict[str, str] | None] = (
+                asyncio.get_running_loop().create_future()
+            )
+
+            self._questions[question.id] = pending
+
+            yield question
+
+            answers = await pending
+
+            if answers is None:
+                yield Text("No answer.")
+            else:
+                yield Text(
+                    "; ".join(f"{key} {value}" for key, value in answers.items())
+                )
+
+        elif line == "/drop":
+            request = PermissionRequest(
+                id=secrets.token_hex(4),
+                tool="SandboxNetworkAccess",
+                input={"host": "pypi.org"},
+                reason="Lets a command reach pypi.org over the network",
+            )
+
+            yield request
+
+            await asyncio.sleep(1.0)
+
+            yield PermissionWithdrawn(request.id)
+            yield Text("Carried on without it.")
 
         elif line.startswith("/tool "):
             name, _, rest = line[len("/tool ") :].partition(" ")

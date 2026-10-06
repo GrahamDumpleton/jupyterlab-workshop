@@ -55,6 +55,9 @@ export type IAgentMessage =
   | {
       type: 'opened';
       path: string;
+
+      /** The draft's id, for a workshop not created yet; empty otherwise. */
+      draft?: string;
       provider: string;
       session_id: string | null;
       running: boolean;
@@ -65,6 +68,7 @@ export type IAgentMessage =
   | { type: 'event'; event: IAgentEvent }
   | { type: 'state'; running: boolean }
   | { type: 'cleared' }
+  | { type: 'created'; path: string }
   | { type: 'terminal'; cwd: string; command: string | null }
   | { type: 'error'; message: string }
   | { type: 'closed' };
@@ -147,6 +151,11 @@ export class AgentConnection {
     this._write({ type: 'permission', id, allow, remember });
   }
 
+  /** Answer the agent's questions, by question text; null declines. */
+  answerQuestion(id: string, answers: Record<string, string> | null): void {
+    this._write({ type: 'answer', id, answers });
+  }
+
   /** Stop the turn in progress. */
   interrupt(): void {
     this._write({ type: 'interrupt' });
@@ -165,6 +174,16 @@ export class AgentConnection {
   /** Start the conversation over, forgetting what was said. */
   clear(): void {
     this._write({ type: 'clear' });
+  }
+
+  /** Create the workshop a draft agreed on. */
+  create(): void {
+    this._write({ type: 'create' });
+  }
+
+  /** End a draft and forget it. */
+  discard(): void {
+    this._write({ type: 'discard' });
   }
 
   /** Ask for the command that carries the conversation on in a terminal. */

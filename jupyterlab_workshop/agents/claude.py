@@ -38,12 +38,15 @@ from .base import (
     Error,
     ModelChoice,
     PermissionRequest,
+    PermissionWithdrawn,
+    Question,
     StartOptions,
     Text,
     TextDelta,
     ToolCall,
     ToolResult,
 )
+from .policy import NETWORK_TOOL
 
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
@@ -55,6 +58,9 @@ INSTALL_HINT = 'uv tool install "jupyterlab-workshop[lab,ai]"'
 # The name the workshop tools are served under, which the agent sees as
 # the mcp__workshop__ prefix.
 TOOLS_SERVER = "workshop"
+
+# The tool Claude asks the person multiple-choice questions with.
+QUESTION_TOOL = "AskUserQuestion"
 
 # The plugin the authoring skill is served in.
 PLUGIN_NAME = "jupyterlab-workshop"
@@ -222,6 +228,7 @@ class ClaudeSession:
         self._session_id: str | None = options.resume
         self._events: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
         self._answers: dict[str, asyncio.Future[bool]] = {}
+        self._questions: dict[str, asyncio.Future[dict[str, str] | None]] = {}
         self._remembered: set[str] = set()
         self._remember: set[str] = set()
         self._interrupting = False
@@ -290,6 +297,18 @@ class ClaudeSession:
 
         return True
 
+    def answer_question(self, question_id: str, answers: dict[str, str] | None) -> bool:
+        """Answer the questions Claude is waiting on; None declines them."""
+
+        future = self._questions.get(question_id)
+
+        if future is None or future.done():
+            return False
+
+        future.set_result(answers)
+
+        return True
+
     async def interrupt(self) -> None:
         """Stop the turn in progress, declining any request it waits on."""
 
@@ -298,6 +317,10 @@ class ClaudeSession:
         for future in self._answers.values():
             if not future.done():
                 future.set_result(False)
+
+        for pending in self._questions.values():
+            if not pending.done():
+                pending.set_result(None)
 
         await self._client.interrupt()
 
@@ -362,6 +385,12 @@ class ClaudeSession:
 
         from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
+        # A question is not a permission: the person answers it, and the
+        # answers go back with the tool's input, as Claude Code's own
+        # prompt sends them.
+        if name == QUESTION_TOOL:
+            return await self._ask(data, context)
+
         decision = self._options.policy.decide(name, data)
 
         if decision.verdict == "allow":
@@ -387,8 +416,14 @@ class ClaudeSession:
         self._answers[request.id] = future
         await self._events.put(request)
 
+        # Claude Code cancels the request when it stops waiting for it, so
+        # the panel is told the question no longer stands.
         try:
             allowed = await future
+        except asyncio.CancelledError:
+            self._events.put_nowait(PermissionWithdrawn(request.id))
+
+            raise
         finally:
             self._answers.pop(request.id, None)
 
@@ -432,6 +467,39 @@ class ClaudeSession:
             ]
 
         return []
+
+    async def _ask(self, data: dict[str, Any], context: Any) -> Any:
+        from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+
+        questions = [
+            item for item in data.get("questions") or () if isinstance(item, dict)
+        ]
+        question = Question(
+            id=str(getattr(context, "tool_use_id", "") or secrets.token_hex(8)),
+            questions=questions,
+        )
+        future: asyncio.Future[dict[str, str] | None] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+        self._questions[question.id] = future
+        await self._events.put(question)
+
+        try:
+            answers = await future
+        except asyncio.CancelledError:
+            self._events.put_nowait(PermissionWithdrawn(question.id))
+
+            raise
+        finally:
+            self._questions.pop(question.id, None)
+
+        if answers is None:
+            return PermissionResultDeny(
+                message="The person chose not to answer; carry on without it."
+            )
+
+        return PermissionResultAllow(updated_input={**data, "answers": answers})
 
     async def _pump(self, events: asyncio.Queue[AgentEvent | None]) -> None:
         try:
@@ -778,6 +846,10 @@ def _remember_key(name: str, data: dict[str, Any]) -> str:
     # conversation does not allow every other.
     if name == "Bash":
         return f"Bash:{data.get('command', '')}"
+
+    # Likewise one host is remembered, not the whole network.
+    if name == NETWORK_TOOL:
+        return f"{name}:{data.get('host', '')}"
 
     return name
 

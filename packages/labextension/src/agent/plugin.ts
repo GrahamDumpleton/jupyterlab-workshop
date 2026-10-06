@@ -5,7 +5,6 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 import {
-  Dialog,
   ICommandPalette,
   MainAreaWidget,
   showErrorMessage,
@@ -15,13 +14,7 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { ILauncher } from '@jupyterlab/launcher';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { Terminal } from '@jupyterlab/terminal';
-import { Widget } from '@lumino/widgets';
-import {
-  joinLibraryPath,
-  normalizeWorkshopsDirectory,
-  PERSONAL_DIRECTORY,
-  slugify
-} from '@jupyterlab-workshop/core';
+import { UUID } from '@lumino/coreutils';
 
 import { BRIDGE_CLIENT_ID } from '../authoring/bridge';
 import type { LibraryService } from '../library/service';
@@ -30,12 +23,14 @@ import { requestAPI } from '../request';
 import { PANEL_PLUGIN_ID, readSetting } from '../settings';
 import {
   CommandIDs,
-  errorMessage,
   IFeaturePolicy,
   IPlatformInfo,
   IWorkshopManager
 } from '../tokens';
 import { AUTHOR_TITLE, AuthorPanel } from './panel';
+
+/** The command the layout restorer reopens Workshop Author panels with. */
+const RESTORE_COMMAND = 'jupyterlab-workshop:author-restore';
 
 /**
  * Workshop Author: an AI agent that writes and revises the library
@@ -127,11 +122,16 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       session.send({ type: 'stdin', content: [`${command}\r`] });
     };
 
-    // The conversation for a workshop: the panel already open for it, or
-    // a new one.
-    const openPanel = async (path: string): Promise<AuthorPanel> => {
+    // The conversation for a workshop, or for a draft of a new one: the
+    // panel already open for it, or a new one.
+    const openPanel = async (
+      path: string,
+      draft = ''
+    ): Promise<AuthorPanel> => {
       const existing = tracker.find(
-        panel => panel.path === path && !panel.isDisposed
+        panel =>
+          !panel.isDisposed &&
+          (draft ? panel.draft === draft : !panel.draft && panel.path === path)
       );
 
       if (existing) {
@@ -147,15 +147,24 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
 
       const panel = new AuthorPanel({
         path,
+        draft,
         serverSettings,
         open: () => ({
           path,
+          draft,
           directory: directoryCache,
           client: BRIDGE_CLIENT_ID,
           model: aiCache.model,
           effort: aiCache.effort
         }),
         openTerminal,
+        reveal: () => {
+          if (!panel.isAttached) {
+            shell.add(panel, 'main');
+          }
+
+          shell.activateById(panel.id);
+        },
         openWorkshop: async () => {
           await manager.open(path);
 
@@ -170,6 +179,12 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       // can carry them without waiting.
       directoryCache = await workshopsDirectory();
       aiCache = await readAi(settingRegistry);
+
+      // Once a draft's workshop is created, the workshop's own panel takes
+      // over the conversation, and the draft's panel goes.
+      panel.created.connect((_, created) => {
+        void openPanel(created).then(() => panel.dispose());
+      });
 
       void tracker.add(panel);
       shell.add(panel, 'main');
@@ -204,45 +219,14 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const request =
-          typeof args.topic === 'string'
-            ? { topic: args.topic, name: String(args.name ?? '') }
-            : await askForWorkshop();
+        // Nothing is created yet: the agent drafts the workshop with the
+        // person and proposes a plan, and the workshop is made only when
+        // they press Create on it.
+        const panel = await openPanel('', UUID.uuid4());
 
-        if (!request) {
-          return;
+        if (typeof args.topic === 'string' && args.topic.trim()) {
+          panel.send(args.topic.trim());
         }
-
-        const directory = normalizeWorkshopsDirectory(
-          await workshopsDirectory()
-        );
-        const name =
-          slugify(request.name || firstWords(request.topic)) || 'new-workshop';
-        const path = joinLibraryPath(
-          joinLibraryPath(directory, PERSONAL_DIRECTORY),
-          name
-        );
-
-        try {
-          await requestAPI('init', serverSettings, {
-            method: 'POST',
-            body: JSON.stringify({ directory: path, name, template: 'blank' })
-          });
-        } catch (error) {
-          await showErrorMessage(
-            'Unable to create the workshop',
-            errorMessage(error)
-          );
-
-          return;
-        }
-
-        const panel = await openPanel(path);
-
-        panel.send(
-          `Write this workshop, in the current directory, which has been ` +
-            `scaffolded empty for it. What it should teach:\n\n${request.topic}`
-        );
       }
     });
 
@@ -264,11 +248,56 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    // When the workshop a Workshop Author panel works on closes, such as
+    // at the end of the agent's play-through of it, the conversation comes
+    // back to the front.
+    let authoring = manager.workshop?.path ?? null;
+
+    manager.changed.connect(() => {
+      const current = manager.workshop?.path ?? null;
+
+      if (authoring !== null && current === null) {
+        const closed = authoring;
+        const author = tracker.find(
+          panel =>
+            !panel.isDisposed &&
+            !panel.draft &&
+            panel.isAttached &&
+            panel.path === closed
+        );
+
+        if (author) {
+          shell.activateById(author.id);
+        }
+      }
+
+      authoring = current;
+    });
+
+    // Restores a workshop's panel by its path, and a draft's by its id.
+    app.commands.addCommand(RESTORE_COMMAND, {
+      label: AUTHOR_TITLE,
+      execute: async args => {
+        await checked;
+
+        if (!enabled()) {
+          return;
+        }
+
+        if (typeof args.draft === 'string' && args.draft) {
+          await openPanel('', args.draft);
+        } else if (typeof args.path === 'string' && args.path) {
+          await openPanel(PathExt.normalize(args.path));
+        }
+      }
+    });
+
     if (restorer) {
       void restorer.restore(tracker, {
-        command: CommandIDs.editWithAI,
-        args: panel => ({ path: panel.path }),
-        name: panel => panel.path
+        command: RESTORE_COMMAND,
+        args: panel =>
+          panel.draft ? { draft: panel.draft } : { path: panel.path },
+        name: panel => (panel.draft ? `draft:${panel.draft}` : panel.path)
       });
     }
 
@@ -296,63 +325,6 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
-/** Ask what the workshop should teach, and what to call it. */
-async function askForWorkshop(): Promise<{
-  topic: string;
-  name: string;
-} | null> {
-  const body = new Widget();
-  const topic = document.createElement('textarea');
-  const name = document.createElement('input');
-  const topicLabel = document.createElement('label');
-  const nameLabel = document.createElement('label');
-
-  body.addClass('jp-WorkshopAgent-create');
-  topicLabel.className =
-    'jp-WorkshopAgent-createField jp-WorkshopAgent-createTopicField';
-  nameLabel.className = 'jp-WorkshopAgent-createField';
-  topic.className = 'jp-WorkshopAgent-createInput jp-WorkshopAgent-createTopic';
-  name.className = 'jp-WorkshopAgent-createInput';
-
-  // The example is a hint below the box rather than its placeholder,
-  // which some browsers draw on one line, cut off at the box's edge.
-  const hint = document.createElement('span');
-
-  hint.className = 'jp-WorkshopAgent-createHint';
-  hint.textContent =
-    'For example: the basics of git for someone who has never used it, with a terminal, ending with a first commit.';
-
-  topicLabel.textContent = 'What should the workshop teach?';
-  topic.rows = 6;
-  topic.placeholder = 'The topic, and who it is for';
-  topicLabel.append(topic, hint);
-
-  nameLabel.textContent = 'Directory name (optional)';
-  name.placeholder = 'Made from the description when left empty';
-  nameLabel.appendChild(name);
-
-  body.node.append(topicLabel, nameLabel);
-
-  // Made directly rather than through showDialog, so the dialog can carry
-  // a class giving it a size that fits the form.
-  const dialog = new Dialog({
-    title: 'Create Workshop with AI',
-    body,
-    focusNodeSelector: 'textarea',
-    buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Create' })]
-  });
-
-  dialog.addClass('jp-WorkshopAgent-createDialog');
-
-  const result = await dialog.launch();
-
-  if (!result.button.accept || !topic.value.trim()) {
-    return null;
-  }
-
-  return { topic: topic.value.trim(), name: name.value.trim() };
-}
-
 /**
  * The model and effort a new conversation starts with, empty for the
  * agent's defaults.
@@ -378,9 +350,4 @@ async function readAi(
   } catch {
     return { model: '', effort: '' };
   }
-}
-
-/** The first few words of a description, for a directory name. */
-function firstWords(text: string): string {
-  return text.split(/\s+/).slice(0, 5).join(' ');
 }

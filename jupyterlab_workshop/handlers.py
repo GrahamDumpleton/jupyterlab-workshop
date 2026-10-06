@@ -682,10 +682,12 @@ class AgentStatusHandler(WorkshopHandler):
 class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
     """A websocket carrying one workshop's conversation with the agent.
 
-    The first message opens the conversation, naming the workshop; the
-    socket then receives everything that happens in it, starting with
-    what happened before, and sends messages, permission answers and
-    interrupts.
+    The first message opens the conversation, naming the workshop, or a
+    draft for a workshop not yet created; the socket then receives
+    everything that happens in it, starting with what happened before,
+    and sends messages, permission answers and interrupts. A draft's
+    socket also creates the workshop from the agreed plan, or discards
+    the draft.
     """
 
     auth_resource = "contents"
@@ -786,11 +788,36 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
         elif kind == "clear":
             await self.manager.clear(conversation)
 
+        elif kind == "create":
+            # The workshop is made from the plan, its conversation begins
+            # with the plan as the brief, and the panel is told where to
+            # carry on.
+            created, text = await self.manager.create(conversation)
+
+            self.conversation = None
+
+            self._start_turn(created, created.send(text))
+
+        elif kind == "discard":
+            await self.manager.discard(conversation)
+
+            self.conversation = None
+
         elif kind == "permission":
             conversation.session.answer(
                 str(data.get("id") or ""),
                 bool(data.get("allow")),
                 bool(data.get("remember")),
+            )
+
+        elif kind == "answer":
+            answers = data.get("answers")
+
+            conversation.session.answer_question(
+                str(data.get("id") or ""),
+                {str(key): str(value) for key, value in answers.items()}
+                if isinstance(answers, dict)
+                else None,
             )
 
         elif kind == "interrupt":
@@ -839,7 +866,13 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
             raise ConversationError("This socket already has a conversation")
 
         path = str(data.get("path") or "").strip().strip("/")
+        draft = str(data.get("draft") or "")
         workshops_directory = str(data.get("directory") or "")
+
+        if draft:
+            await self._open_draft(data, draft, workshops_directory)
+
+            return
 
         if not path:
             raise ConversationError("A workshop path is required")
@@ -866,6 +899,30 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
 
             raise ConversationError(f"The agent could not start: {error}") from error
 
+        await self._attach(conversation, data)
+
+    async def _open_draft(
+        self, data: dict[str, Any], draft: str, workshops_directory: str
+    ) -> None:
+        await self._send({"type": "starting"})
+
+        try:
+            conversation = await self.manager.open_draft(
+                draft,
+                workshops_directory,
+                str(data.get("model") or ""),
+                str(data.get("effort") or ""),
+            )
+        except ConversationError:
+            raise
+        except Exception as error:
+            self.log.exception("Unable to start drafting a workshop")
+
+            raise ConversationError(f"The agent could not start: {error}") from error
+
+        await self._attach(conversation, data)
+
+    async def _attach(self, conversation: Conversation, data: dict[str, Any]) -> None:
         self.conversation = conversation
 
         conversation.attach(self._send, str(data.get("client") or ""))
@@ -874,6 +931,7 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
             {
                 "type": "opened",
                 "path": conversation.path,
+                "draft": conversation.draft,
                 "provider": conversation.provider,
                 "session_id": conversation.session.session_id,
                 "running": conversation.running,

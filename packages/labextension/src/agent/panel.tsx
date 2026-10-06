@@ -7,12 +7,18 @@ import {
 } from '@jupyterlab/apputils';
 import { ServerConnection } from '@jupyterlab/services';
 import { stopIcon } from '@jupyterlab/ui-components';
+import { ISignal, Signal } from '@lumino/signaling';
 import * as React from 'react';
 
 import { requestAPI } from '../request';
 import { errorMessage } from '../tokens';
 import { AgentConnection, IAgentInfo, IAgentMessage } from './connection';
-import { ConversationModel, TranscriptItem } from './model';
+import {
+  ConversationModel,
+  IProposal,
+  IQuestion,
+  TranscriptItem
+} from './model';
 
 /** What the server says about the agent before a conversation starts. */
 export interface IAgentStatus {
@@ -41,9 +47,19 @@ export class AuthorPanel extends ReactWidget {
     super();
 
     this._options = options;
-    this.id = AuthorPanel.idFor(options.path);
-    this.title.label = `${AUTHOR_TITLE}: ${lastSegment(options.path)}`;
-    this.title.caption = `${AUTHOR_TITLE} for ${options.path}`;
+
+    // A draft has no workshop yet, so it goes by its own id until the
+    // workshop is created and a panel for it takes over.
+    if (options.draft) {
+      this.id = AuthorPanel.idForDraft(options.draft);
+      this.title.label = `${AUTHOR_TITLE}: New workshop`;
+      this.title.caption = `${AUTHOR_TITLE}, drafting a new workshop`;
+    } else {
+      this.id = AuthorPanel.idFor(options.path);
+      this.title.label = `${AUTHOR_TITLE}: ${lastSegment(options.path)}`;
+      this.title.caption = `${AUTHOR_TITLE} for ${options.path}`;
+    }
+
     this.title.closable = true;
     this.addClass('jp-WorkshopAgent');
 
@@ -61,9 +77,24 @@ export class AuthorPanel extends ReactWidget {
     return `jupyterlab-workshop-author-${encodeURIComponent(path)}`;
   }
 
-  /** The workshop the conversation is about. */
+  /** The id of the panel drafting a new workshop. */
+  static idForDraft(draft: string): string {
+    return `jupyterlab-workshop-author-draft-${draft}`;
+  }
+
+  /** The workshop the conversation is about; empty while drafting. */
   get path(): string {
     return this._options.path;
+  }
+
+  /** The draft's id while a new workshop is drafted; empty otherwise. */
+  get draft(): string {
+    return this._options.draft ?? '';
+  }
+
+  /** Emitted with the workshop's path when a draft's workshop is created. */
+  get created(): ISignal<this, string> {
+    return this._created;
   }
 
   /** The conversation as shown. */
@@ -130,6 +161,12 @@ export class AuthorPanel extends ReactWidget {
             }
             onCompact={() => this._connection.compact()}
             onNewConversation={() => void this._newConversation()}
+            onAnswerQuestion={(id, answers) => {
+              this._connection.answerQuestion(id, answers);
+              this._model.answeredQuestion(id, answers);
+            }}
+            onCreate={() => this._connection.create()}
+            onDiscard={() => void this._discard()}
           />
         )}
       </UseSignal>
@@ -152,6 +189,32 @@ export class AuthorPanel extends ReactWidget {
     if (result.button.accept) {
       this._connection.clear();
     }
+  }
+
+  /** End the draft, once the person confirms. */
+  private async _discard(): Promise<void> {
+    const result = await showDialog({
+      title: 'Discard this draft?',
+      body: 'The conversation is forgotten. Nothing was created, so nothing else changes.',
+      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Discard' })]
+    });
+
+    if (result.button.accept) {
+      this._connection.discard();
+    }
+  }
+
+  private _reveal(): void {
+    this._options.reveal();
+
+    // Once shown and drawn, scroll the newest request into view.
+    requestAnimationFrame(() => {
+      const requests = this.node.querySelectorAll(
+        '.jp-WorkshopAgent-permission, .jp-WorkshopAgent-question'
+      );
+
+      requests[requests.length - 1]?.scrollIntoView({ block: 'center' });
+    });
   }
 
   private async _checkStatus(): Promise<void> {
@@ -190,7 +253,29 @@ export class AuthorPanel extends ReactWidget {
       return;
     }
 
+    if (message.type === 'created') {
+      this._created.emit(message.path);
+
+      return;
+    }
+
+    // A discarded draft has nothing left to show.
+    if (message.type === 'closed' && this.draft) {
+      this.dispose();
+
+      return;
+    }
+
     this._model.handle(message);
+
+    // A request the agent waits on is no use behind other tabs, so the
+    // panel comes to the front with the request in view.
+    if (
+      message.type === 'event' &&
+      (message.event.kind === 'permission' || message.event.kind === 'question')
+    ) {
+      this._reveal();
+    }
 
     if (message.type === 'opened') {
       for (const text of this._queued.splice(0)) {
@@ -200,6 +285,7 @@ export class AuthorPanel extends ReactWidget {
   }
 
   private _options: AuthorPanel.IOptions;
+  private _created = new Signal<this, string>(this);
   private _connection: AgentConnection;
   private _model = new ConversationModel();
   private _status: IAgentStatus | null = null;
@@ -209,8 +295,11 @@ export class AuthorPanel extends ReactWidget {
 
 export namespace AuthorPanel {
   export interface IOptions {
-    /** The workshop, relative to the JupyterLab root. */
+    /** The workshop, relative to the JupyterLab root; empty for a draft. */
     path: string;
+
+    /** The draft's id, for a workshop not created yet. */
+    draft?: string;
 
     serverSettings: ServerConnection.ISettings;
 
@@ -222,6 +311,9 @@ export namespace AuthorPanel {
 
     /** Open the workshop in the instructions panel, in author mode. */
     openWorkshop: () => Promise<void>;
+
+    /** Bring the panel to the front, for something that needs an answer. */
+    reveal: () => void;
   }
 }
 
@@ -238,7 +330,10 @@ function AuthorContent({
   onContinueInTerminal,
   onConfigure,
   onCompact,
-  onNewConversation
+  onNewConversation,
+  onAnswerQuestion,
+  onCreate,
+  onDiscard
 }: {
   panel: AuthorPanel;
   status: IAgentStatus | null;
@@ -253,11 +348,18 @@ function AuthorContent({
   onConfigure: (model: string, effort: string) => void;
   onCompact: () => void;
   onNewConversation: () => void;
+  onAnswerQuestion: (
+    id: string,
+    answers: Record<string, string> | null
+  ) => void;
+  onCreate: () => void;
+  onDiscard: () => void;
 }): JSX.Element {
   const model = panel.model;
   const [draft, setDraft] = React.useState('');
   const end = React.useRef<HTMLDivElement>(null);
   const ready = model.state === 'ready';
+  const drafting = panel.draft !== '';
 
   // Keep the newest entry in view as the conversation grows.
   React.useEffect(() => {
@@ -280,7 +382,9 @@ function AuthorContent({
       <div className="jp-WorkshopAgent-header">
         <div className="jp-WorkshopAgent-title">
           <h2>{AUTHOR_TITLE}</h2>
-          <span className="jp-WorkshopAgent-path">{panel.path}</span>
+          <span className="jp-WorkshopAgent-path">
+            {drafting ? 'New workshop, not created yet' : panel.path}
+          </span>
         </div>
         <div className="jp-WorkshopAgent-headerActions">
           {status?.logged_in ? (
@@ -288,15 +392,27 @@ function AuthorContent({
               {describeAccount(status)}
             </span>
           ) : null}
-          <button
-            type="button"
-            className="jp-WorkshopAgent-barButton"
-            title="Start the conversation over; the agent forgets what was said so far"
-            disabled={!ready || model.running || model.items.length === 0}
-            onClick={onNewConversation}
-          >
-            New conversation
-          </button>
+          {drafting ? (
+            <button
+              type="button"
+              className="jp-WorkshopAgent-barButton"
+              title="Forget this draft; nothing has been created"
+              disabled={!ready || model.running}
+              onClick={onDiscard}
+            >
+              Discard draft
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="jp-WorkshopAgent-barButton"
+              title="Start the conversation over; the agent forgets what was said so far"
+              disabled={!ready || model.running || model.items.length === 0}
+              onClick={onNewConversation}
+            >
+              New conversation
+            </button>
+          )}
         </div>
       </div>
       <Setup
@@ -311,7 +427,11 @@ function AuthorContent({
       <div className="jp-WorkshopAgent-transcript">
         {model.items.length === 0 && ready ? (
           <p className="jp-WorkshopAgent-hint">
-            Say what the workshop should teach, or what to change in it.
+            {drafting
+              ? 'Say what the workshop should teach and who it is for. ' +
+                'Workshop Author asks about anything unclear and proposes a ' +
+                'plan; nothing is created until you press Create.'
+              : 'Say what the workshop should teach, or what to change in it.'}
           </p>
         ) : null}
         {model.items.map((item, index) => (
@@ -320,6 +440,17 @@ function AuthorContent({
             item={item}
             workshop={panel.path}
             onAnswer={onAnswer}
+            onAnswerQuestion={onAnswerQuestion}
+            proposal={
+              item.type === 'proposal'
+                ? {
+                    drafting,
+                    latest: item.id === model.latestProposal,
+                    canCreate: ready && !model.running,
+                    onCreate
+                  }
+                : undefined
+            }
           />
         ))}
         <div ref={end} />
@@ -345,23 +476,27 @@ function AuthorContent({
         />
         <div className="jp-WorkshopAgent-bar">
           <div className="jp-WorkshopAgent-barControls">
-            <button
-              type="button"
-              className="jp-WorkshopAgent-barButton"
-              title="Open the workshop in the instructions panel, in author mode"
-              onClick={onOpenWorkshop}
-            >
-              Open workshop
-            </button>
-            <button
-              type="button"
-              className="jp-WorkshopAgent-barButton"
-              title="Carry the conversation on in a terminal, in the workshop's directory"
-              disabled={!ready || model.running}
-              onClick={onContinueInTerminal}
-            >
-              Continue in terminal
-            </button>
+            {drafting ? null : (
+              <>
+                <button
+                  type="button"
+                  className="jp-WorkshopAgent-barButton"
+                  title="Open the workshop in the instructions panel, in author mode"
+                  onClick={onOpenWorkshop}
+                >
+                  Open workshop
+                </button>
+                <button
+                  type="button"
+                  className="jp-WorkshopAgent-barButton"
+                  title="Carry the conversation on in a terminal, in the workshop's directory"
+                  disabled={!ready || model.running}
+                  onClick={onContinueInTerminal}
+                >
+                  Continue in terminal
+                </button>
+              </>
+            )}
             <ModelPicker
               info={model.info}
               disabled={!ready || model.running}
@@ -652,13 +787,22 @@ function Setup({
 function Entry({
   item,
   workshop,
-  onAnswer
+  onAnswer,
+  onAnswerQuestion,
+  proposal
 }: {
   item: TranscriptItem;
 
   /** The workshop's path, which paths in tool calls are shown relative to. */
   workshop: string;
   onAnswer: (id: string, allow: boolean, remember: boolean) => void;
+  onAnswerQuestion: (
+    id: string,
+    answers: Record<string, string> | null
+  ) => void;
+
+  /** For a proposed plan: where the conversation stands, and Create. */
+  proposal?: IProposalState;
 }): JSX.Element {
   switch (item.type) {
     case 'user':
@@ -746,6 +890,17 @@ function Entry({
     case 'note':
       return <p className="jp-WorkshopAgent-note">{item.text}</p>;
 
+    case 'proposal':
+      return <ProposalCard item={item} state={proposal} />;
+
+    case 'question':
+      return (
+        <QuestionCard
+          item={item}
+          onAnswer={answers => onAnswerQuestion(item.id, answers)}
+        />
+      );
+
     case 'compacted':
       return (
         <p
@@ -758,6 +913,246 @@ function Entry({
         </p>
       );
   }
+}
+
+/**
+ * The agent's questions, each with its options to choose from, one or
+ * several, and a box for an answer of the person's own.
+ */
+function QuestionCard({
+  item,
+  onAnswer
+}: {
+  item: Extract<TranscriptItem, { type: 'question' }>;
+  onAnswer: (answers: Record<string, string> | null) => void;
+}): JSX.Element {
+  const [chosen, setChosen] = React.useState<Record<string, string[]>>({});
+  const [other, setOther] = React.useState<Record<string, string>>({});
+
+  // What each question is answered with: the options chosen, and the
+  // person's own words where given.
+  const answerFor = (question: IQuestion): string => {
+    const own = (other[question.question] ?? '').trim();
+    const picked = chosen[question.question] ?? [];
+
+    if (!question.multiSelect) {
+      return own || picked[0] || '';
+    }
+
+    return [...picked, ...(own ? [own] : [])].join(', ');
+  };
+
+  const answers = Object.fromEntries(
+    item.questions.map(question => [question.question, answerFor(question)])
+  );
+  const complete = item.questions.every(question => answers[question.question]);
+
+  const choose = (question: IQuestion, label: string): void => {
+    const current = chosen[question.question] ?? [];
+    const next = question.multiSelect
+      ? current.includes(label)
+        ? current.filter(item => item !== label)
+        : [...current, label]
+      : [label];
+
+    setChosen({ ...chosen, [question.question]: next });
+
+    if (!question.multiSelect) {
+      setOther({ ...other, [question.question]: '' });
+    }
+  };
+
+  // Once answered, or no longer waited on, the card shows how it ended.
+  if (item.answers !== undefined || item.expired) {
+    return (
+      <div className="jp-WorkshopAgent-question">
+        {item.questions.map(question => (
+          <p key={question.question}>
+            <strong>{question.question}</strong>{' '}
+            {item.answers
+              ? item.answers[question.question] || 'No answer.'
+              : null}
+          </p>
+        ))}
+        <p className="jp-WorkshopAgent-answer">
+          {item.answers === null
+            ? 'Not answered.'
+            : item.answers
+              ? 'Answered.'
+              : 'No longer waiting.'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="jp-WorkshopAgent-question">
+      {item.questions.map(question => (
+        <fieldset key={question.question}>
+          <legend>
+            {question.header ? (
+              <span className="jp-WorkshopAgent-questionHeader">
+                {question.header}
+              </span>
+            ) : null}
+            {question.question}
+          </legend>
+          {question.options.map(option => (
+            <label
+              key={option.label}
+              className="jp-WorkshopAgent-questionOption"
+            >
+              <input
+                type={question.multiSelect ? 'checkbox' : 'radio'}
+                name={`${item.id}-${question.question}`}
+                checked={(chosen[question.question] ?? []).includes(
+                  option.label
+                )}
+                onChange={() => choose(question, option.label)}
+              />
+              <span>
+                {option.label}
+                {option.description ? (
+                  <span className="jp-WorkshopAgent-questionDescription">
+                    {option.description}
+                  </span>
+                ) : null}
+              </span>
+            </label>
+          ))}
+          <input
+            type="text"
+            className="jp-WorkshopAgent-questionOther"
+            aria-label={`Other answer to: ${question.question}`}
+            placeholder="Or answer in your own words"
+            value={other[question.question] ?? ''}
+            onChange={event => {
+              setOther({ ...other, [question.question]: event.target.value });
+
+              if (!question.multiSelect && event.target.value) {
+                setChosen({ ...chosen, [question.question]: [] });
+              }
+            }}
+          />
+        </fieldset>
+      ))}
+      <div className="jp-WorkshopAgent-setupActions">
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={!complete}
+          onClick={() => onAnswer(answers)}
+        >
+          Submit
+        </button>
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled"
+          title="Let the agent carry on without an answer"
+          onClick={() => onAnswer(null)}
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Where a proposed plan stands, for its card. */
+interface IProposalState {
+  /** Whether the conversation is still a draft, with nothing created. */
+  drafting: boolean;
+
+  /** Whether this is the plan Create would make: the last one accepted. */
+  latest: boolean;
+
+  /** Whether Create may be pressed now. */
+  canCreate: boolean;
+  onCreate: () => void;
+}
+
+/** Who each audience a plan names is. */
+const AUDIENCES: Record<string, string> = {
+  newcomers: 'People new to the subject',
+  experienced: 'Experienced practitioners',
+  demonstration: 'A product demonstration or presentation'
+};
+
+/** A plan the agent proposed, with Create while drafting. */
+function ProposalCard({
+  item,
+  state
+}: {
+  item: Extract<TranscriptItem, { type: 'proposal' }>;
+  state?: IProposalState;
+}): JSX.Element {
+  const plan: IProposal = item.plan;
+  const refused = item.result !== undefined && !item.result.ok;
+  const checks = [
+    plan.quizzes ? 'Quizzes' : 'No quizzes',
+    plan.gating
+      ? 'pages wait for their checks'
+      : 'pages do not wait for their checks'
+  ].join(', ');
+
+  let footer: JSX.Element | null = null;
+
+  if (refused) {
+    footer = (
+      <p className="jp-WorkshopAgent-error">
+        Not accepted: {item.result?.summary}
+      </p>
+    );
+  } else if (item.result === undefined) {
+    footer = null;
+  } else if (!state?.latest) {
+    footer = (
+      <p className="jp-WorkshopAgent-answer">Replaced by a later plan.</p>
+    );
+  } else if (state.drafting) {
+    footer = (
+      <div className="jp-WorkshopAgent-setupActions">
+        <button
+          type="button"
+          className="jp-Button jp-mod-styled jp-mod-accept"
+          disabled={!state.canCreate}
+          onClick={state.onCreate}
+        >
+          Create
+        </button>
+        <span className="jp-WorkshopAgent-answer">
+          Or reply with what to change.
+        </span>
+      </div>
+    );
+  } else {
+    footer = <p className="jp-WorkshopAgent-answer">The plan agreed.</p>;
+  }
+
+  return (
+    <div
+      className={`jp-WorkshopAgent-proposal${refused ? ' jp-mod-failed' : ''}`}
+    >
+      <h3>{plan.title}</h3>
+      <dl>
+        <dt>Directory</dt>
+        <dd>
+          <code>personal/{plan.name}</code>
+        </dd>
+        <dt>For</dt>
+        <dd>{AUDIENCES[plan.audience] ?? plan.audience}</dd>
+        <dt>Checks</dt>
+        <dd>{checks}</dd>
+      </dl>
+      <p className="jp-WorkshopAgent-proposalSummary">{plan.summary}</p>
+      <ol className="jp-WorkshopAgent-proposalOutline">
+        {plan.outline.map((page, index) => (
+          <li key={index}>{page}</li>
+        ))}
+      </ol>
+      {footer}
+    </div>
+  );
 }
 
 /** A tool call in a few words: what it did, to what. */

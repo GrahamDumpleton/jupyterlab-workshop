@@ -15,10 +15,15 @@ export const BRIDGE_SCHEMA_ID =
  */
 export const BRIDGE_CLIENT_ID: string = UUID.uuid4();
 
-/** Commands answered even when no workshop is open in author mode. */
+/**
+ * Commands answered even when no workshop is open in author mode. A run's
+ * progress is among them, since a run that passes closes the workshop and
+ * its report is asked for afterwards.
+ */
 const ALWAYS: ReadonlySet<string> = new Set([
   CommandIDs.bridgeOpen,
-  CommandIDs.bridgeStatus
+  CommandIDs.bridgeStatus,
+  CommandIDs.selfTestProgress
 ]);
 
 /**
