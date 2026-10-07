@@ -625,13 +625,24 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const remove = async (item: IInstalledWorkshop): Promise<void> => {
     // A directory the browser did not download may hold work that is
     // nowhere else, so only its progress goes and the dialog says so.
+    // One of the owner's own is theirs to delete, so for it the dialog
+    // offers both: cleaning up the progress, or deleting the directory.
+    const personal = !isDownloaded(item) && item.kind === 'personal';
     const body = isDownloaded(item)
       ? `The directory ${item.path} and any progress recorded in it will be deleted.`
-      : `The progress recorded in ${item.path} will be deleted. The directory and its files stay, since the browser did not download them.`;
+      : personal
+        ? `${item.path} is your own workshop, so its files have no other copy. Clean up deletes only the progress recorded in it and keeps the workshop; Delete deletes the directory and everything in it.`
+        : `The progress recorded in ${item.path} will be deleted. The directory and its files stay, since the browser did not download them.`;
     const result = await showDialog({
       title: `Remove workshop "${item.title}"?`,
       body,
-      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Remove' })]
+      buttons: personal
+        ? [
+            Dialog.cancelButton(),
+            Dialog.okButton({ label: 'Clean up' }),
+            Dialog.warnButton({ label: 'Delete' })
+          ]
+        : [Dialog.cancelButton(), Dialog.warnButton({ label: 'Remove' })]
     });
 
     if (!result.button.accept) {
@@ -639,7 +650,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
 
     try {
-      await manager.removeInstalled(item);
+      await manager.removeInstalled(item, result.button.label === 'Delete');
       setVersion(value => value + 1);
     } catch (error) {
       await showErrorMessage(

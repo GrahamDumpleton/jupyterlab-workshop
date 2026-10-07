@@ -149,6 +149,13 @@ the trust dialog, as long as they were not downloaded there. They open
 as a learner sees them; author mode is a button away as usual. In a
 library, the New Workshop dialog and a recording saved as a new
 workshop suggest a directory under `personal/`.
+
+Remove on one of them asks which you mean, since the directory has no
+other copy: Clean up deletes only the progress recorded in it, so the
+workshop stays and starts afresh, much as Restart does; Delete deletes
+the directory and everything in it. "Workshop: Remove…" on an open
+personal workshop offers the same choice, and `jupyter workshop remove
+--delete` is the command line's Delete.
 [Workshop Author](authoring.md#workshop-author), the AI agent, writes
 the workshops it creates there too, and works on the workshops under
 `personal/` and in projects, never on downloaded ones.

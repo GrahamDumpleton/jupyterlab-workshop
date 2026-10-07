@@ -232,7 +232,10 @@ deal with it:
   decision. Remove on a card follows the same rule for a workshop that
   is not open: a directory the browser downloaded is deleted, while one
   that was put there by other means, such as a checkout's own
-  directory, keeps its files and loses only its `_workshop` state.
+  directory, keeps its files and loses only its `_workshop` state. For
+  one of [your own workshops](library.md#your-own-workshops) in a
+  library the dialog offers both, Clean up for the state alone and
+  Delete for the directory.
 
 Closing a workshop, from the header button or the Finish dialog, closes
 the documents it put on screen and shuts down its terminals, so the next

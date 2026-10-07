@@ -286,9 +286,15 @@ function PanelContent({
       />
       {gate.unmet.length > 0 ? (
         <div
-          className={`jp-WorkshopPanel-gate${gate.blocked ? ' jp-mod-blocked' : ''}`}
+          className={`jp-WorkshopPanel-gate${gate.blocked || gate.relaxed ? ' jp-mod-blocked' : ''}`}
         >
-          <span>{gate.blocked ? 'Before moving on: ' : 'Not yet done: '}</span>
+          <span>
+            {gate.blocked
+              ? 'Before moving on: '
+              : gate.relaxed
+                ? 'Before moving on (not enforced in author mode): '
+                : 'Not yet done: '}
+          </span>
           {gate.unmet.map((item, position) => (
             <React.Fragment key={item.id}>
               {position > 0 ? ', ' : null}

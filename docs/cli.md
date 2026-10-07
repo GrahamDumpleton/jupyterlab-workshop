@@ -344,14 +344,16 @@ there is no terminal to ask at.
 ## remove
 
 ```
-jupyter workshop remove NAME... [--yes] [--root ROOT] [--directory DIR | --library]
+jupyter workshop remove NAME... [--delete] [--yes] [--root ROOT] [--directory DIR | --library]
 ```
 
 Removes installed workshops as the browser's Remove button does: a
 downloaded workshop is deleted, and any other, a local directory, a
 library's own workshop or a project's, loses only its recorded
-progress, `_workshop/`, keeping its files. It lists what it will do and
-asks first unless given `--yes`.
+progress, `_workshop/`, keeping its files. `--delete` deletes the
+directory of such a workshop as well, as the browser's Delete does for
+one of your own. It lists what it will do and asks first unless given
+`--yes`.
 
 ## project
 

@@ -186,6 +186,93 @@ interface IBridgeAnswer {
   message: string;
 }
 
+test.describe('strict gating in author mode', () => {
+  test.beforeEach(async ({ page, tmpPath }) => {
+    await page.contents.uploadDirectory(EXAMPLE_DIR, `${tmpPath}/${WORKSHOP}`);
+
+    const manifest = await page.evaluate(async (file: string) => {
+      const exposed = window as unknown as IExposedApp;
+      const model = await exposed.jupyterapp.serviceManager.contents.get(file, {
+        content: true
+      });
+
+      return String(model.content);
+    }, `${tmpPath}/${WORKSHOP}/workshop.yaml`);
+
+    await page.contents.uploadContent(
+      manifest.replace('gating: soft', 'gating: strict'),
+      'text',
+      `${tmpPath}/${WORKSHOP}/workshop.yaml`
+    );
+  });
+
+  test('shows the gate but lets the author move on', async ({
+    page,
+    tmpPath
+  }) => {
+    await page.evaluate((target: string) => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:open', {
+        path: target
+      });
+    }, workshopPath(tmpPath));
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog.locator('.jp-WorkshopTrust')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Trust', exact: true }).click();
+    await page.sidebar.openTab('jupyterlab-workshop-panel');
+
+    const panel = page.locator(PANEL);
+    const gate = panel.locator('.jp-WorkshopPanel-gate');
+    const next = panel
+      .locator('.jp-WorkshopPanel-footer')
+      .getByRole('button', { name: 'Next' });
+
+    // A learner is held on the first page until its requirements pass.
+    await expect(panel.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Create a repository'
+    );
+    await expect(gate).toContainText('Before moving on:');
+    await expect(gate).toHaveClass(/jp-mod-blocked/);
+    await expect(next).toBeDisabled();
+
+    // In author mode the gate is still shown, marked as not enforced,
+    // and Next moves on.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:author-mode', {});
+    });
+    await expect(panel.locator('.jp-WorkshopPanel-author')).toBeVisible();
+    await expect(gate).toContainText(
+      'Before moving on (not enforced in author mode):'
+    );
+    await expect(gate).toHaveClass(/jp-mod-blocked/);
+    await expect(next).toBeEnabled();
+    await next.click();
+    await expect(panel.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Your first commit'
+    );
+
+    // Leaving author mode brings the gate back on the page the author is
+    // on.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      return exposed.jupyterapp.commands.execute('workshop:author-mode', {});
+    });
+    await expect(panel.locator('.jp-WorkshopPanel-author')).toHaveCount(0);
+    await expect(gate).toContainText('Before moving on:');
+    await expect(next).toBeDisabled();
+  });
+});
+
+function workshopPath(tmpPath: string): string {
+  return `${tmpPath}/${WORKSHOP}`;
+}
+
 test.describe('bridge targets', () => {
   test('a request aimed at a tab runs only there', async ({ page }) => {
     // Status is answered by any tab, so a request with no target, one

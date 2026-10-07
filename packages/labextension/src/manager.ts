@@ -39,6 +39,7 @@ import {
   COLLECTIONS_DIRECTORY,
   STANDALONE_DIRECTORY,
   isOwnLibraryPath,
+  isPersonalLibraryPath,
   joinLibraryPath,
   normalizeWorkshopsDirectory
 } from '@jupyterlab-workshop/core';
@@ -979,11 +980,14 @@ export class WorkshopManager implements IWorkshopManager {
     return this._backend.installed(directory);
   }
 
-  async removeInstalled(item: IInstalledWorkshop): Promise<void> {
+  async removeInstalled(
+    item: IInstalledWorkshop,
+    deleteFiles = false
+  ): Promise<void> {
     const target = normalizeWorkshopPath(item.path);
 
     if (this._workshop?.path === target) {
-      await this.uninstall();
+      await this.uninstall(deleteFiles);
 
       return;
     }
@@ -991,8 +995,8 @@ export class WorkshopManager implements IWorkshopManager {
     // Only a directory the extension downloaded is deleted whole. One
     // with no download record, such as a checkout's own directory, may
     // hold work that exists nowhere else, so it loses only its state,
-    // as removing it while open does.
-    if (isDownloaded(item)) {
+    // as removing it while open does, unless deleting it was asked for.
+    if (isDownloaded(item) || deleteFiles) {
       await leaveDirectory(this._fileBrowser, target, PathExt.dirname(target));
       await this._backend.removeInstalled(target);
 
@@ -1096,7 +1100,29 @@ export class WorkshopManager implements IWorkshopManager {
     return this._decide(node.name, isAutomatic(node), node.options);
   }
 
-  uninstallPlan(): IUninstallPlan | null {
+  async isPersonal(): Promise<boolean> {
+    const workshop = this._workshop;
+    const library = this._library;
+
+    if (!workshop || workshop.source.kind !== 'local' || !library) {
+      return false;
+    }
+
+    try {
+      if ((await library.read()) === null) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+
+    return isPersonalLibraryPath(
+      await library.workshopsDirectory(),
+      workshop.path
+    );
+  }
+
+  uninstallPlan(deleteFiles = false): IUninstallPlan | null {
     const workshop = this._workshop;
 
     if (!workshop) {
@@ -1105,7 +1131,7 @@ export class WorkshopManager implements IWorkshopManager {
 
     const steps: string[] = [];
     const settings = this._state.state?.installed.settings ?? [];
-    const removesDirectory = workshop.source.kind !== 'local';
+    const removesDirectory = workshop.source.kind !== 'local' || deleteFiles;
 
     if (removesDirectory) {
       steps.push(
@@ -1135,9 +1161,9 @@ export class WorkshopManager implements IWorkshopManager {
     return { steps, removesDirectory };
   }
 
-  async uninstall(): Promise<void> {
+  async uninstall(deleteFiles = false): Promise<void> {
     const workshop = this._workshop;
-    const plan = this.uninstallPlan();
+    const plan = this.uninstallPlan(deleteFiles);
 
     if (!workshop || !plan) {
       return;
@@ -1375,7 +1401,17 @@ export class WorkshopManager implements IWorkshopManager {
       }
     }
 
-    return { policy, unmet, blocked: policy === 'strict' && unmet.length > 0 };
+    // Strict gating is shown but not enforced in author mode, since the
+    // author has to reach every page to work on it.
+    const strict = policy === 'strict' && unmet.length > 0;
+    const authoring = this.authoring;
+
+    return {
+      policy,
+      unmet,
+      blocked: strict && !authoring,
+      relaxed: strict && authoring
+    };
   }
 
   setPreflight(results: IPreflightResult[] | null): void {

@@ -13,6 +13,7 @@ import {
   downloadKey,
   emptyLibrary,
   isOwnLibraryPath,
+  isPersonalLibraryPath,
   joinLibraryPath,
   libraryFilePath,
   mayReplaceDownload,
@@ -349,6 +350,26 @@ describe('projects', () => {
     expect(projectWorkshops(projectEntry(library, 'repo'))).toBe('examples');
     expect(projectEntry(library, 'other')).toEqual({ name: 'other' });
     expect(projectWorkshops({ name: 'other' })).toBe('workshops');
+  });
+});
+
+describe('isPersonalLibraryPath', () => {
+  it('takes personal workshops alone', () => {
+    expect(isPersonalLibraryPath('workshops', 'workshops/personal/mine')).toBe(
+      true
+    );
+    expect(isPersonalLibraryPath('.', 'personal/mine')).toBe(true);
+
+    expect(isPersonalLibraryPath('workshops', 'workshops/personal')).toBe(
+      false
+    );
+    expect(isPersonalLibraryPath('workshops', 'personal/mine')).toBe(false);
+    expect(
+      isPersonalLibraryPath('workshops', 'workshops/projects/repo/workshops/x')
+    ).toBe(false);
+    expect(
+      isPersonalLibraryPath('workshops', 'workshops/personal/../collections/x')
+    ).toBe(false);
   });
 });
 

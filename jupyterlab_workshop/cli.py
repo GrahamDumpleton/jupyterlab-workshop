@@ -477,11 +477,17 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Remove installed workshops as the browser does: a downloaded one "
             "is deleted, and any other, such as your own or a project's, loses "
-            "only its recorded progress."
+            "only its recorded progress unless --delete asks for its directory "
+            "to go as well."
         ),
     )
     remove.add_argument(
         "names", nargs="+", metavar="NAME", help="workshop names or paths"
+    )
+    remove.add_argument(
+        "--delete",
+        action="store_true",
+        help="delete the directory of a workshop that was not downloaded too",
     )
     remove.add_argument("--yes", action="store_true", help="do not ask before removing")
     _add_library_target_arguments(remove)
@@ -1624,7 +1630,7 @@ def command_remove(args: argparse.Namespace) -> int:
         ) not in {None, "local"}
         what = (
             "the directory and its progress"
-            if downloaded
+            if downloaded or args.delete
             else "its progress; the files stay"
         )
 
@@ -1635,7 +1641,7 @@ def command_remove(args: argparse.Namespace) -> int:
 
     for record in records:
         try:
-            print(f"removed {remove_installed(root, record)}")
+            print(f"removed {remove_installed(root, record, args.delete)}")
         except FetchError as error:
             raise CliError(str(error)) from error
 

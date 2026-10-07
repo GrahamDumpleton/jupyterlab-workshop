@@ -39,9 +39,11 @@ line, and edit and delete buttons. Edit opens the same form as Insert,
 filled in, and rewrites the block in place. Lint findings that refer to
 a line are shown under the block they refer to.
 
-While author mode is on, progress events are not recorded, and edits to
-the files re-render the panel as they are saved, whether they were made
-in JupyterLab or elsewhere. Restart only ever refills the
+While author mode is on, progress events are not recorded, strict
+[gating](checks.md#gating) is shown but not enforced, so every page can
+be reached without passing the checks before it, and edits to the files
+re-render the panel as they are saved, whether they were made in
+JupyterLab or elsewhere. Restart only ever refills the
 [workspace](concepts.md#the-workspace), so restarting to try the
 workshop from the top keeps every edit to the pages and the manifest.
 

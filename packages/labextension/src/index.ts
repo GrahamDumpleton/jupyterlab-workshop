@@ -1266,13 +1266,24 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
+        // One of the library owner's own workshops is theirs to delete,
+        // so the dialog offers that beside cleaning up its progress.
+        const personal = await manager.isPersonal();
         const result = await showDialog({
           title: `Remove workshop "${title}"?`,
-          body: new UninstallBody(plan.steps),
-          buttons: [
-            Dialog.cancelButton(),
-            Dialog.warnButton({ label: 'Remove' })
-          ]
+          body: new UninstallBody(
+            plan.steps,
+            personal
+              ? 'Clean up does the above and keeps the workshop. Delete deletes the workshop directory and everything in it instead, since it is your own and has no other copy.'
+              : ''
+          ),
+          buttons: personal
+            ? [
+                Dialog.cancelButton(),
+                Dialog.okButton({ label: 'Clean up' }),
+                Dialog.warnButton({ label: 'Delete' })
+              ]
+            : [Dialog.cancelButton(), Dialog.warnButton({ label: 'Remove' })]
         });
 
         if (!result.button.accept) {
@@ -1287,7 +1298,7 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
             await layouts.forget(path);
           }
 
-          await manager.uninstall();
+          await manager.uninstall(result.button.label === 'Delete');
           Notification.success(`Removed workshop "${title}"`, {
             autoClose: 4000
           });
@@ -1945,7 +1956,7 @@ async function runPreflight(manager: IWorkshopManager): Promise<void> {
  * Dialog body listing what removing a workshop will do.
  */
 class UninstallBody extends Widget {
-  constructor(steps: string[]) {
+  constructor(steps: string[], note = '') {
     super();
 
     const list = document.createElement('ul');
@@ -1958,6 +1969,13 @@ class UninstallBody extends Widget {
     }
 
     this.node.appendChild(list);
+
+    if (note) {
+      const paragraph = document.createElement('p');
+
+      paragraph.textContent = note;
+      this.node.appendChild(paragraph);
+    }
   }
 }
 

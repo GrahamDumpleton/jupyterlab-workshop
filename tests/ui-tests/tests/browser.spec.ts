@@ -2214,6 +2214,53 @@ test.describe('workshop library', () => {
     await expect(page.locator('.jp-Dialog .jp-WorkshopTrust')).toHaveCount(0);
   });
 
+  test("offers to clean up or delete one of the owner's own workshops", async ({
+    page
+  }) => {
+    const mine = `${WORKSHOPS_DIR}/personal/mine`;
+
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await uploadWorkshop(page, mine, 'mine', 'My own workshop');
+    await page.contents.uploadContent(
+      JSON.stringify({
+        version: 1,
+        workshop: { name: 'mine', version: '1.0.0' },
+        installed: { settings: [] },
+        currentPage: '01',
+        pages: {}
+      }),
+      'text',
+      `${mine}/_workshop/state.json`
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const card = browser.locator('.jp-WorkshopBrowser-card', {
+      hasText: 'My own workshop'
+    });
+    const dialog = page.locator('.jp-Dialog');
+
+    // Clean up takes the progress and keeps the workshop.
+    await card.getByRole('button', { name: 'Remove' }).click();
+    await expect(dialog).toContainText('is your own workshop');
+    await dialog.getByRole('button', { name: 'Clean up' }).click();
+    await expect
+      .poll(() => page.contents.fileExists(`${mine}/_workshop/state.json`))
+      .toBe(false);
+    expect(await page.contents.fileExists(`${mine}/workshop.yaml`)).toBe(true);
+    await expect(card).toHaveCount(1);
+
+    // Delete takes the directory with it.
+    await card.getByRole('button', { name: 'Remove' }).click();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+    await expect.poll(() => page.contents.directoryExists(mine)).toBe(false);
+    await expect(card).toHaveCount(0);
+  });
+
   test('makes a plain directory a library, moving what was downloaded', async ({
     page
   }) => {

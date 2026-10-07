@@ -409,6 +409,29 @@ export function isOwnLibraryPath(
   workshopsDirectory: string,
   path: string
 ): boolean {
+  return isUnderLibraryTrees(workshopsDirectory, path, [
+    PERSONAL_DIRECTORY,
+    PROJECTS_DIRECTORY
+  ]);
+}
+
+/**
+ * Whether a workshop path is one of the library owner's own under
+ * `personal/`. Such a workshop has no other copy, but it is the owner's
+ * to delete, so removing it may take the directory too.
+ */
+export function isPersonalLibraryPath(
+  workshopsDirectory: string,
+  path: string
+): boolean {
+  return isUnderLibraryTrees(workshopsDirectory, path, [PERSONAL_DIRECTORY]);
+}
+
+function isUnderLibraryTrees(
+  workshopsDirectory: string,
+  path: string,
+  trees: string[]
+): boolean {
   const base = normalizeWorkshopsDirectory(workshopsDirectory);
   const target = normalizeWorkshopsDirectory(path);
 
@@ -416,7 +439,7 @@ export function isOwnLibraryPath(
     return false;
   }
 
-  return [PERSONAL_DIRECTORY, PROJECTS_DIRECTORY].some(tree => {
+  return trees.some(tree => {
     const prefix = `${joinLibraryPath(base, tree)}/`;
 
     return target.startsWith(prefix) && target.length > prefix.length;

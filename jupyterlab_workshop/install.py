@@ -468,18 +468,23 @@ def apply_update(
     return result.path
 
 
-def remove_installed(root_dir: Path, record: dict[str, Any]) -> str:
+def remove_installed(
+    root_dir: Path, record: dict[str, Any], delete_files: bool = False
+) -> str:
     """Remove an installed workshop as the browser does.
 
     A workshop the extension downloaded is deleted whole. Any other, a
     local directory, the library owner's own or a project's, may hold
-    work that is nowhere else, so only its recorded progress goes.
-    Returns what was removed: the workshop's path, or its state directory.
+    work that is nowhere else, so only its recorded progress goes unless
+    ``delete_files`` asks for its directory to go too. Returns what was
+    removed: the workshop's path, or its state directory.
     """
 
     source = record.get("source")
 
-    if isinstance(source, dict) and source.get("kind") not in {None, "local"}:
+    if delete_files or (
+        isinstance(source, dict) and source.get("kind") not in {None, "local"}
+    ):
         return remove_workshop(root_dir, str(record["path"]))
 
     state = _resolve_inside(root_dir, str(record["path"])) / "_workshop"

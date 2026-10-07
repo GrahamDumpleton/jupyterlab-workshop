@@ -461,6 +461,12 @@ export interface IGateStatus {
 
   /** Whether moving forward is blocked outright. */
   blocked: boolean;
+
+  /**
+   * Whether strict gating would block a learner here but does not,
+   * because author mode is on and the author needs to reach every page.
+   */
+  relaxed: boolean;
 }
 
 /** What the preflight found about one required tool. */
@@ -828,9 +834,20 @@ export interface IWorkshopManager {
   /**
    * Remove a workshop that is not open: the whole directory when it was
    * downloaded, or only its `_workshop` state when the directory was put
-   * there by other means, such as a checkout, so its files are kept.
+   * there by other means, such as a checkout, so its files are kept
+   * unless `deleteFiles` asks for the directory to go as well.
    */
-  removeInstalled(item: IInstalledWorkshop): Promise<void>;
+  removeInstalled(
+    item: IInstalledWorkshop,
+    deleteFiles?: boolean
+  ): Promise<void>;
+
+  /**
+   * Whether the open workshop is one of the library owner's own under
+   * `personal/`, so removing it may delete its directory even though it
+   * was not downloaded.
+   */
+  isPersonal(): Promise<boolean>;
 
   /** Read and validate a collection index, by URL or root-relative path. */
   fetchCollection(url: string): Promise<ICollectionIndex>;
@@ -857,13 +874,14 @@ export interface IWorkshopManager {
   disposition(node: IDirectiveNode): ActionDisposition;
 
   /** Describe what `uninstall()` would remove for the open workshop. */
-  uninstallPlan(): IUninstallPlan | null;
+  uninstallPlan(deleteFiles?: boolean): IUninstallPlan | null;
 
   /**
    * Remove what the workshop created: its progress, settings it changed
-   * and, for downloaded workshops, the directory itself.
+   * and, for downloaded workshops, the directory itself. `deleteFiles`
+   * deletes the directory of a workshop that was not downloaded too.
    */
-  uninstall(): Promise<void>;
+  uninstall(deleteFiles?: boolean): Promise<void>;
 
   /** Forget progress and reopen the workshop from its first page. */
   reset(): Promise<void>;

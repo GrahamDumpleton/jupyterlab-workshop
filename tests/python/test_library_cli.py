@@ -294,6 +294,10 @@ def test_remove_deletes_a_download_and_keeps_a_local_workshop(tmp_path: Path) ->
     assert (mine / "workshop.yaml").is_file()
     assert not (mine / "_workshop").exists()
 
+    # Deleting the files takes the owner's own directory as well.
+    assert remove_installed(tmp_path, own, delete_files=True) == "personal/alpha"
+    assert not mine.exists()
+
 
 def test_project_commands_link_list_and_unlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

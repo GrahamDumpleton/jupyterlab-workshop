@@ -411,6 +411,12 @@ before leaving the page. The manifest's `gating` chooses what that means:
 The page selector still allows moving backwards, and jumping ahead is
 gated the same way as Next.
 
+In [author mode](authoring.md#author-mode) strict gating is shown but
+not enforced: the footer still lists what a learner would have to do
+first, marked as not enforced, and Next and the page selector work, so
+every page can be reached to edit it without passing the checks before
+it.
+
 ## Progress and finishing
 
 A page is done once the learner leaves it forwards, by Next or by
