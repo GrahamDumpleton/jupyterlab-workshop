@@ -2252,15 +2252,25 @@ test.describe('workshop library', () => {
       await page.contents.directoryExists(`${WORKSHOPS_DIR}/${WORKSHOP}`)
     ).toBe(true);
 
-    const registry = await page.request.get(
-      `api/contents/${WORKSHOPS_DIR}/library.json?content=1&type=file&format=text`
-    );
+    // The registry is written after the move, so it is read until it is
+    // whole rather than the moment the move lands.
+    await expect
+      .poll(async () => {
+        const registry = await page.request.get(
+          `api/contents/${WORKSHOPS_DIR}/library.json?content=1&type=file&format=text`
+        );
 
-    expect(JSON.parse(String((await registry.json()).content))).toEqual({
-      version: 1,
-      collections: [COLLECTION_FILE],
-      directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
-    });
+        try {
+          return JSON.parse(String((await registry.json()).content));
+        } catch {
+          return null;
+        }
+      })
+      .toEqual({
+        version: 1,
+        collections: [COLLECTION_FILE],
+        directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
+      });
     await expect(
       browser.locator('.jp-WorkshopBrowser-heading', {
         hasText: 'My workshops'
