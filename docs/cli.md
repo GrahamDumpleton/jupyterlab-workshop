@@ -139,10 +139,13 @@ meant for the [demo site](demo.md).
 A `README.md` is generated as well, which GitHub pins to the top of
 the gist page: the title, description, version, authors, duration,
 tags, platforms and frontends from the manifest, then how to open the
-workshop. When the manifest lists `jupyterlite` among its frontends
-the README carries a launch button that opens the gist in a JupyterLite
-site, and it always gives the JupyterLab routes: the "Open Workshop
-from URL…" command, a launch link and `jupyter workshop launch`. The
+workshop, starting by saying that the gist is a workshop to take rather
+than pages to read. Each way to start it is a button with a plain link
+beside it: one that opens the gist in a JupyterLite site, when the
+manifest lists `jupyterlite` among its frontends, and one that opens it
+in JupyterLab on mybinder.org, and it always gives the JupyterLab
+routes: the "Open Workshop from URL…" command, a launch link and
+`jupyter workshop launch`. The
 workshop's own `README.md` is left out unless `--append-readme` adds it
 below the generated part. In the flat copy on disk the README names a
 gist that does not exist yet; creating or updating the gist writes it

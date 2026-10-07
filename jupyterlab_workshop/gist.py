@@ -480,14 +480,18 @@ def render_readme(
     """The gist's README: the workshop's details and how to open it.
 
     GitHub pins ``README.md`` to the top of a gist page, so this is what
-    a visitor reads first. The JupyterLite launch button appears only
-    when the manifest lists that frontend, since the button would not
-    work otherwise. The Binder button opens the workshop in JupyterLab
-    through the launcher repository ``binder``, and appears unless that
-    is empty or the manifest rules the session out: frontends that leave
-    out JupyterLab, or platforms that leave out Linux, which is what
-    Binder runs. The JupyterLab route is always described. ``extra`` is
-    the author's own README, appended under a rule.
+    a visitor reads first, and it opens by saying that the gist is a
+    workshop to take rather than pages to read, since a page of files
+    does not say so by itself. Each way to start it is a button with a
+    plain link beside it, as a badge alone is easy to pass over. The
+    JupyterLite one appears only when the manifest lists that frontend,
+    since it would not work otherwise. The Binder one opens the workshop
+    in JupyterLab through the launcher repository ``binder``, and
+    appears unless that is empty or the manifest rules the session out:
+    frontends that leave out JupyterLab, or platforms that leave out
+    Linux, which is what Binder runs. The JupyterLab route is always
+    described. ``extra`` is the author's own README, appended under a
+    rule.
     """
 
     name = str(manifest.get("name") or "")
@@ -513,41 +517,54 @@ def render_readme(
         lines += [f"| {label} | {value} |" for label, value in rows]
         lines.append("")
 
-    lines += ["## Open this workshop", ""]
-
-    # The buttons share a line, followed by one paragraph saying what
-    # each of them opens.
+    # The buttons share a line, and under them each way to start has a
+    # plain link saying what it opens.
     lite = "jupyterlite" in _strings(manifest.get("frontends"))
     on_binder = bool(binder) and _runs_on_binder(manifest)
     buttons: list[str] = []
+    ways: list[str] = []
 
     if lite:
         launch = f"{site}?reset&workshop={gist_url}&restart=force"
 
         buttons.append(f"[![Launch in JupyterLite]({LAUNCH_BADGE})]({launch})")
+        ways.append(
+            f"- [Start in JupyterLite]({launch}), which runs in the browser "
+            "with nothing to install."
+        )
 
     if on_binder:
-        buttons.append(
-            f"[![Launch on Binder]({BINDER_BADGE})]({binder_link(binder, gist_url)})"
+        launch = binder_link(binder, gist_url)
+
+        buttons.append(f"[![Launch on Binder]({BINDER_BADGE})]({launch})")
+        ways.append(
+            f"- [Start on Binder]({launch}), in JupyterLab on "
+            "[mybinder.org](https://mybinder.org), which starts a temporary "
+            "session for you and can take a minute or two to start."
         )
 
-    lite_text = "in JupyterLite, which runs in the browser with nothing to install"
-    binder_text = (
-        "in JupyterLab on [mybinder.org](https://mybinder.org), which starts "
-        "a temporary session for you and can take a minute or two to start"
+    # The section opens by saying what the gist is for, since a page of
+    # files does not, and points at the buttons when there are any.
+    start = (
+        "start it there with a button or link below"
+        if buttons
+        else "open it there as described below"
     )
 
-    if lite and on_binder:
-        explained = (
-            f"The JupyterLite button opens the workshop {lite_text}. "
-            f"The Binder button opens it {binder_text}."
-        )
-    else:
-        where = lite_text if lite else binder_text
-        explained = f"The button opens the workshop {where}."
+    lines += [
+        "## Open this workshop",
+        "",
+        "**This gist is a workshop to take rather than to read.** Its pages "
+        "are shown as instructions in JupyterLab, beside a live session that "
+        f"their steps act on, so {start}.",
+        "",
+    ]
 
     if buttons:
-        lines += [" ".join(buttons), "", explained, ""]
+        lines += [" ".join(buttons), ""]
+
+    for way in ways:
+        lines += [way, ""]
 
     lines += [
         "In a JupyterLab with the "

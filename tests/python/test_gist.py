@@ -349,16 +349,29 @@ def test_render_readme_describes_the_workshop_and_how_to_open_it() -> None:
 
     assert binder_link(BINDER_LAUNCHER, gist) == binder
 
-    # Both buttons share one line, and one paragraph says what each opens.
+    # The section says the gist is a workshop to start, the buttons share
+    # one line, and each has a plain link under it saying what it opens.
     section = readme.split("## Open this workshop\n\n", 1)[1].split("\n\n")
+    lite = (
+        f"https://lite.example.org/lab/index.html?reset&workshop={gist}&restart=force"
+    )
 
-    assert section[0].startswith("[![Launch in JupyterLite](")
-    assert " [![Launch on Binder](" in section[0]
-    assert section[1].startswith("The JupyterLite button opens the workshop in ")
-    assert "The Binder button opens it in JupyterLab on [mybinder.org]" in section[1]
-    assert "The button opens the workshop in JupyterLab" in plain
+    assert section[0].startswith("**This gist is a workshop to take")
+    assert section[0].endswith("with a button or link below.")
+    assert section[1].startswith("[![Launch in JupyterLite](")
+    assert " [![Launch on Binder](" in section[1]
+    assert section[2].startswith(f"- [Start in JupyterLite]({lite}), which runs")
+    assert section[3].startswith(f"- [Start on Binder]({binder}), in JupyterLab on")
+    assert section[4].startswith("In a JupyterLab with the")
     assert f"[![Launch on Binder]({BINDER_BADGE})]({binder})" in readme
-    assert f"]({binder})" in plain
+    assert f"- [Start on Binder]({binder})" in plain
+    assert "Start in JupyterLite" not in plain
+
+    # Without a button there is nothing to point at.
+    neither = render_readme({"name": "demo", "platforms": ["windows"]}, gist)
+
+    assert "Launch" not in neither
+    assert "so open it there as described below.\n\nIn a JupyterLab" in neither
 
     # It is left out when asked, and when the workshop cannot run there:
     # JupyterLite only, or platforms without Linux.

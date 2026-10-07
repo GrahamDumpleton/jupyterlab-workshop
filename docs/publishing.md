@@ -158,9 +158,10 @@ the tree alone. The command lints the source, writes the copy under
 `dist/gist/`, then puts the copy back together the way a download would
 and lints that. It also writes a `README.md`, which GitHub shows first
 on the gist page, with the workshop's details from the manifest and how
-to open it, including a button that launches it in JupyterLite when the
-manifest lists that frontend, and one that launches it in JupyterLab on
-mybinder.org through the project's [Binder
+to open it: it says the gist is a workshop to take rather than pages to
+read, and gives a button and a plain link that launch it in JupyterLite
+when the manifest lists that frontend, and a button and link that launch
+it in JupyterLab on mybinder.org through the project's [Binder
 launcher](collections.md#launch-links). With `--create` it makes the gist, secret
 unless `--public`, and prints its address; with `--update` it replaces
 the files of an existing one, as a new revision in the gist's history;
