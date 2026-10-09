@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -103,8 +104,11 @@ def test_write_course_writes_a_repository_that_lints(tmp_path: Path) -> None:
     requirements = (course / "binder" / "requirements.txt").read_text()
 
     assert "jupyterlab-workshop==1.2.3\n" in requirements
-    assert (course / "binder" / "postBuild").stat().st_mode & 0o111
-    assert (course / ".devcontainer" / "setup.sh").stat().st_mode & 0o111
+
+    # Windows has no executable bit to set.
+    if os.name != "nt":
+        assert (course / "binder" / "postBuild").stat().st_mode & 0o111
+        assert (course / ".devcontainer" / "setup.sh").stat().st_mode & 0o111
 
     post_build = (course / "binder" / "postBuild").read_text()
 

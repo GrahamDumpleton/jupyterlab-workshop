@@ -225,9 +225,11 @@ def test_publish_pushes_to_the_remote_it_has_and_can_make_it_public(
     assert result.public is False
     assert result.made_public is False
     assert [call[:2] for call in gh.calls] == [["auth", "status"], ["repo", "view"]]
+    # The bare remote's HEAD names whatever branch git defaults to on
+    # this machine, so count the commits of every branch, not HEAD's.
     assert (
         subprocess.run(
-            ["git", "-C", str(remote), "log", "--oneline"],
+            ["git", "-C", str(remote), "log", "--oneline", "--all"],
             capture_output=True,
             text=True,
             check=True,

@@ -108,7 +108,9 @@ def test_the_message_shows_images_and_text_and_names_every_file(
 
     note = blocks[3]["text"]
 
-    assert "_workshop/attachments/" in note
+    # The note says where the files are in each one's own path, as the
+    # platform writes it, rather than naming the directory.
+    assert "attachments directory, at the path given" in note
 
     for item in saved:
         assert f"{item.name} ({item.media_type}" in note
