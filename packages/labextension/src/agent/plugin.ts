@@ -7,11 +7,13 @@ import {
 import {
   ICommandPalette,
   MainAreaWidget,
+  Notification,
   showErrorMessage,
   WidgetTracker
 } from '@jupyterlab/apputils';
 import { PathExt } from '@jupyterlab/coreutils';
 import { ILauncher } from '@jupyterlab/launcher';
+import type { Contents } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { Terminal } from '@jupyterlab/terminal';
 import { UUID } from '@lumino/coreutils';
@@ -140,6 +142,28 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       session.send({ type: 'stdin', content: [`${command}\r`] });
     };
 
+    // A path the conversation names is shown in the file browser when it
+    // is a directory and opened as a document when it is a file.
+    const openPath = async (path: string): Promise<void> => {
+      let model: Contents.IModel;
+
+      try {
+        model = await app.serviceManager.contents.get(path, { content: false });
+      } catch {
+        Notification.warning(`There is no ${path} to open.`, {
+          autoClose: 4000
+        });
+
+        return;
+      }
+
+      if (model.type === 'directory') {
+        await app.commands.execute(CommandIDs.showFiles, { path });
+      } else {
+        await app.commands.execute('docmanager:open', { path });
+      }
+    };
+
     // The conversation for a workshop or a course, or for a draft of a
     // new one: the panel already open for it, or a new one.
     const openPanel = async (
@@ -179,6 +203,7 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           effort: aiCache.effort
         }),
         openTerminal,
+        openPath,
         contents: app.serviceManager.contents,
         reveal: () => {
           if (!panel.isAttached) {

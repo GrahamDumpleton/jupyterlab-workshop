@@ -185,9 +185,19 @@ opened. What was said is kept in the workshop's `_workshop/agent.json`,
 or for a course in `.workshop/agent.json` at the repository's root,
 which its `.gitignore` leaves out. Stop ends the agent's turn; Open
 workshop opens the workshop in the instructions panel in author mode;
-Continue in terminal opens a terminal in the workshop's or course's
-directory with the same conversation in Claude Code, with the authoring
-skill and the workshop tools.
+Show files, like the path at the head of the panel, takes the file
+browser to the workshop's or course's directory; Continue in terminal
+opens a terminal in that directory with the same conversation in Claude
+Code, with the authoring skill and the workshop tools.
+
+Paths in the conversation open what they name. The agent writes a file
+or directory it mentions in a reply as a link, and clicking one opens
+the file in JupyterLab or shows the directory in the file browser; a
+link elsewhere opens in a new browser tab as usual. Each tool call the
+agent makes is a row of the transcript naming the tool and what it was
+given, and where that is a file or directory, the name is a link that
+opens it the same way. A path that is not there, such as a file the
+agent is about to write, says so when clicked.
 
 A course has one conversation, about the whole repository, rather than
 one per workshop in it: two agents editing one repository and one
@@ -270,8 +280,9 @@ says where the conversation stands:
 - Open workshop opens the workshop in the instructions panel, in author
   mode (a course has no one workshop to open, so its conversation has no
   such button; the agent opens a workshop of the course with its live
-  tools), and Continue in terminal carries the conversation on in a
-  terminal.
+  tools), Show files takes the file browser to the workshop's or
+  course's directory, and Continue in terminal carries the conversation
+  on in a terminal.
 
 - The model the conversation answers with, chosen from the models Claude
   Code offers your account; hovering over it names the model actually

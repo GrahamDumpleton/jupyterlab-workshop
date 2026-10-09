@@ -1074,6 +1074,12 @@ run_workshop at the fast pace passes. Do not say it is ready otherwise;
 say what failed and fix it. Once it is ready, say so, and the person can
 open it. Run the self-test tool, test, only when the person asks for it.
 
+When a reply names a file or directory of the workshop, write it as a
+Markdown link whose text and target are both its path relative to the
+workshop directory, such as [pages/01-intro.md](pages/01-intro.md): the
+panel opens a file so named in JupyterLab, and shows a directory in the
+file browser, when the person clicks it.
+
 The workshop is a git repository. Follow the skill's "Git and GitHub"
 section: commit only when the person tells you to, never add a
 Co-Authored-By line or any other trailer naming an agent, and before the
@@ -1153,6 +1159,12 @@ run_workshop at the fast pace passes. Do not say it is ready otherwise;
 say what failed and fix it. Once it is ready, say so, update its row in
 the status table of OUTLINE.md and its entry in the README, and refresh
 the index. Run the self-test tool, test, only when the person asks.
+
+When a reply names a file or directory of the course, write it as a
+Markdown link whose text and target are both its path relative to the
+course directory, such as [workshops/intro/pages/01.md](workshops/intro/pages/01.md):
+the panel opens a file so named in JupyterLab, and shows a directory in
+the file browser, when the person clicks it.
 
 The repository is under git. Follow the skill's "Git and GitHub"
 section: commit only when the person tells you to, with a message that

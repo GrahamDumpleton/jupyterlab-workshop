@@ -2065,7 +2065,27 @@
   font-weight: 600;
 }
 
+/* A path the panel names, at its head or in a tool row, opens what it
+   names when clicked, so it reads as a link while keeping the text's own
+   font and colour. The path rule follows so its font wins on the head. */
+.jp-WorkshopAgent-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.jp-WorkshopAgent-link:hover {
+  color: var(--jp-content-link-color);
+  text-decoration: underline;
+}
+
 .jp-WorkshopAgent-path {
+  max-width: 100%;
   overflow: hidden;
   color: var(--jp-ui-font-color2);
   font-family: var(--jp-code-font-family);

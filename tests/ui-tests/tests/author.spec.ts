@@ -232,6 +232,70 @@ test.describe('Workshop Author conversation', () => {
   });
 });
 
+test.describe('Workshop Author paths', () => {
+  const LIBRARY = 'test-author-paths';
+
+  useLibrary(LIBRARY);
+
+  test('opens what the conversation names, in the file browser or as a document', async ({
+    page
+  }) => {
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+    const input = author.locator('.jp-WorkshopAgent-input');
+    const listing = page.locator('#filebrowser .jp-DirListing-item');
+
+    await expect(input).toBeEnabled();
+
+    // Show files, and the path at the head of the panel, take the file
+    // browser to the workshop's directory.
+    await author.getByRole('button', { name: 'Show files' }).click();
+    await expect(listing.filter({ hasText: 'workshop.yaml' })).toBeVisible();
+    await page.locator('#filebrowser .jp-BreadCrumbs-home').click();
+    await expect(listing.filter({ hasText: 'workshop.yaml' })).toHaveCount(0);
+    await author.locator('.jp-WorkshopAgent-path').click();
+    await expect(listing.filter({ hasText: 'workshop.yaml' })).toBeVisible();
+
+    // A tool row names what the tool was given, relative to the workshop,
+    // and the name opens it: the workshop's own directory here.
+    await page.locator('#filebrowser .jp-BreadCrumbs-home').click();
+    await input.fill('/tool pages {"directory": "."}');
+    await input.press('Enter');
+
+    const tool = author.locator('.jp-WorkshopAgent-tool.jp-mod-ok');
+
+    await expect(tool).toHaveCount(1);
+    await expect(tool.locator('summary')).toHaveText('pages: .');
+    await tool.getByRole('button', { name: '.', exact: true }).click();
+    await expect(listing.filter({ hasText: 'workshop.yaml' })).toBeVisible();
+    await expect(tool).not.toHaveAttribute('open', '');
+
+    // A link in a reply to a file of the workshop opens it as a document,
+    // in place of taking the browser to a page that is not there.
+    await input.fill(
+      'see [pages/01.md](pages/01.md) and [nothing](missing.md)'
+    );
+    await input.press('Enter');
+
+    const reply = author.locator('.jp-WorkshopAgent-assistant').last();
+
+    await expect(reply).toContainText('You said: see pages/01.md');
+    await reply.getByRole('link', { name: 'nothing' }).click();
+    await expect(page.locator('.Toastify__toast')).toContainText('There is no');
+    await reply.getByRole('link', { name: 'pages/01.md' }).click();
+    await expect(
+      page.locator('.lm-TabBar-tab.lm-mod-current', { hasText: '01.md' })
+    ).toBeVisible();
+    await expect(page.locator('.jp-FileEditor')).toBeVisible();
+    expect(page.url()).toContain('/lab');
+  });
+});
+
 test.describe('Workshop Author attachments', () => {
   const LIBRARY = 'test-author-attach';
 

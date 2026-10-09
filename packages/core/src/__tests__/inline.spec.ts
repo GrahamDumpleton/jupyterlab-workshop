@@ -77,4 +77,15 @@ describe('renderPlainMarkdown', () => {
     expect(html).toContain('href="https://example.org"');
     expect(html).toContain('target="_blank"');
   });
+
+  it('links a URL only when it has its scheme, so a file name is not a host', () => {
+    const html = renderPlainMarkdown(
+      'See OUTLINE.md and pages/01.md, or https://example.org and [a file](pages/01.md).'
+    );
+
+    expect(html).not.toContain('href="http://OUTLINE.md"');
+    expect(html).toContain('See OUTLINE.md and pages/01.md');
+    expect(html).toContain('href="https://example.org"');
+    expect(html).toContain('<a href="pages/01.md">a file</a>');
+  });
 });

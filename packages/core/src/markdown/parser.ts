@@ -182,8 +182,11 @@ let plainParser: MarkdownIt | undefined;
  *
  * This is for text that is not a workshop page, such as the replies of
  * an AI agent: directives stay as fenced code, roles as code spans, and
- * nothing is substituted. Raw HTML is escaped and bare URLs are linked,
- * and a link that leaves JupyterLab opens in a new tab, as on pages.
+ * nothing is substituted. Raw HTML is escaped, a bare URL with its scheme
+ * is linked, and a link that leaves JupyterLab opens in a new tab, as on
+ * pages. A bare domain without a scheme is not linked, since such text
+ * names files far more often than sites: `OUTLINE.md` would otherwise be
+ * a link to a host in Moldova.
  */
 export function renderPlainMarkdown(text: string): string {
   if (!plainParser) {
@@ -192,6 +195,7 @@ export function renderPlainMarkdown(text: string): string {
       linkify: true,
       typographer: false
     });
+    plainParser.linkify.set({ fuzzyLink: false, fuzzyEmail: false });
     plainParser.renderer.rules.link_open = renderLinkOpen;
   }
 

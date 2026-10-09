@@ -5,6 +5,7 @@ import {
   showDialog,
   UseSignal
 } from '@jupyterlab/apputils';
+import { PathExt } from '@jupyterlab/coreutils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
 import { stopIcon } from '@jupyterlab/ui-components';
 import { IDragEvent } from '@lumino/dragdrop';
@@ -35,6 +36,7 @@ import {
   ICourseProposal,
   IProposal,
   IQuestion,
+  OPEN_WORKSHOP_TOOL,
   TranscriptItem
 } from './model';
 
@@ -306,6 +308,7 @@ export class AuthorPanel extends ReactWidget {
               }
             }}
             onOpenWorkshop={() => void this._options.openWorkshop()}
+            onOpenPath={path => void this._options.openPath(path)}
             onContinueInTerminal={() => this._connection.requestTerminal()}
             onConfigure={(model, effort) =>
               this._connection.configure(model, effort)
@@ -547,6 +550,13 @@ export namespace AuthorPanel {
     /** Open the workshop in the instructions panel, in author mode. */
     openWorkshop: () => Promise<void>;
 
+    /**
+     * Show a directory under the root in the file browser, or open a file
+     * there as a document: what a path the conversation names does when
+     * clicked.
+     */
+    openPath: (path: string) => Promise<void>;
+
     /** Bring the panel to the front, for something that needs an answer. */
     reveal: () => void;
 
@@ -565,6 +575,7 @@ function AuthorContent({
   onCheckAgain,
   onLogin,
   onOpenWorkshop,
+  onOpenPath,
   onContinueInTerminal,
   onConfigure,
   onCompact,
@@ -582,6 +593,9 @@ function AuthorContent({
   onCheckAgain: () => void;
   onLogin: () => void;
   onOpenWorkshop: () => void;
+
+  /** Open a path under the root: a directory in the file browser, a file as a document. */
+  onOpenPath: (path: string) => void;
   onContinueInTerminal: () => void;
   onConfigure: (model: string, effort: string) => void;
   onCompact: () => void;
@@ -675,9 +689,20 @@ function AuthorContent({
       <div className="jp-WorkshopAgent-header">
         <div className="jp-WorkshopAgent-title">
           <h2>{AUTHOR_TITLE}</h2>
-          <span className="jp-WorkshopAgent-path">
-            {drafting ? `New ${kind}, not created yet` : panel.path}
-          </span>
+          {drafting ? (
+            <span className="jp-WorkshopAgent-path">
+              New {kind}, not created yet
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="jp-WorkshopAgent-path jp-WorkshopAgent-link"
+              title={`Show the ${kind}'s directory in the file browser`}
+              onClick={() => onOpenPath(panel.path)}
+            >
+              {panel.path}
+            </button>
+          )}
         </div>
         <div className="jp-WorkshopAgent-headerActions">
           {status?.logged_in ? (
@@ -728,6 +753,7 @@ function AuthorContent({
             workshop={panel.path}
             onAnswer={onAnswer}
             onAnswerQuestion={onAnswerQuestion}
+            onOpenPath={onOpenPath}
             proposal={
               item.type === 'proposal'
                 ? {
@@ -837,6 +863,14 @@ function AuthorContent({
                     Open workshop
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="jp-WorkshopAgent-barButton"
+                  title={`Show the ${kind}'s directory in the file browser`}
+                  onClick={() => onOpenPath(panel.path)}
+                >
+                  Show files
+                </button>
                 <button
                   type="button"
                   className="jp-WorkshopAgent-barButton"
@@ -1140,17 +1174,24 @@ function Entry({
   workshop,
   onAnswer,
   onAnswerQuestion,
+  onOpenPath,
   proposal
 }: {
   item: TranscriptItem;
 
-  /** The workshop's path, which paths in tool calls are shown relative to. */
+  /**
+   * The workshop's or course's path under the root, which paths in tool
+   * calls are shown relative to and paths in replies resolve against.
+   */
   workshop: string;
   onAnswer: (id: string, allow: boolean, remember: boolean) => void;
   onAnswerQuestion: (
     id: string,
     answers: Record<string, string> | null
   ) => void;
+
+  /** Open a path the conversation names; see AuthorPanel.IOptions. */
+  onOpenPath: (path: string) => void;
 
   /** For a proposed plan: where the conversation stands, and Create. */
   proposal?: IProposalState;
@@ -1186,12 +1227,16 @@ function Entry({
         <div
           className="jp-WorkshopAgent-assistant jp-RenderedHTMLCommon"
           // The agent's reply is rendered as plain Markdown with raw HTML
-          // escaped, as workshop pages are.
+          // escaped, as workshop pages are. A link in it to a file of the
+          // workshop opens that file here rather than leaving the page.
+          onClick={event => followLink(event, workshop, onOpenPath)}
           dangerouslySetInnerHTML={{ __html: renderPlainMarkdown(item.text) }}
         />
       );
 
-    case 'tool':
+    case 'tool': {
+      const described = describeTool(item.name, item.input, workshop);
+
       return (
         <details
           className={`jp-WorkshopAgent-tool${
@@ -1203,13 +1248,33 @@ function Entry({
           }`}
         >
           <summary>
-            {describeTool(item.name, item.input, workshop)}
+            {described.tool}
+            {described.target ? ': ' : ''}
+            {described.path ? (
+              <button
+                type="button"
+                className="jp-WorkshopAgent-link"
+                title="Open in JupyterLab"
+                onClick={event => {
+                  // The click opens the path, and does not fold or unfold
+                  // the row as a click on its summary otherwise would.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onOpenPath(described.path);
+                }}
+              >
+                {described.target}
+              </button>
+            ) : (
+              described.target
+            )}
             {item.result === undefined ? '…' : ''}
           </summary>
           <pre>{JSON.stringify(item.input, null, 2)}</pre>
           {item.result?.summary ? <pre>{item.result.summary}</pre> : null}
         </details>
       );
+    }
 
     case 'permission':
       return (
@@ -1597,24 +1662,135 @@ export function describeTool(
   name: string,
   input: Record<string, unknown>,
   workshop = ''
-): string {
+): IToolDescription {
   const tool = name.startsWith('mcp__workshop__')
     ? name.slice('mcp__workshop__'.length).replace(/_/g, ' ')
     : name;
-  let target = String(
-    input.file_path ?? input.path ?? input.directory ?? input.command ?? ''
-  );
 
-  // The agent names files by absolute path; inside the workshop the part
-  // up to the workshop is noise.
-  const marker = workshop ? `/${workshop}/` : '';
-  const at = marker ? target.indexOf(marker) : -1;
+  // A command is shown as it is; a file or directory is placed under the
+  // root, and shown relative to the workshop when it is inside it, since
+  // the part up to the workshop is noise there. The live tools take a
+  // path under the root as the person's session sees it, never one
+  // relative to the agent's directory, so theirs is taken as it is.
+  const named = input.file_path ?? input.path ?? input.directory;
+  const target = String(named ?? input.command ?? '');
+  const path =
+    named === undefined
+      ? ''
+      : name === OPEN_WORKSHOP_TOOL
+        ? PathExt.normalize(target)
+        : resolvePath(workshop, target);
 
-  if (at >= 0) {
-    target = target.slice(at + marker.length);
+  if (!path) {
+    return { tool, target, path };
   }
 
-  return target ? `${tool}: ${target}` : tool;
+  const inside =
+    path === workshop
+      ? '.'
+      : path.startsWith(`${workshop}/`)
+        ? path.slice(workshop.length + 1)
+        : path;
+
+  return { tool, target: inside, path };
+}
+
+/** A tool call as its row in the transcript shows it. */
+export interface IToolDescription {
+  /** The tool's name, without the workshop tools' prefix. */
+  tool: string;
+
+  /** What it was given: a command, or a path cut down to the workshop. */
+  target: string;
+
+  /** The path under the root that the target names, if it names one. */
+  path: string;
+}
+
+/**
+ * The path under the JupyterLab root that the agent means by a path it
+ * named, or empty when it cannot be placed under the root. The agent
+ * names a file relative to its working directory, the workshop's or the
+ * course's, or by its absolute path, and the live tools take a path under
+ * the root as the person's session sees it; each form is taken. An
+ * absolute path is cut where the workshop begins in it, which is found by
+ * the workshop's path under the root, or failing that by the name of its
+ * directory alone, since a course linked from outside the library has
+ * its real path, not the library's, in what the agent names.
+ */
+export function resolvePath(workshop: string, target: string): string {
+  const named = target.trim().replace(/\\/g, '/');
+
+  if (!named) {
+    return '';
+  }
+
+  if (/^([a-zA-Z]:)?\//.test(named)) {
+    const markers = [`/${workshop}/`, `/${lastSegment(workshop)}/`];
+
+    for (const marker of markers) {
+      const at = named.lastIndexOf(marker);
+
+      if (at >= 0) {
+        return PathExt.join(workshop, named.slice(at + marker.length));
+      }
+    }
+
+    return named.endsWith(`/${workshop}`) ||
+      named.endsWith(`/${lastSegment(workshop)}`)
+      ? workshop
+      : '';
+  }
+
+  if (named === workshop || named.startsWith(`${workshop}/`)) {
+    return PathExt.normalize(named);
+  }
+
+  // A relative path is the agent's, from its working directory; one that
+  // climbs out of the root names nothing the session can open.
+  const path = PathExt.join(workshop, named);
+
+  return path.startsWith('..') ? '' : path;
+}
+
+/**
+ * A link in a reply that names a file or directory opens it in JupyterLab,
+ * in place of taking the browser to a page that is not there, which is
+ * where a relative link in the page would otherwise go. Links elsewhere,
+ * with a scheme, are left to the browser.
+ */
+function followLink(
+  event: React.MouseEvent<HTMLDivElement>,
+  workshop: string,
+  onOpenPath: (path: string) => void
+): void {
+  const anchor = (event.target as HTMLElement).closest('a');
+
+  if (!anchor || !event.currentTarget.contains(anchor)) {
+    return;
+  }
+
+  const href = anchor.getAttribute('href') ?? '';
+
+  if (!href || /^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(href)) {
+    return;
+  }
+
+  event.preventDefault();
+
+  let target = href.split(/[?#]/)[0];
+
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    // Left as written when it is not valid percent-encoding.
+  }
+
+  const path = resolvePath(workshop, target);
+
+  if (path) {
+    onOpenPath(path);
+  }
 }
 
 /** The tokens compaction freed, when the agent said. */
