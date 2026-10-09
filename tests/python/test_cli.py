@@ -41,6 +41,14 @@ def test_init_writes_a_workshop_and_refuses_to_overwrite(
     assert (target / ".git").is_dir()
     assert (target / ".git" / "HEAD").read_text().strip() == "ref: refs/heads/main"
 
+    # What running, editing and authoring leave behind is ignored.
+    ignored = (target / ".gitignore").read_text().splitlines()
+
+    for entry in ("_workshop/", "work/", "dist/", "scratch/"):
+        assert entry in ignored
+    assert ".ipynb_checkpoints/" in ignored
+    assert ".claude/" in ignored
+
     out = capsys.readouterr().out
 
     assert "wrote" in out

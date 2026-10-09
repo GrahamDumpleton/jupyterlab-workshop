@@ -534,9 +534,11 @@ __pycache__/
 # `just install`, so it always matches the pinned release
 .claude/skills/jupyterlab-workshop-authoring
 
-# Claude Code's per-checkout permissions, written as they are granted.
-# The repository's .mcp.json and AGENTS.md are committed; this is local.
+# Claude Code's local state: the permissions granted in this checkout
+# and its own bookkeeping. The repository's .mcp.json and AGENTS.md are
+# committed; these are local.
 .claude/settings.local.json
+.claude/.cc-writes/
 
 # Workshop Author's conversation about this course
 .workshop/

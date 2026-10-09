@@ -89,6 +89,14 @@ def test_write_course_writes_a_repository_that_lints(tmp_path: Path) -> None:
         "collections/proxies/collection.json",
     ]
 
+    # Claude Code's local state is ignored, its committed files are not.
+    ignored = (course / ".gitignore").read_text().splitlines()
+
+    assert ".claude/settings.local.json" in ignored
+    assert ".claude/.cc-writes/" in ignored
+    assert ".ipynb_checkpoints/" in ignored
+    assert ".mcp.json" not in ignored
+
     # The pin is this release's, the scripts are executable, and the
     # hosted overrides switch the library and authoring parts off.
     assert 'jupyterlab-workshop==1.2.3"' in (course / "pyproject.toml").read_text()

@@ -360,8 +360,12 @@ work/
 # Temporary working files, never referred to from the workshop
 scratch/
 
-# Claude Code's per-checkout permissions, written as they are granted
-.claude/settings.local.json
+# Checkpoints JupyterLab keeps beside a file saved from its editor
+.ipynb_checkpoints/
+
+# Claude Code's local state: the permissions granted in this checkout
+# and its own bookkeeping, none of it meant for anyone else
+.claude/
 """
 
 
