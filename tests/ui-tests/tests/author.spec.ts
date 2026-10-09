@@ -683,6 +683,145 @@ test.describe('Workshop Author creating a workshop', () => {
   });
 });
 
+test.describe('Workshop Author and courses', () => {
+  const LIBRARY = 'test-author-course';
+
+  useLibrary(LIBRARY);
+
+  // A course of the owner's with one workshop, found by its shape under
+  // personal/courses/.
+  test.beforeEach(async ({ page }) => {
+    await page.contents.uploadContent(
+      MANIFEST.replace('name: demo', 'name: inner').replace(
+        'title: My demo',
+        'title: Inside the course'
+      ),
+      'text',
+      `${LIBRARY}/personal/courses/big-course/workshops/inner/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# Start\n',
+      'text',
+      `${LIBRARY}/personal/courses/big-course/workshops/inner/pages/01.md`
+    );
+  });
+
+  test('drafts a course with the agent and creates it from the plan', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    await openBrowser(page);
+    await page
+      .locator('#jupyterlab-workshop-browser')
+      .getByRole('button', { name: 'Create Course with AI…' })
+      .click();
+
+    // A draft of a course: nothing exists yet.
+    const draft = page.locator('.jp-WorkshopAgent', { hasText: 'New course' });
+    const input = draft.locator('.jp-WorkshopAgent-input');
+
+    await expect(draft.locator('.jp-WorkshopAgent-path')).toHaveText(
+      'New course, not created yet'
+    );
+    await expect(input).toBeEnabled();
+
+    // The agent proposes the course, shown as a card with its parts.
+    const plan = {
+      title: 'Python for analysts',
+      name: 'python-course',
+      description: 'Python from the first line to a working analysis.',
+      collections: [
+        { name: 'basics', title: 'The basics', description: 'The language.' },
+        { name: 'data', title: 'Working with data' }
+      ],
+      id_prefix: 'github.com/example',
+      lite: true
+    };
+
+    await input.fill(`/tool propose_course ${JSON.stringify(plan)}`);
+    await input.press('Enter');
+
+    const card = draft.locator('.jp-WorkshopAgent-proposal');
+
+    await expect(card.locator('h3')).toHaveText('Python for analysts');
+    await expect(card).toContainText('personal/courses/python-course');
+    await expect(card).toContainText('JupyterLab and JupyterLite');
+    await expect(card).toContainText('github.com/example/python-course/');
+    await expect(card.locator('li')).toHaveCount(2);
+    await expect(card.locator('li').first()).toContainText(
+      'The basics (basics): The language.'
+    );
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/courses/python-course/OUTLINE.md`
+      )
+    ).toBe(false);
+
+    // Create scaffolds the repository, and the course's own panel carries
+    // on with the design as the brief; a course has no workshop to open.
+    await card.getByRole('button', { name: 'Create' }).click();
+
+    const author = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/courses/python-course'
+    });
+
+    await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
+      `${LIBRARY}/personal/courses/python-course`
+    );
+    await expect(page.locator('.jp-WorkshopAgent')).toHaveCount(1);
+    await expect(
+      author.getByRole('button', { name: 'Open workshop' })
+    ).toHaveCount(0);
+    await expect(
+      author.getByRole('button', { name: 'Continue in terminal' })
+    ).toBeVisible();
+    await expect(author.locator('.jp-WorkshopAgent-user').last()).toContainText(
+      'Design the course we agreed'
+    );
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/courses/python-course/OUTLINE.md`
+      )
+    ).toBe(true);
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/courses/python-course/collections/data/collection.json`
+      )
+    ).toBe(true);
+
+    // The new course is listed under My courses.
+    await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
+    await expect(
+      page.locator('.jp-WorkshopBrowser-group', { hasText: 'python-course' })
+    ).toBeVisible();
+  });
+
+  test('edits a workshop of a course in the course conversation', async ({
+    page
+  }) => {
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'Inside the course' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    // The conversation is the course's, with the workshop named in the
+    // message box for the person to finish.
+    const author = page.locator('.jp-WorkshopAgent');
+
+    await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
+      `${LIBRARY}/personal/courses/big-course`
+    );
+    await expect(author.locator('.jp-WorkshopAgent-input')).toHaveValue(
+      'About workshops/inner: '
+    );
+    await expect(
+      page.locator('.lm-TabBar-tab', { hasText: 'Workshop Author: big-course' })
+    ).toHaveCount(1);
+  });
+});
+
 test.describe('Workshop Author switched off', () => {
   useLibrary('test-author-off', ['ai-authoring']);
 

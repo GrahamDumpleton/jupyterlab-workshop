@@ -86,11 +86,14 @@ add checks, then lint and test.
 ## Workshop Author
 
 Workshop Author is an AI agent inside JupyterLab that writes and
-revises your own workshops. You describe the workshop you want; it
-reads the [authoring skill](#the-authoring-skill), writes the manifest
-and the pages, lints them, plays the workshop in your session to check
-it works, and tells you when a version is ready to open. Then you carry
-on the conversation, asking for changes, and it makes them.
+revises your own workshops and courses. You describe the workshop you
+want; it reads the [authoring skill](#the-authoring-skill), writes the
+manifest and the pages, lints them, plays the workshop in your session
+to check it works, and tells you when a version is ready to open. Then
+you carry on the conversation, asking for changes, and it makes them.
+For a [course](library.md#courses), a repository of workshops in parts,
+it sets the repository up and designs the course with you before
+writing its workshops.
 
 It needs three things:
 
@@ -112,10 +115,14 @@ It needs three things:
   logged in, the panel offers Log in, which opens a terminal running
   Claude Code's own login, and Check again.
 
-With all three, the browser has a "Create Workshop with AI…" button,
-the launcher a Workshop Author card, and each card under My workshops
-and My courses an Edit with AI button. Edit with AI opens the conversation
-for that workshop, or goes back to it.
+With all three, the browser has "Create Workshop with AI…" and "Create
+Course with AI…" buttons, the launcher a Workshop Author card, and each
+card under My workshops and My courses an Edit with AI button. Edit with
+AI on one of your workshops opens the conversation for that workshop, or
+goes back to it. On a workshop in a course it opens the course's
+conversation, since a course has one conversation for the whole
+repository, with the workshop named in the message box for you to say
+what to do with it.
 
 ### Creating a workshop
 
@@ -136,10 +143,34 @@ press Create, nothing is written: the agent can read and search the
 web, but cannot change files or run commands, and the draft is kept by
 the server outside your library. Discard draft forgets it.
 
-Create makes the workshop under `personal/workshops/` and opens its own
-conversation, which starts with everything said in the draft and the
-plan as the agent's brief, and the agent goes on to write the workshop.
-A draft left alone keeps until it is discarded, or for 30 days.
+Create makes the workshop under `personal/workshops/`, as a git
+repository with nothing committed yet, and opens its own conversation,
+which starts with everything said in the draft and the plan as the
+agent's brief, and the agent goes on to write the workshop. A draft left
+alone keeps until it is discarded, or for 30 days.
+
+### Creating a course
+
+Create Course with AI drafts a course the same way. Say what the course
+should teach and who it is for; the agent asks what it cannot tell, in
+particular how the course divides into parts, whether its workshops must
+also run as a JupyterLite site in the browser, and what prefix its
+collection ids should carry, a domain or forge account you control such
+as `github.com/<account>`, since an id is permanent. The plan it
+proposes is the course's title, its directory under `personal/courses/`,
+a description, and its parts in order, each with a name, a title and a
+description; a course with one part has one collection.
+
+Create scaffolds the whole repository, exactly as
+[`jupyter workshop course init`](cli.md#course) does: the design
+document `OUTLINE.md` with a section for each part, empty ordered
+collection indexes, the catalog, `AGENTS.md`, the Justfile, the Binder
+and Codespaces configuration, the test workflow, and for JupyterLite the
+site files and the Pages workflow, all recorded in `course.json` so
+`course update` can refresh them later. The repository starts under git
+with nothing committed. The course's own conversation then opens with
+the design as the agent's brief: it fills in the outline with you, part
+by part, and writes a workshop only once that part's outline is settled.
 
 ### The conversation
 
@@ -147,19 +178,31 @@ The conversation is held by the server, not the page: reloading the
 page, or opening the same workshop's conversation in another tab, shows
 it again where it was, and a conversation left alone for half an hour
 is closed and picks up from where it stopped the next time it is
-opened. What was said is kept in the workshop's `_workshop/agent.json`.
-Stop ends the agent's turn; Open workshop opens the workshop in the
-instructions panel in author mode; Continue in terminal opens a terminal
-in the workshop's directory with the same conversation in Claude Code,
-with the authoring skill and the workshop tools.
+opened. What was said is kept in the workshop's `_workshop/agent.json`,
+or for a course in `.workshop/agent.json` at the repository's root,
+which its `.gitignore` leaves out. Stop ends the agent's turn; Open
+workshop opens the workshop in the instructions panel in author mode;
+Continue in terminal opens a terminal in the workshop's or course's
+directory with the same conversation in Claude Code, with the authoring
+skill and the workshop tools.
+
+A course has one conversation, about the whole repository, rather than
+one per workshop in it: two agents editing one repository and one
+outline would work against each other. The agent reads the course's
+`AGENTS.md` and `OUTLINE.md` first and keeps the outline true as the
+work goes, opens a workshop of the course in your session with the live
+tools, refreshes the collection indexes and the catalog, and commits
+only when you tell it to, with no agent trailer on the commit, asking
+for a name and email to set in the repository if git has none. It never
+pushes, adds a remote or publishes unless asked.
 
 ### What it may do without asking
 
-The agent works on the one workshop. Without asking, it reads and
-changes the files in that workshop's directory, reads the authoring
-skill, uses the [workshop tools](#what-the-tools-do), and searches and
-reads the web to research the topic. Its live tools act in the browser
-tab the conversation is open in, and no other.
+The agent works on the one workshop or course. Without asking, it reads
+and changes the files in that directory, reads the authoring skill,
+uses the [workshop tools](#what-the-tools-do), and searches and reads
+the web to research the topic. Its live tools act in the browser tab
+the conversation is open in, and no other.
 
 When the agent needs to know something, it may ask in a card of its
 own: each question with its options, to choose one or several, a box to
@@ -262,13 +305,15 @@ and the message tells the agent where. So a file the workshop itself
 needs can be attached, an image for a page or data its actions work on:
 ask, and the agent copies it into a directory of the workshop's own,
 such as `images/`, since `_workshop/` is the workshop's state, not part
-of it. The files stay
-there until New conversation, which removes them with the conversation. While a new workshop is being drafted,
+of it. In a course's conversation they are saved under
+`.workshop/attachments/` at the repository's root instead. The files
+stay there until New conversation, which removes them with the
+conversation. While a new workshop or course is being drafted,
 attachments are saved with the draft, outside the library, and go to
-the workshop when it is created, or away with the draft when it is
-discarded. The conversation's record keeps each attachment's name,
-type and size, not its content, so after a reload the message shows
-what went with it.
+the workshop or course when it is created, or away with the draft when
+it is discarded. The conversation's record keeps each attachment's
+name, type and size, not its content, so after a reload the message
+shows what went with it.
 
 ```{note}
 Usage counts against whatever Claude Code is logged in with. When

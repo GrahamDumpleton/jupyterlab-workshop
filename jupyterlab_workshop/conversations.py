@@ -6,18 +6,25 @@ opening the panel in another tab, attaches to the same conversation and
 is sent what happened so far. There is one conversation per workshop.
 
 A conversation is only ever started for the library owner's own
-workshops, under `personal/workshops/` or in a course, never for an
-installed one: the agent runs with the workshop as its working directory, and a
+workshops, under `personal/workshops/`, or for one of their courses
+under `personal/courses/`, never for an installed workshop: the agent
+runs with the workshop or course as its working directory, and a
 workshop someone else wrote could ship agent configuration that would
 then be obeyed. Each workshop keeps its conversation's id, and what was
 said, in `_workshop/agent.json`, so it carries on after a restart.
 
-A new workshop starts as a draft: a conversation with no workshop behind
-it, held under `draft:<id>` and recorded in the server's data directory,
-in which the agent may only read, research and propose (see
-`drafting.py`). Creating the workshop from the plan moves what was said
-into the new workshop's conversation, which then begins with the plan
-as its brief.
+A course has one conversation, about the whole repository, kept in
+`.workshop/agent.json` at its root, since `_workshop/` is a workshop's
+own state directory and two agents editing one repository and one
+outline would work against each other. A workshop inside a course is
+written in the course's conversation, never in one of its own.
+
+A new workshop or course starts as a draft: a conversation with nothing
+behind it, held under `draft:<id>` and recorded in the server's data
+directory, in which the agent may only read, research and propose (see
+`drafting.py`). Creating from the plan moves what was said into the new
+workshop's or course's conversation, which then begins with the plan as
+its brief.
 """
 
 from __future__ import annotations
@@ -57,18 +64,25 @@ from .bridge import Bridge
 from .collection import STATE_DIR
 from .drafting import (
     DRAFT_PATTERN,
+    CourseProposal,
     Proposal,
     ProposalError,
     brief,
+    check_course_proposal,
     check_proposal,
+    course_brief,
+    course_draft_instructions,
+    create_course_draft_server,
     create_draft_server,
     draft_instructions,
 )
 from .library import (
+    COURSES_DIRECTORY,
     INSTALLED_DIRECTORY,
     NEEDS_UPGRADE_MESSAGE,
     PERSONAL_WORKSHOPS_DIRECTORY,
     LibraryError,
+    course_of_path,
     is_library,
     is_own_library_path,
     library_directory,
@@ -78,8 +92,14 @@ from .library import (
 
 log = logging.getLogger(__name__)
 
-# The file a workshop's conversation is kept in, under _workshop/.
+# The file a conversation is kept in, under its state directory.
 AGENT_FILE = "agent.json"
+
+# A course's state directory, at its root; `_workshop/` is a workshop's.
+COURSE_STATE_DIR = ".workshop"
+
+# What a conversation can be about.
+KINDS = ("workshop", "course")
 
 # The environment variable naming the provider, for tests.
 PROVIDER_VARIABLE = "JUPYTERLAB_WORKSHOP_AGENT_PROVIDER"
@@ -118,18 +138,24 @@ class ConversationError(Exception):
 
 @dataclass
 class Conversation:
-    """One workshop's conversation and who is watching it."""
+    """One workshop's or course's conversation and who is watching it."""
 
-    # The workshop's path relative to the JupyterLab root, as the browser
-    # names it; `draft:<id>` for a workshop still being drafted.
+    # The workshop's or course's path relative to the JupyterLab root, as
+    # the browser names it; `draft:<id>` for one still being drafted.
     path: str
 
-    # The workshop directory on disk, which may lie behind a course link.
+    # The directory on disk, which may lie behind a course link.
     directory: Path
 
     session: AgentSession
 
     provider: str
+
+    # Whether it is about a workshop or a course, drafted or made.
+    kind: str = "workshop"
+
+    # The directory under `directory` the record and attachments live in.
+    state_dir: str = STATE_DIR
 
     # What the conversation was started with, for its terminal command.
     options: StartOptions | None = None
@@ -154,12 +180,12 @@ class Conversation:
 
     created: str = field(default_factory=lambda: _now())
 
-    # The draft's id while the workshop is being drafted, and the plan
-    # last proposed for it.
+    # The draft's id while the workshop or course is being drafted, and
+    # the plan last proposed for it.
     draft: str = ""
-    proposal: Proposal | None = None
+    proposal: Proposal | CourseProposal | None = None
 
-    # The workshops directory the draft's workshop is created in.
+    # The workshops directory the draft's workshop or course is created in.
     workshops_directory: str = ""
 
     async def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
@@ -174,7 +200,7 @@ class Conversation:
             raise ConversationError("The agent is still working on the last message")
 
         try:
-            saved = save_attachments(self.directory, attachments)
+            saved = save_attachments(self.directory, attachments, self.state_dir)
         except OSError as error:
             raise ConversationError(
                 f"Unable to save the attachments: {error}"
@@ -253,10 +279,11 @@ class Conversation:
         await self._broadcast({"type": "info", "info": await self.info()})
 
     def save(self) -> None:
-        """Record the conversation in the workshop's agent.json."""
+        """Record the conversation in the agent.json of its state directory."""
 
-        state = self.directory / STATE_DIR
+        state = self.directory / self.state_dir
         data: dict[str, Any] = {
+            "kind": self.kind,
             "provider": self.provider,
             "session_id": self.session.session_id,
             "model": self.model,
@@ -396,15 +423,16 @@ class ConversationManager:
         model: str = "",
         effort: str = "",
     ) -> Conversation:
-        """The conversation about a workshop, started or resumed if needed.
+        """The conversation about a workshop or a course, started or resumed
+        if needed.
 
-        `directory` is the workshop on disk, already checked to be under
-        the root; `path` is the same workshop relative to the root. The
+        `directory` is the workshop or course on disk, already checked to
+        be under the root; `path` is the same relative to the root. The
         model and effort are the settings' defaults, used unless the
-        workshop's conversation has chosen its own.
+        conversation has chosen its own.
         """
 
-        self._check(path, workshops_directory, directory)
+        kind = self._check(path, workshops_directory, directory)
 
         lock = self._opening.setdefault(path, asyncio.Lock())
 
@@ -415,7 +443,7 @@ class ConversationManager:
                 return existing
 
             conversation = await self._start(
-                path, workshops_directory, directory, model, effort
+                path, workshops_directory, directory, model, effort, kind
             )
 
             self._conversations[path] = conversation
@@ -480,7 +508,10 @@ class ConversationManager:
 
         await conversation.session.close()
 
-        shutil.rmtree(attachments_directory(conversation.directory), ignore_errors=True)
+        shutil.rmtree(
+            attachments_directory(conversation.directory, conversation.state_dir),
+            ignore_errors=True,
+        )
 
         options = replace(
             conversation.options,
@@ -506,8 +537,10 @@ class ConversationManager:
         workshops_directory: str,
         model: str = "",
         effort: str = "",
+        kind: str = "workshop",
     ) -> Conversation:
-        """The conversation drafting a new workshop, started or resumed.
+        """The conversation drafting a new workshop or course, started or
+        resumed.
 
         `draft` is the id the panel made for it. Nothing is created in the
         library until `create` is called with the plan the agent proposed.
@@ -515,6 +548,9 @@ class ConversationManager:
 
         if not DRAFT_PATTERN.match(draft):
             raise ConversationError("Not a draft id")
+
+        if kind not in KINDS:
+            raise ConversationError(f"Not something to draft: {kind}")
 
         if not is_library(self._root, workshops_directory):
             raise ConversationError("Workshop Author works only in a workshop library")
@@ -533,7 +569,7 @@ class ConversationManager:
             self._prune_drafts()
 
             conversation = await self._start_draft(
-                draft, workshops_directory, model, effort
+                draft, workshops_directory, model, effort, kind
             )
 
             self._conversations[key] = conversation
@@ -543,16 +579,20 @@ class ConversationManager:
         return conversation
 
     async def create(self, conversation: Conversation) -> tuple[Conversation, str]:
-        """Create the workshop a draft agreed on, and hand its conversation on.
+        """Create the workshop or course a draft agreed on, and hand its
+        conversation on.
 
-        The workshop is scaffolded empty under `personal/workshops/` with
-        the plan's name and title, and its conversation starts with what
-        was said in the draft. Returns that conversation and the brief to
-        send it first; the draft is closed and its record removed.
+        A workshop is scaffolded empty under `personal/workshops/` with the
+        plan's name and title; a course is scaffolded whole under
+        `personal/courses/`, as `jupyter workshop course init` writes it.
+        Either starts as a git repository, with nothing committed, and its
+        conversation starts with what was said in the draft. Returns that
+        conversation and the brief to send it first; the draft is closed
+        and its record removed.
         """
 
         if not conversation.draft:
-            raise ConversationError("Only a draft creates a workshop")
+            raise ConversationError("Only a draft creates a workshop or course")
 
         if conversation.running:
             raise ConversationError("Wait for the agent to finish before creating")
@@ -565,45 +605,52 @@ class ConversationManager:
                 "once it knows what to make"
             )
 
-        from .scaffold import initialize_repository, write_scaffold
+        from .scaffold import initialize_repository
 
         workshops_directory = conversation.workshops_directory
         library = library_directory(self._root, workshops_directory)
-        personal = library / PERSONAL_WORKSHOPS_DIRECTORY
 
-        try:
-            check_proposal(proposal, personal)
-        except ProposalError as error:
-            raise ConversationError(str(error)) from error
+        if isinstance(proposal, CourseProposal):
+            tree, state_dir = COURSES_DIRECTORY, COURSE_STATE_DIR
+            directory = library / tree / proposal.name
 
-        directory = personal / proposal.name
+            try:
+                check_course_proposal(proposal, library / tree)
+            except ProposalError as error:
+                raise ConversationError(str(error)) from error
+
+            _write_course(directory, proposal)
+
+            text = course_brief(proposal)
+        else:
+            tree, state_dir = PERSONAL_WORKSHOPS_DIRECTORY, STATE_DIR
+            directory = library / tree / proposal.name
+
+            try:
+                check_proposal(proposal, library / tree)
+            except ProposalError as error:
+                raise ConversationError(str(error)) from error
+
+            _write_workshop(directory, proposal)
+
+            text = brief(proposal)
+
         path = posixpath.normpath(
-            posixpath.join(
-                workshops_directory or ".",
-                PERSONAL_WORKSHOPS_DIRECTORY,
-                proposal.name,
-            )
+            posixpath.join(workshops_directory or ".", tree, proposal.name)
         )
 
-        write_scaffold(
-            directory,
-            proposal.name,
-            proposal.title,
-            ci=False,
-            template="blank",
-            gating="soft" if proposal.gating else "off",
-        )
-
-        # The workshop is the person's own, so its history starts with it;
-        # the agent commits only when told.
+        # The workshop or course is the person's own, so its history starts
+        # with it; the agent commits only when told.
         initialize_repository(directory)
 
-        # Files attached while drafting go to the workshop, where the
-        # agent may use them.
-        carried = _move_attachments(conversation.directory, directory)
+        # Files attached while drafting go with it, where the agent may
+        # use them.
+        carried = _move_attachments(
+            conversation.directory, directory, STATE_DIR, state_dir
+        )
 
-        # The workshop's conversation starts where the draft left off, so
-        # the panel shows the whole exchange and the plan agreed in it.
+        # The new conversation starts where the draft left off, so the
+        # panel shows the whole exchange and the plan agreed in it.
         created = await self.open(
             path,
             workshops_directory,
@@ -619,14 +666,14 @@ class ConversationManager:
         created.save()
 
         await self.discard(conversation, announce=False)
-        await conversation.announce({"type": "created", "path": path})
-
-        text = brief(proposal)
+        await conversation.announce(
+            {"type": "created", "path": path, "kind": created.kind}
+        )
 
         if carried:
             text += (
                 "\n\nThe files attached while drafting are now under "
-                f"{STATE_DIR}/{ATTACHMENTS_DIR}/ here: " + ", ".join(carried) + "."
+                f"{state_dir}/{ATTACHMENTS_DIR}/ here: " + ", ".join(carried) + "."
             )
 
         return created, text
@@ -683,10 +730,10 @@ class ConversationManager:
 
         return idle
 
-    def _check(self, path: str, workshops_directory: str, directory: Path) -> None:
-        # The library must exist, in this release's layout, the workshop be
-        # its owner's, and nothing downloaded: the same rule that trusts a
-        # workshop by location.
+    def _check(self, path: str, workshops_directory: str, directory: Path) -> str:
+        # The library must exist, in this release's layout, the workshop or
+        # course be its owner's, and nothing downloaded: the same rule that
+        # trusts a workshop by location. Returns what the path is.
         if not is_library(self._root, workshops_directory):
             raise ConversationError("Workshop Author works only in a workshop library")
 
@@ -695,8 +742,25 @@ class ConversationManager:
         if not is_own_library_path(workshops_directory, path):
             raise ConversationError(
                 "Workshop Author works only on your own workshops, under "
-                "personal/workshops/ or in a course"
+                "personal/workshops/, and your courses, under personal/courses/"
             )
+
+        # A course has one conversation, about the whole repository.
+        course = course_of_path(workshops_directory, path)
+
+        if course is not None:
+            course_path, inner = course
+
+            if inner:
+                raise ConversationError(
+                    "A workshop in a course is written in the course's "
+                    f"conversation: open Workshop Author on {course_path}"
+                )
+
+            if not directory.is_dir():
+                raise ConversationError(f"{path} is not a course")
+
+            return "course"
 
         if not (directory / "workshop.yaml").is_file():
             raise ConversationError(f"{path} is not a workshop")
@@ -705,6 +769,8 @@ class ConversationManager:
             raise ConversationError(
                 f"{path} was downloaded from a collection, so it is not yours to edit"
             )
+
+        return "workshop"
 
     def _check_upgraded(self, workshops_directory: str) -> None:
         # A library in the previous layout has no personal/workshops/
@@ -724,12 +790,14 @@ class ConversationManager:
         directory: Path,
         model: str,
         effort: str,
+        kind: str,
     ) -> Conversation:
         from .agents.claude import sandbox_supported
         from .mcp import BridgeSession, create_server
 
         provider = self.provider
-        record = _read_record(directory)
+        state_dir = COURSE_STATE_DIR if kind == "course" else STATE_DIR
+        record = _read_record(directory, state_dir)
         resume = (
             str(record.get("session_id") or "") or None
             if record.get("provider") == provider.name
@@ -765,7 +833,9 @@ class ConversationManager:
         options = StartOptions(
             directory=directory,
             policy=policy,
-            instructions=instructions(path, directory),
+            instructions=course_instructions(path, directory)
+            if kind == "course"
+            else instructions(path, directory),
             tools=create_server(session_factory, base=directory),
             skill=self._skill,
             resume=resume,
@@ -779,6 +849,8 @@ class ConversationManager:
             directory=directory,
             session=session,
             provider=provider.name,
+            kind=kind,
+            state_dir=state_dir,
             options=options,
             model=model,
             effort=effort,
@@ -797,6 +869,7 @@ class ConversationManager:
         workshops_directory: str,
         model: str,
         effort: str,
+        kind: str,
     ) -> Conversation:
         provider = self.provider
         directory = self.drafts_directory / draft
@@ -820,7 +893,7 @@ class ConversationManager:
         holder: list[Conversation] = []
 
         # A plan that passes the checks is kept for the Create button.
-        def on_propose(proposal: Proposal) -> None:
+        def on_propose(proposal: Proposal | CourseProposal) -> None:
             if holder:
                 holder[0].proposal = proposal
                 holder[0].save()
@@ -833,16 +906,24 @@ class ConversationManager:
             forbidden=(library / INSTALLED_DIRECTORY,),
             read_only=True,
         )
-        personal = posixpath.normpath(
-            posixpath.join(workshops_directory or ".", PERSONAL_WORKSHOPS_DIRECTORY)
-        )
+
+        # A workshop is proposed for personal/workshops/, a course for
+        # personal/courses/, each with the one tool that proposes it.
+        tree = COURSES_DIRECTORY if kind == "course" else PERSONAL_WORKSHOPS_DIRECTORY
+        target = posixpath.normpath(posixpath.join(workshops_directory or ".", tree))
+
+        if kind == "course":
+            tools = create_course_draft_server(library / tree, on_propose)
+            told = course_draft_instructions(target)
+        else:
+            tools = create_draft_server(library / tree, on_propose)
+            told = draft_instructions(target)
+
         options = StartOptions(
             directory=directory,
             policy=policy,
-            instructions=draft_instructions(personal),
-            tools=create_draft_server(
-                library / PERSONAL_WORKSHOPS_DIRECTORY, on_propose
-            ),
+            instructions=told,
+            tools=tools,
             skill=self._skill,
             resume=resume,
             model=model,
@@ -851,11 +932,21 @@ class ConversationManager:
 
         session = await provider.start(options)
         recorded = record.get("proposal") if resume else None
+        proposal: Proposal | CourseProposal | None = None
+
+        if isinstance(recorded, dict):
+            proposal = (
+                CourseProposal.from_dict(recorded)
+                if kind == "course"
+                else Proposal.from_dict(recorded)
+            )
+
         conversation = Conversation(
             path=DRAFT_PREFIX + draft,
             directory=directory,
             session=session,
             provider=provider.name,
+            kind=kind,
             options=options,
             model=model,
             effort=effort,
@@ -863,9 +954,7 @@ class ConversationManager:
             history=list(record.get("history") or []) if resume else [],
             created=str(record.get("created") or _now()) if resume else _now(),
             draft=draft,
-            proposal=Proposal.from_dict(recorded)
-            if isinstance(recorded, dict)
-            else None,
+            proposal=proposal,
             workshops_directory=workshops_directory,
         )
 
@@ -986,6 +1075,70 @@ first; workshops downloaded into the library are never yours to read or
 change."""
 
 
+def course_instructions(path: str, directory: Path) -> str:
+    """What the agent is told when its conversation is about a course."""
+
+    return f"""You are Workshop Author, running inside JupyterLab. You design and
+write one course of jupyterlab-workshop workshops: the repository
+{directory}, which is your working directory. A course is one or more
+collections, each a part of the course with an index of its own under
+collections/<name>/collection.json, and every workshop of every
+collection is a directory under workshops/. The person you work for is
+watching their JupyterLab session in a browser while you work.
+
+Read AGENTS.md and OUTLINE.md in the repository first, and follow them.
+AGENTS.md holds the conventions of this repository; OUTLINE.md is the
+design of the course, written before its workshops are, with one entry
+per workshop and a status table, and it is kept true as the work goes.
+While OUTLINE.md still has its skeleton, settle the design with the
+person before writing any workshop. Before writing or changing workshop
+files, use the jupyterlab-workshop:jupyterlab-workshop-authoring skill,
+and follow it.
+
+The workshop tools are the mcp__workshop__ tools; use them, not the
+jupyter workshop or just commands in a shell, which the sandbox may stop.
+Paths you give the file tools are relative to the course directory, so a
+workshop is "workshops/<name>". init scaffolds a new workshop there;
+lint, render, pages and test take it. index writes a collection's
+index: give it the workshop directories in the collection's order, out
+"collections/<name>/collection.json", ordered true, and repo as the
+Justfile's repo variable gives it, which is a placeholder until the
+course has a repository on GitHub; the stub's id and title are kept.
+catalog refreshes catalog.json with path "catalog.json" and relative
+true. The Justfile's index-<name> recipe lists each collection's
+workshops in order; keep it in step when a workshop is added or moved.
+The live tools act in the person's own browser tab: open_workshop with
+the path "{path}/workshops/<name>" opens a workshop there in author
+mode, and run_page, run_workshop and reset_workshop then run it.
+
+A version of a workshop is ready to show when lint reports no errors and
+run_workshop at the fast pace passes. Do not say it is ready otherwise;
+say what failed and fix it. Once it is ready, say so, update its row in
+the status table of OUTLINE.md and its entry in the README, and refresh
+the index. Run the self-test tool, test, only when the person asks.
+
+The repository is under git. Commit only when the person tells you to,
+with a message that says what changed and why, and never add a
+Co-Authored-By line or any other trailer naming an agent. Before the
+first commit, check git config user.name and user.email; if either is
+unset, ask the person for them and set them with git config --local in
+this repository, never globally unless they say so. Never push, add a
+remote or publish anything unless asked; when a version is ready, you
+may say once that you can publish when asked.
+
+The person can attach files to a message: a screenshot, a diagram, a
+PDF, notes, a data file. Each is saved under {COURSE_STATE_DIR}/{ATTACHMENTS_DIR}/
+in the course, and the message says where. An image is shown to you in
+the message as well; read a PDF from its file. When the person wants a
+file itself to be part of a workshop, copy it into that workshop's own
+directory and refer to it there; never refer to it where it was saved,
+since {COURSE_STATE_DIR}/ is the conversation's state and not part of the course.
+
+Stay inside the course directory. Anything outside it asks the person
+first; workshops downloaded into the library are never yours to read or
+change."""
+
+
 def command_line(parts: list[str]) -> str:
     """A command quoted for the shell a terminal on this server runs."""
 
@@ -995,15 +1148,43 @@ def command_line(parts: list[str]) -> str:
     return shlex.join(parts)
 
 
-def _move_attachments(source: Path, target: Path) -> list[str]:
+def _write_workshop(directory: Path, proposal: Proposal) -> None:
+    # An empty workshop with the plan's name and title, for the agent to
+    # write from the brief.
+    from .scaffold import write_scaffold
+
+    write_scaffold(
+        directory,
+        proposal.name,
+        proposal.title,
+        ci=False,
+        template="blank",
+        gating="soft" if proposal.gating else "off",
+    )
+
+
+def _write_course(directory: Path, proposal: CourseProposal) -> None:
+    # The whole repository as the command line scaffolds it, pinned to
+    # this release, with no repository URL yet.
+    from .course import CourseError, write_course
+
+    try:
+        write_course(directory, proposal.options())
+    except CourseError as error:
+        raise ConversationError(str(error)) from error
+
+
+def _move_attachments(
+    source: Path, target: Path, source_state: str, target_state: str
+) -> list[str]:
     # The files attached in one conversation's directory move to another's,
     # by name; the names moved are returned.
-    origin = attachments_directory(source)
+    origin = attachments_directory(source, source_state)
 
     if not origin.is_dir():
         return []
 
-    destination = attachments_directory(target)
+    destination = attachments_directory(target, target_state)
     moved: list[str] = []
 
     destination.mkdir(parents=True, exist_ok=True)
@@ -1016,10 +1197,10 @@ def _move_attachments(source: Path, target: Path) -> list[str]:
     return moved
 
 
-def _read_record(directory: Path) -> dict[str, Any]:
+def _read_record(directory: Path, state_dir: str = STATE_DIR) -> dict[str, Any]:
     try:
         data = json.loads(
-            (directory / STATE_DIR / AGENT_FILE).read_text(encoding="utf-8")
+            (directory / state_dir / AGENT_FILE).read_text(encoding="utf-8")
         )
     except (OSError, ValueError):
         return {}

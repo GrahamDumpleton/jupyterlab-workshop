@@ -23,10 +23,16 @@ import {
   prepareAttachment,
   releaseAttachment
 } from './attachments';
-import { AgentConnection, IAgentInfo, IAgentMessage } from './connection';
+import {
+  AgentConnection,
+  ConversationKind,
+  IAgentInfo,
+  IAgentMessage
+} from './connection';
 import {
   ConversationModel,
   IAttachmentInfo,
+  ICourseProposal,
   IProposal,
   IQuestion,
   TranscriptItem
@@ -63,16 +69,16 @@ export class AuthorPanel extends ReactWidget {
 
     this._options = options;
 
-    // A draft has no workshop yet, so it goes by its own id until the
-    // workshop is created and a panel for it takes over.
+    // A draft has no workshop or course yet, so it goes by its own id
+    // until one is created and a panel for it takes over.
     if (options.draft) {
       this.id = AuthorPanel.idForDraft(options.draft);
-      this.title.label = `${AUTHOR_TITLE}: New workshop`;
-      this.title.caption = `${AUTHOR_TITLE}, drafting a new workshop`;
+      this.title.label = `${AUTHOR_TITLE}: New ${this.kind}`;
+      this.title.caption = `${AUTHOR_TITLE}, drafting a new ${this.kind}`;
     } else {
       this.id = AuthorPanel.idFor(options.path);
       this.title.label = `${AUTHOR_TITLE}: ${lastSegment(options.path)}`;
-      this.title.caption = `${AUTHOR_TITLE} for ${options.path}`;
+      this.title.caption = `${AUTHOR_TITLE} for the ${this.kind} ${options.path}`;
     }
 
     this.title.closable = true;
@@ -97,19 +103,42 @@ export class AuthorPanel extends ReactWidget {
     return `jupyterlab-workshop-author-draft-${draft}`;
   }
 
-  /** The workshop the conversation is about; empty while drafting. */
+  /** The workshop or course the conversation is about; empty while drafting. */
   get path(): string {
     return this._options.path;
   }
 
-  /** The draft's id while a new workshop is drafted; empty otherwise. */
+  /** The draft's id while a new workshop or course is drafted; empty otherwise. */
   get draft(): string {
     return this._options.draft ?? '';
   }
 
-  /** Emitted with the workshop's path when a draft's workshop is created. */
-  get created(): ISignal<this, string> {
+  /** Whether the conversation is about a workshop or a course. */
+  get kind(): ConversationKind {
+    return this._options.kind ?? 'workshop';
+  }
+
+  /** Emitted with the path and kind of what a draft created. */
+  get created(): ISignal<this, { path: string; kind: ConversationKind }> {
     return this._created;
+  }
+
+  /**
+   * Text the message box was last asked to start with, and how many
+   * times it has been asked, so the box takes each new request once.
+   */
+  get prefilled(): { text: string; version: number } {
+    return this._prefilled;
+  }
+
+  /**
+   * Put text in the message box for the person to finish and send, in
+   * place of whatever is there: how Edit with AI on a workshop inside a
+   * course names that workshop to the course's conversation.
+   */
+  prefill(text: string): void {
+    this._prefilled = { text, version: this._prefilled.version + 1 };
+    this.update();
   }
 
   /** The conversation as shown. */
@@ -297,7 +326,7 @@ export class AuthorPanel extends ReactWidget {
       title: 'Start a new conversation?',
       body:
         'The agent forgets what was said so far and the conversation is ' +
-        'cleared. The workshop itself is not changed.',
+        `cleared. The ${this.kind} itself is not changed.`,
       buttons: [
         Dialog.cancelButton(),
         Dialog.warnButton({ label: 'New conversation' })
@@ -423,7 +452,10 @@ export class AuthorPanel extends ReactWidget {
     }
 
     if (message.type === 'created') {
-      this._created.emit(message.path);
+      this._created.emit({
+        path: message.path,
+        kind: message.kind ?? 'workshop'
+      });
 
       return;
     }
@@ -466,7 +498,10 @@ export class AuthorPanel extends ReactWidget {
   }
 
   private _options: AuthorPanel.IOptions;
-  private _created = new Signal<this, string>(this);
+  private _created = new Signal<this, { path: string; kind: ConversationKind }>(
+    this
+  );
+  private _prefilled = { text: '', version: 0 };
   private _connection: AgentConnection;
   private _model = new ConversationModel();
   private _status: IAgentStatus | null = null;
@@ -479,11 +514,14 @@ export class AuthorPanel extends ReactWidget {
 
 export namespace AuthorPanel {
   export interface IOptions {
-    /** The workshop, relative to the JupyterLab root; empty for a draft. */
+    /** The workshop or course, relative to the JupyterLab root; empty for a draft. */
     path: string;
 
-    /** The draft's id, for a workshop not created yet. */
+    /** The draft's id, for a workshop or course not created yet. */
     draft?: string;
+
+    /** Whether the conversation is about a workshop or a course; a workshop by default. */
+    kind?: ConversationKind;
 
     serverSettings: ServerConnection.ISettings;
 
@@ -549,12 +587,21 @@ function AuthorContent({
   const chooser = React.useRef<HTMLInputElement>(null);
   const ready = model.state === 'ready';
   const drafting = panel.draft !== '';
+  const kind = panel.kind;
   const pending = panel.pending;
 
   // Keep the newest entry in view as the conversation grows.
   React.useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
   }, [model.items]);
+
+  // Text the panel was asked to start the message with goes into the
+  // box, once per request, for the person to finish.
+  React.useEffect(() => {
+    if (panel.prefilled.text) {
+      setDraft(panel.prefilled.text);
+    }
+  }, [panel.prefilled]);
 
   const submit = (): void => {
     const text = draft.trim();
@@ -616,7 +663,7 @@ function AuthorContent({
         <div className="jp-WorkshopAgent-title">
           <h2>{AUTHOR_TITLE}</h2>
           <span className="jp-WorkshopAgent-path">
-            {drafting ? 'New workshop, not created yet' : panel.path}
+            {drafting ? `New ${kind}, not created yet` : panel.path}
           </span>
         </div>
         <div className="jp-WorkshopAgent-headerActions">
@@ -659,13 +706,7 @@ function AuthorContent({
       ) : null}
       <div className="jp-WorkshopAgent-transcript">
         {model.items.length === 0 && ready ? (
-          <p className="jp-WorkshopAgent-hint">
-            {drafting
-              ? 'Say what the workshop should teach and who it is for. ' +
-                'Workshop Author asks about anything unclear and proposes a ' +
-                'plan; nothing is created until you press Create.'
-              : 'Say what the workshop should teach, or what to change in it.'}
-          </p>
+          <p className="jp-WorkshopAgent-hint">{hintFor(kind, drafting)}</p>
         ) : null}
         {model.items.map((item, index) => (
           <Entry
@@ -773,18 +814,20 @@ function AuthorContent({
             </button>
             {drafting ? null : (
               <>
+                {kind === 'course' ? null : (
+                  <button
+                    type="button"
+                    className="jp-WorkshopAgent-barButton"
+                    title="Open the workshop in the instructions panel, in author mode"
+                    onClick={onOpenWorkshop}
+                  >
+                    Open workshop
+                  </button>
+                )}
                 <button
                   type="button"
                   className="jp-WorkshopAgent-barButton"
-                  title="Open the workshop in the instructions panel, in author mode"
-                  onClick={onOpenWorkshop}
-                >
-                  Open workshop
-                </button>
-                <button
-                  type="button"
-                  className="jp-WorkshopAgent-barButton"
-                  title="Carry the conversation on in a terminal, in the workshop's directory"
+                  title={`Carry the conversation on in a terminal, in the ${kind}'s directory`}
                   disabled={!ready || model.running}
                   onClick={onContinueInTerminal}
                 >
@@ -1395,6 +1438,23 @@ const AUDIENCES: Record<string, string> = {
   demonstration: 'A product demonstration or presentation'
 };
 
+/** What an empty conversation invites, by what it is about. */
+function hintFor(kind: ConversationKind, drafting: boolean): string {
+  if (drafting) {
+    return kind === 'course'
+      ? 'Say what the course should teach and who it is for. Workshop ' +
+          'Author asks about anything unclear and proposes a plan of its ' +
+          'parts; nothing is created until you press Create.'
+      : 'Say what the workshop should teach and who it is for. Workshop ' +
+          'Author asks about anything unclear and proposes a plan; nothing ' +
+          'is created until you press Create.';
+  }
+
+  return kind === 'course'
+    ? 'Say what to design next in the course, or what to change in one of its workshops.'
+    : 'Say what the workshop should teach, or what to change in it.';
+}
+
 /** A plan the agent proposed, with Create while drafting. */
 function ProposalCard({
   item,
@@ -1403,14 +1463,8 @@ function ProposalCard({
   item: Extract<TranscriptItem, { type: 'proposal' }>;
   state?: IProposalState;
 }): JSX.Element {
-  const plan: IProposal = item.plan;
+  const plan = item.plan;
   const refused = item.result !== undefined && !item.result.ok;
-  const checks = [
-    plan.quizzes ? 'Quizzes' : 'No quizzes',
-    plan.gating
-      ? 'pages wait for their checks'
-      : 'pages do not wait for their checks'
-  ].join(', ');
 
   let footer: JSX.Element | null = null;
 
@@ -1451,6 +1505,27 @@ function ProposalCard({
       className={`jp-WorkshopAgent-proposal${refused ? ' jp-mod-failed' : ''}`}
     >
       <h3>{plan.title}</h3>
+      {plan.kind === 'course' ? (
+        <CourseProposalBody plan={plan} />
+      ) : (
+        <WorkshopProposalBody plan={plan} />
+      )}
+      {footer}
+    </div>
+  );
+}
+
+/** The details of a proposed workshop: where it goes, who for, its pages. */
+function WorkshopProposalBody({ plan }: { plan: IProposal }): JSX.Element {
+  const checks = [
+    plan.quizzes ? 'Quizzes' : 'No quizzes',
+    plan.gating
+      ? 'pages wait for their checks'
+      : 'pages do not wait for their checks'
+  ].join(', ');
+
+  return (
+    <>
       <dl>
         <dt>Directory</dt>
         <dd>
@@ -1467,8 +1542,40 @@ function ProposalCard({
           <li key={index}>{page}</li>
         ))}
       </ol>
-      {footer}
-    </div>
+    </>
+  );
+}
+
+/** The details of a proposed course: where it goes, what it runs on, its parts. */
+function CourseProposalBody({ plan }: { plan: ICourseProposal }): JSX.Element {
+  const prefix = plan.idPrefix || plan.name;
+
+  return (
+    <>
+      <dl>
+        <dt>Directory</dt>
+        <dd>
+          <code>personal/courses/{plan.name}</code>
+        </dd>
+        <dt>Runs in</dt>
+        <dd>{plan.lite ? 'JupyterLab and JupyterLite' : 'JupyterLab'}</dd>
+        <dt>Collection ids</dt>
+        <dd>
+          <code>
+            {prefix}/{plan.name}/…
+          </code>
+        </dd>
+      </dl>
+      <p className="jp-WorkshopAgent-proposalSummary">{plan.description}</p>
+      <ol className="jp-WorkshopAgent-proposalOutline">
+        {plan.collections.map(collection => (
+          <li key={collection.name}>
+            <strong>{collection.title}</strong> (<code>{collection.name}</code>)
+            {collection.description ? `: ${collection.description}` : ''}
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 

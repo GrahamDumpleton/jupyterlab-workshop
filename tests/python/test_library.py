@@ -21,6 +21,7 @@ from jupyterlab_workshop.library import (
     collection_title,
     collection_workshops,
     course_entry,
+    course_of_path,
     course_path,
     course_workshops,
     default_library,
@@ -65,6 +66,32 @@ def test_slugs_agree_with_the_browser(collection_id: str, slug: str | None) -> N
 @pytest.mark.parametrize(("directory", "path", "own"), VECTORS["ownPaths"])
 def test_own_paths_agree_with_the_browser(directory: str, path: str, own: bool) -> None:
     assert is_own_library_path(directory, path) is own
+
+
+@pytest.mark.parametrize(
+    ("directory", "path", "course"),
+    [
+        (
+            "workshops",
+            "workshops/personal/courses/repo",
+            ("workshops/personal/courses/repo", ""),
+        ),
+        (
+            "workshops",
+            "workshops/personal/courses/repo/workshops/x",
+            ("workshops/personal/courses/repo", "workshops/x"),
+        ),
+        (".", "personal/courses/repo/", ("personal/courses/repo", "")),
+        (".", "personal/workshops/mine", None),
+        (".", "personal/courses", None),
+        (".", "personal/courses/../x", None),
+        ("workshops", "personal/courses/repo", None),
+    ],
+)
+def test_course_of_path_names_the_course_and_what_is_inside(
+    directory: str, path: str, course: tuple[str, str] | None
+) -> None:
+    assert course_of_path(directory, path) == course
 
 
 @pytest.mark.parametrize(("location", "digest"), VECTORS["hashes"])

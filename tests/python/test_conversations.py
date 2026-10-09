@@ -19,18 +19,25 @@ MANIFEST = (
 
 @pytest.fixture
 def library(jp_root_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    # The root is the library, with one workshop of the owner's and one
-    # installed from a collection.
+    # The root is the library, with one workshop of the owner's, one
+    # installed from a collection, and a course of the owner's holding one
+    # workshop.
     monkeypatch.setenv(PROVIDER_VARIABLE, "fake")
 
     (jp_root_dir / "library.json").write_text('{"version": 2}\n')
 
-    for path in ("personal/workshops/demo", "installed/collections/course/other"):
+    for path in (
+        "personal/workshops/demo",
+        "installed/collections/course/other",
+        "personal/courses/my-course/workshops/inner",
+    ):
         workshop = jp_root_dir / path
 
         (workshop / "pages").mkdir(parents=True)
         (workshop / "workshop.yaml").write_text(MANIFEST)
         (workshop / "pages" / "01.md").write_text("# Page\n")
+
+    (jp_root_dir / "personal/courses/my-course/OUTLINE.md").write_text("# Outline\n")
 
     return jp_root_dir
 
@@ -162,6 +169,12 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
         ("personal/workshops/missing", ".", "not a workshop"),
         ("personal/workshops/demo", "elsewhere", "workshop library"),
         ("../outside", ".", "inside the JupyterLab root"),
+        ("personal/courses/missing", ".", "not a course"),
+        (
+            "personal/courses/my-course/workshops/inner",
+            ".",
+            "open Workshop Author on personal/courses/my-course",
+        ),
     ],
 )
 async def test_conversations_are_only_for_the_owners_workshops(
@@ -176,6 +189,75 @@ async def test_conversations_are_only_for_the_owners_workshops(
     error = (await _receive(socket, "error"))[-1]
 
     assert refusal in error["message"]
+
+    socket.close()
+
+
+async def test_a_course_has_one_conversation_at_its_root(
+    jp_serverapp, jp_ws_fetch, library
+) -> None:
+    import base64
+
+    from jupyterlab_workshop.handlers import CONVERSATIONS_KEY
+
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps(
+            {"type": "open", "path": "personal/courses/my-course", "directory": "."}
+        )
+    )
+
+    opened = (await _receive(socket, "opened"))[-1]
+
+    assert (opened["path"], opened["kind"]) == ("personal/courses/my-course", "course")
+
+    # The agent works in the course's directory, is told about the course,
+    # and may write anywhere in it, a workshop of the course included.
+    manager = jp_serverapp.web_app.settings[CONVERSATIONS_KEY]
+    conversation = manager.get("personal/courses/my-course")
+    options = conversation.options
+
+    assert options.directory == library / "personal/courses/my-course"
+    assert "Read AGENTS.md and OUTLINE.md" in options.instructions
+    assert "personal/courses/my-course/workshops/<name>" in options.instructions
+    assert (
+        options.policy.decide(
+            "Write", {"file_path": "workshops/inner/pages/02.md"}
+        ).verdict
+        == "allow"
+    )
+
+    # What is said and attached is kept at the course root, in .workshop/,
+    # since _workshop/ is a workshop's own state directory.
+    notes = base64.b64encode(b"a syllabus").decode("ascii")
+
+    socket.write_message(
+        json.dumps(
+            {
+                "type": "send",
+                "text": "use this",
+                "attachments": [
+                    {"name": "syllabus.txt", "type": "text/plain", "data": notes}
+                ],
+            }
+        )
+    )
+    await _receive(socket, "info")
+
+    course = library / "personal/courses/my-course"
+    record = json.loads((course / ".workshop" / AGENT_FILE).read_text())
+
+    assert record["kind"] == "course"
+    assert (course / ".workshop/attachments/syllabus.txt").read_text() == "a syllabus"
+    assert not (course / "_workshop").exists()
+
+    # A terminal carries the conversation on in the course's directory.
+    socket.write_message(json.dumps({"type": "terminal"}))
+
+    assert (await _receive(socket, "terminal"))[-1]["cwd"] == (
+        "personal/courses/my-course"
+    )
 
     socket.close()
 
@@ -554,14 +636,19 @@ PLAN = {
 }
 
 
-async def _draft(jp_ws_fetch: Any, draft: str = "0123abcd-ef45") -> Any:
+async def _draft(
+    jp_ws_fetch: Any, draft: str = "0123abcd-ef45", kind: str = "workshop"
+) -> Any:
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
-    socket.write_message(json.dumps({"type": "open", "draft": draft, "directory": "."}))
+    socket.write_message(
+        json.dumps({"type": "open", "draft": draft, "directory": ".", "kind": kind})
+    )
 
     opened = (await _receive(socket, "opened"))[-1]
 
     assert opened["draft"] == draft
+    assert opened["kind"] == kind
     assert opened["history"] == []
 
     return socket
@@ -608,14 +695,14 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
                 "type": "send",
                 "text": "",
                 "attachments": [
-                    {"name": "outline.md", "type": "text/markdown", "data": "IyBIaQ=="}
+                    {"name": "plan.md", "type": "text/markdown", "data": "IyBIaQ=="}
                 ],
             }
         )
     )
     await _receive(socket, "info")
 
-    assert not list(library.rglob("outline.md"))
+    assert not list(library.rglob("plan.md"))
 
     # Create makes the workshop, and the panel is told where to go.
     socket.write_message(json.dumps({"type": "create"}))
@@ -668,10 +755,123 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
 
     # The draft's attachment went with the workshop, and the brief says so.
     assert (
-        library / "personal/workshops/git-basics/_workshop/attachments/outline.md"
+        library / "personal/workshops/git-basics/_workshop/attachments/plan.md"
     ).read_text() == "# Hi"
     assert "attached while drafting" in first["text"]
-    assert "outline.md" in first["text"]
+    assert "plan.md" in first["text"]
+
+    again.close()
+
+
+COURSE_PLAN = {
+    "title": "Python for analysts",
+    "name": "python-course",
+    "description": "Python from the first line to a working analysis, for analysts.",
+    "collections": [
+        {"name": "basics", "title": "The basics", "description": "The language."},
+        {"name": "data", "title": "Working with data"},
+    ],
+    "id_prefix": "github.com/example",
+    "lite": True,
+}
+
+
+async def test_a_course_is_drafted_and_created_from_the_plan(
+    jp_ws_fetch, library
+) -> None:
+    socket = await _draft(jp_ws_fetch, "c0a5e000-0001", kind="course")
+
+    # A plan the scaffold could not write, or whose name is taken, is an
+    # error the agent reads.
+    bad = {**COURSE_PLAN, "collections": [{"name": "Bad Name", "title": "Bad"}]}
+    events = await _turn(socket, f"/tool propose_course {json.dumps(bad)}")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is False
+    assert "cannot be a collection name" in result["summary"]
+
+    taken = {**COURSE_PLAN, "name": "my-course"}
+    events = await _turn(socket, f"/tool propose_course {json.dumps(taken)}")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is False
+    assert "personal/courses/my-course already exists" in result["summary"]
+
+    # A good plan is kept, and nothing exists in the library yet.
+    events = await _turn(socket, f"/tool propose_course {json.dumps(COURSE_PLAN)}")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert not (library / "personal/courses/python-course").exists()
+
+    socket.write_message(
+        json.dumps(
+            {
+                "type": "send",
+                "text": "",
+                "attachments": [
+                    {"name": "syllabus.md", "type": "text/markdown", "data": "IyBIaQ=="}
+                ],
+            }
+        )
+    )
+    await _receive(socket, "info")
+
+    # Create scaffolds the whole repository, as course init does, and the
+    # panel is told where to go.
+    socket.write_message(json.dumps({"type": "create"}))
+
+    created = (await _receive(socket, "created"))[-1]
+
+    assert created["path"] == "personal/courses/python-course"
+
+    course = library / "personal/courses/python-course"
+
+    assert (course / ".git").is_dir()
+    assert (course / "OUTLINE.md").is_file()
+    assert (course / "collections/basics/collection.json").is_file()
+    assert (course / "collections/data/collection.json").is_file()
+    assert (course / "lite/settings.json").is_file()
+
+    record = json.loads((course / "course.json").read_text())
+
+    assert record["idPrefix"] == "github.com/example"
+    assert record["collections"][1]["title"] == "Working with data"
+
+    socket.close()
+
+    # The course's conversation has what was said in the draft, then
+    # begins with the plan as its brief, recorded at the course root.
+    again = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    again.write_message(
+        json.dumps(
+            {"type": "open", "path": "personal/courses/python-course", "directory": "."}
+        )
+    )
+
+    reopened = (await _receive(again, "opened"))[-1]
+
+    assert reopened["kind"] == "course"
+    assert {"kind": "note", "text": "Created personal/courses/python-course."} in (
+        reopened["history"]
+    )
+
+    if reopened["running"]:
+        await _receive(again, "info")
+
+    agent_record = json.loads((course / ".workshop" / AGENT_FILE).read_text())
+    first = next(
+        event
+        for event in agent_record["history"]
+        if event["kind"] == "user" and "Design the course we agreed" in event["text"]
+    )
+
+    assert "1. The basics (basics): The language." in first["text"]
+    assert "2. Working with data (data)" in first["text"]
+    assert "JupyterLab and JupyterLite" in first["text"]
+    assert (course / ".workshop/attachments/syllabus.md").read_text() == "# Hi"
+    assert ".workshop/attachments/" in first["text"]
 
     again.close()
 
@@ -718,5 +918,13 @@ async def test_a_draft_needs_a_library_and_a_proper_id(
     )
 
     assert (await _receive(socket, "error"))[-1]["message"] == "Not a draft id"
+
+    socket.write_message(
+        json.dumps(
+            {"type": "open", "draft": "0123abcd-ef45", "directory": ".", "kind": "x"}
+        )
+    )
+
+    assert "Not something to draft" in (await _receive(socket, "error"))[-1]["message"]
 
     socket.close()

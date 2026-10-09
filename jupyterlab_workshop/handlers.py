@@ -744,14 +744,15 @@ class AgentStatusHandler(WorkshopHandler):
 
 
 class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
-    """A websocket carrying one workshop's conversation with the agent.
+    """A websocket carrying one workshop's or course's conversation with
+    the agent.
 
-    The first message opens the conversation, naming the workshop, or a
-    draft for a workshop not yet created; the socket then receives
-    everything that happens in it, starting with what happened before,
-    and sends messages, permission answers and interrupts. A draft's
-    socket also creates the workshop from the agreed plan, or discards
-    the draft.
+    The first message opens the conversation, naming the workshop or
+    course, or a draft for one not yet created, with its kind; the socket
+    then receives everything that happens in it, starting with what
+    happened before, and sends messages, permission answers and
+    interrupts. A draft's socket also creates the workshop or course from
+    the agreed plan, or discards the draft.
     """
 
     auth_resource = "contents"
@@ -950,10 +951,10 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
             return
 
         if not path:
-            raise ConversationError("A workshop path is required")
+            raise ConversationError("A workshop or course path is required")
 
         try:
-            directory = under_root(self.root_dir, path, "workshop")
+            directory = under_root(self.root_dir, path, "workshop or course")
         except tornado.web.HTTPError as error:
             raise ConversationError(str(error.log_message)) from error
 
@@ -987,11 +988,12 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
                 workshops_directory,
                 str(data.get("model") or ""),
                 str(data.get("effort") or ""),
+                str(data.get("kind") or "workshop"),
             )
         except ConversationError:
             raise
         except Exception as error:
-            self.log.exception("Unable to start drafting a workshop")
+            self.log.exception("Unable to start drafting a workshop or course")
 
             raise ConversationError(f"The agent could not start: {error}") from error
 
@@ -1007,6 +1009,7 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
                 "type": "opened",
                 "path": conversation.path,
                 "draft": conversation.draft,
+                "kind": conversation.kind,
                 "provider": conversation.provider,
                 "session_id": conversation.session.session_id,
                 "running": conversation.running,

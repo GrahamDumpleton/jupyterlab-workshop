@@ -17,6 +17,7 @@ import { Terminal } from '@jupyterlab/terminal';
 import { UUID } from '@lumino/coreutils';
 
 import { BRIDGE_CLIENT_ID } from '../authoring/bridge';
+import { BROWSER_ID, WorkshopBrowser } from '../browser/widget';
 import type { LibraryService } from '../library/service';
 import { PANEL_ID } from '../panel/widget';
 import { requestAPI } from '../request';
@@ -27,16 +28,23 @@ import {
   IPlatformInfo,
   IWorkshopManager
 } from '../tokens';
+import type { ConversationKind } from './connection';
 import { AUTHOR_TITLE, AuthorPanel } from './panel';
+
+/** The kind a command argument names; a workshop unless it says course. */
+function kindOf(value: unknown): ConversationKind {
+  return value === 'course' ? 'course' : 'workshop';
+}
 
 /** The command the layout restorer reopens Workshop Author panels with. */
 const RESTORE_COMMAND = 'jupyterlab-workshop:author-restore';
 
 /**
  * Workshop Author: an AI agent that writes and revises the library
- * owner's own workshops, in a conversation in the main area. It is
- * offered only where the server has an agent installed, in a workshop
- * library, and when neither `ai-authoring` nor `personal` is disabled.
+ * owner's own workshops and courses, in a conversation in the main area.
+ * It is offered only where the server has an agent installed, in a
+ * workshop library, and when neither `ai-authoring` nor `personal` is
+ * disabled.
  */
 export const agentPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab-workshop/labextension:agent',
@@ -105,6 +113,16 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // The browser lists the library's workshops and courses, so one the
+    // agent has just created shows there without a reload.
+    const refreshBrowser = (): void => {
+      for (const widget of shell.widgets('main')) {
+        if (widget.id === BROWSER_ID && widget instanceof WorkshopBrowser) {
+          widget.refresh();
+        }
+      }
+    };
+
     const openTerminal = async (
       cwd: string,
       command: string
@@ -122,11 +140,12 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       session.send({ type: 'stdin', content: [`${command}\r`] });
     };
 
-    // The conversation for a workshop, or for a draft of a new one: the
-    // panel already open for it, or a new one.
+    // The conversation for a workshop or a course, or for a draft of a
+    // new one: the panel already open for it, or a new one.
     const openPanel = async (
       path: string,
-      draft = ''
+      draft = '',
+      kind: ConversationKind = 'workshop'
     ): Promise<AuthorPanel> => {
       const existing = tracker.find(
         panel =>
@@ -148,10 +167,12 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       const panel = new AuthorPanel({
         path,
         draft,
+        kind,
         serverSettings,
         open: () => ({
           path,
           draft,
+          kind,
           directory: directoryCache,
           client: BRIDGE_CLIENT_ID,
           model: aiCache.model,
@@ -181,10 +202,13 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       directoryCache = await workshopsDirectory();
       aiCache = await readAi(settingRegistry);
 
-      // Once a draft's workshop is created, the workshop's own panel takes
+      // Once a draft's workshop or course is created, its own panel takes
       // over the conversation, and the draft's panel goes.
       panel.created.connect((_, created) => {
-        void openPanel(created).then(() => panel.dispose());
+        void openPanel(created.path, '', created.kind).then(() => {
+          panel.dispose();
+          refreshBrowser();
+        });
       });
 
       void tracker.add(panel);
@@ -199,9 +223,15 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(CommandIDs.createWithAI, {
       label: args =>
-        args.isLauncher ? AUTHOR_TITLE : 'Workshop: Create Workshop with AI…',
-      caption:
-        'Describe a workshop and have an AI agent write it in your library',
+        args.isLauncher
+          ? AUTHOR_TITLE
+          : kindOf(args.kind) === 'course'
+            ? 'Workshop: Create Course with AI…'
+            : 'Workshop: Create Workshop with AI…',
+      caption: args =>
+        kindOf(args.kind) === 'course'
+          ? 'Describe a course and have an AI agent set up its repository in your library and design it with you'
+          : 'Describe a workshop and have an AI agent write it in your library',
       isVisible: enabled,
       isEnabled: enabled,
       execute: async args => {
@@ -220,10 +250,10 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        // Nothing is created yet: the agent drafts the workshop with the
-        // person and proposes a plan, and the workshop is made only when
+        // Nothing is created yet: the agent drafts the workshop or course
+        // with the person and proposes a plan, and it is made only when
         // they press Create on it.
-        const panel = await openPanel('', UUID.uuid4());
+        const panel = await openPanel('', UUID.uuid4(), kindOf(args.kind));
 
         if (typeof args.topic === 'string' && args.topic.trim()) {
           panel.send(args.topic.trim());
@@ -237,7 +267,10 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       isVisible: enabled,
       isEnabled: args => enabled() && typeof args.path === 'string',
       execute: async args => {
-        const path = typeof args.path === 'string' ? args.path : '';
+        const path =
+          typeof args.path === 'string' ? PathExt.normalize(args.path) : '';
+        const course =
+          typeof args.course === 'string' ? PathExt.normalize(args.course) : '';
 
         await checked;
 
@@ -245,11 +278,26 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        await openPanel(PathExt.normalize(path));
+        // A workshop in a course is written in the course's conversation,
+        // which opens with that workshop named as the starting point for
+        // the person to say what to do with it.
+        if (course) {
+          const panel = await openPanel(course, '', 'course');
+          const inside = path.startsWith(`${course}/`)
+            ? path.slice(course.length + 1)
+            : path;
+
+          panel.prefill(`About ${inside}: `);
+
+          return;
+        }
+
+        await openPanel(path);
       }
     });
 
-    // Restores a workshop's panel by its path, and a draft's by its id.
+    // Restores a workshop's or course's panel by its path, and a draft's
+    // by its id, each with its kind.
     app.commands.addCommand(RESTORE_COMMAND, {
       label: AUTHOR_TITLE,
       execute: async args => {
@@ -260,9 +308,9 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
         }
 
         if (typeof args.draft === 'string' && args.draft) {
-          await openPanel('', args.draft);
+          await openPanel('', args.draft, kindOf(args.kind));
         } else if (typeof args.path === 'string' && args.path) {
-          await openPanel(PathExt.normalize(args.path));
+          await openPanel(PathExt.normalize(args.path), '', kindOf(args.kind));
         }
       }
     });
@@ -271,7 +319,9 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       void restorer.restore(tracker, {
         command: RESTORE_COMMAND,
         args: panel =>
-          panel.draft ? { draft: panel.draft } : { path: panel.path },
+          panel.draft
+            ? { draft: panel.draft, kind: panel.kind }
+            : { path: panel.path, kind: panel.kind },
         name: panel => (panel.draft ? `draft:${panel.draft}` : panel.path)
       });
     }
@@ -290,6 +340,11 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       palette?.addItem({
         command: CommandIDs.createWithAI,
         category: 'Workshop'
+      });
+      palette?.addItem({
+        command: CommandIDs.createWithAI,
+        category: 'Workshop',
+        args: { kind: 'course' }
       });
     });
 

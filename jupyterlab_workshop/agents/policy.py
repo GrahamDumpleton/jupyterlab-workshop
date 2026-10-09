@@ -1,9 +1,9 @@
 """What an agent may do without asking the person first.
 
 The rules are the same for every provider: the agent works on one
-workshop, so it reads and changes files inside that workshop's directory
-freely, reads the authoring skill, uses the workshop tools and the web,
-and asks before anything else. Workshops downloaded into the library,
+workshop, or on one course, so it reads and changes files inside that
+directory freely, reads the authoring skill, uses the workshop tools and
+the web, and asks before anything else. Workshops downloaded into the library,
 from a collection or a URL of their own, are never touched, since they
 are someone else's and may be replaced by an update. Bash runs freely
 only where the agent's sandbox confines it.

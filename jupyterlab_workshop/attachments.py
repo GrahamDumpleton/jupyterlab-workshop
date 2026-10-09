@@ -222,14 +222,16 @@ def safe_name(name: str, media_type: str) -> str:
     return base[:100]
 
 
-def attachments_directory(directory: Path) -> Path:
-    """Where a conversation held in `directory` keeps its attachments."""
+def attachments_directory(directory: Path, state: str = STATE_DIR) -> Path:
+    """Where a conversation held in `directory` keeps its attachments:
+    under its state directory, `_workshop/` for a workshop and
+    `.workshop/` for a course."""
 
-    return directory / STATE_DIR / ATTACHMENTS_DIR
+    return directory / state / ATTACHMENTS_DIR
 
 
 def save_attachments(
-    directory: Path, attachments: Sequence[Attachment]
+    directory: Path, attachments: Sequence[Attachment], state: str = STATE_DIR
 ) -> list[Attachment]:
     """Save attachments beside a conversation's record, each under its name.
 
@@ -237,7 +239,7 @@ def save_attachments(
     overwritten. Returns the attachments with their paths.
     """
 
-    target = attachments_directory(directory)
+    target = attachments_directory(directory, state)
     saved: list[Attachment] = []
 
     if attachments:
@@ -311,11 +313,10 @@ def describe_attachments(attachments: Sequence[Attachment]) -> str:
     ]
 
     return (
-        "The person attached these files to this message. Each is saved "
-        f"under {STATE_DIR}/{ATTACHMENTS_DIR}/ in your working directory, "
-        "where you may read it; an image shown above is the same file. "
-        "Copy a file into the workshop only when they ask for it to be used:\n"
-        + "\n".join(lines)
+        "The person attached these files to this message. Each is saved in "
+        "this conversation's attachments directory, at the path given, where "
+        "you may read it; an image shown above is the same file. Copy a file "
+        "into the workshop only when they ask for it to be used:\n" + "\n".join(lines)
     )
 
 

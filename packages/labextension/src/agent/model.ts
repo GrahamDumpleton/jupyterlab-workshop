@@ -4,6 +4,7 @@ import { IAgentEvent, IAgentInfo, IAgentMessage } from './connection';
 
 /** The workshop the agent proposes while drafting. */
 export interface IProposal {
+  kind: 'workshop';
   title: string;
   name: string;
   audience: string;
@@ -11,6 +12,28 @@ export interface IProposal {
   outline: string[];
   quizzes: boolean;
   gating: boolean;
+}
+
+/** One part of a proposed course. */
+export interface IProposedCollection {
+  name: string;
+  title: string;
+  description: string;
+}
+
+/** The course the agent proposes while drafting. */
+export interface ICourseProposal {
+  kind: 'course';
+  title: string;
+  name: string;
+  description: string;
+  collections: IProposedCollection[];
+
+  /** The prefix of the collection ids; the course's name when empty. */
+  idPrefix: string;
+
+  /** Whether the course is written for JupyterLite as well. */
+  lite: boolean;
 }
 
 /** One of the agent's questions, with the options to choose from. */
@@ -26,6 +49,9 @@ export const QUESTION_TOOL = 'AskUserQuestion';
 
 /** The tool a drafting agent proposes a workshop with. */
 export const PROPOSE_TOOL = 'mcp__workshop__propose_workshop';
+
+/** The tool a drafting agent proposes a course with. */
+export const PROPOSE_COURSE_TOOL = 'mcp__workshop__propose_course';
 
 /** The tools whose run may close the workshop when it passes. */
 export const RUN_TOOLS: readonly string[] = [
@@ -78,7 +104,7 @@ export type TranscriptItem =
   | {
       type: 'proposal';
       id: string;
-      plan: IProposal;
+      plan: IProposal | ICourseProposal;
 
       /** Whether the server accepted the plan, and why not if it did not. */
       result?: { ok: boolean; summary: string };
@@ -322,11 +348,14 @@ export class ConversationModel {
 
         // A proposed plan is shown as a card to create from, not as a
         // tool row.
-        if (event.name === PROPOSE_TOOL) {
+        if (event.name === PROPOSE_TOOL || event.name === PROPOSE_COURSE_TOOL) {
           this._push({
             type: 'proposal',
             id: String(event.id ?? ''),
-            plan: toProposal(event.input)
+            plan:
+              event.name === PROPOSE_TOOL
+                ? toProposal(event.input)
+                : toCourseProposal(event.input)
           });
           break;
         }
@@ -466,6 +495,7 @@ function toProposal(value: unknown): IProposal {
   const input = isRecord(value) ? value : {};
 
   return {
+    kind: 'workshop',
     title: String(input.title ?? ''),
     name: String(input.name ?? ''),
     audience: String(input.audience ?? ''),
@@ -473,6 +503,25 @@ function toProposal(value: unknown): IProposal {
     outline: Array.isArray(input.outline) ? input.outline.map(String) : [],
     quizzes: input.quizzes === true,
     gating: input.gating === true
+  };
+}
+
+function toCourseProposal(value: unknown): ICourseProposal {
+  const input = isRecord(value) ? value : {};
+  const collections = Array.isArray(input.collections) ? input.collections : [];
+
+  return {
+    kind: 'course',
+    title: String(input.title ?? ''),
+    name: String(input.name ?? ''),
+    description: String(input.description ?? ''),
+    collections: collections.filter(isRecord).map(item => ({
+      name: String(item.name ?? ''),
+      title: String(item.title ?? ''),
+      description: String(item.description ?? '')
+    })),
+    idPrefix: String(input.id_prefix ?? ''),
+    lite: input.lite === true
   };
 }
 

@@ -199,6 +199,30 @@ def is_own_library_path(directory: str, path: str) -> bool:
     return False
 
 
+def course_of_path(directory: str, path: str) -> tuple[str, str] | None:
+    """The course a path, relative to the root, is or lies in, or None.
+
+    For a path at or under ``personal/courses/<name>`` the course's own
+    path and the rest of the path within it are returned, the rest being
+    empty for the course itself. Lexical only, like ``is_own_library_path``.
+    """
+
+    base = normalize_workshops_directory(directory)
+    target = normalize_workshops_directory(path)
+
+    if ".." in target.split("/"):
+        return None
+
+    prefix = f"{base}/{COURSES_DIRECTORY}/" if base else f"{COURSES_DIRECTORY}/"
+
+    if not target.startswith(prefix) or len(target) == len(prefix):
+        return None
+
+    name, _, inner = target[len(prefix) :].partition("/")
+
+    return prefix + name, inner
+
+
 def is_library(root_dir: Path, directory: str) -> bool:
     """Whether a workshops directory is a library: whether it has a registry."""
 

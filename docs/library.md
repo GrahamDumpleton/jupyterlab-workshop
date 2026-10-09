@@ -173,7 +173,7 @@ personal workshop offers the same choice, and `jupyter workshop remove
 --delete` is the command line's Delete.
 [Workshop Author](authoring.md#workshop-author), the AI agent, writes
 the workshops it creates there too, and works on the workshops under
-`personal/workshops/` and in courses, never on downloaded ones.
+`personal/workshops/` and on courses, never on downloaded ones.
 
 ## Courses
 

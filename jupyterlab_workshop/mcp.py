@@ -516,6 +516,7 @@ def create_server(
         out: str = "",
         repo: str = "",
         ref: str = "",
+        id: str = "",
         title: str = "",
         description: str = "",
         publisher: str = "",
@@ -535,9 +536,10 @@ def create_server(
         names another file; entries already listed keep their position and
         new ones go at the end. To set the order instead, give the workshop
         directories themselves, all of them, in the order to list them.
-        The title, description, publisher, homepage, icon and tags describe
-        the collection itself and are kept from an existing index when
-        not given; ordered says whether the workshops form a sequence to
+        The id, title, description, publisher, homepage, icon and tags
+        describe the collection itself and are kept from an existing
+        index when not given, so an index written from a stub keeps the
+        stub's id; ordered says whether the workshops form a sequence to
         take in the order listed.
         """
 
@@ -555,6 +557,7 @@ def create_server(
         index_path = Path(place(out)) if out else root_path / "collection.json"
         existing = None
         metadata = CollectionMetadata(
+            id=id,
             title=title,
             description=description,
             publisher=publisher,

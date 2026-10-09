@@ -600,8 +600,15 @@ function BrowserContent(props: IContentProps): JSX.Element {
           (item.kind === 'personal' || item.kind === 'course') &&
           commands.isVisible(CommandIDs.editWithAI)
             ? () =>
+                // A workshop in a course is written in the course's
+                // conversation, so the command is told which course.
                 void commands.execute(CommandIDs.editWithAI, {
-                  path: item.path
+                  path: item.path,
+                  course:
+                    item.kind === 'course'
+                      ? courses.find(course => course.name === item.course)
+                          ?.path
+                      : undefined
                 })
             : undefined
         }
@@ -931,14 +938,28 @@ function BrowserContent(props: IContentProps): JSX.Element {
           </button>
         ) : null}
         {canAuthorWithAI ? (
-          <button
-            type="button"
-            className="jp-Button jp-mod-styled"
-            title="Describe a workshop and have Workshop Author, an AI agent, write it in My workshops"
-            onClick={() => void commands.execute(CommandIDs.createWithAI)}
-          >
-            Create Workshop with AI…
-          </button>
+          <>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled"
+              title="Describe a workshop and have Workshop Author, an AI agent, write it in My workshops"
+              onClick={() => void commands.execute(CommandIDs.createWithAI)}
+            >
+              Create Workshop with AI…
+            </button>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled"
+              title="Describe a course, a repository of workshops in parts, and have Workshop Author set it up in My courses and design it with you"
+              onClick={() =>
+                void commands.execute(CommandIDs.createWithAI, {
+                  kind: 'course'
+                })
+              }
+            >
+              Create Course with AI…
+            </button>
+          </>
         ) : null}
         {canMakeLibrary ? (
           <button

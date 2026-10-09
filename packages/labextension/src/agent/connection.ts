@@ -50,6 +50,9 @@ export interface IAgentInfo {
   cost?: number;
 }
 
+/** What a conversation is about: one workshop, or a whole course. */
+export type ConversationKind = 'workshop' | 'course';
+
 /** A message from the server about the conversation. */
 export type IAgentMessage =
   | { type: 'starting' }
@@ -57,8 +60,11 @@ export type IAgentMessage =
       type: 'opened';
       path: string;
 
-      /** The draft's id, for a workshop not created yet; empty otherwise. */
+      /** The draft's id, for a workshop or course not created yet; empty otherwise. */
       draft?: string;
+
+      /** Whether the conversation is about a workshop or a course. */
+      kind?: ConversationKind;
       provider: string;
       session_id: string | null;
       running: boolean;
@@ -69,7 +75,7 @@ export type IAgentMessage =
   | { type: 'event'; event: IAgentEvent }
   | { type: 'state'; running: boolean }
   | { type: 'cleared' }
-  | { type: 'created'; path: string }
+  | { type: 'created'; path: string; kind?: ConversationKind }
   | { type: 'terminal'; cwd: string; command: string | null }
   | { type: 'error'; message: string }
   | { type: 'closed' };
