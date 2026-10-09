@@ -2223,7 +2223,7 @@ test.describe('workshop library', () => {
     ).toBe(false);
   });
 
-  test('opens a terminal in one of the owner’s workshops and offers to publish it and a course', async ({
+  test('shows one of the owner’s workshops in the file browser and offers to publish it and a course', async ({
     page
   }) => {
     await page.contents.uploadContent(
@@ -2250,9 +2250,13 @@ test.describe('workshop library', () => {
       hasText: 'At the terminal'
     });
 
-    // A terminal opens in the workshop's directory.
-    await card.getByRole('button', { name: 'Open in terminal' }).click();
-    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    // Show files takes the file browser into the workshop's directory.
+    await card.getByRole('button', { name: 'Show files' }).click();
+    await expect(
+      page.locator('#filebrowser .jp-DirListing-item', {
+        hasText: 'workshop.yaml'
+      })
+    ).toBeVisible();
     await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
 
     // Publish asks where, a gist or a repository, and whether publicly;
@@ -2269,13 +2273,13 @@ test.describe('workshop library', () => {
     await expect(dialog.locator('input[type="checkbox"]')).not.toBeChecked();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
 
-    // A course group offers a terminal and GitHub, with no gist.
+    // A course group offers its files and GitHub, with no gist.
     const group = browser.locator('.jp-WorkshopBrowser-group', {
       hasText: 'shelf'
     });
 
     await expect(
-      group.getByRole('button', { name: 'Open in terminal' })
+      group.getByRole('button', { name: 'Show files' })
     ).toBeVisible();
     await group.getByRole('button', { name: 'Publish to GitHub…' }).click();
     await expect(dialog).toContainText('Publish the course "shelf"');

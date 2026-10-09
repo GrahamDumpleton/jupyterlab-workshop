@@ -1376,7 +1376,7 @@ export namespace CommandIDs {
   export const applyFix = 'workshop:apply-fix';
   export const trustPreview = 'workshop:trust-preview';
   export const publish = 'workshop:publish';
-  export const openTerminal = 'workshop:open-terminal';
+  export const showFiles = 'workshop:show-files';
   export const record = 'workshop:record';
   export const recordPageBreak = 'workshop:record-page-break';
   export const bridgeOpen = 'workshop:bridge-open';

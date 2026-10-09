@@ -31,7 +31,6 @@ import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import {
   Dialog,
   InputDialog,
-  MainAreaWidget,
   Notification,
   showDialog,
   showErrorMessage
@@ -40,7 +39,6 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { FileEditor, IEditorTracker } from '@jupyterlab/fileeditor';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
-import { Terminal } from '@jupyterlab/terminal';
 import { ReadonlyJSONObject, ReadonlyJSONValue } from '@lumino/coreutils';
 
 import { readTextFile, writeTextFile } from '../actions/contents';
@@ -773,15 +771,14 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
     }
   });
 
-  // A terminal in a workshop's or course's directory, for git and the
-  // command line tools; only a server has terminals.
-  commands.addCommand(CommandIDs.openTerminal, {
-    label: 'Workshop: Open in Terminal',
-    caption: "Open a terminal in the workshop's or course's directory",
+  // The workshop's or course's directory in the file browser, the way
+  // into a directory the library keeps out of sight; from there the
+  // browser's own menus give a terminal, a launcher and the rest.
+  commands.addCommand(CommandIDs.showFiles, {
+    label: 'Workshop: Show in File Browser',
+    caption: "Show the workshop's or course's directory in the file browser",
     isEnabled: args =>
-      manager.backend.kind === 'server' &&
-      app.serviceManager.terminals.isAvailable() &&
-      (typeof args.path === 'string' || manager.workshop !== null),
+      typeof args.path === 'string' || manager.workshop !== null,
     execute: async args => {
       const path =
         typeof args.path === 'string' ? args.path : manager.workshop?.path;
@@ -790,15 +787,8 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         return;
       }
 
-      const session = await app.serviceManager.terminals.startNew({
-        cwd: path
-      });
-      const widget = new MainAreaWidget({ content: new Terminal(session, {}) });
-
-      widget.title.label = `Terminal: ${PathExt.basename(path)}`;
-      widget.title.closable = true;
-      shell.add(widget, 'main');
-      shell.activateById(widget.id);
+      await commands.execute('filebrowser:go-to-path', { path });
+      shell.activateById('filebrowser');
     }
   });
 

@@ -607,10 +607,10 @@ function BrowserContent(props: IContentProps): JSX.Element {
             ? () => void moveToCourse(item)
             : undefined
         }
-        onOpenTerminal={
-          item.kind === 'personal' && canOpenTerminal(item.path)
+        onShowFiles={
+          item.kind === 'personal' && canShowFiles(item.path)
             ? () =>
-                void commands.execute(CommandIDs.openTerminal, {
+                void commands.execute(CommandIDs.showFiles, {
                   path: item.path
                 })
             : undefined
@@ -779,9 +779,11 @@ function BrowserContent(props: IContentProps): JSX.Element {
   // Publishing goes through the server, which holds the GitHub login;
   // every publish asks first, and nothing is public without asking.
   const canPublish = manager.backend.kind === 'server' && !upgradeNeeded;
-  const canOpenTerminal = (path: string): boolean =>
-    manager.backend.kind === 'server' &&
-    commands.isEnabled(CommandIDs.openTerminal, { path });
+
+  // The owner's directories sit out of sight under the library, so a
+  // card and a course heading offer the way into them in the file browser.
+  const canShowFiles = (path: string): boolean =>
+    commands.isEnabled(CommandIDs.showFiles, { path });
 
   const publishWorkshop = async (item: IInstalledWorkshop): Promise<void> => {
     const choice = await showPublishDialog({
@@ -1264,18 +1266,18 @@ function BrowserContent(props: IContentProps): JSX.Element {
                           Edit course with AI
                         </button>
                       ) : null}
-                      {canOpenTerminal(course.path) ? (
+                      {canShowFiles(course.path) ? (
                         <button
                           type="button"
                           className="jp-Button jp-mod-styled"
-                          title="Open a terminal in the course's directory"
+                          title="Show the course's repository in the file browser"
                           onClick={() =>
-                            void commands.execute(CommandIDs.openTerminal, {
+                            void commands.execute(CommandIDs.showFiles, {
                               path: course.path
                             })
                           }
                         >
-                          Open in terminal
+                          Show files
                         </button>
                       ) : null}
                       {canPublish ? (
@@ -2131,7 +2133,7 @@ function InstalledCard({
   onRestart,
   onRemove,
   onMove,
-  onOpenTerminal,
+  onShowFiles,
   onPublish,
   onEditWithAI,
   update
@@ -2176,8 +2178,8 @@ function InstalledCard({
   /** Move one of the owner's own workshops into one of their courses. */
   onMove?: () => void;
 
-  /** Open a terminal in the workshop's directory, for the owner's own. */
-  onOpenTerminal?: () => void;
+  /** Show the workshop's directory in the file browser, for the owner's own. */
+  onShowFiles?: () => void;
 
   /** Publish one of the owner's own workshops, as a gist or to GitHub. */
   onPublish?: () => void;
@@ -2322,14 +2324,14 @@ function InstalledCard({
             Move to course…
           </button>
         ) : null}
-        {onOpenTerminal ? (
+        {onShowFiles ? (
           <button
             type="button"
             className="jp-Button jp-mod-styled"
-            title="Open a terminal in the workshop's directory"
-            onClick={onOpenTerminal}
+            title="Show the workshop's directory in the file browser"
+            onClick={onShowFiles}
           >
-            Open in terminal
+            Show files
           </button>
         ) : null}
         {onPublish ? (

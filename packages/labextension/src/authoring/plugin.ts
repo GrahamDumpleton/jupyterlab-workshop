@@ -124,7 +124,7 @@ export const authoringPlugin: JupyterFrontEndPlugin<void> = {
         CommandIDs.showLint,
         CommandIDs.trustPreview,
         CommandIDs.publish,
-        CommandIDs.openTerminal,
+        CommandIDs.showFiles,
         CommandIDs.record,
         CommandIDs.recordPageBreak
       ]) {
