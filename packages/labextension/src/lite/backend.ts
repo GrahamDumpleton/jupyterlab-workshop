@@ -91,6 +91,15 @@ export class LiteBackend implements IWorkshopBackend {
     throw new Error('JupyterLite has no linked courses to unlink');
   }
 
+  async courseCollections(): Promise<never[]> {
+    // Courses are not written in a site, so there is nothing to join.
+    return [];
+  }
+
+  async promoteWorkshop(): Promise<never> {
+    throw new Error('JupyterLite cannot move a workshop into a course');
+  }
+
   async libraryUpgrade(): Promise<null> {
     // A site is built with a library in the current layout, or none.
     return null;

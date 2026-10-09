@@ -693,6 +693,26 @@ class ConversationManager:
         if announce:
             await conversation.announce({"type": "closed"})
 
+    async def moved(self, path: str, course_path: str, inside: str) -> None:
+        """Hand a promoted workshop's conversation on to its course's.
+
+        The workshop's conversation ends, since a course has one
+        conversation for all of it, and whoever is watching is told where
+        to carry on: the course's path, with the workshop's place in it.
+        The record is not saved, since the directory has moved and the
+        course keeps its own.
+        """
+
+        conversation = self._conversations.pop(path, None)
+
+        if conversation is None:
+            return
+
+        await conversation.announce(
+            {"type": "moved", "path": course_path, "kind": "course", "inside": inside}
+        )
+        await conversation.session.close()
+
     async def close(self, path: str) -> None:
         """End a workshop's conversation, keeping its record."""
 

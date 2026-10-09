@@ -797,6 +797,56 @@ test.describe('Workshop Author and courses', () => {
     ).toBeVisible();
   });
 
+  test('hands a conversation over to the course a workshop moves into', async ({
+    page
+  }) => {
+    // The workshop's own conversation is open.
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+
+    await expect(author.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
+
+    // Move to course asks which course; this one has no collections and
+    // is not a git repository, so the move is reported as not committed.
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Move to course…' })
+      .click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await dialog.locator('select').selectOption('big-course');
+    await dialog.getByRole('button', { name: 'Move' }).click();
+    await expect(dialog).toContainText('Moved, but not committed');
+    await dialog.getByRole('button', { name: 'OK' }).click();
+
+    // The conversation is now the course's, with the workshop named, and
+    // the browser lists the workshop under the course.
+    await expect(author).toHaveCount(1);
+    await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
+      `${LIBRARY}/personal/courses/big-course`
+    );
+    await expect(author.locator('.jp-WorkshopAgent-input')).toHaveValue(
+      'About workshops/demo: '
+    );
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/courses/big-course/workshops/demo/workshop.yaml`
+      )
+    ).toBe(true);
+    expect(
+      await page.contents.fileExists(
+        `${LIBRARY}/personal/workshops/demo/workshop.yaml`
+      )
+    ).toBe(false);
+  });
+
   test('edits a workshop of a course in the course conversation', async ({
     page
   }) => {

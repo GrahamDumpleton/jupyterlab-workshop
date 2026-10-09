@@ -12,7 +12,12 @@ import {
   supportsFrontend,
   supportsPlatform
 } from '@jupyterlab-workshop/core';
-import { Dialog, showDialog, showErrorMessage } from '@jupyterlab/apputils';
+import {
+  Dialog,
+  InputDialog,
+  showDialog,
+  showErrorMessage
+} from '@jupyterlab/apputils';
 import {
   ReactWidget,
   UseSignal,
@@ -596,6 +601,11 @@ function BrowserContent(props: IContentProps): JSX.Element {
         onRemove={
           features.enabled('remove') ? () => void remove(item) : undefined
         }
+        onMove={
+          item.kind === 'personal' && !isDownloaded(item) && canMove
+            ? () => void moveToCourse(item)
+            : undefined
+        }
         onEditWithAI={
           (item.kind === 'personal' || item.kind === 'course') &&
           commands.isVisible(CommandIDs.editWithAI)
@@ -672,6 +682,85 @@ function BrowserContent(props: IContentProps): JSX.Element {
   // Whether the library keeps its workshops in the previous layout and
   // waits to be upgraded, when nothing is listed and nothing offered.
   const upgradeNeeded = registry !== null && needsUpgrade(registry);
+
+  // The courses one of the owner's workshops can move into: those that
+  // are there, on a server, since the move happens in the server.
+  const joinable = courses.filter(course => !course.missing);
+  const canMove =
+    manager.backend.kind === 'server' && !upgradeNeeded && joinable.length > 0;
+
+  const moveToCourse = async (item: IInstalledWorkshop): Promise<void> => {
+    if (manager.workshop?.path === item.path) {
+      await showErrorMessage(
+        'Unable to move the workshop',
+        'The workshop is open; close it first.'
+      );
+
+      return;
+    }
+
+    const chosen = await InputDialog.getItem({
+      title: `Move "${item.title}" into a course`,
+      label:
+        'The workshop moves into the course, whole, with its progress and gist record, joins the design and the index, and is committed there. Its own repository ends with the move.',
+      items: joinable.map(course => course.name),
+      okLabel: 'Move'
+    });
+    const course = joinable.find(entry => entry.name === chosen.value);
+
+    if (!chosen.button.accept || !course) {
+      return;
+    }
+
+    try {
+      // A course of several parts asks which one; one part needs no asking.
+      const collections = await manager.backend.courseCollections(
+        directory,
+        course.name
+      );
+      let collection: string | null = collections[0]?.name ?? null;
+
+      if (collections.length > 1) {
+        const labels = collections.map(
+          entry => `${entry.title} (${entry.name})`
+        );
+        const picked = await InputDialog.getItem({
+          title: `Which part of ${course.name}?`,
+          label: 'The collection the workshop joins, at the end of its order.',
+          items: labels,
+          okLabel: 'Move'
+        });
+
+        if (!picked.button.accept || !picked.value) {
+          return;
+        }
+
+        collection = collections[labels.indexOf(picked.value)]?.name ?? null;
+      }
+
+      const report = await manager.backend.promoteWorkshop(
+        directory,
+        item.path,
+        course.path,
+        collection
+      );
+
+      setVersion(value => value + 1);
+
+      if (!report.committed) {
+        await showDialog({
+          title: 'Moved, but not committed',
+          body: `${item.title} is now at ${report.path}. The move was not committed in the course: ${report.commit_note}. Commit it yourself, or ask Workshop Author to.`,
+          buttons: [Dialog.okButton()]
+        });
+      }
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to move the workshop',
+        errorMessage(error)
+      );
+    }
+  };
 
   // Workshop Author writes the owner's own workshops, so only in a
   // library, and only one in this release's layout.
@@ -1909,6 +1998,7 @@ function InstalledCard({
   onContinue,
   onRestart,
   onRemove,
+  onMove,
   onEditWithAI,
   update
 }: {
@@ -1948,6 +2038,9 @@ function InstalledCard({
 
   /** Delete the workshop, when the settings allow removing. */
   onRemove?: () => void;
+
+  /** Move one of the owner's own workshops into one of their courses. */
+  onMove?: () => void;
 
   /** Revise the workshop with Workshop Author, for the owner's own. */
   onEditWithAI?: () => void;
@@ -2077,6 +2170,16 @@ function InstalledCard({
             onClick={onEditWithAI}
           >
             Edit with AI
+          </button>
+        ) : null}
+        {onMove ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Move this workshop into one of your courses, whole, joining its design and index"
+            onClick={onMove}
+          >
+            Move to course…
           </button>
         ) : null}
         {onRemove ? (

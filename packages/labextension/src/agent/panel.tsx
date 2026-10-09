@@ -118,8 +118,12 @@ export class AuthorPanel extends ReactWidget {
     return this._options.kind ?? 'workshop';
   }
 
-  /** Emitted with the path and kind of what a draft created. */
-  get created(): ISignal<this, { path: string; kind: ConversationKind }> {
+  /**
+   * Emitted with the path and kind of the conversation that takes over
+   * from this one: what a draft created, or the course a workshop was
+   * promoted into, with the workshop's place in it as `inside`.
+   */
+  get created(): ISignal<this, AuthorPanel.IHandover> {
     return this._created;
   }
 
@@ -451,10 +455,11 @@ export class AuthorPanel extends ReactWidget {
       return;
     }
 
-    if (message.type === 'created') {
+    if (message.type === 'created' || message.type === 'moved') {
       this._created.emit({
         path: message.path,
-        kind: message.kind ?? 'workshop'
+        kind: message.kind ?? 'workshop',
+        inside: message.type === 'moved' ? message.inside : undefined
       });
 
       return;
@@ -498,9 +503,7 @@ export class AuthorPanel extends ReactWidget {
   }
 
   private _options: AuthorPanel.IOptions;
-  private _created = new Signal<this, { path: string; kind: ConversationKind }>(
-    this
-  );
+  private _created = new Signal<this, AuthorPanel.IHandover>(this);
   private _prefilled = { text: '', version: 0 };
   private _connection: AgentConnection;
   private _model = new ConversationModel();
@@ -513,6 +516,16 @@ export class AuthorPanel extends ReactWidget {
 }
 
 export namespace AuthorPanel {
+  /** The conversation that takes over from a panel's. */
+  export interface IHandover {
+    /** Its path, relative to the JupyterLab root. */
+    path: string;
+    kind: ConversationKind;
+
+    /** For a course, the workshop within it to carry on with. */
+    inside?: string;
+  }
+
   export interface IOptions {
     /** The workshop or course, relative to the JupyterLab root; empty for a draft. */
     path: string;

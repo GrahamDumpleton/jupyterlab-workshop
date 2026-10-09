@@ -405,6 +405,7 @@ jupyter workshop course init DIRECTORY [--name NAME] [--title TITLE] [--descript
                                        [--repo URL] [--lite] [--python X.Y] [--no-git]
                                        [--link [--root ROOT] [--directory DIR]]
 jupyter workshop course update [DIRECTORY] [--version X.Y.Z]
+jupyter workshop course promote WORKSHOP COURSE [--collection NAME]
 jupyter workshop course link PATH [--name NAME] [--workshops DIR] [--root ROOT] [--directory DIR]
 jupyter workshop course unlink NAME [--root ROOT] [--directory DIR]
 jupyter workshop course list [--json] [--root ROOT] [--directory DIR]
@@ -440,6 +441,24 @@ generated file that is still as the scaffold last wrote it, adds any
 the scaffold now writes, and leaves alone, and reports, the files edited
 since they were generated, which stay edited files to every later
 update. Run `just requirements` afterwards to relock.
+
+`promote` moves a workshop of its own into a course: the directory goes
+whole into the course's `workshops/`, with its progress and gist record,
+and its own git repository and Workshop Author conversation end with
+the move. `--collection` names the part of the course it joins, by the
+index's directory under `collections/`; a course with one collection
+needs no name, and one with none takes the workshop into `workshops/`
+alone. In the collection it joins, an entry written from the workshop's
+manifest and pages goes into `OUTLINE.md` at the end of that
+collection's workshops section, the index is rebuilt with the workshop
+last, using the repository address the `Justfile` names, and the
+`Justfile`'s order for the collection gains its name. The move is then
+committed in the course as "Add the workshop NAME"; when git has no
+identity to commit as, or the course is not a repository, the command
+says so and leaves the commit to you. A workshop downloaded from a
+collection, or one already inside the course, is refused. The browser's
+Move to course… button does the same, asking which course and which
+part.
 
 `link`, `unlink` and `list` manage the [courses](library.md#courses) of
 a workshop library. A repository kept under the library's

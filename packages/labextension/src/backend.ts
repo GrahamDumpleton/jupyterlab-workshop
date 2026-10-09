@@ -9,7 +9,9 @@ import {
   IFetchRequest,
   IFetchResult,
   IInstalledWorkshop,
+  ICourseCollectionInfo,
   ILibraryUpgradePlan,
+  IPromotionReport,
   IPlatformInfo,
   IPreflightResult,
   IScriptRequest,
@@ -97,6 +99,31 @@ export class ServerBackend implements IWorkshopBackend {
       this._settings,
       { method: 'DELETE' }
     );
+  }
+
+  async courseCollections(
+    directory: string,
+    name: string
+  ): Promise<ICourseCollectionInfo[]> {
+    const response = await requestAPI<{
+      courses: { name: string; collections?: ICourseCollectionInfo[] }[];
+    }>(`courses?directory=${encodeURIComponent(directory)}`, this._settings);
+
+    return (
+      response.courses.find(course => course.name === name)?.collections ?? []
+    );
+  }
+
+  async promoteWorkshop(
+    directory: string,
+    workshop: string,
+    course: string,
+    collection: string | null
+  ): Promise<IPromotionReport> {
+    return requestAPI<IPromotionReport>('courses', this._settings, {
+      method: 'POST',
+      body: JSON.stringify({ directory, workshop, course, collection })
+    });
   }
 
   async libraryUpgrade(directory: string): Promise<ILibraryUpgradePlan | null> {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import posixpath
 from collections.abc import Coroutine, Sequence
 from pathlib import Path
 from typing import Any
@@ -61,7 +62,12 @@ from .fetch import (
     remove_workshop,
 )
 from .library import (
+    COURSES_DIRECTORY,
+    DEFAULT_COURSE_WORKSHOPS,
+    PERSONAL_WORKSHOPS_DIRECTORY,
     LibraryError,
+    course_of_path,
+    is_own_library_path,
     linked_course_path,
     plan_upgrade,
     read_library,
@@ -69,6 +75,7 @@ from .library import (
     upgrade_library,
 )
 from .platform import current_platform, has_web_proxy
+from .promotion import PromotionError, promote_workshop
 from .publish import PublishError, publish_workshop
 from .scaffold import TEMPLATES, initialize_repository, slug, write_scaffold
 
@@ -231,12 +238,64 @@ class WorkshopsHandler(WorkshopHandler):
 
 
 class CoursesHandler(WorkshopHandler):
-    """List a workshop library's courses and unlink a linked one.
+    """List a workshop library's courses, unlink a linked one, and promote
+    a workshop into one.
 
     Unlinking has to happen here rather than through the contents API:
     deleting a linked directory there could reach the files it links to,
     and a link whose target has gone is not listed there at all.
     """
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        """Move one of the owner's workshops into one of their courses."""
+
+        data = self.body_json()
+        directory = str(data.get("directory") or DEFAULT_WORKSHOPS_DIRECTORY)
+        workshop = str(data.get("workshop") or "").strip().strip("/")
+        course = str(data.get("course") or "").strip().strip("/")
+        collection = str(data.get("collection") or "") or None
+
+        if not workshop or not course:
+            raise tornado.web.HTTPError(400, "workshop and course are required")
+
+        # The workshop is the owner's own, standing alone; the course is
+        # one of theirs, named by its root.
+        if not is_own_library_path(directory, workshop) or course_of_path(
+            directory, workshop
+        ):
+            raise tornado.web.HTTPError(
+                400,
+                f"{workshop} is not one of your own workshops under "
+                f"{PERSONAL_WORKSHOPS_DIRECTORY}/",
+            )
+
+        placed = course_of_path(directory, course)
+
+        if placed is None or placed[1]:
+            raise tornado.web.HTTPError(
+                400, f"{course} is not a course under {COURSES_DIRECTORY}/"
+            )
+
+        workshop_dir = self.under_root(workshop, "workshop")
+        course_dir = self.under_root(course, "course")
+
+        try:
+            report = promote_workshop(workshop_dir, course_dir, collection)
+        except PromotionError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        # The workshop's conversation, if one is open, hands on to the
+        # course's, with the workshop named as the place to carry on.
+        inside = f"{DEFAULT_COURSE_WORKSHOPS}/{report.target.name}"
+        manager = self.settings.get(CONVERSATIONS_KEY)
+
+        if isinstance(manager, ConversationManager):
+            await manager.moved(workshop, course, inside)
+
+        self.finish(
+            json.dumps({**report.to_dict(), "path": posixpath.join(course, inside)})
+        )
 
     @tornado.web.authenticated
     def get(self) -> None:

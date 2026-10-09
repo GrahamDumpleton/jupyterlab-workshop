@@ -2125,6 +2125,104 @@ test.describe('workshop library', () => {
     ).toContainText('A workshop of its own');
   });
 
+  test('moves one of the owner’s workshops into a course, asking which part', async ({
+    page
+  }) => {
+    const course = `${WORKSHOPS_DIR}/personal/courses/parts`;
+    const stub = (name: string, title: string): string =>
+      JSON.stringify({
+        version: 1,
+        id: `example.org/parts/${name}`,
+        title,
+        ordered: true,
+        workshops: []
+      });
+
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 2 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await page.contents.uploadContent(
+      JSON.stringify({
+        version: 1,
+        title: 'Parts',
+        collections: [
+          { url: 'collections/first/collection.json', title: 'First part' },
+          { url: 'collections/second/collection.json', title: 'Second part' }
+        ]
+      }),
+      'text',
+      `${course}/catalog.json`
+    );
+    await page.contents.uploadContent(
+      stub('first', 'First part'),
+      'text',
+      `${course}/collections/first/collection.json`
+    );
+    await page.contents.uploadContent(
+      stub('second', 'Second part'),
+      'text',
+      `${course}/collections/second/collection.json`
+    );
+    await page.contents.uploadContent(
+      '# Parts: outline\n\n## Part II: Second part\n\n### The Second part workshops\n\n### Topics the Second part collection leaves out\n\nNone.\n',
+      'text',
+      `${course}/OUTLINE.md`
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/personal/workshops/mover`,
+      'mover',
+      'Moving house'
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const card = browser.locator('.jp-WorkshopBrowser-card', {
+      hasText: 'Moving house'
+    });
+
+    await card.getByRole('button', { name: 'Move to course…' }).click();
+
+    // The course, then which of its two parts.
+    const dialog = page.locator('.jp-Dialog');
+
+    await dialog.locator('select').selectOption('parts');
+    await dialog.getByRole('button', { name: 'Move' }).click();
+    await expect(dialog).toContainText('Which part of parts?');
+    await dialog.locator('select').selectOption('Second part (second)');
+    await dialog.getByRole('button', { name: 'Move' }).click();
+
+    // Not a git repository, so the move is reported as not committed.
+    await expect(dialog).toContainText('Moved, but not committed');
+    await dialog.getByRole('button', { name: 'OK' }).click();
+
+    // Listed under the course's second part, and gone from My workshops.
+    const group = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'parts'
+    });
+
+    await expect(
+      group.locator('.jp-WorkshopBrowser-section', { hasText: 'Second part' })
+    ).toBeVisible();
+    await expect(group).toContainText('Moving house');
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-card', { hasText: 'Moving house' })
+    ).toHaveCount(1);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', { hasText: 'My workshops' })
+    ).toHaveCount(0);
+    expect(
+      await page.contents.fileExists(`${course}/workshops/mover/workshop.yaml`)
+    ).toBe(true);
+    expect(
+      await page.contents.fileExists(
+        `${WORKSHOPS_DIR}/personal/workshops/mover/workshop.yaml`
+      )
+    ).toBe(false);
+  });
+
   test('shows its own sections, installs into a collection directory and trusts its own workshops', async ({
     page
   }) => {

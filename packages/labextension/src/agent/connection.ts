@@ -76,6 +76,16 @@ export type IAgentMessage =
   | { type: 'state'; running: boolean }
   | { type: 'cleared' }
   | { type: 'created'; path: string; kind?: ConversationKind }
+  | {
+      /**
+       * The workshop was promoted into a course, whose conversation
+       * carries on at `path`, with the workshop at `inside` within it.
+       */
+      type: 'moved';
+      path: string;
+      kind?: ConversationKind;
+      inside?: string;
+    }
   | { type: 'terminal'; cwd: string; command: string | null }
   | { type: 'error'; message: string }
   | { type: 'closed' };

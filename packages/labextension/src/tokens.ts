@@ -1051,6 +1051,29 @@ export interface ILibraryUpgradePlan {
   environments: string[];
 }
 
+/** One collection of a course, as the server lists them. */
+export interface ICourseCollectionInfo {
+  /** The index's directory under `collections/`, as the Justfile names it. */
+  name: string;
+  title: string;
+}
+
+/** What promoting a workshop into a course did. */
+export interface IPromotionReport {
+  /** The workshop's new path, relative to the JupyterLab root. */
+  path: string;
+
+  /** The collection it joined, or null for a course without one. */
+  collection: string | null;
+  indexed: boolean;
+  outlined: boolean;
+  ordered: boolean;
+
+  /** Whether the move was committed in the course, and if not why. */
+  committed: boolean;
+  commit_note: string;
+}
+
 /** What a download produced. */
 export interface IFetchResult {
   /** Directory of the workshop relative to the JupyterLab root. */
@@ -1173,6 +1196,27 @@ export interface IWorkshopBackend {
    * `personal/courses/` and its registry entry, never what it links to.
    */
   unlinkCourse(directory: string, name: string): Promise<void>;
+
+  /**
+   * The collections of one of a workshop library's courses, each with its
+   * name and title, for a workshop to be promoted into.
+   */
+  courseCollections(
+    directory: string,
+    name: string
+  ): Promise<ICourseCollectionInfo[]>;
+
+  /**
+   * Move one of the library owner's own workshops into one of their
+   * courses, under its `workshops/` directory, joining the collection
+   * named, or the course's only one.
+   */
+  promoteWorkshop(
+    directory: string,
+    workshop: string,
+    course: string,
+    collection: string | null
+  ): Promise<IPromotionReport>;
 
   /**
    * What upgrading a workshop library from the previous layout would do,

@@ -203,9 +203,15 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       aiCache = await readAi(settingRegistry);
 
       // Once a draft's workshop or course is created, its own panel takes
-      // over the conversation, and the draft's panel goes.
+      // over the conversation, and the draft's panel goes. A workshop
+      // promoted into a course hands over the same way, to the course's
+      // conversation with the workshop named as the place to carry on.
       panel.created.connect((_, created) => {
-        void openPanel(created.path, '', created.kind).then(() => {
+        void openPanel(created.path, '', created.kind).then(next => {
+          if (created.inside) {
+            next.prefill(`About ${created.inside}: `);
+          }
+
           panel.dispose();
           refreshBrowser();
         });

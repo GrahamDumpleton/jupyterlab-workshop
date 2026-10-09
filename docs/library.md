@@ -180,12 +180,34 @@ the workshops it creates there too, and works on the workshops under
 A course is a repository whose workshops the library shows, typically
 one you are writing workshops in to publish. Cloning a repository into
 `personal/courses/` is enough, and so is writing a new one there with
-[`jupyter workshop course init`](publishing.md#a-course-repository):
+[`jupyter workshop course init`](publishing.md#a-course-repository) or
+with [Create Course with AI](authoring.md#creating-a-course):
 
 ```
 git clone https://github.com/example-org/course-workshops ~/Workshops/personal/courses/course-workshops
 jupyter workshop course init ~/Workshops/personal/courses/new-course --title "A new course"
 ```
+
+A workshop of your own that belongs in a course moves into it with Move
+to course… on its card, or with `jupyter workshop course promote`:
+
+```
+jupyter workshop course promote ~/Workshops/personal/workshops/git-basics ~/Workshops/personal/courses/new-course --collection basics
+```
+
+The directory moves whole into the course's `workshops/`, with its
+progress and its gist record, so publishing it again later updates the
+same gist. The course takes it in: an entry written from its manifest
+and pages goes into `OUTLINE.md` under the collection it joins, that
+collection's index is rebuilt with it last, and the collection's order
+in the `Justfile` gains its name, so `just index` keeps it there. The
+move is committed in the course, since the workshop's own repository
+ends with the move and its files join the course's history; when git
+has no identity to commit as, the move is left for you to commit and
+the dialog says so. A course with one collection needs no `--collection`,
+and the card's dialog asks which part when there are several. If the
+workshop's Workshop Author conversation is open, it hands over to the
+course's conversation with the workshop named.
 
 The library works out where a course's workshops are, taking the first
 of these that finds any:

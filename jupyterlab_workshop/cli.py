@@ -92,6 +92,7 @@ from .library import (
     write_library,
 )
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
+from .promotion import PromotionError, promote_workshop
 from .publish import PublishError, publish_workshop
 from .scaffold import (
     GATING,
@@ -619,6 +620,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--version", help="the release to pin (default: this installation's)"
     )
     course_update.set_defaults(func=command_course_update)
+    promote = course_commands.add_parser(
+        "promote",
+        help="move a workshop of its own into a course",
+        description=(
+            "Move a workshop into a course's workshops/ directory, whole, with "
+            "its progress and gist record; write its entry into OUTLINE.md "
+            "under the collection it joins, rebuild that collection's index "
+            "with it last, add its name to the Justfile's order, and commit "
+            "the move in the course. The workshop's own git repository ends, "
+            "since its files join the course's."
+        ),
+    )
+    promote.add_argument("workshop", type=Path, help="the workshop to move")
+    promote.add_argument("course", type=Path, help="the course it joins")
+    promote.add_argument(
+        "--collection",
+        help="the part of the course it joins, by its directory name under "
+        "collections/ (needed when the course has several)",
+    )
+    promote.set_defaults(func=command_course_promote)
     link = course_commands.add_parser(
         "link", help="link in a repository kept outside the library"
     )
@@ -1925,6 +1946,38 @@ def _collection_spec(item: str) -> CollectionSpec:
         name=name,
         title=title.strip() if separator else name.replace("-", " ").capitalize(),
     )
+
+
+def command_course_promote(args: argparse.Namespace) -> int:
+    """Move a workshop into a course."""
+
+    try:
+        report = promote_workshop(args.workshop, args.course, args.collection)
+    except PromotionError as error:
+        raise CliError(str(error)) from error
+
+    print(f"moved {args.workshop} to {report.target}")
+
+    if report.collection:
+        joined = f"joined the collection {report.collection}"
+        parts = [
+            name
+            for name, done in (
+                ("index", report.indexed),
+                ("OUTLINE.md", report.outlined),
+                ("Justfile", report.ordered),
+            )
+            if done
+        ]
+
+        print(f"{joined}: {', '.join(parts) if parts else 'nothing to update'}")
+
+    if report.committed:
+        print("committed in the course")
+    else:
+        print(f"not committed: {report.commit_note}; commit the move yourself")
+
+    return 0
 
 
 def command_course_update(args: argparse.Namespace) -> int:

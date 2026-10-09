@@ -678,10 +678,11 @@ def list_courses(root_dir: Path, directory: str) -> list[dict[str, Any]]:
     A course is a directory under ``personal/courses/``, or an entry in
     the registry naming one. Each record has the ``name``, the ``path`` of
     its directory relative to the root, its ``workshops`` directory, the
-    ``target`` a linked course points to, whether it is ``linked``, and
+    ``target`` a linked course points to, whether it is ``linked``,
     whether it is ``missing``: a link whose target has gone, or a
-    registered link that is not there. Empty when the directory is not a
-    library.
+    registered link that is not there; and its ``collections``, each
+    with a name and title, for a workshop to be promoted into. Empty when
+    the directory is not a library.
     """
 
     from .library import (
@@ -692,6 +693,7 @@ def list_courses(root_dir: Path, directory: str) -> list[dict[str, Any]]:
         is_link,
         read_library,
     )
+    from .promotion import course_collections
 
     try:
         parent = _resolve_inside(root_dir, directory)
@@ -729,6 +731,7 @@ def list_courses(root_dir: Path, directory: str) -> list[dict[str, Any]]:
                 "target": entry.get("target"),
                 "linked": linked or bool(entry.get("target")),
                 "missing": not path.is_dir(),
+                "collections": course_collections(path) if path.is_dir() else [],
             }
         )
 

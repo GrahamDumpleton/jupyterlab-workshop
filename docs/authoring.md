@@ -122,7 +122,10 @@ AI on one of your workshops opens the conversation for that workshop, or
 goes back to it. On a workshop in a course it opens the course's
 conversation, since a course has one conversation for the whole
 repository, with the workshop named in the message box for you to say
-what to do with it.
+what to do with it. A workshop [moved into a
+course](library.md#courses) while its conversation is open hands over
+the same way: its panel closes and the course's opens, with the workshop
+named.
 
 ### Creating a workshop
 

@@ -622,6 +622,113 @@ async def test_library_endpoint_reports_and_upgrades_the_previous_layout(
     assert error.value.code == 404
 
 
+async def test_courses_endpoint_promotes_a_workshop_into_a_course(
+    jp_fetch, jp_root_dir
+):
+    from tornado.httpclient import HTTPClientError
+
+    from jupyterlab_workshop.course import CollectionSpec, CourseOptions, write_course
+    from jupyterlab_workshop.library import empty_library, write_library
+
+    library = jp_root_dir / "workshops"
+    workshop = library / "personal" / "workshops" / "mover"
+    course = library / "personal" / "courses" / "parts"
+
+    write_library(library, "", empty_library())
+    (workshop / "pages").mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: mover\ntitle: Mover\n"
+        "pages: [pages/01.md]\n"
+    )
+    (workshop / "pages" / "01.md").write_text("# One\n")
+    write_course(
+        course,
+        CourseOptions(
+            name="parts",
+            title="Parts",
+            description="",
+            collections=(CollectionSpec("a", "A"), CollectionSpec("b", "B")),
+            id_prefix="example.org",
+        ),
+    )
+
+    # The listing names each course's collections, for the dialog.
+    response = await jp_fetch(
+        "jupyterlab-workshop", "courses", params={"directory": "workshops"}
+    )
+    (listed,) = json.loads(response.body)["courses"]
+
+    assert listed["collections"] == [
+        {"name": "a", "title": "A"},
+        {"name": "b", "title": "B"},
+    ]
+
+    # The move needs the owner's workshop and one of their courses.
+    for body, detail in (
+        ({"workshop": "workshops/personal/workshops/mover"}, "course are required"),
+        (
+            {
+                "workshop": "workshops/installed/workshops/x",
+                "course": "workshops/personal/courses/parts",
+            },
+            "not one of your own",
+        ),
+        (
+            {
+                "workshop": "workshops/personal/workshops/mover",
+                "course": "workshops/personal/courses/parts/workshops",
+            },
+            "not a course",
+        ),
+        (
+            {
+                "workshop": "workshops/personal/workshops/mover",
+                "course": "workshops/personal/courses/parts",
+            },
+            "name the one the workshop joins",
+        ),
+    ):
+        with pytest.raises(HTTPClientError) as error:
+            await jp_fetch(
+                "jupyterlab-workshop",
+                "courses",
+                method="POST",
+                body=json.dumps({"directory": "workshops", **body}),
+            )
+
+        assert error.value.code == 400
+        assert detail in str(error.value.response.body)
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "courses",
+        method="POST",
+        body=json.dumps(
+            {
+                "directory": "workshops",
+                "workshop": "workshops/personal/workshops/mover",
+                "course": "workshops/personal/courses/parts",
+                "collection": "b",
+            }
+        ),
+    )
+    report = json.loads(response.body)
+
+    assert report["path"] == "workshops/personal/courses/parts/workshops/mover"
+    assert report["collection"] == "b"
+    assert (report["indexed"], report["outlined"], report["ordered"]) == (
+        True,
+        True,
+        True,
+    )
+    assert (course / "workshops" / "mover" / "workshop.yaml").is_file()
+    assert not workshop.exists()
+
+    # Not a git repository, so not committed, and the report says why.
+    assert report["committed"] is False
+    assert "not a git repository" in report["commit_note"]
+
+
 async def test_courses_endpoint_lists_and_unlinks_a_missing_course(
     jp_fetch, jp_root_dir, tmp_path
 ):

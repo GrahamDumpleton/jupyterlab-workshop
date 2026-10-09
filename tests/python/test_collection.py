@@ -421,6 +421,7 @@ def test_list_courses_lists_directories_links_and_missing_links(
         "target": None,
         "linked": False,
         "missing": False,
+        "collections": [],
     }
     assert courses["linked"]["linked"] is True
     assert courses["linked"]["missing"] is False
