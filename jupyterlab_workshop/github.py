@@ -22,6 +22,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .journal import record_publication
+
 #: Runs a command as ``subprocess.run`` does; tests pass a fake.
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -147,6 +149,7 @@ def publish_repository(
             made_public = True
 
         notes.extend(_pages_notes(directory, was_public or made_public))
+        record_publication(directory, "github", existing)
 
         return GitHubResult(
             url=existing,
@@ -199,6 +202,7 @@ def publish_repository(
         )
 
     notes.extend(_pages_notes(directory, public))
+    record_publication(directory, "github", url)
 
     return GitHubResult(
         url=url,

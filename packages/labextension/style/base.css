@@ -1132,6 +1132,14 @@
   padding: 16px 24px 32px;
 }
 
+/* The search has a row of its own above the buttons, so the buttons wrap
+   among themselves rather than squeezing the search or spilling one at a
+   time onto a second line. */
+.jp-WorkshopBrowser-searchbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+
 .jp-WorkshopBrowser-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1141,7 +1149,7 @@
 }
 
 .jp-WorkshopBrowser-search {
-  flex: 1 1 240px;
+  flex: 1 1 auto;
   min-width: 160px;
   padding: 4px 8px;
   border: 1px solid var(--jp-border-color1);

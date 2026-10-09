@@ -42,6 +42,7 @@ from urllib.request import Request, urlopen
 
 from .checks import satisfies_version
 from .fetch import USER_AGENT
+from .journal import record_publication
 from .publish import PUBLISH_EXCLUDES, WORKSPACE_DIR, PublishError, read_manifest
 from .tree import BASE64, STATE_DIR, TREE_FILE, TreeEntry, tree_document
 
@@ -753,9 +754,14 @@ def publish_to_gist(
             "auth login in a terminal, or set GH_TOKEN before starting JupyterLab"
         ) from error
 
-    return send_gist(
+    result = send_gist(
         directory, flat, token, create=create, public=public, request=request
     )
+
+    # The library's journal notes where the workshop went.
+    record_publication(directory, "gist", result.url)
+
+    return result
 
 
 def github_request(

@@ -322,6 +322,59 @@ async def test_workshops_listing_collection_and_events_endpoints(jp_fetch, jp_ro
     assert json.loads(response.body)["ready"] is False
 
 
+async def test_events_of_a_library_workshop_are_kept_in_its_journal(
+    jp_fetch, jp_root_dir
+):
+    workshop = jp_root_dir / "installed" / "collections" / "demo-1234567" / "demo"
+
+    workshop.mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(MANIFEST)
+    (jp_root_dir / "library.json").write_text('{"version": 2}\n')
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "events",
+        method="POST",
+        body=json.dumps(
+            {
+                "workshop": "installed/collections/demo-1234567/demo",
+                "events": [
+                    {
+                        "kind": "workshop-start",
+                        "ts": "2026-10-10T09:00:00Z",
+                        "name": "demo",
+                        "page": "a",
+                        "pages": [{"id": "a", "path": "a.md", "title": "A"}],
+                    },
+                    {"kind": "page-enter", "ts": "2026-10-10T09:00:01Z", "page": "a"},
+                    {"kind": "heartbeat", "ts": "2026-10-10T09:01:00Z", "page": "a"},
+                ],
+            }
+        ),
+    )
+
+    assert json.loads(response.body)["written"] == 3
+
+    # The workshop's own file has every event; the journal keeps what it
+    # wants, under the path in the library, with a history file beside.
+    assert (workshop / "_workshop" / "events.jsonl").read_text().count("\n") == 3
+
+    journal = jp_root_dir / "journal"
+    lines = (journal / "events.jsonl").read_text().splitlines()
+
+    assert [json.loads(line)["kind"] for line in lines] == [
+        "workshop-start",
+        "page-enter",
+    ]
+    assert json.loads(lines[0])["path"] == "installed/collections/demo-1234567/demo"
+
+    history = (journal / "history" / "demo.md").read_text()
+
+    assert "status: in progress" in history
+    assert "pages_reached: 1" in history
+    assert "- [x] A" in history
+
+
 async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
     response = await jp_fetch(
         "jupyterlab-workshop",

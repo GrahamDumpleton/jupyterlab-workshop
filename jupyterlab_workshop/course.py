@@ -57,6 +57,7 @@ DISABLED_FEATURES = (
     "library",
     "personal",
     "ai-authoring",
+    "journal",
 )
 
 #: The sink hosted launches report to when a collection index declares one.

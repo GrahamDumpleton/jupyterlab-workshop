@@ -859,6 +859,12 @@ function BrowserContent(props: IContentProps): JSX.Element {
     !upgradeNeeded &&
     commands.isVisible(CommandIDs.createWithAI);
 
+  // The journal is the library's own, so only a library offers it.
+  const canShowJournal =
+    registry !== null &&
+    !upgradeNeeded &&
+    commands.isEnabled(CommandIDs.showJournal, { directory });
+
   // A plain workshops directory on a server can become a library, unless
   // the subscriptions are locked, since the registry would hold them.
   const canMakeLibrary =
@@ -1078,8 +1084,8 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
   return (
     <div className="jp-WorkshopBrowser-content">
-      <div className="jp-WorkshopBrowser-toolbar">
-        {showAvailable ? (
+      {showAvailable ? (
+        <div className="jp-WorkshopBrowser-searchbar">
           <input
             type="search"
             className="jp-WorkshopBrowser-search"
@@ -1087,7 +1093,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
             value={query}
             onChange={event => setQuery(event.target.value)}
           />
-        ) : null}
+        </div>
+      ) : null}
+      <div className="jp-WorkshopBrowser-toolbar">
         {features.enabled('open-url') ? (
           <button
             type="button"
@@ -1114,6 +1122,18 @@ function BrowserContent(props: IContentProps): JSX.Element {
             onClick={() => manage('collection')}
           >
             Collections…
+          </button>
+        ) : null}
+        {canShowJournal ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Show your learning journal, the record of what you have done in this library, in the file browser"
+            onClick={() =>
+              void commands.execute(CommandIDs.showJournal, { directory })
+            }
+          >
+            Journal
           </button>
         ) : null}
         {canAuthorWithAI ? (

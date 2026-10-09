@@ -63,6 +63,7 @@ from .fetch import (
 )
 from .gist import GistError, publish_to_gist
 from .github import GitHubError, publish_repository
+from .journal import record_events
 from .library import (
     COURSES_DIRECTORY,
     DEFAULT_COURSE_WORKSHOPS,
@@ -560,6 +561,14 @@ class EventsHandler(WorkshopHandler):
             written = append_events(self.root_dir, workshop, events)
         except AnalyticsError as error:
             raise tornado.web.HTTPError(400, str(error)) from error
+
+        # A workshop in a library has its events kept in the library's
+        # journal too, which outlives the workshop; a fault there must
+        # not lose the batch.
+        try:
+            record_events(self.root_dir / workshop, events)
+        except Exception:
+            self.log.exception("The journal could not record events for %s", workshop)
 
         forwarded = False
         problem = ""

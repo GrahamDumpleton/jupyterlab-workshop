@@ -263,6 +263,57 @@ def test_update_asks_before_resetting_progress(
     assert "Pass --yes" in capsys.readouterr().err
 
 
+def test_journal_lists_what_the_library_recorded_and_resets_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv(LIBRARY_VARIABLE, str(tmp_path / "lib"))
+
+    # Outside a library there is no journal to show.
+    assert cli.main(["journal", "--root", str(tmp_path), "--directory", "."]) == 2
+    assert "not a workshop library" in capsys.readouterr().err
+
+    write_library(tmp_path / "lib", ".", empty_library())
+
+    assert cli.main(["journal", "--library"]) == 0
+    assert "no journal yet" in capsys.readouterr().out
+
+    # Installing into the library is the first thing recorded.
+    index = write_index(tmp_path, "1.0")
+
+    install_collection(str(index), tmp_path / "lib", ".", downloader=downloader)
+
+    assert cli.main(["journal", "--library", "--json"]) == 0
+
+    shown = json.loads(capsys.readouterr().out)
+
+    assert shown["journal"] is True
+    assert shown["profile"] is False
+    assert [record["status"] for record in shown["history"]] == ["not started"]
+    assert shown["history"][0]["path"].startswith("installed/collections/")
+
+    assert cli.main(["journal", "--library"]) == 0
+
+    listing = capsys.readouterr().out
+
+    assert "profile: not written yet" in listing
+    assert "not started  Alpha" in listing
+
+    # A reset asks, moves the journal aside whole, and can be undone by
+    # moving it back; --profile with nothing to move is refused.
+    assert cli.main(["journal", "--library", "--profile"]) == 2
+    assert cli.main(["journal", "--library", "--reset", "--profile", "--yes"]) == 2
+
+    capsys.readouterr()
+
+    assert cli.main(["journal", "--library", "--reset", "--yes"]) == 0
+
+    moved = capsys.readouterr().out
+
+    assert "moved the journal to" in moved
+    assert not (tmp_path / "lib" / "journal").exists()
+    assert list((tmp_path / "lib").glob("journal-archive-*"))
+
+
 def test_remove_deletes_a_download_and_keeps_a_local_workshop(tmp_path: Path) -> None:
     index = write_index(tmp_path, "1.0")
     write_library(tmp_path, ".", empty_library())

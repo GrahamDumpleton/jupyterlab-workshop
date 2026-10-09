@@ -391,6 +391,30 @@ prints an object with `directory`, `library` (whether it is one),
 settings apply) and `workshops`, the records the browser reads; the
 shape is stable for scripts to rely on.
 
+## journal
+
+```
+jupyter workshop journal [--json] [--root ROOT] [--directory DIR | --library]
+jupyter workshop journal --reset [--profile] [--yes] [--root ROOT] [--directory DIR | --library]
+```
+
+Shows the [learning journal](library.md#your-learning-journal) a
+workshop library keeps in its `journal/` directory: whether the profile
+has been written, and a line per workshop or course with its status
+(`not started`, `in progress`, `finished` or `removed`), its title,
+when it was last touched, its path under the library and the pages
+reached. A directory that is not a library has no journal, and a
+library in which nothing has happened yet says so. `--json` prints an
+object with `directory`, `journal` (whether anything has been
+recorded), `profile` (whether it has been written) and `history`, the
+frontmatter of every history file, most recently active first.
+
+`--reset` moves the whole journal to `journal-archive-<stamp>/` beside
+it, so the library starts afresh; `--reset --profile` moves only
+`profile.md` there and keeps the history. Either asks first unless
+`--yes` is given, and nothing is deleted: moving the directory or the
+file back undoes it.
+
 ## update
 
 ```

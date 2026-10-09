@@ -650,7 +650,8 @@ export const FEATURES = [
   'click-hint',
   'library',
   'personal',
-  'ai-authoring'
+  'ai-authoring',
+  'journal'
 ] as const;
 
 /** One of the removable features. */
@@ -1359,6 +1360,7 @@ export namespace CommandIDs {
   export const newWorkshop = 'workshop:new';
   export const createWithAI = 'workshop:create-with-ai';
   export const editWithAI = 'workshop:edit-with-ai';
+  export const showJournal = 'workshop:show-journal';
   export const applyLayout = 'workshop:apply-layout';
   export const editPage = 'workshop:edit-page';
   export const editManifest = 'workshop:edit-manifest';

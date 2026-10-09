@@ -38,6 +38,7 @@ from .collection import (
     parse_collection,
 )
 from .course import COURSE_FILE, read_record
+from .journal import record_promotion
 from .library import DEFAULT_COURSE_WORKSHOPS
 from .publish import PublishError, read_manifest
 from .tree import STATE_DIR
@@ -174,6 +175,9 @@ def promote_workshop(
 
     workshops_dir.mkdir(parents=True, exist_ok=True)
     shutil.move(str(workshop), str(target))
+
+    # The library's journal carries the workshop's record to its new path.
+    record_promotion(workshop, target)
 
     outlined = ordered = indexed = False
     touched: list[Path] = [target]

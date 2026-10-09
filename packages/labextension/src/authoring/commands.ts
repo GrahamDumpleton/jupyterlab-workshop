@@ -13,6 +13,7 @@ import {
   insertBlock,
   isOwnLibraryPath,
   joinLibraryPath,
+  JOURNAL_DIRECTORY,
   newPagePath,
   normalizeWorkshopsDirectory,
   PERSONAL_WORKSHOPS_DIRECTORY,
@@ -784,6 +785,42 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         typeof args.path === 'string' ? args.path : manager.workshop?.path;
 
       if (!path) {
+        return;
+      }
+
+      await commands.execute('filebrowser:go-to-path', { path });
+      shell.activateById('filebrowser');
+    }
+  });
+
+  // A library's journal is the record of what its owner has done in it,
+  // kept in its journal/ directory from the first thing recorded there;
+  // the browser names the library, since the command has no other way
+  // to know which directory is one.
+  commands.addCommand(CommandIDs.showJournal, {
+    label: 'Workshop: Show Learning Journal',
+    caption:
+      "Show the library's learning journal, the record of what you have done in it, in the file browser",
+    isEnabled: args =>
+      features.enabled('journal') && typeof args.directory === 'string',
+    execute: async args => {
+      if (!features.enabled('journal') || typeof args.directory !== 'string') {
+        return;
+      }
+
+      const path = joinLibraryPath(
+        normalizeWorkshopsDirectory(args.directory),
+        JOURNAL_DIRECTORY
+      );
+
+      try {
+        await contents.get(path, { content: false });
+      } catch {
+        Notification.info(
+          'Your learning journal begins with the first workshop you open in this library.',
+          { autoClose: 6000 }
+        );
+
         return;
       }
 

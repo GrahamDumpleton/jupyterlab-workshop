@@ -47,6 +47,7 @@ A library keeps what you made apart from what you installed:
   installed/
     collections/<collection>/<name>/         workshops installed from a collection
     workshops/<name>-<hash>/                 workshops downloaded from a URL of their own
+  journal/                                   your learning journal, written as you go
 ```
 
 A workshop is one directory with a `workshop.yaml` at its top. A course
@@ -186,6 +187,60 @@ secret and a new repository private unless you say otherwise. A course's
 group has Edit course with AI, Show files and Publish to GitHub… in its
 heading, and "Workshop: Show in File Browser" in the command palette does
 the same for the open workshop.
+
+## Your learning journal
+
+A library keeps a record of what you do in it, in its `journal/`
+directory, written by the extension as things happen and readable in
+the file browser like any other files: the Journal button at the top of
+the workshop browser takes you there. Nothing in it leaves your machine
+unless you ask an AI agent to read it.
+
+```
+journal/
+  events.jsonl          what happened, one event per line, oldest first
+  history/<name>.md     one file per workshop or course, rewritten as it goes
+  profile.md            about you as a learner, when an agent has written it
+  settings.yaml         the journal's own settings and format version
+```
+
+The log keeps the [progress events](analytics.md) worth keeping from
+every workshop in the library: when it was started, resumed, finished or
+left, the pages entered and how long each was open, the outcome of each
+check and quiz, the hints opened and checkpoints restored. The extension
+adds events of its own when a workshop is installed, updated or removed,
+when Workshop Author creates a workshop or a course, when a workshop
+moves into a course and when one is published. Heartbeats, the actions
+run, what was typed into a form and anything from inside your work are
+not kept. Every event names the workshop by its path under the library,
+so the record outlives the workshop: an installed workshop's own
+`_workshop/events.jsonl` goes when it is removed or updated, the
+journal's copy stays.
+
+Each file under `history/` is about one workshop or course. Its
+frontmatter holds the facts, where the workshop came from, when it was
+installed, first opened and last touched, whether it is finished, in
+progress or not started, how many of its pages were reached, how its
+checks and quizzes went and how long it was open, counted over the
+current run, since Restart begins again. Below that it names the pages,
+ticking those reached, and lists the dated record: installed, started,
+restarted, finished, updated, removed, created, moved, published.
+Everything above the marker comment at the end is rewritten from the
+log whenever the workshop is touched; anything you, or an agent, write
+below the marker is kept.
+
+`profile.md` is the one file the extension never writes: it is for an
+AI agent to write with you, about what you want to learn and how, and it
+is yours to edit. Its absence is how the extension knows no agent has
+met you yet.
+
+The journal is yours, so it is plain files you may edit or delete, one
+entry or all of them. To start afresh, `jupyter workshop journal
+--reset` moves the whole directory to `journal-archive-<stamp>/` beside
+it, and `--reset --profile` moves only the profile, keeping the history;
+nothing is deleted, and moving the directory back undoes it. See
+[journal](cli.md#journal). A deployment can remove the Journal button
+with `journal` in `disabledFeatures`; the record is still written.
 
 ## Courses
 

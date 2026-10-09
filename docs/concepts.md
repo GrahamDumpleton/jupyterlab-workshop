@@ -159,9 +159,12 @@ Everything the extension records about a workshop lives in a
 | `gist.json`                  | The [gist](publishing.md#a-workshop-in-a-gist) the workshop was published to, so a later publish updates it.                                                              |
 | `agent.json`, `attachments/` | [Workshop Author](authoring.md#workshop-author)'s conversation about the workshop and the files attached to it; a course keeps these in `.workshop/` at its root instead. |
 
-A [workshop library](library.md) adds one file of its own,
-`library.json`, at its root, holding its subscriptions and where each
-collection installs.
+A [workshop library](library.md) adds a file of its own, `library.json`,
+at its root, holding its subscriptions and where each collection
+installs, and a `journal/` directory, its owner's
+[learning journal](library.md#your-learning-journal), which keeps what
+happened in every workshop of the library after the workshop's own state
+directory has gone.
 
 Restart refills the workspace and forgets the progress; Reset Progress
 keeps the files; Remove deletes a downloaded workshop altogether. The trust decision is kept in JupyterLab's own state

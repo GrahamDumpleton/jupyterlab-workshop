@@ -2223,6 +2223,40 @@ test.describe('workshop library', () => {
     ).toBe(false);
   });
 
+  test('shows the learning journal once something has been recorded in it', async ({
+    page
+  }) => {
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 2 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const journal = browser.getByRole('button', { name: 'Journal' });
+
+    // Before anything has happened in the library there is nothing to
+    // show, and the button says so rather than opening a missing path.
+    await journal.click();
+    await expect(page.locator('.Toastify__toast')).toContainText(
+      'begins with the first workshop'
+    );
+
+    // Once the journal exists the button takes the file browser to it.
+    await page.contents.uploadContent(
+      'version: 1\n',
+      'text',
+      `${WORKSHOPS_DIR}/journal/settings.yaml`
+    );
+    await journal.click();
+    await expect(
+      page.locator('#filebrowser .jp-DirListing-item', {
+        hasText: 'settings.yaml'
+      })
+    ).toBeVisible();
+  });
+
   test('shows one of the owner’s workshops in the file browser and offers to publish it and a course', async ({
     page
   }) => {

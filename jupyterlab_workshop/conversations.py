@@ -76,6 +76,7 @@ from .drafting import (
     create_draft_server,
     draft_instructions,
 )
+from .journal import record_creation
 from .library import (
     COURSES_DIRECTORY,
     INSTALLED_DIRECTORY,
@@ -642,6 +643,12 @@ class ConversationManager:
         # The workshop or course is the person's own, so its history starts
         # with it; the agent commits only when told.
         initialize_repository(directory)
+
+        # The library's journal notes what was made and what it is for.
+        if isinstance(proposal, CourseProposal):
+            record_creation(directory, "course", proposal.title, proposal.description)
+        else:
+            record_creation(directory, "workshop", proposal.title, proposal.summary)
 
         # Files attached while drafting go with it, where the agent may
         # use them.

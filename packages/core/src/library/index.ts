@@ -26,6 +26,9 @@ import { isRecord, isStringArray } from '../util';
 /** The registry file that makes a workshops directory a library. */
 export const LIBRARY_FILE = 'library.json';
 
+/** The learning journal's directory at the library root. */
+export const JOURNAL_DIRECTORY = 'journal';
+
 /** The registry format version this package understands. */
 export const LIBRARY_VERSION = 2;
 

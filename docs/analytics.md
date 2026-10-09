@@ -138,6 +138,16 @@ instructor. Removing or resetting the workshop deletes it with the rest
 of the state directory. Because every line carries the labels and the
 identity fields, the file needs nothing beside it to be understood.
 
+A workshop in a [workshop library](library.md) also has the events worth
+keeping copied into the library's
+[learning journal](library.md#your-learning-journal), under
+`journal/events.jsonl` at the library root, cut down to the fields the
+journal uses and keyed by the workshop's path in the library. That copy
+stays when the workshop is removed or updated, which is its point: the
+journal is the owner's record of what they have done, across every
+workshop in the library. It is written whatever the analytics settings
+say and is sent nowhere.
+
 ## Reporting to a sink
 
 An `analytics` block says where events go, with what credential, and

@@ -361,8 +361,9 @@ def fetch_workshop(
             target_name = _standalone_name(target_name, source)
 
         target = parent / target_name
+        replaced = target.exists()
 
-        if target.exists():
+        if replaced:
             relative = _relative(root_dir, target)
 
             if not _replaceable(target, source, collection):
@@ -388,6 +389,12 @@ def fetch_workshop(
 
         _write_source_file(staging, fetched, url, collection)
         shutil.move(str(staging), str(target))
+
+    # The library's journal notes the install; imported here since the
+    # journal module imports the library one, which imports this.
+    from .journal import record_install
+
+    record_install(target, source.url, collection, replaced)
 
     return FetchResult(
         path=_relative(root_dir, target),
@@ -525,6 +532,11 @@ def remove_workshop(root_dir: Path, path: str) -> str:
     if not (target / MANIFEST_FILE).is_file():
         raise FetchError(f"{path} is not a workshop directory")
 
+    # The journal notes the removal while the manifest is still there to
+    # name the workshop.
+    from .journal import record_removal
+
+    record_removal(target)
     remove_tree(target)
 
     return _relative(root_dir, target)

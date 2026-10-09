@@ -74,6 +74,7 @@ from .install import (
     subscribe,
     unsubscribe,
 )
+from .journal import Journal, JournalError, read_history, reset_journal
 from .library import (
     COURSES_DIRECTORY,
     DEFAULT_LIBRARY_NAME,
@@ -484,6 +485,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_library_target_arguments(listing)
     listing.set_defaults(func=command_list)
+
+    journal = commands.add_parser(
+        "journal",
+        help="show the learning journal of a workshop library",
+        description=(
+            "Show the learning journal a workshop library keeps in its journal/ "
+            "directory: what was installed, started, finished and made there, "
+            "written from the progress events as they happen. --reset moves the "
+            "journal aside to journal-archive-<stamp>/ beside it, or with "
+            "--profile only the profile an AI agent wrote about you as a "
+            "learner, keeping the history; nothing is deleted, so a reset is "
+            "undone by moving the directory back."
+        ),
+    )
+    journal.add_argument(
+        "--json", action="store_true", help="print the journal as JSON"
+    )
+    journal.add_argument(
+        "--reset", action="store_true", help="move the journal aside and start afresh"
+    )
+    journal.add_argument(
+        "--profile",
+        action="store_true",
+        help="with --reset, move only the profile aside and keep the history",
+    )
+    journal.add_argument("--yes", action="store_true", help="do not ask before a reset")
+    _add_library_target_arguments(journal)
+    journal.set_defaults(func=command_journal)
 
     update = commands.add_parser(
         "update",
@@ -1825,6 +1854,83 @@ def command_list(args: argparse.Namespace) -> int:
         print(
             f"{kind:<9} {record['title']} {record['version'] or '-'} "
             f"{record['path']} ({progress})"
+        )
+
+    return 0
+
+
+def command_journal(args: argparse.Namespace) -> int:
+    """Show a library's learning journal, or move it aside."""
+
+    root, directory = _library_target(args)
+    location = library_directory(root, directory)
+
+    if not is_library(root, directory):
+        raise CliError(f"{location} is not a workshop library, so it keeps no journal")
+
+    if args.profile and not args.reset:
+        raise CliError("--profile goes with --reset")
+
+    journal = Journal(location)
+
+    if args.reset:
+        what = "the profile" if args.profile else "the journal"
+
+        if not journal.exists():
+            raise CliError(f"{location} has no journal yet")
+
+        if not _confirm(f"Move {what} of {location} aside?", args.yes):
+            return 1
+
+        try:
+            archive = reset_journal(journal, profile_only=args.profile)
+        except JournalError as error:
+            raise CliError(str(error)) from error
+
+        print(f"moved {what} to {archive}")
+
+        return 0
+
+    records = read_history(journal)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "directory": location.as_posix(),
+                    "journal": journal.exists(),
+                    "profile": journal.has_profile(),
+                    "history": records,
+                },
+                indent=2,
+            )
+        )
+
+        return 0
+
+    print(f"workshop library {location}")
+
+    if not journal.exists():
+        print("no journal yet: it begins with the first workshop opened here")
+
+        return 0
+
+    print("profile: written" if journal.has_profile() else "profile: not written yet")
+
+    if not records:
+        print("nothing recorded yet")
+
+    for facts in records:
+        progress = ""
+
+        if "pages_visible" in facts:
+            progress = (
+                f" {facts.get('pages_reached', 0)}/{facts['pages_visible']} pages"
+            )
+
+        print(
+            f"{facts.get('status', ''):<12} {facts.get('title') or facts.get('name')} "
+            f"{facts.get('last_activity', '')} {facts['path']}{progress}"
         )
 
     return 0
