@@ -18,12 +18,12 @@ export function isInstalledFrom(
   collection: string,
   name: string
 ): boolean {
-  // A workshop library's own and project workshops are never a
-  // collection's, whatever they are called.
+  // A workshop library's own workshops, single or in a course, are never
+  // a collection's, whatever they are called.
   if (
     item.name !== name ||
     item.kind === 'personal' ||
-    item.kind === 'project'
+    item.kind === 'course'
   ) {
     return false;
   }

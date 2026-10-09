@@ -282,6 +282,35 @@ def remove_environment(
     return environment_status(root_dir, workshop_path, kernel)
 
 
+def forget_environment(workshop: Path) -> bool:
+    """Remove whatever environment a workshop directory holds: the
+    kernelspec its record names, when that spec is the venv's, the venv
+    and the record and log. For a workshop about to move, whose venv
+    would hold the old paths. Returns whether there was one."""
+
+    record = _read_record(workshop)
+    venv = workshop / STATE_DIR / VENV_DIR
+
+    if not record and not venv.exists():
+        return False
+
+    name = str(record.get("kernel") or "")
+
+    if name and _spec_owned_by(name, venv):
+        _remove_kernelspec(name)
+
+    if venv.exists():
+        shutil.rmtree(venv)
+
+    for file in (RECORD_FILE, LOG_FILE):
+        path = workshop / STATE_DIR / file
+
+        if path.exists():
+            path.unlink()
+
+    return True
+
+
 def _workshop(root_dir: Path, workshop_path: str) -> Path:
     try:
         return _workshop_dir(root_dir, workshop_path)

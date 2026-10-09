@@ -3,15 +3,24 @@
 A library is the workshops directory, ``<JupyterLab root>/<workshops
 directory>``, when it holds ``library.json``. The registry records the
 collections and catalogs its owner subscribes to, in order, the
-directory under ``collections/`` each collection's workshops go into,
-and the projects whose workshops it shows. Workshops installed from a
-collection live under ``collections/<collection>/``, workshops
-downloaded from a URL of their own under ``standalone/``, the owner's
-own under ``personal/``, and repositories being worked on under
-``projects/``. The directories under ``collections/`` and
-``standalone/`` always carry a short hash of where their workshops came
+directory under ``installed/collections/`` each collection's workshops
+go into, and the courses that need saying something about. Inside the
+library, what the owner made is kept apart from what they installed:
+their own single workshops live under ``personal/workshops/`` and their
+courses, each a repository of workshops with its indexes, under
+``personal/courses/``; workshops installed from a collection live under
+``installed/collections/<collection>/`` and those downloaded from a URL
+of their own under ``installed/workshops/``. The directories under
+``installed/`` always carry a short hash of where their workshops came
 from, so two sources never compete for a name. A workshops directory
 without the registry is a plain one and behaves exactly as before.
+
+A library made by an earlier release, whose registry is version 1,
+keeps its own workshops under ``personal/``, its courses under
+``projects/`` and its downloads under ``collections/`` and
+``standalone/``. Such a registry is read, so the library can be seen to
+need upgrading, and ``upgrade_library`` moves the trees to where this
+release keeps them; nothing writes to it before then.
 
 The browser applies the same rules through the core package's
 ``library`` module; the two must choose the same directory names, which
@@ -28,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -37,28 +47,37 @@ from .collection import collection_hash, normalize_location
 LIBRARY_FILE = "library.json"
 
 #: The registry format version this package understands.
-LIBRARY_VERSION = 1
+LIBRARY_VERSION = 2
 
-#: Where workshops installed from a collection go, a directory per collection.
-COLLECTIONS_DIRECTORY = "collections"
+#: The registry format version before this one, read but never written.
+LEGACY_LIBRARY_VERSION = 1
 
-#: Where workshops downloaded from a URL of their own go.
-STANDALONE_DIRECTORY = "standalone"
-
-#: Where the owner's own workshops go.
+#: The tree of what the library's owner made.
 PERSONAL_DIRECTORY = "personal"
 
-#: Where projects go, cloned in or linked from elsewhere.
-PROJECTS_DIRECTORY = "projects"
+#: The tree of what was installed from elsewhere.
+INSTALLED_DIRECTORY = "installed"
 
-#: A project's workshops directory when its entry does not name one.
-DEFAULT_PROJECT_WORKSHOPS = "workshops"
+#: Where the owner's own single workshops go.
+PERSONAL_WORKSHOPS_DIRECTORY = f"{PERSONAL_DIRECTORY}/workshops"
 
-#: A catalog a project may hold at its top, listing its collections.
-PROJECT_CATALOG = "catalog.json"
+#: Where courses go, cloned in or linked from elsewhere.
+COURSES_DIRECTORY = f"{PERSONAL_DIRECTORY}/courses"
 
-#: A collection index a project may hold at its top.
-PROJECT_COLLECTION = "collection.json"
+#: Where workshops installed from a collection go, a directory per collection.
+COLLECTIONS_DIRECTORY = f"{INSTALLED_DIRECTORY}/collections"
+
+#: Where workshops downloaded from a URL of their own go.
+INSTALLED_WORKSHOPS_DIRECTORY = f"{INSTALLED_DIRECTORY}/workshops"
+
+#: A course's workshops directory when its entry does not name one.
+DEFAULT_COURSE_WORKSHOPS = "workshops"
+
+#: A catalog a course may hold at its top, listing its collections.
+COURSE_CATALOG = "catalog.json"
+
+#: A collection index a course may hold at its top.
+COURSE_COLLECTION = "collection.json"
 
 #: The environment variable naming the default library.
 LIBRARY_VARIABLE = "JUPYTER_WORKSHOP_LIBRARY"
@@ -69,7 +88,27 @@ DEFAULT_LIBRARY_NAME = "Workshops"
 #: The longest slug made from a collection id, before any suffix.
 MAX_SLUG = 64
 
-PROJECT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+#: The trees of the previous layout, where each goes now, and what each
+#: holds, in the order they are moved: the owner's tree first, since the
+#: courses go inside it.
+LEGACY_TREES: tuple[tuple[str, str, str], ...] = (
+    ("personal", PERSONAL_WORKSHOPS_DIRECTORY, "workshop"),
+    ("projects", COURSES_DIRECTORY, "course"),
+    ("standalone", INSTALLED_WORKSHOPS_DIRECTORY, "workshop"),
+    ("collections", COLLECTIONS_DIRECTORY, "collection"),
+)
+
+#: The key the previous format kept its courses under.
+LEGACY_COURSES_KEY = "projects"
+
+#: Why a library in the previous layout is not written to.
+NEEDS_UPGRADE_MESSAGE = (
+    "The workshop library was made by an earlier release and keeps its "
+    "workshops in the previous layout; upgrade it from the workshop browser, "
+    "or by starting it with jupyter workshop library, before changing it"
+)
+
+COURSE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 DIRECTORY_NAME = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
@@ -81,7 +120,10 @@ RESERVED = frozenset(
 )
 
 #: The order keys are written in, matching the browser's writes.
-KEY_ORDER = ("version", "collections", "catalogs", "directories", "projects")
+KEY_ORDER = ("version", "collections", "catalogs", "directories", "courses")
+
+#: The state directory of a workshop, where its environment is recorded.
+_STATE_DIR = "_workshop"
 
 
 class LibraryError(Exception):
@@ -92,6 +134,13 @@ def empty_library() -> dict[str, Any]:
     """A new, empty registry."""
 
     return {"version": LIBRARY_VERSION}
+
+
+def needs_upgrade(library: Mapping[str, Any]) -> bool:
+    """Whether a registry is in the previous format, so its library keeps
+    its workshops in the previous layout and must be upgraded first."""
+
+    return library.get("version") != LIBRARY_VERSION
 
 
 def normalize_workshops_directory(directory: str) -> str:
@@ -127,7 +176,8 @@ def library_file(root_dir: Path, directory: str) -> Path:
 
 def is_own_library_path(directory: str, path: str) -> bool:
     """Whether a workshop path, relative to the root, is the library owner's:
-    under ``personal/``, or under ``projects/``, cloned there or linked in.
+    under ``personal/workshops/``, or under ``personal/courses/``, whether
+    a course cloned there or linked in.
 
     The same lexical rule as the browser's ``isOwnLibraryPath``, with the
     same test vectors; whether the directory is a library at all, and
@@ -140,7 +190,7 @@ def is_own_library_path(directory: str, path: str) -> bool:
     if ".." in target.split("/"):
         return False
 
-    for tree in (PERSONAL_DIRECTORY, PROJECTS_DIRECTORY):
+    for tree in (PERSONAL_WORKSHOPS_DIRECTORY, COURSES_DIRECTORY):
         prefix = f"{base}/{tree}/" if base else f"{tree}/"
 
         if target.startswith(prefix) and len(target) > len(prefix):
@@ -160,24 +210,30 @@ def parse_library(data: Any, location: str = LIBRARY_FILE) -> dict[str, Any]:
 
     The checks are made here rather than against the bundled schema,
     which a source checkout may not have built, and they match what the
-    schema and the browser's parser accept.
+    schema and the browser's parser accept. A registry in the previous
+    format is accepted too, its ``projects`` read as ``courses`` and its
+    version kept, so that its library can be seen to need upgrading.
     """
 
     if not isinstance(data, dict):
         raise LibraryError(f"{location} must contain an object")
 
-    if data.get("version") != LIBRARY_VERSION:
+    version = data.get("version")
+
+    if version not in (LIBRARY_VERSION, LEGACY_LIBRARY_VERSION):
         raise LibraryError(
-            f"{location} has unsupported version {data.get('version')!r}, "
+            f"{location} has unsupported version {version!r}, "
             f"expected {LIBRARY_VERSION}"
         )
 
-    unknown = sorted(set(data) - set(KEY_ORDER))
+    courses_key = LEGACY_COURSES_KEY if version == LEGACY_LIBRARY_VERSION else "courses"
+    allowed = {courses_key if key == "courses" else key for key in KEY_ORDER}
+    unknown = sorted(set(data) - allowed)
 
     if unknown:
         raise LibraryError(f"{location} has unknown keys {', '.join(unknown)}")
 
-    library: dict[str, Any] = {"version": LIBRARY_VERSION}
+    library: dict[str, Any] = {"version": version}
 
     for key in ("collections", "catalogs"):
         if key not in data:
@@ -195,15 +251,22 @@ def parse_library(data: Any, location: str = LIBRARY_FILE) -> dict[str, Any]:
     if "directories" in data:
         library["directories"] = _parse_directories(data["directories"], location)
 
-    if "projects" in data:
-        library["projects"] = _parse_projects(data["projects"], location)
+    if courses_key in data:
+        library["courses"] = _parse_courses(data[courses_key], location)
 
     return library
 
 
 def serialize_library(library: Mapping[str, Any]) -> str:
     """The text of a registry: two space indents, a final newline, and the
-    keys in a fixed order, so the browser and the CLI write the same file."""
+    keys in a fixed order, so the browser and the CLI write the same file.
+
+    A registry that needs upgrading is never written, since the layout it
+    describes is the previous one.
+    """
+
+    if needs_upgrade(library):
+        raise LibraryError(NEEDS_UPGRADE_MESSAGE)
 
     ordered = {key: library[key] for key in KEY_ORDER if key in library}
 
@@ -262,7 +325,8 @@ def update_library(
 
     Reading just before writing keeps a change made meanwhile by the
     browser or another command, rather than overwriting it with an older
-    copy. Raises when the directory is not a library.
+    copy. Raises when the directory is not a library, or is one that
+    needs upgrading, whose layout a write would take for the current one.
     """
 
     library = read_library(root_dir, directory)
@@ -271,6 +335,9 @@ def update_library(
         raise LibraryError(
             f"{library_directory(root_dir, directory)} is not a workshop library"
         )
+
+    if needs_upgrade(library):
+        raise LibraryError(NEEDS_UPGRADE_MESSAGE)
 
     changed = change(library)
 
@@ -303,7 +370,8 @@ def slugify_collection_id(collection_id: str) -> str | None:
 
 
 def choose_collection_directory(location: str, collection_id: str | None) -> str:
-    """The directory under ``collections/`` for a collection that has none.
+    """The directory under ``installed/collections/`` for a collection that
+    has none.
 
     The slug of its id followed by the location's hash, or the hash alone
     when there is no usable id. The hash makes it unique to the location,
@@ -337,10 +405,10 @@ def download_key(kind: str, url: str, subdir: str = "") -> str:
 
 
 def standalone_directory(name: str, kind: str, url: str, subdir: str = "") -> str:
-    """The directory under ``standalone/`` for a workshop downloaded from a
-    URL of its own: its name followed by the short hash of its download
-    key, so the same source always lands in the same place and no other
-    can."""
+    """The directory under ``installed/workshops/`` for a workshop
+    downloaded from a URL of its own: its name followed by the short hash
+    of its download key, so the same source always lands in the same
+    place and no other can."""
 
     digest = hashlib.sha256(download_key(kind, url, subdir).encode("utf-8"))
 
@@ -414,28 +482,27 @@ def assign_collection_directory(
     return directory, {**library, "directories": directories}
 
 
-def project_entry(library: Mapping[str, Any], name: str) -> dict[str, Any]:
-    """The registry entry for a project, or a bare one if it has none."""
+def course_entry(library: Mapping[str, Any], name: str) -> dict[str, Any]:
+    """The registry entry for a course, or a bare one if it has none."""
 
-    for project in library.get("projects") or []:
-        if project.get("name") == name:
-            return dict(project)
+    for course in library.get("courses") or []:
+        if course.get("name") == name:
+            return dict(course)
 
     return {"name": name}
 
 
-def project_workshops(project: Mapping[str, Any]) -> str:
-    """A project's workshops directory, relative to the project."""
+def course_workshops(course: Mapping[str, Any]) -> str:
+    """A course's workshops directory, relative to the course."""
 
-    return str(project.get("workshops") or DEFAULT_PROJECT_WORKSHOPS)
+    return str(course.get("workshops") or DEFAULT_COURSE_WORKSHOPS)
 
 
-def project_path(base: str, target: str) -> str | None:
-    """The path inside a project that a location in one of its index files
+def course_path(base: str, target: str) -> str | None:
+    """The path inside a course that a location in one of its index files
     names, resolved against the file's own path: None for a URL, an
-    absolute path, or anything that climbs out of the project. The
-    project itself is the empty string. Mirrors the browser's
-    ``projectPath``."""
+    absolute path, or anything that climbs out of the course. The course
+    itself is the empty string. Mirrors the browser's ``coursePath``."""
 
     if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith(
         "/"
@@ -461,8 +528,8 @@ def project_path(base: str, target: str) -> str | None:
 
 
 def catalog_collections(catalog: Any, catalog_path: str) -> list[dict[str, str]]:
-    """The collections a project's catalog lists that are inside the
-    project, in catalog order, each as its ``path`` and ``title``. A
+    """The collections a course's catalog lists that are inside the
+    course, in catalog order, each as its ``path`` and ``title``. A
     collection named by URL is somewhere else and left out; anything
     unreadable is skipped rather than refusing the rest."""
 
@@ -477,7 +544,7 @@ def catalog_collections(catalog: Any, catalog_path: str) -> list[dict[str, str]]
         if not isinstance(item, dict) or not isinstance(item.get("url"), str):
             continue
 
-        path = project_path(catalog_path, item["url"])
+        path = course_path(catalog_path, item["url"])
 
         if path:
             title = item.get("title")
@@ -492,11 +559,11 @@ def catalog_collections(catalog: Any, catalog_path: str) -> list[dict[str, str]]
 
 
 def collection_workshops(collection: Any) -> list[str]:
-    """The directories, relative to the project, of the workshops a
+    """The directories, relative to the course, of the workshops a
     collection index in it lists, in index order: each entry's newest
     version, the first listed, names its directory with the ``subdir`` of
-    its git source, or the project itself with none. An entry fetched as
-    an archive, or one outside the project, is left out."""
+    its git source, or the course itself with none. An entry fetched as
+    an archive, or one outside the course, is left out."""
 
     if not isinstance(collection, dict) or not isinstance(
         collection.get("workshops"), list
@@ -515,7 +582,7 @@ def collection_workshops(collection: Any) -> list[str]:
 
         # A subdir is always within the repository, however it is written.
         subdir = source.get("subdir")
-        path = project_path("", subdir.lstrip("/") if isinstance(subdir, str) else "")
+        path = course_path("", subdir.lstrip("/") if isinstance(subdir, str) else "")
 
         if path is not None and path not in found:
             found.append(path)
@@ -537,32 +604,40 @@ def is_link(path: Path) -> bool:
     return path.is_symlink() or path.is_junction()
 
 
-def link_project(
+def link_course(
     library_dir: Path,
     target: Path,
     name: str | None = None,
     workshops: str | None = None,
 ) -> dict[str, Any]:
-    """Link a directory kept outside the library in as a project.
+    """Link a repository kept outside the library in as a course.
 
-    Makes ``projects/<name>`` a symbolic link to ``target``, or a
+    Makes ``personal/courses/<name>`` a symbolic link to ``target``, or a
     directory junction on Windows where a symbolic link needs rights a
-    user may not have, and records the project in the registry with its
+    user may not have, and records the course in the registry with its
     target, which is what makes the link trusted. Returns the entry.
     """
 
     target = target.expanduser().resolve()
     name = name or target.name
 
-    if not PROJECT_NAME.match(name):
+    if not COURSE_NAME.match(name):
         raise LibraryError(
-            f"{name!r} is not a usable project name; give one with --name"
+            f"{name!r} is not a usable course name; give one with --name"
         )
 
     if not target.is_dir():
         raise LibraryError(f"{target} is not a directory")
 
-    link = library_dir / PROJECTS_DIRECTORY / name
+    library = read_library(library_dir, "")
+
+    if library is None:
+        raise LibraryError(f"{library_dir} is not a workshop library")
+
+    if needs_upgrade(library):
+        raise LibraryError(NEEDS_UPGRADE_MESSAGE)
+
+    link = library_dir / COURSES_DIRECTORY / name
 
     if is_link(link):
         if link.resolve() != target:
@@ -578,22 +653,22 @@ def link_project(
     if workshops:
         entry["workshops"] = workshops
 
-    def change(library: dict[str, Any]) -> dict[str, Any]:
+    def change(current: dict[str, Any]) -> dict[str, Any]:
         others = [
-            project
-            for project in library.get("projects") or []
-            if project.get("name") != name
+            course
+            for course in current.get("courses") or []
+            if course.get("name") != name
         ]
 
-        return {**library, "projects": [*others, entry]}
+        return {**current, "courses": [*others, entry]}
 
     update_library(library_dir, "", change)
 
     return entry
 
 
-def unlink_project(library_dir: Path, name: str) -> dict[str, Any]:
-    """Remove a linked project's link and its registry entry.
+def unlink_course(library_dir: Path, name: str) -> dict[str, Any]:
+    """Remove a linked course's link and its registry entry.
 
     Only the link is removed, never anything it points to, and a link
     whose target has gone is removed all the same. Returns the entry
@@ -605,12 +680,15 @@ def unlink_project(library_dir: Path, name: str) -> dict[str, Any]:
     if library is None:
         raise LibraryError(f"{library_dir} is not a workshop library")
 
-    entry = project_entry(library, name)
+    if needs_upgrade(library):
+        raise LibraryError(NEEDS_UPGRADE_MESSAGE)
+
+    entry = course_entry(library, name)
 
     if "target" not in entry:
-        raise LibraryError(f"{name} is not a linked project")
+        raise LibraryError(f"{name} is not a linked course")
 
-    link = library_dir / PROJECTS_DIRECTORY / name
+    link = library_dir / COURSES_DIRECTORY / name
 
     if is_link(link):
         _remove_link(link)
@@ -622,10 +700,10 @@ def unlink_project(library_dir: Path, name: str) -> dict[str, Any]:
         "",
         lambda current: {
             **current,
-            "projects": [
-                project
-                for project in current.get("projects") or []
-                if project.get("name") != name
+            "courses": [
+                course
+                for course in current.get("courses") or []
+                if course.get("name") != name
             ],
         },
     )
@@ -634,19 +712,21 @@ def unlink_project(library_dir: Path, name: str) -> dict[str, Any]:
 
 
 def repair_links(library_dir: Path) -> list[str]:
-    """Recreate the links of linked projects whose link has gone but whose
-    target is still there. Returns the names of the projects relinked."""
+    """Recreate the links of linked courses whose link has gone but whose
+    target is still there. Returns the names of the courses relinked. A
+    library that needs upgrading is left alone, since its links are
+    where the upgrade will move them from."""
 
     library = read_library(library_dir, "")
 
-    if library is None:
+    if library is None or needs_upgrade(library):
         return []
 
     relinked: list[str] = []
 
-    for project in library.get("projects") or []:
-        target = project.get("target")
-        link = library_dir / PROJECTS_DIRECTORY / str(project["name"])
+    for course in library.get("courses") or []:
+        target = course.get("target")
+        link = library_dir / COURSES_DIRECTORY / str(course["name"])
 
         if not target or is_link(link) or link.exists():
             continue
@@ -654,25 +734,27 @@ def repair_links(library_dir: Path) -> list[str]:
         if Path(target).is_dir():
             link.parent.mkdir(parents=True, exist_ok=True)
             _make_link(link, Path(target))
-            relinked.append(str(project["name"]))
+            relinked.append(str(course["name"]))
 
     return relinked
 
 
-def linked_project_path(root: Path, parts: list[str]) -> Path | None:
-    """The path for ``parts`` under ``root`` when it lies behind a project
+def linked_course_path(root: Path, parts: list[str]) -> Path | None:
+    """The path for ``parts`` under ``root`` when it lies behind a course
     link the registry vouches for, or None.
 
-    A workshop in a linked project resolves outside the JupyterLab root,
+    A workshop in a linked course resolves outside the JupyterLab root,
     which the path checks otherwise refuse. It is let through only when
-    some ancestor is ``<library>/projects/<name>``, that is a link, the
-    library's registry lists the project with a target, and the link
-    points at that target; and then only for paths inside the target.
-    The path is returned unresolved, so it still names the link.
+    some ancestor is ``<library>/personal/courses/<name>``, that is a
+    link, the library's registry lists the course with a target, and the
+    link points at that target; and then only for paths inside the
+    target. The path is returned unresolved, so it still names the link.
     """
 
-    for index, part in enumerate(parts[:-1]):
-        if part != PROJECTS_DIRECTORY or index + 1 >= len(parts):
+    tree = COURSES_DIRECTORY.split("/")
+
+    for index in range(len(parts) - len(tree)):
+        if parts[index : index + len(tree)] != tree:
             continue
 
         library_dir = root.joinpath(*parts[:index])
@@ -681,8 +763,8 @@ def linked_project_path(root: Path, parts: list[str]) -> Path | None:
         if resolved_library != root and root not in resolved_library.parents:
             continue
 
-        name = parts[index + 1]
-        link = library_dir / PROJECTS_DIRECTORY / name
+        name = parts[index + len(tree)]
+        link = library_dir / COURSES_DIRECTORY / name
 
         if not is_link(link):
             continue
@@ -692,7 +774,7 @@ def linked_project_path(root: Path, parts: list[str]) -> Path | None:
         except LibraryError:
             continue
 
-        target = project_entry(library or {}, name).get("target")
+        target = course_entry(library or {}, name).get("target")
 
         if not target:
             continue
@@ -709,6 +791,197 @@ def linked_project_path(root: Path, parts: list[str]) -> Path | None:
             return lexical
 
     return None
+
+
+@dataclass(frozen=True)
+class UpgradeMove:
+    """One tree the upgrade of a library's layout moves."""
+
+    #: The tree's path before the upgrade, relative to the root.
+    source: str
+
+    #: Its path afterwards.
+    target: str
+
+    #: What it holds, in a few words.
+    contents: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """A JSON friendly form, as the browser reads it."""
+
+        return {"from": self.source, "to": self.target, "contents": self.contents}
+
+
+@dataclass(frozen=True)
+class UpgradePlan:
+    """What upgrading a library from the previous layout does.
+
+    The trees it moves, and the workshops whose isolated environments it
+    removes: an environment holds the paths it was made at, so one that
+    moved would not work, and it is made again when the workshop is next
+    opened.
+    """
+
+    moves: list[UpgradeMove]
+
+    #: The workshops, relative to the root, whose environments go.
+    environments: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """A JSON friendly form, as the browser reads it."""
+
+        return {
+            "moves": [move.to_dict() for move in self.moves],
+            "environments": list(self.environments),
+        }
+
+
+def plan_upgrade(root_dir: Path, directory: str) -> UpgradePlan | None:
+    """What upgrading a library from the previous layout would do, without
+    doing it, or None when the directory is not a library or is one in
+    the current layout already."""
+
+    library = read_library(root_dir, directory)
+
+    if library is None or not needs_upgrade(library):
+        return None
+
+    library_dir = library_directory(root_dir, directory)
+    base = normalize_workshops_directory(directory)
+    moves: list[UpgradeMove] = []
+    environments: list[str] = []
+
+    for old, new, unit in LEGACY_TREES:
+        tree = library_dir / old
+
+        if not tree.is_dir():
+            continue
+
+        workshops = _legacy_workshops(tree, old, library)
+        count = len(_containers(tree)) if unit != "workshop" else len(workshops)
+
+        moves.append(
+            UpgradeMove(
+                source=_join_path(base, old),
+                target=_join_path(base, new),
+                contents=f"{count} {unit}{'' if count == 1 else 's'}",
+            )
+        )
+
+        for workshop in workshops:
+            if (workshop / _STATE_DIR / "environment.json").is_file():
+                relative = workshop.relative_to(tree).as_posix()
+
+                environments.append(_join_path(base, old, relative))
+
+    return UpgradePlan(moves=moves, environments=environments)
+
+
+def upgrade_library(root_dir: Path, directory: str) -> UpgradePlan:
+    """Move a library from the previous layout to this one.
+
+    Each tree of the previous layout is moved whole to where this release
+    keeps it, progress and all, with the environments of the workshops
+    it holds removed first, since they hold the paths they were made at;
+    the registry is then written in the current format. Nothing is moved
+    while anything is in the way, and a tree that is not there is simply
+    not moved. Returns what was done.
+    """
+
+    from .environment import forget_environment
+
+    plan = plan_upgrade(root_dir, directory)
+    library = read_library(root_dir, directory)
+
+    if plan is None or library is None:
+        raise LibraryError(
+            f"{library_directory(root_dir, directory)} is not a workshop library "
+            "in the previous layout"
+        )
+
+    library_dir = library_directory(root_dir, directory)
+
+    # The owner's tree is moved into a directory of the same name, so it
+    # goes by way of a holding name; any other target in the way is a
+    # reason to stop before anything has moved.
+    for old, new, _ in LEGACY_TREES:
+        target = library_dir / new
+
+        inside_old = old == new.split("/")[0]
+
+        if (library_dir / old).is_dir() and target.exists() and not inside_old:
+            raise LibraryError(f"{target} is in the way of the upgrade")
+
+    for path in plan.environments:
+        forget_environment(root_dir / path)
+
+    for old, new, _ in LEGACY_TREES:
+        tree = library_dir / old
+
+        if not tree.is_dir():
+            continue
+
+        target = library_dir / new
+        held = library_dir / f".upgrade-{old}"
+
+        try:
+            tree.rename(held)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            held.rename(target)
+        except OSError as error:
+            raise LibraryError(f"Unable to move {tree} to {target}: {error}") from error
+
+    write_library(root_dir, directory, {**library, "version": LIBRARY_VERSION})
+
+    return plan
+
+
+def _legacy_workshops(tree: Path, old: str, library: Mapping[str, Any]) -> list[Path]:
+    # The workshops a tree of the previous layout holds: directly under
+    # the owner's and the standalone trees, one level down for the
+    # collections, and wherever each course's own layout says.
+    from .collection import MANIFEST_FILE, course_sections
+
+    if old == "collections":
+        return [
+            workshop
+            for collection in _containers(tree)
+            for workshop in _containers(collection)
+            if (workshop / MANIFEST_FILE).is_file()
+        ]
+
+    if old == "projects":
+        found: list[Path] = []
+
+        for course in _containers(tree):
+            entry = course_entry(library, course.name)
+
+            for _, paths in course_sections(course, entry):
+                found.extend(course / path if path else course for path in paths)
+
+        return found
+
+    return [
+        workshop
+        for workshop in _containers(tree)
+        if (workshop / MANIFEST_FILE).is_file()
+    ]
+
+
+def _containers(directory: Path) -> list[Path]:
+    # The directories directly under a path, links included, in name order.
+    if not directory.is_dir():
+        return []
+
+    return sorted(
+        child
+        for child in directory.iterdir()
+        if not child.name.startswith(".") and (child.is_dir() or is_link(child))
+    )
+
+
+def _join_path(*parts: str) -> str:
+    return "/".join(part for part in parts if part)
 
 
 def _make_link(link: Path, target: Path) -> None:
@@ -780,29 +1053,29 @@ def _parse_directories(value: Any, location: str) -> dict[str, str]:
     return directories
 
 
-def _parse_projects(value: Any, location: str) -> list[dict[str, Any]]:
+def _parse_courses(value: Any, location: str) -> list[dict[str, Any]]:
     if not isinstance(value, list):
-        raise LibraryError(f'{location}: "projects" must be a list')
+        raise LibraryError(f'{location}: "courses" must be a list')
 
-    projects: list[dict[str, Any]] = []
+    courses: list[dict[str, Any]] = []
 
     for index, item in enumerate(value, start=1):
         if (
             not isinstance(item, dict)
             or not isinstance(item.get("name"), str)
-            or not PROJECT_NAME.match(item["name"])
+            or not COURSE_NAME.match(item["name"])
         ):
-            raise LibraryError(f'{location}: project {index} needs a valid "name"')
+            raise LibraryError(f'{location}: course {index} needs a valid "name"')
 
         unknown = sorted(set(item) - {"name", "target", "workshops"})
 
         if unknown:
             raise LibraryError(
-                f"{location}: project {item['name']} has unknown keys "
+                f"{location}: course {item['name']} has unknown keys "
                 f"{', '.join(unknown)}"
             )
 
-        project: dict[str, Any] = {"name": item["name"]}
+        course: dict[str, Any] = {"name": item["name"]}
 
         for key in ("target", "workshops"):
             if key not in item:
@@ -810,11 +1083,11 @@ def _parse_projects(value: Any, location: str) -> list[dict[str, Any]]:
 
             if not isinstance(item[key], str) or not item[key]:
                 raise LibraryError(
-                    f'{location}: project {item["name"]} has an invalid "{key}"'
+                    f'{location}: course {item["name"]} has an invalid "{key}"'
                 )
 
-            project[key] = item[key]
+            course[key] = item[key]
 
-        projects.append(project)
+        courses.append(course)
 
-    return projects
+    return courses

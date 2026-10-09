@@ -8,10 +8,10 @@ path traversal guarded, put back into its directories when it is a gist
 holding a tree file (see ``tree``), and recorded in ``_workshop/source.json`` so the
 frontend can identify the workshop later.
 
-A download for a workshop library's ``standalone/`` directory is named for
-its source as well as the workshop, so two sources never compete for a
-name; the browser, which knows whether the library is in use, says
-where a download goes. An existing directory is only ever replaced by a
+A download for a workshop library's ``installed/workshops/`` directory is
+named for its source as well as the workshop, so two sources never
+compete for a name; the browser, which knows whether the library is in
+use, says where a download goes. An existing directory is only ever replaced by a
 download of the same workshop, so a download can never take the place
 of the owner's own work, wherever it is asked to go.
 """
@@ -512,11 +512,11 @@ def remove_workshop(root_dir: Path, path: str) -> str:
     if target == root_dir.resolve():
         raise FetchError("Refusing to remove the server root directory")
 
-    # A workshop behind a project link lives in someone's own repository,
+    # A workshop behind a course link lives in someone's own repository,
     # which removing a download must never reach into.
     if target != target.resolve():
         raise FetchError(
-            f"{path} is in a linked project; remove it from the project itself"
+            f"{path} is in a linked course; remove it from the course itself"
         )
 
     if not target.is_dir():
@@ -687,7 +687,7 @@ def _check_name(name: str) -> str:
 
 def _resolve_inside(root_dir: Path, relative: str) -> Path:
     # The library module imports this one, so it is imported here.
-    from .library import linked_project_path
+    from .library import linked_course_path
 
     root = root_dir.resolve()
     parts = [
@@ -702,10 +702,10 @@ def _resolve_inside(root_dir: Path, relative: str) -> Path:
     if target == root or root in target.parents:
         return target
 
-    # A workshop library may link in a project kept elsewhere; a path
+    # A workshop library may link in a course kept elsewhere; a path
     # behind such a link is inside the root as far as the library's
     # owner is concerned, when the registry vouches for the link.
-    linked = linked_project_path(root, parts)
+    linked = linked_course_path(root, parts)
 
     if linked is not None:
         return linked
@@ -721,7 +721,7 @@ def _relative(root_dir: Path, target: Path) -> str:
     except ValueError:
         pass
 
-    # Behind a project link the resolved path is outside the root, but
+    # Behind a course link the resolved path is outside the root, but
     # the path through the link is not.
     try:
         return target.relative_to(root).as_posix()

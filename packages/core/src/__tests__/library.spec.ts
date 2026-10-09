@@ -10,6 +10,9 @@ import {
   collectionHash,
   collectionTitle,
   collectionWorkshops,
+  courseEntry,
+  coursePath,
+  courseWorkshops,
   downloadKey,
   emptyLibrary,
   isOwnLibraryPath,
@@ -18,11 +21,9 @@ import {
   libraryFilePath,
   mayReplaceDownload,
   mergeSources,
+  needsUpgrade,
   normalizeWorkshopsDirectory,
   parseLibrary,
-  projectEntry,
-  projectPath,
-  projectWorkshops,
   recordedDirectory,
   serializeLibrary,
   slugifyCollectionId,
@@ -37,7 +38,7 @@ interface IVectors {
   downloadKeys: [string, string, string, string][];
   standalone: [string, string, string, string, string][];
   collectionDirectories: [string, string | null, string][];
-  projectPaths: [string, string, string | null][];
+  coursePaths: [string, string, string | null][];
 }
 
 const VECTORS: IVectors = JSON.parse(
@@ -49,16 +50,16 @@ describe('library schema', () => {
   const validate = ajv.compile(LIBRARY_SCHEMA);
 
   it('accepts a full registry and a bare one', () => {
-    expect(validate({ version: 1 })).toBe(true);
+    expect(validate({ version: 2 })).toBe(true);
     expect(
       validate({
-        version: 1,
+        version: 2,
         collections: ['https://example.org/collection.json'],
         catalogs: [],
         directories: {
           'https://example.org/collection.json': 'example.org-course'
         },
-        projects: [
+        courses: [
           { name: 'wsgi-workshops' },
           {
             name: 'jupyterlab-workshop',
@@ -70,52 +71,79 @@ describe('library schema', () => {
     ).toBe(true);
   });
 
-  it('rejects unknown keys, bad directories and bad project names', () => {
-    expect(validate({ version: 2 })).toBe(false);
-    expect(validate({ version: 1, colour: 'red' })).toBe(false);
-    expect(validate({ version: 1, directories: { a: 'Upper/Case' } })).toBe(
+  it('rejects the previous version, unknown keys, bad directories and bad course names', () => {
+    expect(validate({ version: 1 })).toBe(false);
+    expect(validate({ version: 3 })).toBe(false);
+    expect(validate({ version: 2, colour: 'red' })).toBe(false);
+    expect(validate({ version: 2, projects: [] })).toBe(false);
+    expect(validate({ version: 2, directories: { a: 'Upper/Case' } })).toBe(
       false
     );
-    expect(validate({ version: 1, projects: [{ name: '../up' }] })).toBe(false);
+    expect(validate({ version: 2, courses: [{ name: '../up' }] })).toBe(false);
   });
 });
 
 describe('parseLibrary', () => {
   it('keeps what is present and leaves out what is not', () => {
-    expect(parseLibrary({ version: 1 })).toEqual({ version: 1 });
+    expect(parseLibrary({ version: 2 })).toEqual({ version: 2 });
     expect(
       parseLibrary({
-        version: 1,
+        version: 2,
         collections: [],
-        projects: [{ name: 'p', workshops: 'examples' }]
+        courses: [{ name: 'p', workshops: 'examples' }]
       })
     ).toEqual({
-      version: 1,
+      version: 2,
       collections: [],
-      projects: [{ name: 'p', workshops: 'examples' }]
+      courses: [{ name: 'p', workshops: 'examples' }]
     });
+  });
+
+  it('reads the previous version, with its projects as courses, as needing an upgrade', () => {
+    const legacy = parseLibrary({
+      version: 1,
+      collections: ['c.json'],
+      projects: [{ name: 'repo', target: '/src/repo' }]
+    });
+
+    expect(legacy).toEqual({
+      version: 1,
+      collections: ['c.json'],
+      courses: [{ name: 'repo', target: '/src/repo' }]
+    });
+    expect(needsUpgrade(legacy)).toBe(true);
+    expect(needsUpgrade(emptyLibrary())).toBe(false);
+
+    // Each version has its own key for the courses, and no other.
+    expect(() => parseLibrary({ version: 1, courses: [] })).toThrow(
+      'unknown keys courses'
+    );
+    expect(() => parseLibrary({ version: 2, projects: [] })).toThrow(
+      'unknown keys projects'
+    );
+    expect(() => serializeLibrary(legacy)).toThrow('previous layout');
   });
 
   it('refuses what the schema refuses', () => {
     expect(() => parseLibrary([])).toThrow('must be an object');
-    expect(() => parseLibrary({ version: 2 })).toThrow('Unsupported');
-    expect(() => parseLibrary({ version: 1, colour: 'red' })).toThrow(
+    expect(() => parseLibrary({ version: 3 })).toThrow('Unsupported');
+    expect(() => parseLibrary({ version: 2, colour: 'red' })).toThrow(
       'unknown keys colour'
     );
     expect(() =>
-      parseLibrary({ version: 1, projects: [{ name: 'p', path: 'x' }] })
+      parseLibrary({ version: 2, courses: [{ name: 'p', path: 'x' }] })
     ).toThrow('unknown keys path');
-    expect(() => parseLibrary({ version: 1, collections: [''] })).toThrow(
+    expect(() => parseLibrary({ version: 2, collections: [''] })).toThrow(
       'list of locations'
     );
     expect(() =>
-      parseLibrary({ version: 1, directories: { a: '../x' } })
+      parseLibrary({ version: 2, directories: { a: '../x' } })
     ).toThrow('lower case name');
     expect(() =>
-      parseLibrary({ version: 1, projects: [{ name: '.hidden' }] })
+      parseLibrary({ version: 2, courses: [{ name: '.hidden' }] })
     ).toThrow('valid "name"');
     expect(() =>
-      parseLibrary({ version: 1, projects: [{ name: 'p', target: '' }] })
+      parseLibrary({ version: 2, courses: [{ name: 'p', target: '' }] })
     ).toThrow('invalid "target"');
   });
 });
@@ -123,16 +151,16 @@ describe('parseLibrary', () => {
 describe('serializeLibrary', () => {
   it('writes the keys in a fixed order with a final newline', () => {
     const text = serializeLibrary({
-      projects: [{ name: 'p' }],
+      courses: [{ name: 'p' }],
       collections: ['c'],
-      version: 1
+      version: 2
     });
 
     expect(text.endsWith('\n')).toBe(true);
     expect(Object.keys(JSON.parse(text))).toEqual([
       'version',
       'collections',
-      'projects'
+      'courses'
     ]);
     expect(parseLibrary(JSON.parse(serializeLibrary(emptyLibrary())))).toEqual(
       emptyLibrary()
@@ -255,15 +283,15 @@ describe('downloads', () => {
   });
 });
 
-describe('projects', () => {
-  it.each(VECTORS.projectPaths)(
-    'resolves %s against %s inside a project as the command line does',
+describe('courses', () => {
+  it.each(VECTORS.coursePaths)(
+    'resolves %s against %s inside a course as the command line does',
     (base, target, resolved) => {
-      expect(projectPath(base, target)).toBe(resolved);
+      expect(coursePath(base, target)).toBe(resolved);
     }
   );
 
-  it('reads a project index for what is inside the project', () => {
+  it('reads a course index for what is inside the course', () => {
     const catalog = {
       collections: [
         { url: 'collections/a/collection.json', title: 'Part A' },
@@ -306,6 +334,17 @@ describe('projects', () => {
     expect(collectionTitle(collection, 'fallback')).toBe('Part A');
     expect(collectionTitle({}, 'fallback')).toBe('fallback');
   });
+
+  it('defaults the workshops directory and finds an entry by name', () => {
+    const library = parseLibrary({
+      version: 2,
+      courses: [{ name: 'repo', workshops: 'examples' }]
+    });
+
+    expect(courseWorkshops(courseEntry(library, 'repo'))).toBe('examples');
+    expect(courseEntry(library, 'other')).toEqual({ name: 'other' });
+    expect(courseWorkshops({ name: 'other' })).toBe('workshops');
+  });
 });
 
 describe('paths', () => {
@@ -315,8 +354,12 @@ describe('paths', () => {
     }
 
     expect(normalizeWorkshopsDirectory('./workshops/')).toBe('workshops');
-    expect(joinLibraryPath('', 'personal', 'x')).toBe('personal/x');
-    expect(joinLibraryPath('.', 'collections/', '/c')).toBe('collections/c');
+    expect(joinLibraryPath('', 'personal/workshops', 'x')).toBe(
+      'personal/workshops/x'
+    );
+    expect(joinLibraryPath('.', 'installed/collections/', '/c')).toBe(
+      'installed/collections/c'
+    );
     expect(libraryFilePath('.')).toBe('library.json');
     expect(libraryFilePath('workshops')).toBe('workshops/library.json');
   });
@@ -340,35 +383,33 @@ describe('mergeSources', () => {
   });
 });
 
-describe('projects', () => {
-  it('defaults the workshops directory and finds an entry by name', () => {
-    const library = parseLibrary({
-      version: 1,
-      projects: [{ name: 'repo', workshops: 'examples' }]
-    });
-
-    expect(projectWorkshops(projectEntry(library, 'repo'))).toBe('examples');
-    expect(projectEntry(library, 'other')).toEqual({ name: 'other' });
-    expect(projectWorkshops({ name: 'other' })).toBe('workshops');
-  });
-});
-
 describe('isPersonalLibraryPath', () => {
-  it('takes personal workshops alone', () => {
-    expect(isPersonalLibraryPath('workshops', 'workshops/personal/mine')).toBe(
-      true
-    );
-    expect(isPersonalLibraryPath('.', 'personal/mine')).toBe(true);
+  it('takes single personal workshops alone', () => {
+    expect(
+      isPersonalLibraryPath('workshops', 'workshops/personal/workshops/mine')
+    ).toBe(true);
+    expect(isPersonalLibraryPath('.', 'personal/workshops/mine')).toBe(true);
 
-    expect(isPersonalLibraryPath('workshops', 'workshops/personal')).toBe(
+    expect(
+      isPersonalLibraryPath('workshops', 'workshops/personal/workshops')
+    ).toBe(false);
+    expect(isPersonalLibraryPath('workshops', 'workshops/personal/mine')).toBe(
       false
     );
-    expect(isPersonalLibraryPath('workshops', 'personal/mine')).toBe(false);
+    expect(isPersonalLibraryPath('workshops', 'personal/workshops/mine')).toBe(
+      false
+    );
     expect(
-      isPersonalLibraryPath('workshops', 'workshops/projects/repo/workshops/x')
+      isPersonalLibraryPath(
+        'workshops',
+        'workshops/personal/courses/repo/workshops/x'
+      )
     ).toBe(false);
     expect(
-      isPersonalLibraryPath('workshops', 'workshops/personal/../collections/x')
+      isPersonalLibraryPath(
+        'workshops',
+        'workshops/personal/workshops/../../installed/collections/x'
+      )
     ).toBe(false);
   });
 });
@@ -381,28 +422,48 @@ describe('isOwnLibraryPath', () => {
     }
   );
 
-  it('takes personal and project workshops and nothing else', () => {
-    expect(isOwnLibraryPath('workshops', 'workshops/personal/mine')).toBe(true);
+  it('takes personal workshops and course workshops and nothing else', () => {
     expect(
-      isOwnLibraryPath('workshops', 'workshops/projects/repo/workshops/x')
+      isOwnLibraryPath('workshops', 'workshops/personal/workshops/mine')
     ).toBe(true);
-    expect(isOwnLibraryPath('.', 'personal/mine')).toBe(true);
-    expect(isOwnLibraryPath('', 'projects/repo/workshops/x')).toBe(true);
+    expect(
+      isOwnLibraryPath(
+        'workshops',
+        'workshops/personal/courses/repo/workshops/x'
+      )
+    ).toBe(true);
+    expect(isOwnLibraryPath('.', 'personal/workshops/mine')).toBe(true);
+    expect(isOwnLibraryPath('', 'personal/courses/repo/workshops/x')).toBe(
+      true
+    );
 
-    expect(isOwnLibraryPath('workshops', 'workshops/personal')).toBe(false);
-    expect(isOwnLibraryPath('workshops', 'workshops/collections/c/alpha')).toBe(
+    expect(isOwnLibraryPath('workshops', 'workshops/personal/workshops')).toBe(
+      false
+    );
+    expect(isOwnLibraryPath('workshops', 'workshops/personal/mine')).toBe(
       false
     );
     expect(
-      isOwnLibraryPath('workshops', 'workshops/standalone/alpha-1234567')
+      isOwnLibraryPath('workshops', 'workshops/installed/collections/c/alpha')
+    ).toBe(false);
+    expect(
+      isOwnLibraryPath(
+        'workshops',
+        'workshops/installed/workshops/alpha-1234567'
+      )
     ).toBe(false);
     expect(isOwnLibraryPath('workshops', 'workshops/alpha')).toBe(false);
-    expect(isOwnLibraryPath('workshops', 'elsewhere/personal/x')).toBe(false);
-    expect(isOwnLibraryPath('workshops', 'workshops/personalised/x')).toBe(
-      false
-    );
     expect(
-      isOwnLibraryPath('workshops', 'workshops/personal/../collections/x')
+      isOwnLibraryPath('workshops', 'elsewhere/personal/workshops/x')
+    ).toBe(false);
+    expect(
+      isOwnLibraryPath('workshops', 'workshops/personalised/workshops/x')
+    ).toBe(false);
+    expect(
+      isOwnLibraryPath(
+        'workshops',
+        'workshops/personal/workshops/../../installed/collections/x'
+      )
     ).toBe(false);
   });
 });

@@ -2,17 +2,18 @@
  * Workshop libraries. A library is a workshops directory holding a
  * `library.json` registry: the collections and catalogs its owner
  * subscribes to, where each collection's workshops are installed, and
- * the projects whose workshops it shows. Inside it, workshops installed
- * from a collection live under `collections/<collection>/`, workshops
- * downloaded from a URL of their own under `standalone/`, the owner's
- * own under `personal/`, and repositories being worked on under
- * `projects/`. A directory without the registry is a plain workshops
- * directory and behaves as one always has.
+ * the courses that need saying something about. Inside it, what the
+ * owner made is kept apart from what they installed: their own single
+ * workshops live under `personal/workshops/` and their courses, each a
+ * repository of workshops with its indexes, under `personal/courses/`;
+ * workshops installed from a collection live under
+ * `installed/collections/<collection>/` and those downloaded from a URL
+ * of their own under `installed/workshops/`. A directory without the
+ * registry is a plain workshops directory and behaves as one always has.
  *
- * The directories under `collections/` and `standalone/` always carry a
- * short hash of where their workshops came from, so two sources never
- * compete for a name. Nobody chooses or types these names; they keep the
- * layout unambiguous.
+ * The directories under `installed/` always carry a short hash of where
+ * their workshops came from, so two sources never compete for a name.
+ * Nobody chooses or types these names; they keep the layout unambiguous.
  *
  * The Python package mirrors these rules in `jupyterlab_workshop/library.py`,
  * and the two must agree on the directory names they choose.
@@ -26,22 +27,37 @@ import { isRecord, isStringArray } from '../util';
 export const LIBRARY_FILE = 'library.json';
 
 /** The registry format version this package understands. */
-export const LIBRARY_VERSION = 1;
+export const LIBRARY_VERSION = 2;
 
-/** Where workshops installed from a collection go, a directory per collection. */
-export const COLLECTIONS_DIRECTORY = 'collections';
+/**
+ * The registry format version before this one, whose library kept its
+ * own workshops under `personal/`, its courses under `projects/` and its
+ * downloads under `collections/` and `standalone/`. Such a registry is
+ * read, so the browser can say the library needs upgrading, but never
+ * written to.
+ */
+export const LEGACY_LIBRARY_VERSION = 1;
 
-/** Where workshops downloaded from a URL of their own go. */
-export const STANDALONE_DIRECTORY = 'standalone';
-
-/** Where the owner's own workshops go. */
+/** The tree of what the library's owner made. */
 export const PERSONAL_DIRECTORY = 'personal';
 
-/** Where projects go, cloned in or linked from elsewhere. */
-export const PROJECTS_DIRECTORY = 'projects';
+/** The tree of what was installed from elsewhere. */
+export const INSTALLED_DIRECTORY = 'installed';
 
-/** A project's workshops directory when its entry does not name one. */
-export const DEFAULT_PROJECT_WORKSHOPS = 'workshops';
+/** Where the owner's own single workshops go. */
+export const PERSONAL_WORKSHOPS_DIRECTORY = `${PERSONAL_DIRECTORY}/workshops`;
+
+/** Where courses go, cloned in or linked from elsewhere. */
+export const COURSES_DIRECTORY = `${PERSONAL_DIRECTORY}/courses`;
+
+/** Where workshops installed from a collection go, a directory per collection. */
+export const COLLECTIONS_DIRECTORY = `${INSTALLED_DIRECTORY}/collections`;
+
+/** Where workshops downloaded from a URL of their own go. */
+export const INSTALLED_WORKSHOPS_DIRECTORY = `${INSTALLED_DIRECTORY}/workshops`;
+
+/** A course's workshops directory when its entry does not name one. */
+export const DEFAULT_COURSE_WORKSHOPS = 'workshops';
 
 /** The longest slug made from a collection id, before any suffix. */
 const MAX_SLUG = 64;
@@ -52,12 +68,15 @@ const KEY_ORDER: readonly (keyof ILibrary)[] = [
   'collections',
   'catalogs',
   'directories',
-  'projects'
+  'courses'
 ];
 
-const PROJECT_KEYS = new Set(['name', 'target', 'workshops']);
+/** The key the previous format kept its courses under. */
+const LEGACY_COURSES_KEY = 'projects';
 
-const PROJECT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const COURSE_KEYS = new Set(['name', 'target', 'workshops']);
+
+const COURSE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 const DIRECTORY_NAME = /^[a-z0-9][a-z0-9.-]*$/;
 
@@ -73,12 +92,12 @@ const RESERVED = new Set([
   ...Array.from({ length: 9 }, (_, index) => `lpt${index + 1}`)
 ]);
 
-/** A project the registry says something about. */
-export interface ILibraryProject {
-  /** The project's directory under `projects/`. */
+/** A course the registry says something about. */
+export interface ILibraryCourse {
+  /** The course's directory under `personal/courses/`. */
   name: string;
 
-  /** For a project linked in from outside, the directory it links to. */
+  /** For a course linked in from outside, the directory it links to. */
   target?: string;
 
   /** Its workshops directory relative to it, when not `workshops`. */
@@ -87,7 +106,8 @@ export interface ILibraryProject {
 
 /** A parsed `library.json`. */
 export interface ILibrary {
-  version: 1;
+  /** The format version, `2`; `1` for a library that needs upgrading. */
+  version: 1 | 2;
 
   /**
    * Subscribed collections in order. Absent means the settings apply;
@@ -98,11 +118,11 @@ export interface ILibrary {
   /** Subscribed catalogs in order, absent or present as for collections. */
   catalogs?: string[];
 
-  /** The directory under `collections/` for each collection location. */
+  /** The directory under `installed/collections/` for each collection location. */
   directories?: Record<string, string>;
 
-  /** Projects with something to say about them. */
-  projects?: ILibraryProject[];
+  /** Courses with something to say about them. */
+  courses?: ILibraryCourse[];
 }
 
 /** A new, empty registry. */
@@ -111,24 +131,49 @@ export function emptyLibrary(): ILibrary {
 }
 
 /**
- * Parse and validate the JSON value of a `library.json`.
+ * Whether a registry is in the previous format, so its library keeps
+ * its workshops in the previous layout and must be upgraded before it
+ * is used.
+ */
+export function needsUpgrade(library: ILibrary): boolean {
+  return library.version !== LIBRARY_VERSION;
+}
+
+/** The message for a write refused because the library needs upgrading. */
+export const NEEDS_UPGRADE_MESSAGE =
+  'The workshop library was made by an earlier release and keeps its ' +
+  'workshops in the previous layout; upgrade it from the workshop browser, ' +
+  'or by starting it with jupyter workshop library, before changing it';
+
+/**
+ * Parse and validate the JSON value of a `library.json`. A registry in
+ * the previous format is accepted, with its `projects` read as courses,
+ * so that a library can be seen to need upgrading.
  */
 export function parseLibrary(data: unknown): ILibrary {
   if (!isRecord(data)) {
     throw new Error('A workshop library registry must be an object');
   }
 
-  if (data.version !== LIBRARY_VERSION) {
+  if (
+    data.version !== LIBRARY_VERSION &&
+    data.version !== LEGACY_LIBRARY_VERSION
+  ) {
     throw new Error(
       `Unsupported library version ${String(data.version)}, expected ${LIBRARY_VERSION}`
     );
   }
 
+  const version = data.version as ILibrary['version'];
+  const coursesKey =
+    version === LEGACY_LIBRARY_VERSION ? LEGACY_COURSES_KEY : 'courses';
+  const allowed = KEY_ORDER.map(key =>
+    key === 'courses' ? coursesKey : (key as string)
+  );
+
   // Unknown keys are refused, as the schema and the command line refuse
   // them, rather than dropped, which a later write would make permanent.
-  const unknown = Object.keys(data).filter(
-    key => !(KEY_ORDER as readonly string[]).includes(key)
-  );
+  const unknown = Object.keys(data).filter(key => !allowed.includes(key));
 
   if (unknown.length > 0) {
     throw new Error(
@@ -136,7 +181,7 @@ export function parseLibrary(data: unknown): ILibrary {
     );
   }
 
-  const library: ILibrary = { version: LIBRARY_VERSION };
+  const library: ILibrary = { version };
 
   for (const key of ['collections', 'catalogs'] as const) {
     if (data[key] === undefined) {
@@ -154,8 +199,8 @@ export function parseLibrary(data: unknown): ILibrary {
     library.directories = parseDirectories(data.directories);
   }
 
-  if (data.projects !== undefined) {
-    library.projects = parseProjects(data.projects);
+  if (data[coursesKey] !== undefined) {
+    library.courses = parseCourses(data[coursesKey]);
   }
 
   return library;
@@ -164,9 +209,15 @@ export function parseLibrary(data: unknown): ILibrary {
 /**
  * The text of a registry as written to `library.json`: two space
  * indents and a final newline, with the keys in a fixed order so that
- * writes by the browser and by the command line give the same file.
+ * writes by the browser and by the command line give the same file. A
+ * registry that needs upgrading is never written, since the layout it
+ * describes is the previous one.
  */
 export function serializeLibrary(library: ILibrary): string {
+  if (needsUpgrade(library)) {
+    throw new Error(NEEDS_UPGRADE_MESSAGE);
+  }
+
   const ordered: Record<string, unknown> = {};
 
   for (const key of KEY_ORDER) {
@@ -180,8 +231,8 @@ export function serializeLibrary(library: ILibrary): string {
 
 /**
  * The short hash of a collection location: the suffix of its directory
- * under `collections/`, and the suffix that tells two clashing names
- * apart for installs outside a library.
+ * under `installed/collections/`, and the suffix that tells two clashing
+ * names apart for installs outside a library.
  */
 export function collectionHash(location: string): string {
   return sha256(normalizeLocation(location)).slice(0, 7);
@@ -216,10 +267,10 @@ export function slugifyCollectionId(id: string): string | null {
 }
 
 /**
- * The directory under `collections/` for a collection that has none yet:
- * the slug of its id followed by the location's hash, or the hash alone
- * when there is no usable id. The hash makes it unique to the location,
- * whatever id another collection claims.
+ * The directory under `installed/collections/` for a collection that has
+ * none yet: the slug of its id followed by the location's hash, or the
+ * hash alone when there is no usable id. The hash makes it unique to the
+ * location, whatever id another collection claims.
  */
 export function chooseCollectionDirectory(
   location: string,
@@ -267,9 +318,10 @@ export function downloadKey(source: IDownloadSource): string {
 }
 
 /**
- * The directory under `standalone/` for a workshop downloaded from a URL
- * of its own: its name followed by the short hash of its download key,
- * so the same source always lands in the same place and no other can.
+ * The directory under `installed/workshops/` for a workshop downloaded
+ * from a URL of its own: its name followed by the short hash of its
+ * download key, so the same source always lands in the same place and
+ * no other can.
  */
 export function standaloneDirectory(
   name: string,
@@ -401,30 +453,34 @@ export function libraryFilePath(workshopsDirectory: string): string {
 
 /**
  * Whether a workshop path belongs to the library's owner: under
- * `personal/`, or under `projects/`, whether cloned there or linked in.
- * Such a workshop is trusted by where it is, when it has no download
- * record; anything downloaded keeps the usual checks wherever it lands.
+ * `personal/workshops/`, or under `personal/courses/`, whether a course
+ * cloned there or linked in. Such a workshop is trusted by where it is,
+ * when it has no download record; anything downloaded keeps the usual
+ * checks wherever it lands.
  */
 export function isOwnLibraryPath(
   workshopsDirectory: string,
   path: string
 ): boolean {
   return isUnderLibraryTrees(workshopsDirectory, path, [
-    PERSONAL_DIRECTORY,
-    PROJECTS_DIRECTORY
+    PERSONAL_WORKSHOPS_DIRECTORY,
+    COURSES_DIRECTORY
   ]);
 }
 
 /**
- * Whether a workshop path is one of the library owner's own under
- * `personal/`. Such a workshop has no other copy, but it is the owner's
- * to delete, so removing it may take the directory too.
+ * Whether a workshop path is one of the library owner's own single
+ * workshops under `personal/workshops/`. Such a workshop has no other
+ * copy, but it is the owner's to delete, so removing it may take the
+ * directory too.
  */
 export function isPersonalLibraryPath(
   workshopsDirectory: string,
   path: string
 ): boolean {
-  return isUnderLibraryTrees(workshopsDirectory, path, [PERSONAL_DIRECTORY]);
+  return isUnderLibraryTrees(workshopsDirectory, path, [
+    PERSONAL_WORKSHOPS_DIRECTORY
+  ]);
 }
 
 function isUnderLibraryTrees(
@@ -493,20 +549,20 @@ export function mergeSources(
   return sources;
 }
 
-/** The workshops directory of a project, relative to the project. */
-export function projectWorkshops(project: ILibraryProject): string {
-  return project.workshops ?? DEFAULT_PROJECT_WORKSHOPS;
+/** The workshops directory of a course, relative to the course. */
+export function courseWorkshops(course: ILibraryCourse): string {
+  return course.workshops ?? DEFAULT_COURSE_WORKSHOPS;
 }
 
-/** A catalog a project may hold at its top, listing its collections. */
-export const PROJECT_CATALOG = 'catalog.json';
+/** A catalog a course may hold at its top, listing its collections. */
+export const COURSE_CATALOG = 'catalog.json';
 
-/** A collection index a project may hold at its top. */
-export const PROJECT_COLLECTION = 'collection.json';
+/** A collection index a course may hold at its top. */
+export const COURSE_COLLECTION = 'collection.json';
 
-/** A collection a project's own catalog lists, found inside the project. */
-export interface IProjectCollection {
-  /** Where its index is, relative to the project. */
+/** A collection a course's own catalog lists, found inside the course. */
+export interface ICourseCollection {
+  /** Where its index is, relative to the course. */
   path: string;
 
   /** What the catalog calls it. */
@@ -514,12 +570,12 @@ export interface IProjectCollection {
 }
 
 /**
- * The path inside a project that a location in one of its index files
+ * The path inside a course that a location in one of its index files
  * names, resolved against the file's own path: null for a URL, an
- * absolute path, or anything that climbs out of the project. The
- * project itself is the empty string.
+ * absolute path, or anything that climbs out of the course. The course
+ * itself is the empty string.
  */
-export function projectPath(base: string, target: string): string | null {
+export function coursePath(base: string, target: string): string | null {
   if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('/')) {
     return null;
   }
@@ -549,7 +605,7 @@ export function projectPath(base: string, target: string): string | null {
 }
 
 /**
- * The collections a project's catalog lists that are inside the project,
+ * The collections a course's catalog lists that are inside the course,
  * in catalog order. A collection the catalog names by URL is somewhere
  * else, and left out. The catalog is read leniently: anything unreadable
  * is skipped rather than refusing the rest.
@@ -557,19 +613,19 @@ export function projectPath(base: string, target: string): string | null {
 export function catalogCollections(
   catalog: unknown,
   catalogPath: string
-): IProjectCollection[] {
+): ICourseCollection[] {
   if (!isRecord(catalog) || !Array.isArray(catalog.collections)) {
     return [];
   }
 
-  const found: IProjectCollection[] = [];
+  const found: ICourseCollection[] = [];
 
   for (const item of catalog.collections as unknown[]) {
     if (!isRecord(item) || typeof item.url !== 'string') {
       continue;
     }
 
-    const path = projectPath(catalogPath, item.url);
+    const path = coursePath(catalogPath, item.url);
 
     if (path) {
       found.push({
@@ -583,11 +639,11 @@ export function catalogCollections(
 }
 
 /**
- * The directories, relative to the project, of the workshops a
+ * The directories, relative to the course, of the workshops a
  * collection index in it lists, in index order: each entry's newest
  * version, the first listed, names its directory with the `subdir` of
- * its git source, or the project itself with none. An entry fetched as
- * an archive, or one whose directory is outside the project, is left
+ * its git source, or the course itself with none. An entry fetched as
+ * an archive, or one whose directory is outside the course, is left
  * out.
  */
 export function collectionWorkshops(collection: unknown): string[] {
@@ -613,7 +669,7 @@ export function collectionWorkshops(collection: unknown): string[] {
       typeof source.subdir === 'string'
         ? source.subdir.replace(/^\/+/, '')
         : '';
-    const path = projectPath('', subdir);
+    const path = coursePath('', subdir);
 
     if (path !== null && !found.includes(path)) {
       found.push(path);
@@ -633,12 +689,12 @@ export function collectionTitle(collection: unknown, fallback: string): string {
 }
 
 /**
- * The project entry for a name, or a bare entry for a project the
+ * The course entry for a name, or a bare entry for a course the
  * registry says nothing about.
  */
-export function projectEntry(library: ILibrary, name: string): ILibraryProject {
+export function courseEntry(library: ILibrary, name: string): ILibraryCourse {
   return (
-    (library.projects ?? []).find(project => project.name === name) ?? {
+    (library.courses ?? []).find(course => course.name === name) ?? {
       name
     }
   );
@@ -664,29 +720,29 @@ function parseDirectories(value: unknown): Record<string, string> {
   return directories;
 }
 
-function parseProjects(value: unknown): ILibraryProject[] {
+function parseCourses(value: unknown): ILibraryCourse[] {
   if (!Array.isArray(value)) {
-    throw new Error(`The library's "projects" must be a list`);
+    throw new Error(`The library's "courses" must be a list`);
   }
 
   return value.map((item: unknown, index: number) => {
     if (
       !isRecord(item) ||
       typeof item.name !== 'string' ||
-      !PROJECT_NAME.test(item.name)
+      !COURSE_NAME.test(item.name)
     ) {
-      throw new Error(`Library project ${index + 1} needs a valid "name"`);
+      throw new Error(`Library course ${index + 1} needs a valid "name"`);
     }
 
-    const unknown = Object.keys(item).filter(key => !PROJECT_KEYS.has(key));
+    const unknown = Object.keys(item).filter(key => !COURSE_KEYS.has(key));
 
     if (unknown.length > 0) {
       throw new Error(
-        `Library project "${item.name}" has unknown keys ${unknown.sort().join(', ')}`
+        `Library course "${item.name}" has unknown keys ${unknown.sort().join(', ')}`
       );
     }
 
-    const project: ILibraryProject = { name: item.name };
+    const course: ILibraryCourse = { name: item.name };
 
     for (const key of ['target', 'workshops'] as const) {
       if (item[key] === undefined) {
@@ -695,13 +751,13 @@ function parseProjects(value: unknown): ILibraryProject[] {
 
       if (typeof item[key] !== 'string' || item[key] === '') {
         throw new Error(
-          `Library project "${item.name}" has an invalid "${key}"`
+          `Library course "${item.name}" has an invalid "${key}"`
         );
       }
 
-      project[key] = item[key];
+      course[key] = item[key];
     }
 
-    return project;
+    return course;
   });
 }

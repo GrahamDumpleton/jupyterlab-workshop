@@ -70,9 +70,9 @@ def is_installed_from(record: dict[str, Any], collection: str, name: str) -> boo
     as the browser does.
     """
 
-    # A workshop library's own and project workshops are never a
-    # collection's, whatever they are called.
-    if record.get("name") != name or record.get("kind") in {"personal", "project"}:
+    # A workshop library's own workshops, single or in a course, are never
+    # a collection's, whatever they are called.
+    if record.get("name") != name or record.get("kind") in {"personal", "course"}:
         return False
 
     recorded = record.get("collection")
@@ -109,10 +109,10 @@ def install_destination(
     to the root, and the name of the workshop's directory within it.
 
     In a workshop library each collection has a directory of its own
-    under ``collections/``, chosen from its id the first time and recorded
-    in the registry, so workshops of the same name from two collections
-    never clash. In a plain workshops directory the workshop goes
-    directly in it, named as the browser names it there.
+    under ``installed/collections/``, chosen from its id the first time
+    and recorded in the registry, so workshops of the same name from two
+    collections never clash. In a plain workshops directory the workshop
+    goes directly in it, named as the browser names it there.
     """
 
     if not is_library(root_dir, directory):
@@ -402,7 +402,7 @@ def find_updates(
     for record in records:
         location = record.get("collection")
 
-        if not location or record.get("kind") in {"personal", "project"}:
+        if not location or record.get("kind") in {"personal", "course"}:
             continue
 
         if location not in indexes:
@@ -474,7 +474,7 @@ def remove_installed(
     """Remove an installed workshop as the browser does.
 
     A workshop the extension downloaded is deleted whole. Any other, a
-    local directory, the library owner's own or a project's, may hold
+    local directory, the library owner's own or a course's, may hold
     work that is nowhere else, so only its recorded progress goes unless
     ``delete_files`` asks for its directory to go too. Returns what was
     removed: the workshop's path, or its state directory.

@@ -1,6 +1,8 @@
 import {
   ILibrary,
   libraryFilePath,
+  NEEDS_UPGRADE_MESSAGE,
+  needsUpgrade,
   normalizeWorkshopsDirectory,
   parseLibrary,
   serializeLibrary
@@ -10,7 +12,7 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import { readIfExists, writeTextFile } from '../actions/contents';
-import { ILibraryProjectInfo, listProjects } from './scan';
+import { ILibraryCourseInfo, listCourses } from './scan';
 import { readSetting } from '../settings';
 import { IFeaturePolicy } from '../tokens';
 
@@ -93,7 +95,8 @@ export class LibraryService {
   /**
    * Re-read the registry, apply a change and write it back. Reading just
    * before writing keeps a change the command line made meanwhile.
-   * Throws when the directory is not a library.
+   * Throws when the directory is not a library, or is one that needs
+   * upgrading, whose layout a write would take for the current one.
    */
   async update(
     change: (library: ILibrary) => ILibrary,
@@ -104,6 +107,10 @@ export class LibraryService {
 
     if (current === null) {
       throw new Error(`${where || 'The root'} is not a workshop library`);
+    }
+
+    if (needsUpgrade(current)) {
+      throw new Error(NEEDS_UPGRADE_MESSAGE);
     }
 
     const changed = change(current);
@@ -130,14 +137,14 @@ export class LibraryService {
   }
 
   /**
-   * The projects of a library, the configured workshops directory's when
+   * The courses of a library, the configured workshops directory's when
    * none is given, with those whose directory has gone marked missing.
    */
-  async projects(
+  async courses(
     library: ILibrary,
     directory?: string
-  ): Promise<ILibraryProjectInfo[]> {
-    return listProjects(
+  ): Promise<ILibraryCourseInfo[]> {
+    return listCourses(
       this._contents,
       directory ?? (await this.workshopsDirectory()),
       library

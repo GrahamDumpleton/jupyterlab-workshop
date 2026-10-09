@@ -29,17 +29,24 @@
     ["test-collection.json", "b5c3661"]
   ],
   "ownPaths": [
-    ["workshops", "workshops/personal/mine", true],
-    ["workshops", "workshops/projects/repo/workshops/x", true],
-    [".", "personal/mine", true],
-    ["", "projects/repo/workshops/x", true],
-    ["./", "personal/a/b", true],
+    ["workshops", "workshops/personal/workshops/mine", true],
+    ["workshops", "workshops/personal/courses/repo/workshops/x", true],
+    [".", "personal/workshops/mine", true],
+    ["", "personal/courses/repo/workshops/x", true],
+    ["./", "personal/workshops/a/b", true],
     ["workshops", "workshops/personal", false],
-    ["workshops", "workshops/personal/", false],
-    ["workshops", "workshops/collections/c/alpha", false],
+    ["workshops", "workshops/personal/workshops", false],
+    ["workshops", "workshops/personal/workshops/", false],
+    ["workshops", "workshops/personal/mine", false],
+    ["workshops", "workshops/installed/collections/c/alpha", false],
+    ["workshops", "workshops/installed/workshops/alpha-1234567", false],
     ["workshops", "workshops/alpha", false],
-    ["workshops", "elsewhere/personal/x", false],
-    ["workshops", "workshops/personal/../collections/c/x", false]
+    ["workshops", "elsewhere/personal/workshops/x", false],
+    [
+      "workshops",
+      "workshops/personal/workshops/../../installed/collections/c/x",
+      false
+    ]
   ],
   "downloadKeys": [
     [
@@ -129,7 +136,7 @@
       "example.org-course-one-b5c3661"
     ]
   ],
-  "projectPaths": [
+  "coursePaths": [
     [
       "catalog.json",
       "collections/a/collection.json",

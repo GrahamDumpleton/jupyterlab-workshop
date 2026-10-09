@@ -101,7 +101,7 @@ It needs three things:
   ```
 
 - A [workshop library](library.md), since the workshops it writes are
-  your own and go under `personal/`. `jupyter workshop library` opens
+  your own and go under `personal/workshops/`. `jupyter workshop library` opens
   one.
 
 - Claude Code logged in on the machine. Workshop Author uses whatever
@@ -113,7 +113,7 @@ It needs three things:
 
 With all three, the browser has a "Create Workshop with AI…" button,
 the launcher a Workshop Author card, and each card under My workshops
-and Projects an Edit with AI button. Edit with AI opens the conversation
+and My courses an Edit with AI button. Edit with AI opens the conversation
 for that workshop, or goes back to it.
 
 ### Creating a workshop
@@ -128,14 +128,14 @@ quizzes. A request it cannot make sense of is met with a question,
 never a guess.
 
 When it knows enough, it proposes a plan: a title, the directory under
-`personal/`, the audience, a summary, the pages in order, and whether
+`personal/workshops/`, the audience, a summary, the pages in order, and whether
 there are quizzes and gating. Press Create on the plan to make the
 workshop, or reply with what to change and it proposes again. Until you
 press Create, nothing is written: the agent can read and search the
 web, but cannot change files or run commands, and the draft is kept by
 the server outside your library. Discard draft forgets it.
 
-Create makes the workshop under `personal/` and opens its own
+Create makes the workshop under `personal/workshops/` and opens its own
 conversation, which starts with everything said in the draft and the
 plan as the agent's brief, and the agent goes on to write the workshop.
 A draft left alone keeps until it is discarded, or for 30 days.

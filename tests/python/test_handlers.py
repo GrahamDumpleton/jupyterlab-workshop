@@ -488,12 +488,12 @@ async def test_fetch_into_the_root_when_the_directory_is_given_as_dot(
     assert [item["path"] for item in json.loads(response.body)["workshops"]] == ["demo"]
 
 
-async def test_endpoints_reach_a_workshop_in_a_linked_project(
+async def test_endpoints_reach_a_workshop_in_a_linked_course(
     jp_fetch, jp_root_dir, tmp_path
 ):
     from tornado.httpclient import HTTPClientError
 
-    from jupyterlab_workshop.library import empty_library, link_project, write_library
+    from jupyterlab_workshop.library import empty_library, link_course, write_library
 
     repo = tmp_path / "outside-the-root" / "repo"
     workshop = repo / "workshops" / "draft"
@@ -503,9 +503,9 @@ async def test_endpoints_reach_a_workshop_in_a_linked_project(
     (workshop / "workshop.yaml").write_text(MANIFEST)
     (workshop / "data.txt").write_text("one\n")
     write_library(library, "", empty_library())
-    link_project(library, repo)
+    link_course(library, repo)
 
-    path = "workshops/projects/repo/workshops/draft"
+    path = "workshops/personal/courses/repo/workshops/draft"
 
     response = await jp_fetch(
         "jupyterlab-workshop",
@@ -530,18 +530,20 @@ async def test_endpoints_reach_a_workshop_in_a_linked_project(
 
     (stray / "ws").mkdir(parents=True)
     (stray / "ws" / "workshop.yaml").write_text(MANIFEST)
-    (library / "projects" / "stray").symlink_to(stray, target_is_directory=True)
+    (library / "personal" / "courses" / "stray").symlink_to(
+        stray, target_is_directory=True
+    )
 
     with pytest.raises(HTTPClientError) as error:
         await jp_fetch(
             "jupyterlab-workshop",
             "checkpoints",
-            params={"workshop": "workshops/projects/stray/ws"},
+            params={"workshop": "workshops/personal/courses/stray/ws"},
         )
 
     assert error.value.code == 400
 
-    # And a download cannot be removed from inside the project.
+    # And a download cannot be removed from inside the course.
     with pytest.raises(HTTPClientError) as error:
         await jp_fetch(
             "jupyterlab-workshop",
@@ -554,7 +556,71 @@ async def test_endpoints_reach_a_workshop_in_a_linked_project(
     assert (workshop / "workshop.yaml").is_file()
 
 
-async def test_projects_endpoint_lists_and_unlinks_a_missing_project(
+async def test_library_endpoint_reports_and_upgrades_the_previous_layout(
+    jp_fetch, jp_root_dir
+):
+    from tornado.httpclient import HTTPClientError
+
+    library = jp_root_dir / "workshops"
+    workshop = library / "personal" / "mine"
+
+    workshop.mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(MANIFEST)
+    (library / "library.json").write_text('{"version": 1}\n')
+
+    response = await jp_fetch(
+        "jupyterlab-workshop", "library", params={"directory": "workshops"}
+    )
+    report = json.loads(response.body)
+
+    assert report["version"] == 1
+    assert report["upgrade"] == {
+        "moves": [
+            {
+                "from": "workshops/personal",
+                "to": "workshops/personal/workshops",
+                "contents": "1 workshop",
+            }
+        ],
+        "environments": [],
+    }
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "library",
+        method="POST",
+        body=json.dumps({"directory": "workshops"}),
+    )
+
+    assert json.loads(response.body)["upgraded"] == report["upgrade"]
+    assert (library / "personal" / "workshops" / "mine" / "workshop.yaml").is_file()
+    assert json.loads((library / "library.json").read_text()) == {"version": 2}
+
+    # Upgraded, there is nothing to do, and asking again is an error.
+    response = await jp_fetch(
+        "jupyterlab-workshop", "library", params={"directory": "workshops"}
+    )
+
+    assert json.loads(response.body) == {"version": 2, "upgrade": None}
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "library",
+            method="POST",
+            body=json.dumps({"directory": "workshops"}),
+        )
+
+    assert error.value.code == 400
+
+    # A plain directory is not a library at all.
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch("jupyterlab-workshop", "library", params={"directory": "."})
+
+    assert error.value.code == 404
+
+
+async def test_courses_endpoint_lists_and_unlinks_a_missing_course(
     jp_fetch, jp_root_dir, tmp_path
 ):
     import shutil
@@ -564,7 +630,7 @@ async def test_projects_endpoint_lists_and_unlinks_a_missing_project(
     from jupyterlab_workshop.library import (
         empty_library,
         is_link,
-        link_project,
+        link_course,
         write_library,
     )
 
@@ -573,31 +639,31 @@ async def test_projects_endpoint_lists_and_unlinks_a_missing_project(
 
     repo.mkdir(parents=True)
     write_library(library, "", empty_library())
-    link_project(library, repo)
+    link_course(library, repo)
     shutil.rmtree(repo)
 
     response = await jp_fetch(
-        "jupyterlab-workshop", "projects", params={"directory": "workshops"}
+        "jupyterlab-workshop", "courses", params={"directory": "workshops"}
     )
-    (project,) = json.loads(response.body)["projects"]
+    (course,) = json.loads(response.body)["courses"]
 
-    assert project["name"] == "repo"
-    assert project["missing"] is True
+    assert course["name"] == "repo"
+    assert course["missing"] is True
 
     response = await jp_fetch(
         "jupyterlab-workshop",
-        "projects",
+        "courses",
         method="DELETE",
         params={"directory": "workshops", "name": "repo"},
     )
 
     assert json.loads(response.body)["unlinked"]["name"] == "repo"
-    assert not is_link(library / "projects" / "repo")
+    assert not is_link(library / "personal" / "courses" / "repo")
 
     with pytest.raises(HTTPClientError) as error:
         await jp_fetch(
             "jupyterlab-workshop",
-            "projects",
+            "courses",
             method="DELETE",
             params={"directory": "workshops", "name": "repo"},
         )

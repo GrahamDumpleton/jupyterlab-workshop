@@ -5,8 +5,8 @@ not exist yet. The agent works out what it should teach, who it is for
 and what it is for, asking whatever it needs to, and then proposes a
 plan with the one tool it has, `propose_workshop`. The panel shows the
 plan with a Create button. Only when the person presses it does the
-server make the workshop under the library's `personal/` tree, and the
-conversation carries on there with the plan as the agent's brief.
+server make the workshop under the library's `personal/workshops/` tree,
+and the conversation carries on there with the plan as the agent's brief.
 
 Nothing is written while drafting: the agent's policy is read-only, and
 the draft's record lives in the server's data directory, not in the
@@ -94,7 +94,7 @@ def check_proposal(proposal: Proposal, personal: Path) -> None:
 
     if (personal / proposal.name).exists():
         raise ProposalError(
-            f"personal/{proposal.name} already exists; propose another name."
+            f"personal/workshops/{proposal.name} already exists; propose another name."
         )
 
     if proposal.audience not in AUDIENCES:
@@ -141,10 +141,11 @@ def create_draft_server(
         teaches, who it is for and what it is for; call it again with a
         changed plan when they ask for changes.
 
-        title: the workshop's title. name: its directory under personal/,
-        lower case letters, digits and hyphens. audience: newcomers,
-        experienced or demonstration. summary: two or three sentences on
-        what it teaches and to whom. outline: one line per page, in order.
+        title: the workshop's title. name: its directory under
+        personal/workshops/, lower case letters, digits and hyphens.
+        audience: newcomers, experienced or demonstration. summary: two or
+        three sentences on what it teaches and to whom. outline: one line
+        per page, in order.
         quizzes and gating: whether it will have quizzes, and whether
         pages wait for their checks before the next opens.
         """

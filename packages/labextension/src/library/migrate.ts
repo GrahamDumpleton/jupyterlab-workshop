@@ -3,9 +3,9 @@ import {
   COLLECTIONS_DIRECTORY,
   emptyLibrary,
   ILibrary,
+  INSTALLED_WORKSHOPS_DIRECTORY,
   joinLibraryPath,
   normalizeWorkshopsDirectory,
-  STANDALONE_DIRECTORY,
   standaloneDirectory
 } from '@jupyterlab-workshop/core';
 import { PathExt } from '@jupyterlab/coreutils';
@@ -16,8 +16,8 @@ import { WORKSHOP_STATE_DIR } from '../state';
 import { IInstalledWorkshop, isDownloaded } from '../tokens';
 
 /**
- * One downloaded workshop the migration moves, under `collections/` or
- * `standalone/`.
+ * One downloaded workshop the migration moves, under
+ * `installed/collections/` or `installed/workshops/`.
  */
 export interface IMigrationMove {
   title: string;
@@ -45,12 +45,12 @@ export interface IMigrationPlan {
  * it: the registry to write, carrying over the subscriptions the user
  * made in their settings (the defaults are left to keep applying), and
  * which downloaded workshops move: into their collection's directory
- * under `collections/`, or under `standalone/` for one downloaded from a
- * URL of its own, named as a download there would be. A workshop with an
- * isolated environment stays,
- * since the environment and its kernel hold absolute paths a move would
- * break, and so does the one open now. Local directories stay where
- * they are, as their own.
+ * under `installed/collections/`, or under `installed/workshops/` for
+ * one downloaded from a URL of its own, named as a download there would
+ * be. A workshop with an isolated environment stays, since the
+ * environment and its kernel hold absolute paths a move would break, and
+ * so does the one open now. Local directories stay where they are, as
+ * their own.
  */
 export async function planMigration(options: {
   contents: Contents.IManager;
@@ -118,7 +118,7 @@ export async function planMigration(options: {
         from: item.path,
         to: joinLibraryPath(
           base,
-          STANDALONE_DIRECTORY,
+          INSTALLED_WORKSHOPS_DIRECTORY,
           standaloneDirectory(item.name, item.source)
         )
       });

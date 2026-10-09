@@ -1898,7 +1898,7 @@ test.describe('deployment set up as a workshop repository sets up Binder', () =>
       await page.contents.fileExists(`${WORKSHOPS_DIR}/library.json`)
     ).toBe(false);
     expect(
-      await page.contents.directoryExists(`${WORKSHOPS_DIR}/collections`)
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/installed`)
     ).toBe(false);
 
     await openBrowser(page);
@@ -1929,7 +1929,7 @@ test.describe('deployment set up as a workshop repository sets up Binder', () =>
     ).toHaveCount(1);
 
     // None of what a library adds appears.
-    for (const text of ['My workshops', 'Projects']) {
+    for (const text of ['My workshops', 'My courses']) {
       await expect(
         browser.locator('.jp-WorkshopBrowser-heading', { hasText: text })
       ).toHaveCount(0);
@@ -1963,7 +1963,7 @@ test.describe('deployment that disables workshop libraries', () => {
 
   test('ignores a registry the directory happens to hold', async ({ page }) => {
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1, collections: [] }),
+      JSON.stringify({ version: 2, collections: [] }),
       'text',
       `${WORKSHOPS_DIR}/library.json`
     );
@@ -2021,10 +2021,10 @@ test.describe('workshop library', () => {
     await removeFixtures(page);
   });
 
-  test('groups a project by its own index and lists a project that is one workshop', async ({
+  test('groups a course by its own index and lists a course that is one workshop', async ({
     page
   }) => {
-    const course = `${WORKSHOPS_DIR}/projects/course`;
+    const course = `${WORKSHOPS_DIR}/personal/courses/big-course`;
     const index = (title: string, names: string[]): string =>
       JSON.stringify({
         version: 1,
@@ -2045,14 +2045,14 @@ test.describe('workshop library', () => {
       });
 
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: 2 }),
       'text',
       `${WORKSHOPS_DIR}/library.json`
     );
 
     // A catalog of two collections, sharing a workshop, one workshop no
     // index lists yet, and a nested repository whose workshops are not
-    // the project's.
+    // the course's.
     await page.contents.uploadContent(
       JSON.stringify({
         version: 1,
@@ -2093,7 +2093,7 @@ test.describe('workshop library', () => {
     );
     await uploadWorkshop(
       page,
-      `${WORKSHOPS_DIR}/projects/solo`,
+      `${WORKSHOPS_DIR}/personal/courses/solo`,
       'solo',
       'A workshop of its own'
     );
@@ -2101,7 +2101,7 @@ test.describe('workshop library', () => {
 
     const browser = page.locator('#jupyterlab-workshop-browser');
     const group = browser.locator('.jp-WorkshopBrowser-group', {
-      hasText: 'course'
+      hasText: 'big-course'
     });
 
     // Each collection in catalog order, its workshops in index order, a
@@ -2129,21 +2129,21 @@ test.describe('workshop library', () => {
     page
   }) => {
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: 2 }),
       'text',
       `${WORKSHOPS_DIR}/library.json`
     );
     await uploadWorkshop(
       page,
-      `${WORKSHOPS_DIR}/personal/mine`,
+      `${WORKSHOPS_DIR}/personal/workshops/mine`,
       'mine',
       'My own workshop'
     );
     await uploadWorkshop(
       page,
-      `${WORKSHOPS_DIR}/projects/repo/workshops/draft`,
+      `${WORKSHOPS_DIR}/personal/courses/repo/workshops/draft`,
       'draft',
-      'A draft in a project'
+      'A draft in a course'
     );
     await openBrowser(page);
 
@@ -2152,16 +2152,16 @@ test.describe('workshop library', () => {
 
     await expect(headings).toHaveText([
       'My workshops',
-      'Projects',
+      'My courses',
       'Installed',
       'Available'
     ]);
 
-    // The owner's workshop and the project's are in their sections, and
+    // The owner's workshop and the course's are in their sections, and
     // the local git-basics is still matched to the collection.
     await expect(
       browser.locator('.jp-WorkshopBrowser-group', { hasText: 'repo' })
-    ).toContainText('A draft in a project');
+    ).toContainText('A draft in a course');
     await expect(
       browser
         .locator('.jp-WorkshopBrowser-group', {
@@ -2184,7 +2184,7 @@ test.describe('workshop library', () => {
     await expect
       .poll(() =>
         page.contents.fileExists(
-          `${WORKSHOPS_DIR}/collections/${COLLECTION_DIRECTORY}/pandas-intro/workshop.yaml`
+          `${WORKSHOPS_DIR}/installed/collections/${COLLECTION_DIRECTORY}/pandas-intro/workshop.yaml`
         )
       )
       .toBe(true);
@@ -2194,7 +2194,7 @@ test.describe('workshop library', () => {
     );
 
     expect(JSON.parse(String((await registry.json()).content))).toEqual({
-      version: 1,
+      version: 2,
       directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
     });
     await expect(
@@ -2217,10 +2217,10 @@ test.describe('workshop library', () => {
   test("offers to clean up or delete one of the owner's own workshops", async ({
     page
   }) => {
-    const mine = `${WORKSHOPS_DIR}/personal/mine`;
+    const mine = `${WORKSHOPS_DIR}/personal/workshops/mine`;
 
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: 2 }),
       'text',
       `${WORKSHOPS_DIR}/library.json`
     );
@@ -2283,7 +2283,7 @@ test.describe('workshop library', () => {
       .click();
 
     const dialog = page.locator('.jp-Dialog');
-    const moved = `${WORKSHOPS_DIR}/collections/${COLLECTION_DIRECTORY}/pandas-intro`;
+    const moved = `${WORKSHOPS_DIR}/installed/collections/${COLLECTION_DIRECTORY}/pandas-intro`;
 
     await expect(dialog).toContainText(
       `Pandas for beginners: ${WORKSHOPS_DIR}/pandas-intro to ${moved}`
@@ -2314,7 +2314,7 @@ test.describe('workshop library', () => {
         }
       })
       .toEqual({
-        version: 1,
+        version: 2,
         collections: [COLLECTION_FILE],
         directories: { [COLLECTION_FILE]: COLLECTION_DIRECTORY }
       });
@@ -2326,6 +2326,90 @@ test.describe('workshop library', () => {
     await expect(
       browser.getByRole('button', { name: 'Make this a workshop library…' })
     ).toHaveCount(0);
+  });
+
+  test('offers to upgrade a library kept in the previous layout', async ({
+    page
+  }) => {
+    // A library as a release before 0.28.0 left it: a version 1 registry
+    // with a workshop of the owner's directly under personal/ and a
+    // course under projects/.
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 1 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/personal/mine`,
+      'mine',
+      'My own workshop'
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/projects/repo/workshops/draft`,
+      'draft',
+      'A draft in a course'
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const notice = browser.locator('.jp-WorkshopBrowser-upgrade');
+
+    // Nothing of the old layout is listed, and nothing is offered but
+    // the upgrade.
+    await expect(notice).toContainText('previous layout');
+    await expect(browser).not.toContainText('My own workshop');
+    await expect(
+      browser.getByRole('button', { name: 'Create Workshop with AI…' })
+    ).toHaveCount(0);
+
+    await notice.getByRole('button', { name: 'Upgrade library…' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText(
+      `${WORKSHOPS_DIR}/personal to ${WORKSHOPS_DIR}/personal/workshops (1 workshop)`
+    );
+    await expect(dialog).toContainText(
+      `${WORKSHOPS_DIR}/projects to ${WORKSHOPS_DIR}/personal/courses (1 course)`
+    );
+    await dialog.getByRole('button', { name: 'Upgrade' }).click();
+
+    // Each tree is where this release keeps it, the registry is current,
+    // and the library is listed as usual.
+    await expect
+      .poll(() =>
+        page.contents.fileExists(
+          `${WORKSHOPS_DIR}/personal/workshops/mine/workshop.yaml`
+        )
+      )
+      .toBe(true);
+    expect(
+      await page.contents.fileExists(
+        `${WORKSHOPS_DIR}/personal/courses/repo/workshops/draft/workshop.yaml`
+      )
+    ).toBe(true);
+    expect(
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/projects`)
+    ).toBe(false);
+
+    const registry = await page.request.get(
+      `api/contents/${WORKSHOPS_DIR}/library.json?content=1&type=file&format=text`
+    );
+
+    expect(JSON.parse(String((await registry.json()).content))).toEqual({
+      version: 2
+    });
+    await expect(notice).toHaveCount(0);
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', {
+        hasText: 'Your own workshops'
+      })
+    ).toContainText('My own workshop');
+    await expect(
+      browser.locator('.jp-WorkshopBrowser-group', { hasText: 'repo' })
+    ).toContainText('A draft in a course');
   });
 });
 
@@ -2350,7 +2434,7 @@ test.describe('empty workshop library', () => {
 
   test('says what goes where without naming directories', async ({ page }) => {
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: 2 }),
       'text',
       'test-library/library.json'
     );

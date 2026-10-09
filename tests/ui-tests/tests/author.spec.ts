@@ -40,19 +40,19 @@ function useLibrary(library: string, disabledFeatures: string[] = []): void {
 
   test.beforeEach(async ({ page }) => {
     await page.contents.uploadContent(
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: 2 }),
       'text',
       `${library}/library.json`
     );
     await page.contents.uploadContent(
       MANIFEST,
       'text',
-      `${library}/personal/demo/workshop.yaml`
+      `${library}/personal/workshops/demo/workshop.yaml`
     );
     await page.contents.uploadContent(
       '# Start\n',
       'text',
-      `${library}/personal/demo/pages/01.md`
+      `${library}/personal/workshops/demo/pages/01.md`
     );
   });
 
@@ -96,7 +96,7 @@ test.describe('Workshop Author conversation', () => {
     const input = author.locator('.jp-WorkshopAgent-input');
 
     await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
-      `${LIBRARY}/personal/demo`
+      `${LIBRARY}/personal/workshops/demo`
     );
     await expect(input).toBeEnabled();
 
@@ -344,7 +344,7 @@ test.describe('Workshop Author attachments', () => {
 
     expect(
       await page.contents.fileExists(
-        `${LIBRARY}/personal/demo/_workshop/attachments/notes.md`
+        `${LIBRARY}/personal/workshops/demo/_workshop/attachments/notes.md`
       )
     ).toBe(true);
 
@@ -382,12 +382,12 @@ test.describe('Workshop Author playing a workshop', () => {
         'My other'
       ),
       'text',
-      `${LIBRARY}/personal/other/workshop.yaml`
+      `${LIBRARY}/personal/workshops/other/workshop.yaml`
     );
     await page.contents.uploadContent(
       '# Other\n',
       'text',
-      `${LIBRARY}/personal/other/pages/01.md`
+      `${LIBRARY}/personal/workshops/other/pages/01.md`
     );
     await openBrowser(page);
     await page
@@ -396,7 +396,7 @@ test.describe('Workshop Author playing a workshop', () => {
       .click();
 
     const other = page.locator('.jp-WorkshopAgent', {
-      hasText: 'personal/other'
+      hasText: 'personal/workshops/other'
     });
 
     await expect(other.locator('.jp-WorkshopAgent-input')).toBeEnabled();
@@ -414,7 +414,7 @@ test.describe('Workshop Author playing a workshop', () => {
       .click();
 
     const author = page.locator('.jp-WorkshopAgent', {
-      hasText: 'personal/demo'
+      hasText: 'personal/workshops/demo'
     });
     const input = author.locator('.jp-WorkshopAgent-input');
 
@@ -568,7 +568,7 @@ test.describe('Workshop Author creating a workshop', () => {
       .click();
 
     const older = page.locator('.jp-WorkshopAgent', {
-      hasText: 'personal/demo'
+      hasText: 'personal/workshops/demo'
     });
 
     await expect(older.locator('.jp-WorkshopAgent-input')).toBeEnabled();
@@ -609,11 +609,11 @@ test.describe('Workshop Author creating a workshop', () => {
     const card = draft.locator('.jp-WorkshopAgent-proposal');
 
     await expect(card.locator('h3')).toHaveText('Git basics');
-    await expect(card).toContainText('personal/git-basics');
+    await expect(card).toContainText('personal/workshops/git-basics');
     await expect(card).toContainText('People new to the subject');
     expect(
       await page.contents.fileExists(
-        `${LIBRARY}/personal/git-basics/workshop.yaml`
+        `${LIBRARY}/personal/workshops/git-basics/workshop.yaml`
       )
     ).toBe(false);
 
@@ -622,11 +622,11 @@ test.describe('Workshop Author creating a workshop', () => {
     await card.getByRole('button', { name: 'Create' }).click();
 
     const author = page.locator('.jp-WorkshopAgent', {
-      hasText: 'personal/git-basics'
+      hasText: 'personal/workshops/git-basics'
     });
 
     await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
-      `${LIBRARY}/personal/git-basics`
+      `${LIBRARY}/personal/workshops/git-basics`
     );
     await expect(page.locator('.jp-WorkshopAgent')).toHaveCount(2);
     await expect(
@@ -637,7 +637,7 @@ test.describe('Workshop Author creating a workshop', () => {
     );
     expect(
       await page.contents.fileExists(
-        `${LIBRARY}/personal/git-basics/workshop.yaml`
+        `${LIBRARY}/personal/workshops/git-basics/workshop.yaml`
       )
     ).toBe(true);
 

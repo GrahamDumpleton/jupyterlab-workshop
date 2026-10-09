@@ -23,9 +23,9 @@ def library(jp_root_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # installed from a collection.
     monkeypatch.setenv(PROVIDER_VARIABLE, "fake")
 
-    (jp_root_dir / "library.json").write_text('{"version": 1}\n')
+    (jp_root_dir / "library.json").write_text('{"version": 2}\n')
 
-    for path in ("personal/demo", "collections/course/other"):
+    for path in ("personal/workshops/demo", "installed/collections/course/other"):
         workshop = jp_root_dir / path
 
         (workshop / "pages").mkdir(parents=True)
@@ -74,13 +74,18 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
 
     socket.write_message(
         json.dumps(
-            {"type": "open", "path": "personal/demo", "directory": ".", "client": "t1"}
+            {
+                "type": "open",
+                "path": "personal/workshops/demo",
+                "directory": ".",
+                "client": "t1",
+            }
         )
     )
 
     opened = (await _receive(socket, "opened"))[-1]
 
-    assert opened["path"] == "personal/demo"
+    assert opened["path"] == "personal/workshops/demo"
     assert opened["history"] == []
 
     socket.write_message(json.dumps({"type": "send", "text": "hello\n/ask"}))
@@ -112,7 +117,9 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
     socket.close()
 
     # The record is kept in the workshop, deltas left out.
-    record = json.loads((library / "personal/demo/_workshop" / AGENT_FILE).read_text())
+    record = json.loads(
+        (library / "personal/workshops/demo/_workshop" / AGENT_FILE).read_text()
+    )
 
     assert record["provider"] == "fake"
     assert record["session_id"].startswith("fake-")
@@ -123,7 +130,9 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
     again = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     again.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
 
     reopened = (await _receive(again, "opened"))[-1]
@@ -135,7 +144,7 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
 
     terminal = (await _receive(again, "terminal"))[-1]
 
-    assert terminal["cwd"] == "personal/demo"
+    assert terminal["cwd"] == "personal/workshops/demo"
     assert terminal["command"] == command_line(
         ["echo", f"fake conversation {record['session_id']}"]
     )
@@ -149,9 +158,9 @@ async def test_a_conversation_streams_asks_and_resumes(jp_ws_fetch, library) -> 
 @pytest.mark.parametrize(
     ("path", "directory", "refusal"),
     [
-        ("collections/course/other", ".", "your own workshops"),
-        ("personal/missing", ".", "not a workshop"),
-        ("personal/demo", "elsewhere", "workshop library"),
+        ("installed/collections/course/other", ".", "your own workshops"),
+        ("personal/workshops/missing", ".", "not a workshop"),
+        ("personal/workshops/demo", "elsewhere", "workshop library"),
         ("../outside", ".", "inside the JupyterLab root"),
     ],
 )
@@ -172,7 +181,7 @@ async def test_conversations_are_only_for_the_owners_workshops(
 
 
 async def test_a_downloaded_workshop_is_refused(jp_ws_fetch, library) -> None:
-    state = library / "personal/demo/_workshop"
+    state = library / "personal/workshops/demo/_workshop"
 
     state.mkdir()
     (state / "source.json").write_text("{}")
@@ -180,7 +189,9 @@ async def test_a_downloaded_workshop_is_refused(jp_ws_fetch, library) -> None:
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
 
     error = (await _receive(socket, "error"))[-1]
@@ -194,7 +205,9 @@ async def test_a_turn_can_be_interrupted(jp_ws_fetch, library) -> None:
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
     await _receive(socket, "opened")
 
@@ -223,9 +236,9 @@ def test_idle_conversations_close_and_resume_from_their_record(
     from jupyterlab_workshop.agents.fake import FakeProvider
     from jupyterlab_workshop.conversations import ConversationManager
 
-    (tmp_path / "library.json").write_text('{"version": 1}\n')
+    (tmp_path / "library.json").write_text('{"version": 2}\n')
 
-    workshop = tmp_path / "personal" / "demo"
+    workshop = tmp_path / "personal" / "workshops" / "demo"
 
     workshop.mkdir(parents=True)
     (workshop / "workshop.yaml").write_text(MANIFEST)
@@ -234,18 +247,18 @@ def test_idle_conversations_close_and_resume_from_their_record(
     manager = ConversationManager(tmp_path, None, provider=provider, idle_timeout=0)
 
     async def scenario() -> tuple[str | None, str | None, list[str]]:
-        first = await manager.open("personal/demo", ".", workshop)
+        first = await manager.open("personal/workshops/demo", ".", workshop)
 
         await first.send("hello")
 
-        assert await manager.open("personal/demo", ".", workshop) is first
+        assert await manager.open("personal/workshops/demo", ".", workshop) is first
 
         closed = await manager.close_idle()
 
-        assert closed == ["personal/demo"]
+        assert closed == ["personal/workshops/demo"]
         assert provider.sessions[0].closed
 
-        second = await manager.open("personal/demo", ".", workshop)
+        second = await manager.open("personal/workshops/demo", ".", workshop)
         kinds = [event["kind"] for event in second.history]
 
         await manager.close_all()
@@ -266,7 +279,7 @@ async def test_the_model_and_effort_can_be_changed(jp_ws_fetch, library) -> None
         json.dumps(
             {
                 "type": "open",
-                "path": "personal/demo",
+                "path": "personal/workshops/demo",
                 "directory": ".",
                 "model": "quick",
             }
@@ -302,7 +315,9 @@ async def test_the_model_and_effort_can_be_changed(jp_ws_fetch, library) -> None
     socket.close()
 
     # The choice is the workshop's from now on, over the settings.
-    record = json.loads((library / "personal/demo/_workshop" / AGENT_FILE).read_text())
+    record = json.loads(
+        (library / "personal/workshops/demo/_workshop" / AGENT_FILE).read_text()
+    )
 
     assert (record["model"], record["effort"]) == ("careful", "high")
 
@@ -311,7 +326,9 @@ async def test_a_conversation_can_be_compacted(jp_ws_fetch, library) -> None:
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
     await _receive(socket, "opened")
 
@@ -331,7 +348,9 @@ async def test_a_conversation_can_be_compacted(jp_ws_fetch, library) -> None:
     socket.close()
 
     # The history keeps that it was compacted, not that it was compacting.
-    record = json.loads((library / "personal/demo/_workshop" / AGENT_FILE).read_text())
+    record = json.loads(
+        (library / "personal/workshops/demo/_workshop" / AGENT_FILE).read_text()
+    )
     kinds = [event["kind"] for event in record["history"]]
 
     assert "compacted" in kinds
@@ -347,7 +366,9 @@ async def test_a_conversation_can_be_started_over(
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
     await _receive(socket, "opened")
 
@@ -359,7 +380,7 @@ async def test_a_conversation_can_be_started_over(
     socket.write_message(json.dumps({"type": "send", "text": "hello"}))
     await _receive(socket, "info")
 
-    path = library / "personal/demo/_workshop" / AGENT_FILE
+    path = library / "personal/workshops/demo/_workshop" / AGENT_FILE
     before = json.loads(path.read_text())
 
     # Clearing goes to a new session, and /clear is not sent to the agent.
@@ -382,7 +403,9 @@ async def test_a_conversation_can_be_started_over(
     again = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     again.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
 
     reopened = (await _receive(again, "opened"))[-1]
@@ -403,7 +426,9 @@ async def test_files_attached_to_a_message_are_saved_and_shown(
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
     await _receive(socket, "opened")
 
@@ -424,7 +449,7 @@ async def test_files_attached_to_a_message_are_saved_and_shown(
     )
 
     events = _events(await _receive(socket, "info"))
-    attachments = library / "personal/demo/_workshop/attachments"
+    attachments = library / "personal/workshops/demo/_workshop/attachments"
 
     # The message shows what was attached, without the content, and the
     # agent was given the files where they were saved.
@@ -483,7 +508,9 @@ async def test_stopping_the_server_closes_conversations(
     socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     socket.write_message(
-        json.dumps({"type": "open", "path": "personal/demo", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
     )
     await _receive(socket, "opened")
 
@@ -500,11 +527,11 @@ async def test_stopping_the_server_closes_conversations(
 
     await asyncio.sleep(0)
 
-    assert manager.running() == ["personal/demo"]
+    assert manager.running() == ["personal/workshops/demo"]
 
     # The extension's stop hook is what Jupyter Server calls on shutdown.
     for app in jp_serverapp.extension_manager.extension_apps["jupyterlab_workshop"]:
-        assert app.current_activity() == ["personal/demo"]
+        assert app.current_activity() == ["personal/workshops/demo"]
 
         await app.stop_extension()
 
@@ -564,14 +591,14 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
     result = next(e for e in events if e["kind"] == "tool-result")
 
     assert result["ok"] is False
-    assert "personal/demo already exists" in result["summary"]
+    assert "personal/workshops/demo already exists" in result["summary"]
 
     # A good plan is kept, and nothing exists in the library yet.
     events = await _turn(socket, f"/tool propose_workshop {json.dumps(PLAN)}")
     result = next(e for e in events if e["kind"] == "tool-result")
 
     assert result["ok"] is True
-    assert not (library / "personal" / "git-basics").exists()
+    assert not (library / "personal" / "workshops" / "git-basics").exists()
 
     # A file attached while drafting is saved with the draft, outside the
     # library.
@@ -595,9 +622,9 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
 
     created = (await _receive(socket, "created"))[-1]
 
-    assert created["path"] == "personal/git-basics"
+    assert created["path"] == "personal/workshops/git-basics"
 
-    manifest = (library / "personal/git-basics/workshop.yaml").read_text()
+    manifest = (library / "personal/workshops/git-basics/workshop.yaml").read_text()
 
     assert "title: Git basics" in manifest
     assert "gating: soft" in manifest
@@ -609,22 +636,24 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
     again = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
 
     again.write_message(
-        json.dumps({"type": "open", "path": "personal/git-basics", "directory": "."})
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/git-basics", "directory": "."}
+        )
     )
 
     reopened = (await _receive(again, "opened"))[-1]
     kinds = [event["kind"] for event in reopened["history"]]
 
     assert kinds.count("tool-call") == 2
-    assert {"kind": "note", "text": "Created personal/git-basics."} in reopened[
-        "history"
-    ]
+    created_note = {"kind": "note", "text": "Created personal/workshops/git-basics."}
+
+    assert created_note in reopened["history"]
 
     if reopened["running"]:
         await _receive(again, "info")
 
     record = json.loads(
-        (library / "personal/git-basics/_workshop" / AGENT_FILE).read_text()
+        (library / "personal/workshops/git-basics/_workshop" / AGENT_FILE).read_text()
     )
     first = next(
         event
@@ -636,7 +665,7 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
 
     # The draft's attachment went with the workshop, and the brief says so.
     assert (
-        library / "personal/git-basics/_workshop/attachments/outline.md"
+        library / "personal/workshops/git-basics/_workshop/attachments/outline.md"
     ).read_text() == "# Hi"
     assert "attached while drafting" in first["text"]
     assert "outline.md" in first["text"]

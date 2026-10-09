@@ -188,7 +188,7 @@ class PermissionPolicy:
 
     def _resolve(self, value: str) -> Path:
         # Symbolic links are followed, so a link inside the workshop cannot
-        # reach outside it unnoticed, and a linked project compares by its
+        # reach outside it unnoticed, and a linked course compares by its
         # real location.
         path = Path(os.path.expanduser(value))
 

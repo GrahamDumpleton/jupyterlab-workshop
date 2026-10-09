@@ -37,8 +37,8 @@ from .checks import (
 )
 from .collection import (
     CollectionError,
+    list_courses,
     list_installed,
-    list_projects,
     load_collection,
 )
 from .conversations import (
@@ -60,7 +60,14 @@ from .fetch import (
     parse_source,
     remove_workshop,
 )
-from .library import LibraryError, linked_project_path, unlink_project
+from .library import (
+    LibraryError,
+    linked_course_path,
+    plan_upgrade,
+    read_library,
+    unlink_course,
+    upgrade_library,
+)
 from .platform import current_platform, has_web_proxy
 from .publish import PublishError, publish_workshop
 from .scaffold import TEMPLATES, slug, write_scaffold
@@ -79,10 +86,10 @@ def under_root(root_dir: Path, path: str, what: str = "path") -> Path:
     if resolved == root or root in resolved.parents:
         return resolved
 
-    # A project a workshop library links in from elsewhere counts as
+    # A course a workshop library links in from elsewhere counts as
     # inside, when the library's registry vouches for the link.
     parts = [part for part in path.replace("\\", "/").split("/") if part]
-    linked = None if ".." in parts else linked_project_path(root, parts)
+    linked = None if ".." in parts else linked_course_path(root, parts)
 
     if linked is None:
         raise tornado.web.HTTPError(
@@ -223,8 +230,8 @@ class WorkshopsHandler(WorkshopHandler):
         self.finish(json.dumps({"removed": removed}))
 
 
-class ProjectsHandler(WorkshopHandler):
-    """List a workshop library's projects and unlink a linked one.
+class CoursesHandler(WorkshopHandler):
+    """List a workshop library's courses and unlink a linked one.
 
     Unlinking has to happen here rather than through the contents API:
     deleting a linked directory there could reach the files it links to,
@@ -236,11 +243,11 @@ class ProjectsHandler(WorkshopHandler):
         directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
 
         try:
-            projects = list_projects(self.root_dir, directory)
+            courses = list_courses(self.root_dir, directory)
         except CollectionError as error:
             raise tornado.web.HTTPError(400, str(error)) from error
 
-        self.finish(json.dumps({"projects": projects}))
+        self.finish(json.dumps({"courses": courses}))
 
     @tornado.web.authenticated
     def delete(self) -> None:
@@ -252,11 +259,62 @@ class ProjectsHandler(WorkshopHandler):
 
         try:
             library_dir = _resolve_inside(self.root_dir, directory)
-            removed = unlink_project(library_dir, name)
+            removed = unlink_course(library_dir, name)
         except (FetchError, LibraryError) as error:
             raise tornado.web.HTTPError(400, str(error)) from error
 
         self.finish(json.dumps({"unlinked": removed}))
+
+
+class LibraryHandler(WorkshopHandler):
+    """Report a workshop library's registry version and upgrade its layout.
+
+    A library made by an earlier release keeps its workshops in the
+    previous layout. The browser reads the registry itself, so this
+    handler is only for the upgrade, which moves directories the browser
+    could not move safely through the contents API, links among them.
+    """
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
+
+        try:
+            _resolve_inside(self.root_dir, directory)
+
+            registry = read_library(self.root_dir, directory)
+            plan = plan_upgrade(self.root_dir, directory)
+        except (FetchError, LibraryError) as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        if registry is None:
+            raise tornado.web.HTTPError(404, f"{directory} is not a workshop library")
+
+        self.finish(
+            json.dumps(
+                {
+                    "version": registry.get("version"),
+                    "upgrade": None if plan is None else plan.to_dict(),
+                }
+            )
+        )
+
+    @tornado.web.authenticated
+    def post(self) -> None:
+        body = self.body_json()
+        raw_directory = body.get("directory")
+        directory = (
+            DEFAULT_WORKSHOPS_DIRECTORY if raw_directory is None else str(raw_directory)
+        )
+
+        try:
+            _resolve_inside(self.root_dir, directory)
+
+            plan = upgrade_library(self.root_dir, directory)
+        except (FetchError, LibraryError) as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps({"upgraded": plan.to_dict()}))
 
 
 class VerifyHandler(WorkshopHandler):
@@ -997,7 +1055,8 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "platform"), PlatformHandler),
         (url_path_join(base_url, API_NAMESPACE, "fetch"), FetchHandler),
         (url_path_join(base_url, API_NAMESPACE, "workshops"), WorkshopsHandler),
-        (url_path_join(base_url, API_NAMESPACE, "projects"), ProjectsHandler),
+        (url_path_join(base_url, API_NAMESPACE, "courses"), CoursesHandler),
+        (url_path_join(base_url, API_NAMESPACE, "library"), LibraryHandler),
         (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
         (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
         (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),

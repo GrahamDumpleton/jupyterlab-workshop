@@ -136,8 +136,8 @@ A collection is a published list of workshops, a JSON index that the
 catalog is a published list of collections, so one URL can point at
 everything an organisation offers. There are no subscriptions out of
 the box. A [workshop library](library.md) keeps all of these in one
-directory: downloads by collection, your own workshops, and projects,
-with the subscriptions in a registry of its own.
+directory: downloads by collection, your own workshops, and your
+courses, with the subscriptions in a registry of its own.
 [Finding and installing workshops](collections.md) covers the browser,
 collections, catalogs, launch links and deployments such as Binder.
 

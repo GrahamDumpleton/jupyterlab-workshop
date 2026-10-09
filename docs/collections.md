@@ -556,9 +556,11 @@ from, and the progress. Collections are read through
 `GET jupyterlab-workshop/collection?url=…` and catalogs through
 `GET jupyterlab-workshop/catalog?url=…`, which returns the catalog with
 its relative locations resolved. All refuse paths outside the JupyterLab
-root, other than those behind a project link a library's registry
+root, other than those behind a course link a library's registry
 vouches for. In a library the browser reads `library.json` and scans
 the library's layout itself through the contents API, the same way on
-JupyterLab and JupyterLite; `GET jupyterlab-workshop/projects` lists a
-library's projects and `DELETE jupyterlab-workshop/projects?name=…`
-unlinks one.
+JupyterLab and JupyterLite; `GET jupyterlab-workshop/courses` lists a
+library's courses and `DELETE jupyterlab-workshop/courses?name=…`
+unlinks one, and `GET jupyterlab-workshop/library` says whether the
+library needs upgrading from the previous layout, which
+`POST jupyterlab-workshop/library` does.

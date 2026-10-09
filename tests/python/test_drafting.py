@@ -30,7 +30,7 @@ def test_a_plan_is_checked_before_it_can_be_created(tmp_path: Path) -> None:
         ({"name": "Not A Name"}, "cannot be a directory name"),
         ({"name": "-leading"}, "cannot be a directory name"),
         ({"name": "x" * 65}, "cannot be a directory name"),
-        ({"name": "taken"}, "personal/taken already exists"),
+        ({"name": "taken"}, "personal/workshops/taken already exists"),
         ({"audience": "everyone"}, "audience is one of"),
         ({"title": " "}, "needs a title"),
         ({"summary": ""}, "needs a summary"),

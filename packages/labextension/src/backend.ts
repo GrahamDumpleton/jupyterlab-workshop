@@ -9,6 +9,7 @@ import {
   IFetchRequest,
   IFetchResult,
   IInstalledWorkshop,
+  ILibraryUpgradePlan,
   IPlatformInfo,
   IPreflightResult,
   IScriptRequest,
@@ -90,12 +91,31 @@ export class ServerBackend implements IWorkshopBackend {
     );
   }
 
-  async unlinkProject(directory: string, name: string): Promise<void> {
+  async unlinkCourse(directory: string, name: string): Promise<void> {
     await requestAPI<{ unlinked: unknown }>(
-      `projects?directory=${encodeURIComponent(directory)}&name=${encodeURIComponent(name)}`,
+      `courses?directory=${encodeURIComponent(directory)}&name=${encodeURIComponent(name)}`,
       this._settings,
       { method: 'DELETE' }
     );
+  }
+
+  async libraryUpgrade(directory: string): Promise<ILibraryUpgradePlan | null> {
+    const response = await requestAPI<{
+      version: number;
+      upgrade: ILibraryUpgradePlan | null;
+    }>(`library?directory=${encodeURIComponent(directory)}`, this._settings);
+
+    return response.upgrade;
+  }
+
+  async upgradeLibrary(directory: string): Promise<ILibraryUpgradePlan> {
+    const response = await requestAPI<{ upgraded: ILibraryUpgradePlan }>(
+      'library',
+      this._settings,
+      { method: 'POST', body: JSON.stringify({ directory }) }
+    );
+
+    return response.upgraded;
   }
 
   async checkpoint(

@@ -13,7 +13,7 @@ import {
   joinLibraryPath,
   newPagePath,
   normalizeWorkshopsDirectory,
-  PERSONAL_DIRECTORY,
+  PERSONAL_WORKSHOPS_DIRECTORY,
   newPageSource,
   parseDirectiveContent,
   parseDirectiveInfo,
@@ -1090,8 +1090,8 @@ function stringList(value: unknown): string[] | null {
 
 /**
  * Where a new workshop goes by default: the workshops directory, or in a
- * workshop library its `personal/` tree, since a workshop someone makes
- * there is their own.
+ * workshop library its `personal/workshops/` tree, since a workshop
+ * someone makes there is their own.
  */
 async function newWorkshopParent(
   manager: IWorkshopManager,
@@ -1109,6 +1109,6 @@ async function newWorkshopParent(
 
   return joinLibraryPath(
     normalizeWorkshopsDirectory(directory),
-    inLibrary ? PERSONAL_DIRECTORY : ''
+    inLibrary ? PERSONAL_WORKSHOPS_DIRECTORY : ''
   );
 }

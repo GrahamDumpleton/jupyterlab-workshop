@@ -297,17 +297,17 @@ def test_install_collection_into_a_library_gives_each_collection_a_directory(
     other_dir = f"example.org-course-{collection_hash('other/collection.json')}"
 
     assert [item.detail for item in first] == [
-        f"workshops/collections/{mine_dir}/alpha"
+        f"workshops/installed/collections/{mine_dir}/alpha"
     ]
     assert [item.detail for item in second] == [
-        f"workshops/collections/{other_dir}/alpha"
+        f"workshops/installed/collections/{other_dir}/alpha"
     ]
     assert [item.status for item in again] == ["skipped"]
 
     # The registry records both directories and subscribes to both, in
     # the order they were installed from.
     assert read_library(tmp_path, "workshops") == {
-        "version": 1,
+        "version": 2,
         "collections": ["collections/collection.json", "other/collection.json"],
         "directories": {
             "collections/collection.json": mine_dir,
@@ -347,7 +347,7 @@ def test_subscribe_and_unsubscribe_need_a_library_and_match_any_spelling(
     assert subscribe(tmp_path, ".", "https://EXAMPLE.org/c.json/") is False
     assert subscribe(tmp_path, ".", "k.json", kind="catalogs") is True
     assert read_library(tmp_path, ".") == {
-        "version": 1,
+        "version": 2,
         "collections": ["https://example.org/c.json"],
         "catalogs": ["k.json"],
     }

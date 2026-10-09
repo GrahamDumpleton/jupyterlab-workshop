@@ -2,6 +2,7 @@ import {
   ICatalog,
   ICollectionEntry,
   ILibrary,
+  needsUpgrade,
   normalizeWorkshopsDirectory,
   collectionTags,
   latestVersion,
@@ -25,13 +26,14 @@ import { ISignal, Signal } from '@lumino/signaling';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { workshopIcon } from '../icons';
-import { ILibraryProjectInfo } from '../library/scan';
+import { ILibraryCourseInfo } from '../library/scan';
 import { LibraryService } from '../library/service';
 import { planMigration, runMigration } from '../library/migrate';
 import {
   CommandIDs,
   IFeaturePolicy,
   IInstalledWorkshop,
+  ILibraryUpgradePlan,
   IWorkshopManager,
   errorMessage,
   isDownloaded
@@ -171,8 +173,8 @@ export namespace WorkshopBrowser {
 
     /**
      * The workshop library, when the extension has one. In a library the
-     * browser shows the owner's own workshops and the projects as well,
-     * and outside one it can offer to make the directory a library.
+     * browser shows the owner's own workshops and courses as well, and
+     * outside one it can offer to make the directory a library.
      */
     library?: LibraryService | null;
   }
@@ -204,7 +206,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [frontend, setFrontend] = useState(manager.frontend);
   const [instance, setInstance] = useState(manager.platform?.instance_id ?? '');
   const [registry, setRegistry] = useState<ILibrary | null>(null);
-  const [projects, setProjects] = useState<ILibraryProjectInfo[]>([]);
+  const [courses, setCourses] = useState<ILibraryCourseInfo[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [, setCommandsVersion] = useState(0);
 
@@ -254,11 +256,11 @@ function BrowserContent(props: IContentProps): JSX.Element {
 
       const settings = await readSettings();
 
-      // Whether the workshops directory is a library, and its projects.
+      // Whether the workshops directory is a library, and its courses.
       // A registry that cannot be read is shown as a problem, and the
       // directory is then listed as a plain one.
       let loadedRegistry: ILibrary | null = null;
-      let loadedProjects: ILibraryProjectInfo[] = [];
+      let loadedCourses: ILibraryCourseInfo[] = [];
       let loadedLibraryError: string | null = null;
 
       if (library) {
@@ -266,7 +268,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           loadedRegistry = await library.read(settings.workshopsDirectory);
 
           if (loadedRegistry) {
-            loadedProjects = await library.projects(
+            loadedCourses = await library.courses(
               loadedRegistry,
               settings.workshopsDirectory
             );
@@ -318,7 +320,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
         setFrontend(info?.frontend ?? manager.frontend);
         setInstance(info?.instance_id ?? '');
         setRegistry(loadedRegistry);
-        setProjects(loadedProjects);
+        setCourses(loadedCourses);
         setLibraryError(loadedLibraryError);
         setLoading(false);
       }
@@ -366,26 +368,26 @@ function BrowserContent(props: IContentProps): JSX.Element {
   // subscribed collection, an ambiguous name, or a recorded collection
   // that is not subscribed. A collection with nothing installed has no
   // group here, since Available lists it.
-  const { installedGroups, otherInstalled, personal, byProject } =
+  const { installedGroups, otherInstalled, personal, byCourse } =
     useMemo(() => {
       const byCollection = new Map<ILoadedCollection, IInstalledWorkshop[]>();
       const rest: IInstalledWorkshop[] = [];
       const own: IInstalledWorkshop[] = [];
-      const inProjects = new Map<string, IInstalledWorkshop[]>();
+      const inCourses = new Map<string, IInstalledWorkshop[]>();
 
       for (const item of installed) {
-        // A library's own and project workshops have sections of their own.
+        // A library's own workshops and courses have sections of their own.
         if (item.kind === 'personal') {
           own.push(item);
 
           continue;
         }
 
-        if (item.kind === 'project') {
-          const items = inProjects.get(item.project ?? '') ?? [];
+        if (item.kind === 'course') {
+          const items = inCourses.get(item.course ?? '') ?? [];
 
           items.push(item);
-          inProjects.set(item.project ?? '', items);
+          inCourses.set(item.course ?? '', items);
 
           continue;
         }
@@ -411,7 +413,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           })),
         otherInstalled: rest,
         personal: own,
-        byProject: inProjects
+        byCourse: inCourses
       };
     }, [installed, collections, groups]);
 
@@ -595,7 +597,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           features.enabled('remove') ? () => void remove(item) : undefined
         }
         onEditWithAI={
-          (item.kind === 'personal' || item.kind === 'project') &&
+          (item.kind === 'personal' || item.kind === 'course') &&
           commands.isVisible(CommandIDs.editWithAI)
             ? () =>
                 void commands.execute(CommandIDs.editWithAI, {
@@ -660,9 +662,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
   };
 
-  // Workshop Author writes the owner's own workshops, so only in a library.
+  // Whether the library keeps its workshops in the previous layout and
+  // waits to be upgraded, when nothing is listed and nothing offered.
+  const upgradeNeeded = registry !== null && needsUpgrade(registry);
+
+  // Workshop Author writes the owner's own workshops, so only in a
+  // library, and only one in this release's layout.
   const canAuthorWithAI =
-    registry !== null && commands.isVisible(CommandIDs.createWithAI);
+    registry !== null &&
+    !upgradeNeeded &&
+    commands.isVisible(CommandIDs.createWithAI);
 
   // A plain workshops directory on a server can become a library, unless
   // the subscriptions are locked, since the registry would hold them.
@@ -701,8 +710,9 @@ function BrowserContent(props: IContentProps): JSX.Element {
           <p>
             {where} becomes a workshop library: a library.json registry there
             holds your subscriptions, workshops from a collection go under
-            collections/, other downloads under standalone/, your own workshops
-            under personal/ and projects under projects/.
+            installed/collections/, other downloads under installed/workshops/,
+            your own workshops under personal/workshops/ and your courses under
+            personal/courses/.
           </p>
           {plan.moves.length > 0 ? (
             <>
@@ -762,10 +772,10 @@ function BrowserContent(props: IContentProps): JSX.Element {
     setVersion(value => value + 1);
   };
 
-  const unlink = async (project: ILibraryProjectInfo): Promise<void> => {
+  const unlink = async (course: ILibraryCourseInfo): Promise<void> => {
     const result = await showDialog({
-      title: `Unlink the project "${project.name}"?`,
-      body: `The link ${project.path} and its entry in the library go. Nothing at ${project.target ?? 'its target'} is touched.`,
+      title: `Unlink the course "${course.name}"?`,
+      body: `The link ${course.path} and its entry in the library go. Nothing at ${course.target ?? 'its target'} is touched.`,
       buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Unlink' })]
     });
 
@@ -774,10 +784,88 @@ function BrowserContent(props: IContentProps): JSX.Element {
     }
 
     try {
-      await manager.backend.unlinkProject(directory, project.name);
+      await manager.backend.unlinkCourse(directory, course.name);
     } catch (error) {
       await showErrorMessage(
-        'Unable to unlink the project',
+        'Unable to unlink the course',
+        errorMessage(error)
+      );
+    }
+
+    setVersion(value => value + 1);
+  };
+
+  // A library made by an earlier release keeps its workshops in the
+  // previous layout; the server moves them to this one, after showing
+  // what moves. Nothing else is offered for such a library meanwhile.
+  const upgrade = async (): Promise<void> => {
+    let plan: ILibraryUpgradePlan | null;
+
+    try {
+      plan = await manager.backend.libraryUpgrade(directory);
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to read the workshop library',
+        errorMessage(error)
+      );
+
+      return;
+    }
+
+    if (plan === null) {
+      setVersion(value => value + 1);
+
+      return;
+    }
+
+    const result = await showDialog({
+      title: 'Upgrade this workshop library?',
+      body: (
+        <div className="jp-WorkshopBrowser-migration">
+          <p>
+            The library keeps its workshops in the layout of an earlier release.
+            Upgrading moves them to where this release keeps them: your own
+            workshops under personal/workshops/, your courses under
+            personal/courses/, and what you installed under installed/. Progress
+            goes with each workshop.
+          </p>
+          {plan.moves.length > 0 ? (
+            <ul>
+              {plan.moves.map(move => (
+                <li key={move.from}>
+                  {move.from} to {move.to} ({move.contents})
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {plan.environments.length > 0 ? (
+            <>
+              <p>
+                These workshops have isolated environments, which hold the paths
+                they were made at, so each is removed and made again when its
+                workshop is next opened:
+              </p>
+              <ul>
+                {plan.environments.map(path => (
+                  <li key={path}>{path}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ),
+      buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Upgrade' })]
+    });
+
+    if (!result.button.accept) {
+      return;
+    }
+
+    try {
+      await manager.backend.upgradeLibrary(directory);
+    } catch (error) {
+      await showErrorMessage(
+        'Unable to upgrade the workshop library',
         errorMessage(error)
       );
     }
@@ -856,7 +944,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
           <button
             type="button"
             className="jp-Button jp-mod-styled"
-            title="Keep your own workshops, downloads and projects apart, with your subscriptions in the directory"
+            title="Keep your own workshops, your courses and what you install apart, with your subscriptions in the directory"
             onClick={() => void makeLibrary()}
           >
             Make this a workshop library…
@@ -888,6 +976,28 @@ function BrowserContent(props: IContentProps): JSX.Element {
       {libraryError !== null ? (
         <p className="jp-WorkshopBrowser-error">{libraryError}</p>
       ) : null}
+      {upgradeNeeded ? (
+        <div className="jp-WorkshopBrowser-upgrade">
+          <p className="jp-WorkshopBrowser-upgradeText">
+            This workshop library was made by an earlier release and keeps its
+            workshops in the previous layout, so they are not listed until it is
+            upgraded.
+          </p>
+          {manager.backend.kind === 'server' ? (
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled jp-mod-accept"
+              onClick={() => void upgrade()}
+            >
+              Upgrade library…
+            </button>
+          ) : (
+            <p className="jp-WorkshopBrowser-upgradeText">
+              Start it with jupyter workshop library to upgrade it.
+            </p>
+          )}
+        </div>
+      ) : null}
       {registry !== null && features.enabled('personal') ? (
         <>
           <h2 className="jp-WorkshopBrowser-heading">My workshops</h2>
@@ -908,39 +1018,39 @@ function BrowserContent(props: IContentProps): JSX.Element {
           )}
         </>
       ) : null}
-      {registry !== null && projects.length > 0 ? (
+      {registry !== null && courses.length > 0 ? (
         <>
-          <h2 className="jp-WorkshopBrowser-heading">Projects</h2>
-          {projects.map(project => {
-            const items = byProject.get(project.name) ?? [];
+          <h2 className="jp-WorkshopBrowser-heading">My courses</h2>
+          {courses.map(course => {
+            const items = byCourse.get(course.name) ?? [];
 
             return (
               <InstalledGroup
-                key={project.name}
-                section="project"
-                collapseKey={project.name}
-                title={project.name}
+                key={course.name}
+                section="course"
+                collapseKey={course.name}
+                title={course.name}
                 count={items.length}
                 note={
-                  project.missing
-                    ? `Missing: ${project.target ?? project.path} is not there any more.`
+                  course.missing
+                    ? `Missing: ${course.target ?? course.path} is not there any more.`
                     : items.length === 0
-                      ? `No workshops found in ${project.path} yet.`
+                      ? `No workshops found in ${course.path} yet.`
                       : undefined
                 }
                 headerActions={
-                  project.missing && project.linked ? (
+                  course.missing && course.linked ? (
                     <button
                       type="button"
                       className="jp-Button jp-mod-styled jp-mod-warn"
-                      onClick={() => void unlink(project)}
+                      onClick={() => void unlink(course)}
                     >
                       Unlink
                     </button>
                   ) : null
                 }
               >
-                {renderProjectCards(items, item =>
+                {renderCourseCards(items, item =>
                   renderInstalledCard(item, false)
                 )}
               </InstalledGroup>
@@ -2046,12 +2156,12 @@ function suggestedCollections(
 }
 
 /**
- * A project's workshop cards. A project whose own index groups its
+ * A course's workshop cards. A course whose own index groups its
  * workshops shows each collection under its title, in the index's
  * order, a workshop listed in two appearing in both, then those no
- * index lists yet; any other project shows its workshops by title.
+ * index lists yet; any other course shows its workshops by title.
  */
-function renderProjectCards(
+function renderCourseCards(
   items: readonly IInstalledWorkshop[],
   render: (item: IInstalledWorkshop) => JSX.Element
 ): React.ReactNode {
@@ -2095,7 +2205,7 @@ function renderProjectCards(
 }
 
 /** Which section a group's collapse state belongs to. */
-type GroupSection = 'available' | 'installed' | 'personal' | 'project';
+type GroupSection = 'available' | 'installed' | 'personal' | 'course';
 
 /**
  * The storage key of a group's collapse state. The Available keys predate
@@ -2104,8 +2214,8 @@ type GroupSection = 'available' | 'installed' | 'personal' | 'project';
  * collapsing one section's group leaves the other's open.
  */
 function collapsedKey(section: GroupSection, url: string): string {
-  // A project's key is its name, which is not a location.
-  if (section === 'personal' || section === 'project') {
+  // A course's key is its name, which is not a location.
+  if (section === 'personal' || section === 'course') {
     return `${COLLAPSED_KEY}${section}:${url}`;
   }
 

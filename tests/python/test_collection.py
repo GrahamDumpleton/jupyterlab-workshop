@@ -19,8 +19,8 @@ from jupyterlab_workshop.collection import (
     guess_repository,
     https_remote,
     index_repository,
+    list_courses,
     list_installed,
-    list_projects,
     load_collection,
     parse_collection,
 )
@@ -293,15 +293,18 @@ def _write_library(root: Path, registry: dict[str, Any]) -> None:
 def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
     library = tmp_path / "lib"
 
-    _write_library(library, {"version": 1})
+    _write_library(library, {"version": 2})
     _write_workshop(library / "flat-download", "flat-download", done=1)
     _write_workshop(library / "flat-local", "flat-local")
     _write_workshop(
-        library / "collections" / "example.org-c-1234567" / "alpha", "alpha"
+        library / "installed" / "collections" / "example.org-c-1234567" / "alpha",
+        "alpha",
     )
-    _write_workshop(library / "standalone" / "beta-89abcde", "beta")
-    _write_workshop(library / "personal" / "mine", "mine")
-    _write_workshop(library / "projects" / "repo" / "workshops" / "draft", "draft")
+    _write_workshop(library / "installed" / "workshops" / "beta-89abcde", "beta")
+    _write_workshop(library / "personal" / "workshops" / "mine", "mine")
+    _write_workshop(
+        library / "personal" / "courses" / "repo" / "workshops" / "draft", "draft"
+    )
 
     # The endpoint's call sees a plain workshops directory, as before.
     plain = list_installed(tmp_path, "lib")
@@ -316,39 +319,46 @@ def test_list_installed_scans_a_library_only_when_asked(tmp_path: Path) -> None:
     assert {name: record["kind"] for name, record in scanned.items()} == {
         "alpha": "installed",
         "beta": "installed",
-        "draft": "project",
+        "draft": "course",
         "flat-download": "installed",
         "flat-local": None,
         "mine": "personal",
     }
-    assert scanned["draft"]["project"] == "repo"
-    assert scanned["draft"]["path"] == "lib/projects/repo/workshops/draft"
-    assert scanned["alpha"]["path"] == "lib/collections/example.org-c-1234567/alpha"
-    assert scanned["beta"]["path"] == "lib/standalone/beta-89abcde"
+    assert scanned["draft"]["course"] == "repo"
+    assert scanned["draft"]["path"] == "lib/personal/courses/repo/workshops/draft"
+    assert (
+        scanned["alpha"]["path"]
+        == "lib/installed/collections/example.org-c-1234567/alpha"
+    )
+    assert scanned["beta"]["path"] == "lib/installed/workshops/beta-89abcde"
 
     # Asking for the layout of a directory with no registry changes nothing.
-    assert list_installed(tmp_path, "lib/personal", True)[0].keys() == (plain[0].keys())
+    assert list_installed(tmp_path, "lib/personal/workshops", True)[0].keys() == (
+        plain[0].keys()
+    )
 
 
-def test_list_installed_follows_the_project_workshops_directory(
+def test_list_installed_follows_the_course_workshops_directory(
     tmp_path: Path,
 ) -> None:
     _write_library(
         tmp_path,
-        {"version": 1, "projects": [{"name": "repo", "workshops": "examples"}]},
+        {"version": 2, "courses": [{"name": "repo", "workshops": "examples"}]},
     )
-    _write_workshop(tmp_path / "projects" / "repo" / "examples" / "one", "one")
-    _write_workshop(tmp_path / "projects" / "repo" / "workshops" / "not", "not")
+    courses = tmp_path / "personal" / "courses"
+
+    _write_workshop(courses / "repo" / "examples" / "one", "one")
+    _write_workshop(courses / "repo" / "workshops" / "not", "not")
 
     records = list_installed(tmp_path, ".", True)
 
     assert [(record["name"], record["path"]) for record in records] == [
-        ("one", "projects/repo/examples/one")
+        ("one", "personal/courses/repo/examples/one")
     ]
 
 
 def test_list_installed_does_not_look_inside_a_workshop(tmp_path: Path) -> None:
-    _write_library(tmp_path, {"version": 1})
+    _write_library(tmp_path, {"version": 2})
 
     # A workshop that happens to be called "personal" is listed once at
     # the top, not treated as the personal tree.
@@ -370,7 +380,7 @@ def test_list_installed_reports_a_broken_registry(tmp_path: Path) -> None:
         list_installed(tmp_path, ".", True)
 
 
-def test_list_projects_lists_directories_links_and_missing_links(
+def test_list_courses_lists_directories_links_and_missing_links(
     tmp_path: Path,
 ) -> None:
     library = tmp_path / "lib"
@@ -379,16 +389,20 @@ def test_list_projects_lists_directories_links_and_missing_links(
 
     outside.mkdir(parents=True)
     gone.mkdir(parents=True)
-    (library / "projects" / "cloned").mkdir(parents=True)
-    (library / "projects" / "linked").symlink_to(outside, target_is_directory=True)
-    (library / "projects" / "dangling").symlink_to(gone, target_is_directory=True)
+    (library / "personal" / "courses" / "cloned").mkdir(parents=True)
+    (library / "personal" / "courses" / "linked").symlink_to(
+        outside, target_is_directory=True
+    )
+    (library / "personal" / "courses" / "dangling").symlink_to(
+        gone, target_is_directory=True
+    )
     gone.rmdir()
 
     _write_library(
         library,
         {
-            "version": 1,
-            "projects": [
+            "version": 2,
+            "courses": [
                 {"name": "linked", "target": outside.as_posix()},
                 {"name": "dangling", "target": gone.as_posix()},
                 {"name": "unmade", "target": (tmp_path / "x").as_posix()},
@@ -397,23 +411,23 @@ def test_list_projects_lists_directories_links_and_missing_links(
         },
     )
 
-    projects = {project["name"]: project for project in list_projects(tmp_path, "lib")}
+    courses = {course["name"]: course for course in list_courses(tmp_path, "lib")}
 
-    assert sorted(projects) == ["cloned", "dangling", "linked", "unmade"]
-    assert projects["cloned"] == {
+    assert sorted(courses) == ["cloned", "dangling", "linked", "unmade"]
+    assert courses["cloned"] == {
         "name": "cloned",
-        "path": "lib/projects/cloned",
+        "path": "lib/personal/courses/cloned",
         "workshops": "examples",
         "target": None,
         "linked": False,
         "missing": False,
     }
-    assert projects["linked"]["linked"] is True
-    assert projects["linked"]["missing"] is False
-    assert projects["dangling"]["missing"] is True
-    assert projects["unmade"]["missing"] is True
+    assert courses["linked"]["linked"] is True
+    assert courses["linked"]["missing"] is False
+    assert courses["dangling"]["missing"] is True
+    assert courses["unmade"]["missing"] is True
 
-    assert list_projects(tmp_path, "elsewhere") == []
+    assert list_courses(tmp_path, "elsewhere") == []
 
 
 def test_describe_installed_counts_only_the_visible_pages(tmp_path: Path) -> None:
@@ -691,18 +705,18 @@ def _index(title: str, names: list[str]) -> str:
     )
 
 
-def test_a_project_is_listed_as_its_own_layout_says(tmp_path: Path) -> None:
+def test_a_course_is_listed_as_its_own_layout_says(tmp_path: Path) -> None:
     library = tmp_path / "lib"
-    projects = library / "projects"
+    courses = library / "personal" / "courses"
 
     _write_library(
         library,
-        {"version": 1, "projects": [{"name": "chosen", "workshops": "examples"}]},
+        {"version": 2, "courses": [{"name": "chosen", "workshops": "examples"}]},
     )
 
     # A catalog of two collections sharing a workshop, one workshop no
-    # index lists yet, and a nested repository that is not the project's.
-    course = projects / "course"
+    # index lists yet, and a nested repository that is not the course's.
+    course = courses / "course"
 
     for name in ("one", "two", "three", "fresh"):
         _write_workshop(course / "workshops" / name, name)
@@ -726,28 +740,28 @@ def test_a_project_is_listed_as_its_own_layout_says(tmp_path: Path) -> None:
         index.parent.mkdir(parents=True)
         index.write_text(_index(f"Part {part.upper()}", names))
 
-    # One collection at the top, a project that is one workshop, the
+    # One collection at the top, a course that is one workshop, the
     # default and the top-level layouts, and a registry choice that wins
-    # over an index the project also has.
-    single = projects / "single-index"
+    # over an index the course also has.
+    single = courses / "single-index"
 
     _write_workshop(single / "workshops" / "alpha", "alpha")
     (single / "collection.json").write_text(_index("Only part", ["alpha"]))
 
-    _write_workshop(projects / "solo", "solo")
-    _write_workshop(projects / "plain" / "workshops" / "beta", "beta")
-    _write_workshop(projects / "flat" / "gamma", "gamma")
-    _write_workshop(projects / "chosen" / "examples" / "delta", "delta")
-    _write_workshop(projects / "chosen" / "workshops" / "epsilon", "epsilon")
-    (projects / "chosen" / "collection.json").write_text(_index("Ignored", ["epsilon"]))
+    _write_workshop(courses / "solo", "solo")
+    _write_workshop(courses / "plain" / "workshops" / "beta", "beta")
+    _write_workshop(courses / "flat" / "gamma", "gamma")
+    _write_workshop(courses / "chosen" / "examples" / "delta", "delta")
+    _write_workshop(courses / "chosen" / "workshops" / "epsilon", "epsilon")
+    (courses / "chosen" / "collection.json").write_text(_index("Ignored", ["epsilon"]))
 
     records = list_installed(tmp_path, "lib", True)
 
-    def places(project: str) -> list[tuple[int, int, str | None, str]]:
+    def places(course: str) -> list[tuple[int, int, str | None, str]]:
         return sorted(
             (place["index"], place["position"], place["title"], record["name"])
             for record in records
-            if record.get("project") == project
+            if record.get("course") == course
             for place in record["sections"]
         )
 
@@ -758,15 +772,13 @@ def test_a_project_is_listed_as_its_own_layout_says(tmp_path: Path) -> None:
         (1, 1, "Part B", "two"),
         (2, 0, None, "fresh"),
     ]
-    assert [r["name"] for r in records if r.get("project") == "course"].count(
-        "two"
-    ) == 1
+    assert [r["name"] for r in records if r.get("course") == "course"].count("two") == 1
     assert places("single-index") == [(0, 0, "Only part", "alpha")]
     assert places("solo") == [(0, 0, None, "solo")]
     assert places("plain") == [(0, 0, None, "beta")]
     assert places("flat") == [(0, 0, None, "gamma")]
     assert places("chosen") == [(0, 0, None, "delta")]
 
-    solo = next(record for record in records if record.get("project") == "solo")
+    solo = next(record for record in records if record.get("course") == "solo")
 
-    assert solo["path"] == "lib/projects/solo"
+    assert solo["path"] == "lib/personal/courses/solo"

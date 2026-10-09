@@ -636,12 +636,12 @@ def list_installed(
 
     With ``library`` true and the directory a workshop library, the
     library's layout is scanned as well, the workshops under
-    ``installed/``, ``personal/`` and each project, and every record
-    gains a ``kind``: ``installed``, ``personal`` or ``project`` (with the
-    project's name), or None for a local directory at the top. Without
-    it, or without a registry, the records are exactly those of a plain
-    workshops directory, which is what the server's endpoint returns,
-    since the browser scans a library itself.
+    ``installed/``, ``personal/workshops/`` and each course, and every
+    record gains a ``kind``: ``installed``, ``personal`` or ``course``
+    (with the course's name), or None for a local directory at the top.
+    Without it, or without a registry, the records are exactly those of
+    a plain workshops directory, which is what the server's endpoint
+    returns, since the browser scans a library itself.
     """
 
     from .library import LibraryError, read_library
@@ -672,24 +672,24 @@ def list_installed(
     return records
 
 
-def list_projects(root_dir: Path, directory: str) -> list[dict[str, Any]]:
-    """The projects of a workshop library, in name order.
+def list_courses(root_dir: Path, directory: str) -> list[dict[str, Any]]:
+    """The courses of a workshop library, in name order.
 
-    A project is a directory under ``projects/``, or an entry in the
-    registry naming one. Each record has the ``name``, the ``path`` of its
-    directory relative to the root, its ``workshops`` directory, the
-    ``target`` a linked project points to, whether it is ``linked``, and
+    A course is a directory under ``personal/courses/``, or an entry in
+    the registry naming one. Each record has the ``name``, the ``path`` of
+    its directory relative to the root, its ``workshops`` directory, the
+    ``target`` a linked course points to, whether it is ``linked``, and
     whether it is ``missing``: a link whose target has gone, or a
     registered link that is not there. Empty when the directory is not a
     library.
     """
 
     from .library import (
-        PROJECTS_DIRECTORY,
+        COURSES_DIRECTORY,
         LibraryError,
+        course_entry,
+        course_workshops,
         is_link,
-        project_entry,
-        project_workshops,
         read_library,
     )
 
@@ -702,30 +702,30 @@ def list_projects(root_dir: Path, directory: str) -> list[dict[str, Any]]:
     if registry is None:
         return []
 
-    projects_dir = parent / PROJECTS_DIRECTORY
+    courses_dir = parent / COURSES_DIRECTORY
     names = {
         child.name
-        for child in (projects_dir.iterdir() if projects_dir.is_dir() else [])
+        for child in (courses_dir.iterdir() if courses_dir.is_dir() else [])
         if not child.name.startswith(".") and (child.is_dir() or is_link(child))
     }
     names |= {
-        str(project["name"])
-        for project in registry.get("projects") or []
-        if project.get("target")
+        str(course["name"])
+        for course in registry.get("courses") or []
+        if course.get("target")
     }
 
     records: list[dict[str, Any]] = []
 
     for name in sorted(names):
-        entry = project_entry(registry, name)
-        path = projects_dir / name
+        entry = course_entry(registry, name)
+        path = courses_dir / name
         linked = is_link(path)
 
         records.append(
             {
                 "name": name,
-                "path": _join_relative(root_dir, parent, PROJECTS_DIRECTORY, name),
-                "workshops": project_workshops(entry),
+                "path": _join_relative(root_dir, parent, COURSES_DIRECTORY, name),
+                "workshops": course_workshops(entry),
                 "target": entry.get("target"),
                 "linked": linked or bool(entry.get("target")),
                 "missing": not path.is_dir(),
@@ -759,13 +759,13 @@ def _scan_library(
 
     from .library import (
         COLLECTIONS_DIRECTORY,
-        PERSONAL_DIRECTORY,
-        PROJECTS_DIRECTORY,
-        STANDALONE_DIRECTORY,
-        project_entry,
+        COURSES_DIRECTORY,
+        INSTALLED_WORKSHOPS_DIRECTORY,
+        PERSONAL_WORKSHOPS_DIRECTORY,
+        course_entry,
     )
 
-    def scan(directory: Path, kind: str, project: str | None = None) -> None:
+    def scan(directory: Path, kind: str) -> None:
         # A directory holding a manifest is a workshop of its own and is
         # listed at its own level, so it is never looked inside.
         if not directory.is_dir() or (directory / MANIFEST_FILE).is_file():
@@ -773,9 +773,6 @@ def _scan_library(
 
         for record in _scan_workshops(root_dir, directory):
             record["kind"] = kind
-
-            if project is not None:
-                record["project"] = project
 
             records.append(record)
 
@@ -789,34 +786,34 @@ def _scan_library(
 
     # Workshops downloaded from a URL of their own are installed too, with
     # no collection to group them by.
-    scan(parent / STANDALONE_DIRECTORY, "installed")
-    scan(parent / PERSONAL_DIRECTORY, "personal")
+    scan(parent / INSTALLED_WORKSHOPS_DIRECTORY, "installed")
+    scan(parent / PERSONAL_WORKSHOPS_DIRECTORY, "personal")
 
-    projects = parent / PROJECTS_DIRECTORY
+    courses = parent / COURSES_DIRECTORY
 
-    if projects.is_dir() and not (projects / MANIFEST_FILE).is_file():
-        for project in sorted(projects.iterdir()):
-            if project.name.startswith(".") or not project.is_dir():
+    if courses.is_dir() and not (courses / MANIFEST_FILE).is_file():
+        for course in sorted(courses.iterdir()):
+            if course.name.startswith(".") or not course.is_dir():
                 continue
 
-            entry = project_entry(registry, project.name)
+            entry = course_entry(registry, course.name)
             listed: dict[str, dict[str, Any]] = {}
 
             # A workshop listed in two collections is one record, shown in
             # each of its sections.
-            for index, (title, paths) in enumerate(project_sections(project, entry)):
+            for index, (title, paths) in enumerate(course_sections(course, entry)):
                 for position, path in enumerate(paths):
                     record = listed.get(path)
 
                     if record is None:
                         record = describe_installed(
-                            root_dir, project / path if path else project
+                            root_dir, course / path if path else course
                         )
 
                         if record is None:
                             continue
 
-                        record.update(kind="project", project=project.name, sections=[])
+                        record.update(kind="course", course=course.name, sections=[])
                         listed[path] = record
                         records.append(record)
 
@@ -827,39 +824,39 @@ def _scan_library(
     return records
 
 
-def project_sections(
-    project: Path, entry: Mapping[str, Any]
+def course_sections(
+    course: Path, entry: Mapping[str, Any]
 ) -> list[tuple[str | None, list[str]]]:
-    """The workshops of a project, in sections, by their paths in it.
+    """The workshops of a course, in sections, by their paths in it.
 
     The first rule that finds anything decides. A ``workshops`` directory
-    named in the project's registry entry wins, as a choice made on
-    purpose. Then the project's own index: each collection its top-level
+    named in the course's registry entry wins, as a choice made on
+    purpose. Then the course's own index: each collection its top-level
     ``catalog.json`` lists inside it, in catalog order, or else its
     top-level ``collection.json``, each a section titled after the
     collection with its workshops in index order, followed by a section
     with no title for workshops under ``workshops/`` no index lists yet.
-    Then the project itself when it is a workshop, then the workshops
-    directly under ``workshops/``, then those at the top of the project.
+    Then the course itself when it is a workshop, then the workshops
+    directly under ``workshops/``, then those at the top of the course.
     Only these files and directories are read, never anything deeper, so
-    a submodule with workshops of its own is not taken for the project's.
-    The browser's ``projectSections`` follows the same rules.
+    a submodule with workshops of its own is not taken for the course's.
+    The browser's ``courseSections`` follows the same rules.
     """
 
     from .library import (
-        DEFAULT_PROJECT_WORKSHOPS,
-        PROJECT_CATALOG,
-        PROJECT_COLLECTION,
+        COURSE_CATALOG,
+        COURSE_COLLECTION,
+        DEFAULT_COURSE_WORKSHOPS,
         catalog_collections,
         collection_title,
         collection_workshops,
     )
 
     def is_workshop(path: str) -> bool:
-        return ((project / path) if path else project).joinpath(MANIFEST_FILE).is_file()
+        return ((course / path) if path else course).joinpath(MANIFEST_FILE).is_file()
 
     def workshops_in(path: str) -> list[str]:
-        directory = (project / path) if path else project
+        directory = (course / path) if path else course
 
         if not directory.is_dir():
             return []
@@ -883,26 +880,26 @@ def project_sections(
     sections: list[tuple[str | None, list[str]]] = []
 
     for collection in catalog_collections(
-        _read_json(project / PROJECT_CATALOG), PROJECT_CATALOG
+        _read_json(course / COURSE_CATALOG), COURSE_CATALOG
     ):
-        index = _read_json(project / collection["path"])
+        index = _read_json(course / collection["path"])
         paths = [path for path in collection_workshops(index) if is_workshop(path)]
 
         if paths:
             sections.append((collection_title(index, collection["title"]), paths))
 
     if not sections:
-        index = _read_json(project / PROJECT_COLLECTION)
+        index = _read_json(course / COURSE_COLLECTION)
         paths = [path for path in collection_workshops(index) if is_workshop(path)]
 
         if paths:
-            sections.append((collection_title(index, project.name), paths))
+            sections.append((collection_title(index, course.name), paths))
 
     if sections:
         listed = {path for _, paths in sections for path in paths}
         rest = [
             path
-            for path in workshops_in(DEFAULT_PROJECT_WORKSHOPS)
+            for path in workshops_in(DEFAULT_COURSE_WORKSHOPS)
             if path not in listed
         ]
 
@@ -911,8 +908,8 @@ def project_sections(
     if is_workshop(""):
         return [(None, [""])]
 
-    if (project / DEFAULT_PROJECT_WORKSHOPS).is_dir():
-        return [(None, workshops_in(DEFAULT_PROJECT_WORKSHOPS))]
+    if (course / DEFAULT_COURSE_WORKSHOPS).is_dir():
+        return [(None, workshops_in(DEFAULT_COURSE_WORKSHOPS))]
 
     return [(None, workshops_in(""))]
 

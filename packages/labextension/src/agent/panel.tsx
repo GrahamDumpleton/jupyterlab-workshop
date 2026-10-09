@@ -1454,7 +1454,7 @@ function ProposalCard({
       <dl>
         <dt>Directory</dt>
         <dd>
-          <code>personal/{plan.name}</code>
+          <code>personal/workshops/{plan.name}</code>
         </dd>
         <dt>For</dt>
         <dd>{AUDIENCES[plan.audience] ?? plan.audience}</dd>

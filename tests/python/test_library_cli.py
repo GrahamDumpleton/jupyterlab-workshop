@@ -30,11 +30,11 @@ from jupyterlab_workshop.library import (
 
 
 def course(root: Path) -> str:
-    """The directory the library chose for the course, under collections/."""
+    """The directory the library chose for the course, under installed/collections/."""
 
     (directory,) = (read_library(root, ".") or {})["directories"].values()
 
-    return f"collections/{directory}"
+    return f"installed/collections/{directory}"
 
 
 MANIFEST = (
@@ -102,14 +102,14 @@ def test_library_creates_the_default_library_once_and_stops_with_init_only(
     monkeypatch.setenv(LIBRARY_VARIABLE, str(tmp_path / "mine"))
 
     assert cli.main(["library", "--init-only"]) == 0
-    assert read_library(tmp_path / "mine", ".") == {"version": 1}
+    assert read_library(tmp_path / "mine", ".") == {"version": 2}
     assert "created a workshop library" in capsys.readouterr().out
 
-    write_library(tmp_path / "mine", ".", {"version": 1, "catalogs": ["k.json"]})
+    write_library(tmp_path / "mine", ".", {"version": 2, "catalogs": ["k.json"]})
 
     assert cli.main(["library", "--init-only"]) == 0
     assert read_library(tmp_path / "mine", ".") == {
-        "version": 1,
+        "version": 2,
         "catalogs": ["k.json"],
     }
     assert "created" not in capsys.readouterr().out
@@ -152,7 +152,7 @@ def test_library_starts_jupyterlab_with_the_library_as_root(
     assert options.collections == ["https://example.org/c.json"]
     assert options.open_browser is False
     assert options.lab_args == ("--ip=0.0.0.0",)
-    assert read_library(target, ".") == {"version": 1}
+    assert read_library(target, ".") == {"version": 2}
 
 
 def test_a_launch_for_a_library_names_the_root_as_the_workshops_directory() -> None:
@@ -268,7 +268,7 @@ def test_remove_deletes_a_download_and_keeps_a_local_workshop(tmp_path: Path) ->
     write_library(tmp_path, ".", empty_library())
     install_collection(str(index), tmp_path, ".", downloader=downloader)
 
-    mine = tmp_path / "personal" / "alpha"
+    mine = tmp_path / "personal" / "workshops" / "alpha"
 
     (mine / "_workshop").mkdir(parents=True)
     (mine / "workshop.yaml").write_text(
@@ -285,21 +285,61 @@ def test_remove_deletes_a_download_and_keeps_a_local_workshop(tmp_path: Path) ->
     installed = f"{course(tmp_path)}/alpha"
 
     (download,) = select_installed(records, [installed])
-    (own,) = select_installed(records, ["personal/alpha"])
+    (own,) = select_installed(records, ["personal/workshops/alpha"])
 
     assert remove_installed(tmp_path, download) == installed
     assert not (tmp_path / installed).exists()
 
-    assert remove_installed(tmp_path, own) == "personal/alpha/_workshop"
+    assert remove_installed(tmp_path, own) == "personal/workshops/alpha/_workshop"
     assert (mine / "workshop.yaml").is_file()
     assert not (mine / "_workshop").exists()
 
     # Deleting the files takes the owner's own directory as well.
-    assert remove_installed(tmp_path, own, delete_files=True) == "personal/alpha"
+    assert (
+        remove_installed(tmp_path, own, delete_files=True) == "personal/workshops/alpha"
+    )
     assert not mine.exists()
 
 
-def test_project_commands_link_list_and_unlink(
+def test_library_offers_to_upgrade_the_previous_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    library = tmp_path / "old"
+    mine = library / "personal" / "alpha"
+
+    mine.mkdir(parents=True)
+    (mine / "workshop.yaml").write_text(
+        MANIFEST.format(name="alpha", title="Mine", version="1")
+    )
+    (library / "library.json").write_text('{"version": 1}\n')
+    monkeypatch.setenv(LIBRARY_VARIABLE, str(library))
+
+    # Without a terminal to ask at, the library is left as it is and the
+    # commands that would write to it say why.
+    assert cli.main(["library", "--init-only"]) == 0
+
+    out = capsys.readouterr().out
+
+    assert "personal/ to personal/workshops/ (1 workshop)" in out
+    assert "left as it is" in out
+    assert read_library(library, ".") == {"version": 1}
+
+    assert cli.main(["list", "--library"]) == 0
+    assert "previous layout" in capsys.readouterr().out
+    assert cli.main(["subscribe", "--library", "https://example.org/c.json"]) == 2
+    assert "previous layout" in capsys.readouterr().err
+
+    # Told yes, it upgrades.
+    assert cli.main(["library", "--init-only", "--yes"]) == 0
+    assert "upgraded the workshop library" in capsys.readouterr().out
+    assert (library / "personal" / "workshops" / "alpha" / "workshop.yaml").is_file()
+    assert read_library(library, ".") == {"version": 2}
+
+    assert cli.main(["library", "--init-only"]) == 0
+    assert "previous layout" not in capsys.readouterr().out
+
+
+def test_course_commands_link_list_and_unlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     library = tmp_path / "lib"
@@ -309,23 +349,23 @@ def test_project_commands_link_list_and_unlink(
     write_library(library, ".", empty_library())
     monkeypatch.setenv(LIBRARY_VARIABLE, str(library))
 
-    assert cli.main(["project", "link", str(repo), "--workshops", "examples"]) == 0
+    assert cli.main(["course", "link", str(repo), "--workshops", "examples"]) == 0
     assert "does not ignore _workshop/" in capsys.readouterr().out
 
-    assert cli.main(["project", "list", "--json"]) == 0
+    assert cli.main(["course", "list", "--json"]) == 0
 
-    (project,) = json.loads(capsys.readouterr().out)["projects"]
+    (course,) = json.loads(capsys.readouterr().out)["courses"]
 
-    assert project["name"] == "repo"
-    assert project["workshops"] == "examples"
-    assert project["linked"] is True
+    assert course["name"] == "repo"
+    assert course["workshops"] == "examples"
+    assert course["linked"] is True
 
     # The same library named by its root.
     assert (
         cli.main(
-            ["project", "unlink", "repo", "--root", str(library), "--directory", "."]
+            ["course", "unlink", "repo", "--root", str(library), "--directory", "."]
         )
         == 0
     )
     assert repo.is_dir()
-    assert read_library(library, ".")["projects"] == []
+    assert read_library(library, ".")["courses"] == []

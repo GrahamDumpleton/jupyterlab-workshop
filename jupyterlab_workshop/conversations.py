@@ -6,8 +6,8 @@ opening the panel in another tab, attaches to the same conversation and
 is sent what happened so far. There is one conversation per workshop.
 
 A conversation is only ever started for the library owner's own
-workshops, under `personal/` or in a project, never for an installed
-one: the agent runs with the workshop as its working directory, and a
+workshops, under `personal/workshops/` or in a course, never for an
+installed one: the agent runs with the workshop as its working directory, and a
 workshop someone else wrote could ship agent configuration that would
 then be obeyed. Each workshop keeps its conversation's id, and what was
 said, in `_workshop/agent.json`, so it carries on after a restart.
@@ -65,12 +65,15 @@ from .drafting import (
     draft_instructions,
 )
 from .library import (
-    COLLECTIONS_DIRECTORY,
-    PERSONAL_DIRECTORY,
-    STANDALONE_DIRECTORY,
+    INSTALLED_DIRECTORY,
+    NEEDS_UPGRADE_MESSAGE,
+    PERSONAL_WORKSHOPS_DIRECTORY,
+    LibraryError,
     is_library,
     is_own_library_path,
     library_directory,
+    needs_upgrade,
+    read_library,
 )
 
 log = logging.getLogger(__name__)
@@ -121,7 +124,7 @@ class Conversation:
     # names it; `draft:<id>` for a workshop still being drafted.
     path: str
 
-    # The workshop directory on disk, which may lie behind a project link.
+    # The workshop directory on disk, which may lie behind a course link.
     directory: Path
 
     session: AgentSession
@@ -516,6 +519,8 @@ class ConversationManager:
         if not is_library(self._root, workshops_directory):
             raise ConversationError("Workshop Author works only in a workshop library")
 
+        self._check_upgraded(workshops_directory)
+
         key = DRAFT_PREFIX + draft
         lock = self._opening.setdefault(key, asyncio.Lock())
 
@@ -540,10 +545,10 @@ class ConversationManager:
     async def create(self, conversation: Conversation) -> tuple[Conversation, str]:
         """Create the workshop a draft agreed on, and hand its conversation on.
 
-        The workshop is scaffolded empty under `personal/` with the plan's
-        name and title, and its conversation starts with what was said in
-        the draft. Returns that conversation and the brief to send it
-        first; the draft is closed and its record removed.
+        The workshop is scaffolded empty under `personal/workshops/` with
+        the plan's name and title, and its conversation starts with what
+        was said in the draft. Returns that conversation and the brief to
+        send it first; the draft is closed and its record removed.
         """
 
         if not conversation.draft:
@@ -564,7 +569,7 @@ class ConversationManager:
 
         workshops_directory = conversation.workshops_directory
         library = library_directory(self._root, workshops_directory)
-        personal = library / PERSONAL_DIRECTORY
+        personal = library / PERSONAL_WORKSHOPS_DIRECTORY
 
         try:
             check_proposal(proposal, personal)
@@ -574,7 +579,9 @@ class ConversationManager:
         directory = personal / proposal.name
         path = posixpath.normpath(
             posixpath.join(
-                workshops_directory or ".", PERSONAL_DIRECTORY, proposal.name
+                workshops_directory or ".",
+                PERSONAL_WORKSHOPS_DIRECTORY,
+                proposal.name,
             )
         )
 
@@ -673,15 +680,18 @@ class ConversationManager:
         return idle
 
     def _check(self, path: str, workshops_directory: str, directory: Path) -> None:
-        # The library must exist, the workshop be its owner's, and nothing
-        # downloaded: the same rule that trusts a workshop by location.
+        # The library must exist, in this release's layout, the workshop be
+        # its owner's, and nothing downloaded: the same rule that trusts a
+        # workshop by location.
         if not is_library(self._root, workshops_directory):
             raise ConversationError("Workshop Author works only in a workshop library")
+
+        self._check_upgraded(workshops_directory)
 
         if not is_own_library_path(workshops_directory, path):
             raise ConversationError(
                 "Workshop Author works only on your own workshops, under "
-                "personal/ or in a project"
+                "personal/workshops/ or in a course"
             )
 
         if not (directory / "workshop.yaml").is_file():
@@ -691,6 +701,17 @@ class ConversationManager:
             raise ConversationError(
                 f"{path} was downloaded from a collection, so it is not yours to edit"
             )
+
+    def _check_upgraded(self, workshops_directory: str) -> None:
+        # A library in the previous layout has no personal/workshops/
+        # tree for the agent to write into; the upgrade makes one.
+        try:
+            library = read_library(self._root, workshops_directory)
+        except LibraryError as error:
+            raise ConversationError(str(error)) from error
+
+        if library is not None and needs_upgrade(library):
+            raise ConversationError(NEEDS_UPGRADE_MESSAGE)
 
     async def _start(
         self,
@@ -734,10 +755,7 @@ class ConversationManager:
         policy = PermissionPolicy(
             workshop=directory,
             readable=(self._skill,) if self._skill else (),
-            forbidden=(
-                library / COLLECTIONS_DIRECTORY,
-                library / STANDALONE_DIRECTORY,
-            ),
+            forbidden=(library / INSTALLED_DIRECTORY,),
             sandboxed=provider.name == "claude" and sandbox_supported(),
         )
         options = StartOptions(
@@ -808,20 +826,19 @@ class ConversationManager:
         policy = PermissionPolicy(
             workshop=directory,
             readable=(self._skill,) if self._skill else (),
-            forbidden=(
-                library / COLLECTIONS_DIRECTORY,
-                library / STANDALONE_DIRECTORY,
-            ),
+            forbidden=(library / INSTALLED_DIRECTORY,),
             read_only=True,
         )
         personal = posixpath.normpath(
-            posixpath.join(workshops_directory or ".", PERSONAL_DIRECTORY)
+            posixpath.join(workshops_directory or ".", PERSONAL_WORKSHOPS_DIRECTORY)
         )
         options = StartOptions(
             directory=directory,
             policy=policy,
             instructions=draft_instructions(personal),
-            tools=create_draft_server(library / PERSONAL_DIRECTORY, on_propose),
+            tools=create_draft_server(
+                library / PERSONAL_WORKSHOPS_DIRECTORY, on_propose
+            ),
             skill=self._skill,
             resume=resume,
             model=model,

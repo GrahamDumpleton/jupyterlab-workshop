@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://grahamdumpleton.github.io/jupyterlab-workshop/schemas/v1alpha1/library.schema.json",
   "title": "Workshop library",
-  "description": "The registry at the root of a workshop library, `library.json`: the collections and catalogs its owner subscribes to, in order, where each collection's workshops are installed, and the projects whose workshops it shows. A workshops directory holding this file is a library; one without it behaves as a plain workshops directory.",
+  "description": "The registry at the root of a workshop library, `library.json`: the collections and catalogs its owner subscribes to, in order, where each collection's workshops are installed, and the courses that need saying something about. A workshops directory holding this file is a library; one without it behaves as a plain workshops directory. A library keeps what its owner made under `personal/`, single workshops in `personal/workshops/` and courses in `personal/courses/`, and what was installed under `installed/`, by collection in `installed/collections/` and the rest in `installed/workshops/`.",
   "type": "object",
   "required": ["version"],
   "additionalProperties": false,
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
     "collections": {
       "type": "array",
@@ -28,16 +28,16 @@
     },
     "directories": {
       "type": "object",
-      "description": "The directory under `collections/` each collection's workshops are installed into, keyed by the collection's location. Chosen when the first workshop of a collection is installed, whether or not the library subscribes to it, and kept from then on so a later change to the collection does not move anything.",
+      "description": "The directory under `installed/collections/` each collection's workshops are installed into, keyed by the collection's location. Chosen when the first workshop of a collection is installed, whether or not the library subscribes to it, and kept from then on so a later change to the collection does not move anything.",
       "additionalProperties": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9.-]*$",
         "maxLength": 80
       }
     },
-    "projects": {
+    "courses": {
       "type": "array",
-      "description": "Projects that need saying something about. A directory under `projects/` is a project without an entry; an entry names a workshops directory the library would not find by itself, or links in a directory kept outside the library.",
+      "description": "Courses that need saying something about. A directory under `personal/courses/` is a course without an entry; an entry names a workshops directory the library would not find by itself, or links in a repository kept outside the library.",
       "items": {
         "type": "object",
         "required": ["name"],
@@ -46,17 +46,17 @@
           "name": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
-            "description": "The project's directory under `projects/`."
+            "description": "The course's directory under `personal/courses/`."
           },
           "target": {
             "type": "string",
             "minLength": 1,
-            "description": "For a project linked in from outside the library, the absolute path of the directory `projects/<name>` links to."
+            "description": "For a course linked in from outside the library, the absolute path of the directory `personal/courses/<name>` links to."
           },
           "workshops": {
             "type": "string",
             "minLength": 1,
-            "description": "The project's workshops directory, relative to the project, for one whose workshops the library would not find by itself: without it, the project's own catalog.json or collection.json, the project being a workshop itself, its workshops/ directory, then its top, in that order, say where they are."
+            "description": "The course's workshops directory, relative to the course, for one whose workshops the library would not find by itself: without it, the course's own catalog.json or collection.json, the course being a workshop itself, its workshops/ directory, then its top, in that order, say where they are."
           }
         }
       }

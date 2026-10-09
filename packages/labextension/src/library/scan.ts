@@ -3,33 +3,33 @@ import {
   collectionTitle,
   collectionWorkshops,
   COLLECTIONS_DIRECTORY,
-  DEFAULT_PROJECT_WORKSHOPS,
+  COURSE_CATALOG,
+  COURSE_COLLECTION,
+  courseEntry,
+  COURSES_DIRECTORY,
+  courseWorkshops,
+  DEFAULT_COURSE_WORKSHOPS,
   ILibrary,
-  ILibraryProject,
+  ILibraryCourse,
+  INSTALLED_WORKSHOPS_DIRECTORY,
   joinLibraryPath,
   normalizeWorkshopsDirectory,
-  PERSONAL_DIRECTORY,
-  PROJECT_CATALOG,
-  PROJECT_COLLECTION,
-  projectEntry,
-  projectWorkshops,
-  PROJECTS_DIRECTORY,
-  STANDALONE_DIRECTORY
+  PERSONAL_WORKSHOPS_DIRECTORY
 } from '@jupyterlab-workshop/core';
 import { Contents } from '@jupyterlab/services';
 
 import { getIfExists, readIfExists } from '../actions/contents';
 import { describeInstalled, listInstalled, MANIFEST_FILE } from '../installed';
 import {
+  ICourseSectionPlace,
   IInstalledWorkshop,
-  IProjectSectionPlace,
   isDownloaded,
   WorkshopKind
 } from '../tokens';
 
-/** A project of a workshop library, as the browser shows it. */
-export interface ILibraryProjectInfo {
-  /** Its directory under `projects/`. */
+/** A course of a workshop library, as the browser shows it. */
+export interface ILibraryCourseInfo {
+  /** Its directory under `personal/courses/`. */
   name: string;
 
   /** That directory, relative to the root. */
@@ -38,15 +38,15 @@ export interface ILibraryProjectInfo {
   /** Its workshops directory, relative to the root. */
   workshops: string;
 
-  /** For a linked project, the directory it links to. */
+  /** For a linked course, the directory it links to. */
   target: string | null;
 
-  /** Whether it is linked in from outside rather than cloned in. */
+  /** Whether it is linked in from outside rather than kept in the library. */
   linked: boolean;
 
   /**
    * Whether it is gone: a registered link whose target was removed, or
-   * whose link was. A missing project can only be unlinked.
+   * whose link was. A missing course can only be unlinked.
    */
   missing: boolean;
 }
@@ -54,9 +54,10 @@ export interface ILibraryProjectInfo {
 /**
  * Every workshop of a library, each with its kind: the plain listing of
  * the workshops directory, where a download counts as installed and a
- * local directory has no kind, then the workshops under `collections/`
- * and `standalone/`, which are installed, `personal/` and each
- * project. Mirrors the command line's scan.
+ * local directory has no kind, then the workshops under
+ * `installed/collections/` and `installed/workshops/`, which are
+ * installed, `personal/workshops/` and each course. Mirrors the command
+ * line's scan.
  */
 export async function listLibrary(
   contents: Contents.IManager,
@@ -71,18 +72,12 @@ export async function listLibrary(
     kind: isDownloaded(record) ? 'installed' : null
   }));
 
-  const scan = async (
-    path: string,
-    kind: WorkshopKind,
-    project?: string
-  ): Promise<void> => {
+  const scan = async (path: string, kind: WorkshopKind): Promise<void> => {
     for (const child of await subdirectories(contents, path)) {
       const record = await describeInstalled(contents, child.path);
 
       if (record) {
-        records.push(
-          project ? { ...record, kind, project } : { ...record, kind }
-        );
+        records.push({ ...record, kind });
       }
     }
   };
@@ -94,20 +89,20 @@ export async function listLibrary(
     await scan(collection.path, 'installed');
   }
 
-  await scan(joinLibraryPath(base, STANDALONE_DIRECTORY), 'installed');
+  await scan(joinLibraryPath(base, INSTALLED_WORKSHOPS_DIRECTORY), 'installed');
 
-  await scan(joinLibraryPath(base, PERSONAL_DIRECTORY), 'personal');
+  await scan(joinLibraryPath(base, PERSONAL_WORKSHOPS_DIRECTORY), 'personal');
 
-  for (const project of await listProjects(contents, directory, library)) {
-    if (project.missing) {
+  for (const course of await listCourses(contents, directory, library)) {
+    if (course.missing) {
       continue;
     }
 
     const listed = new Map<string, IInstalledWorkshop>();
-    const sections = await projectSections(
+    const sections = await courseSections(
       contents,
-      project.path,
-      projectEntry(library, project.name)
+      course.path,
+      courseEntry(library, course.name)
     );
 
     // A workshop listed in two collections is one record, shown in each
@@ -119,7 +114,7 @@ export async function listLibrary(
         if (!record) {
           const described = await describeInstalled(
             contents,
-            joinLibraryPath(project.path, path)
+            joinLibraryPath(course.path, path)
           );
 
           if (!described) {
@@ -128,15 +123,15 @@ export async function listLibrary(
 
           record = {
             ...described,
-            kind: 'project',
-            project: project.name,
+            kind: 'course',
+            course: course.name,
             sections: []
           };
           listed.set(path, record);
           records.push(record);
         }
 
-        const place: IProjectSectionPlace = {
+        const place: ICourseSectionPlace = {
           title: section.title,
           index,
           position
@@ -154,32 +149,32 @@ export async function listLibrary(
   return records;
 }
 
-/** A section of a project's workshops, by their paths in the project. */
-export interface IProjectSection {
+/** A section of a course's workshops, by their paths in the course. */
+export interface ICourseSection {
   title: string | null;
   paths: string[];
 }
 
 /**
- * The workshops of a project, in sections. The first rule that finds
- * anything decides. A `workshops` directory named in the project's
- * registry entry wins, as a choice made on purpose. Then the project's
+ * The workshops of a course, in sections. The first rule that finds
+ * anything decides. A `workshops` directory named in the course's
+ * registry entry wins, as a choice made on purpose. Then the course's
  * own index: each collection its top-level `catalog.json` lists inside
  * it, in catalog order, or else its top-level `collection.json`, each a
  * section titled after the collection with its workshops in index
  * order, followed by a section with no title for workshops under
- * `workshops/` no index lists yet. Then the project itself when it is a
+ * `workshops/` no index lists yet. Then the course itself when it is a
  * workshop, then the workshops directly under `workshops/`, then those
- * at the top of the project. Nothing deeper is read, so a submodule
- * with workshops of its own is not taken for the project's. Mirrors the
- * command line's `project_sections`.
+ * at the top of the course. Nothing deeper is read, so a submodule with
+ * workshops of its own is not taken for the course's. Mirrors the
+ * command line's `course_sections`.
  */
-export async function projectSections(
+export async function courseSections(
   contents: Contents.IManager,
-  projectPath: string,
-  entry: ILibraryProject
-): Promise<IProjectSection[]> {
-  const at = (path: string): string => joinLibraryPath(projectPath, path);
+  coursePath: string,
+  entry: ILibraryCourse
+): Promise<ICourseSection[]> {
+  const at = (path: string): string => joinLibraryPath(coursePath, path);
 
   const isWorkshop = async (path: string): Promise<boolean> =>
     (await getIfExists(
@@ -240,11 +235,11 @@ export async function projectSections(
     ];
   }
 
-  const sections: IProjectSection[] = [];
+  const sections: ICourseSection[] = [];
 
   for (const collection of catalogCollections(
-    await readJson(PROJECT_CATALOG),
-    PROJECT_CATALOG
+    await readJson(COURSE_CATALOG),
+    COURSE_CATALOG
   )) {
     const index = await readJson(collection.path);
     const paths = await listedIn(index);
@@ -255,12 +250,12 @@ export async function projectSections(
   }
 
   if (sections.length === 0) {
-    const index = await readJson(PROJECT_COLLECTION);
+    const index = await readJson(COURSE_COLLECTION);
     const paths = await listedIn(index);
 
     if (paths.length > 0) {
       sections.push({
-        title: collectionTitle(index, projectPath.split('/').pop() ?? ''),
+        title: collectionTitle(index, coursePath.split('/').pop() ?? ''),
         paths
       });
     }
@@ -268,7 +263,7 @@ export async function projectSections(
 
   if (sections.length > 0) {
     const listed = new Set(sections.flatMap(section => section.paths));
-    const rest = (await workshopsIn(DEFAULT_PROJECT_WORKSHOPS)).filter(
+    const rest = (await workshopsIn(DEFAULT_COURSE_WORKSHOPS)).filter(
       path => !listed.has(path)
     );
 
@@ -281,9 +276,9 @@ export async function projectSections(
     return [{ title: null, paths: [''] }];
   }
 
-  if (await getIfExists(contents, at(DEFAULT_PROJECT_WORKSHOPS), false)) {
+  if (await getIfExists(contents, at(DEFAULT_COURSE_WORKSHOPS), false)) {
     return [
-      { title: null, paths: await workshopsIn(DEFAULT_PROJECT_WORKSHOPS) }
+      { title: null, paths: await workshopsIn(DEFAULT_COURSE_WORKSHOPS) }
     ];
   }
 
@@ -291,36 +286,36 @@ export async function projectSections(
 }
 
 /**
- * The projects of a library in name order: the directories under
- * `projects/`, and the linked projects the registry names, with those
- * whose directory has gone marked missing.
+ * The courses of a library in name order: the directories under
+ * `personal/courses/`, and the linked courses the registry names, with
+ * those whose directory has gone marked missing.
  */
-export async function listProjects(
+export async function listCourses(
   contents: Contents.IManager,
   directory: string,
   library: ILibrary
-): Promise<ILibraryProjectInfo[]> {
+): Promise<ILibraryCourseInfo[]> {
   const base = normalizeWorkshopsDirectory(directory);
-  const projectsPath = joinLibraryPath(base, PROJECTS_DIRECTORY);
+  const coursesPath = joinLibraryPath(base, COURSES_DIRECTORY);
   const present = new Set(
-    (await subdirectories(contents, projectsPath)).map(child => child.name)
+    (await subdirectories(contents, coursesPath)).map(child => child.name)
   );
   const names = new Set(present);
 
-  for (const project of library.projects ?? []) {
-    if (project.target !== undefined) {
-      names.add(project.name);
+  for (const course of library.courses ?? []) {
+    if (course.target !== undefined) {
+      names.add(course.name);
     }
   }
 
   return [...names].sort().map(name => {
-    const entry = projectEntry(library, name);
-    const path = joinLibraryPath(projectsPath, name);
+    const entry = courseEntry(library, name);
+    const path = joinLibraryPath(coursesPath, name);
 
     return {
       name,
       path,
-      workshops: joinLibraryPath(path, projectWorkshops(entry)),
+      workshops: joinLibraryPath(path, courseWorkshops(entry)),
       target: entry.target ?? null,
       linked: entry.target !== undefined,
       missing: !present.has(name)

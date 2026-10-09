@@ -35,8 +35,8 @@ from .collection import (
     checkout_root,
     guess_repository,
     index_repository,
+    list_courses,
     list_installed,
-    list_projects,
     parse_collection,
 )
 from .collection import (
@@ -65,6 +65,7 @@ from .install import (
     unsubscribe,
 )
 from .library import (
+    COURSES_DIRECTORY,
     DEFAULT_LIBRARY_NAME,
     LIBRARY_VARIABLE,
     LibraryError,
@@ -72,10 +73,13 @@ from .library import (
     empty_library,
     is_library,
     library_directory,
-    link_project,
+    link_course,
+    needs_upgrade,
+    plan_upgrade,
     read_library,
     repair_links,
-    unlink_project,
+    unlink_course,
+    upgrade_library,
     write_library,
 )
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
@@ -376,9 +380,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="start JupyterLab on your workshop library",
         description=(
             "Start JupyterLab with a workshop library as its root: a directory "
-            "holding library.json, with the workshops you install, the ones you "
-            "make yourself under personal/, and projects under projects/. The "
-            "library is created on first use. DIR defaults to "
+            "holding library.json, with what you make yourself under personal/, "
+            "single workshops in personal/workshops/ and courses in "
+            "personal/courses/, and what you install under installed/. The "
+            "library is created on first use, and one made by an earlier "
+            "release is offered an upgrade to this layout. DIR defaults to "
             f"${LIBRARY_VARIABLE} when set, else ~/{DEFAULT_LIBRARY_NAME}. "
             "Arguments after -- are passed to jupyter lab."
         ),
@@ -394,6 +400,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--init-only",
         action="store_true",
         help="create the library if needed and stop, without starting JupyterLab",
+    )
+    library.add_argument(
+        "--yes",
+        action="store_true",
+        help="upgrade a library in the previous layout without asking",
     )
     library.add_argument(
         "--collection",
@@ -476,7 +487,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="remove installed workshops",
         description=(
             "Remove installed workshops as the browser does: a downloaded one "
-            "is deleted, and any other, such as your own or a project's, loses "
+            "is deleted, and any other, such as your own or a course's, loses "
             "only its recorded progress unless --delete asks for its directory "
             "to go as well."
         ),
@@ -493,42 +504,44 @@ def build_parser() -> argparse.ArgumentParser:
     _add_library_target_arguments(remove)
     remove.set_defaults(func=command_remove)
 
-    project = commands.add_parser(
-        "project",
-        help="manage the projects of a workshop library",
+    course = commands.add_parser(
+        "course",
+        help="manage the courses of a workshop library",
         description=(
-            "A project is a repository whose workshops the library shows. One "
-            "cloned under projects/ needs nothing; one kept elsewhere is linked "
+            "A course is a repository of workshops, with the indexes that "
+            "publish them, whose workshops the library shows. One kept under "
+            f"{COURSES_DIRECTORY}/ needs nothing; one kept elsewhere is linked "
             "in. These commands use the default library unless --root or "
             "--directory name another."
         ),
     )
-    project_commands = project.add_subparsers(dest="project_command", required=True)
-    link = project_commands.add_parser(
-        "link", help="link in a directory kept outside the library"
+    course_commands = course.add_subparsers(dest="course_command", required=True)
+    link = course_commands.add_parser(
+        "link", help="link in a repository kept outside the library"
     )
     link.add_argument("path", type=Path, help="the repository to link in")
     link.add_argument(
-        "--name", help="the project's name under projects/ (default: its directory's)"
+        "--name",
+        help=f"the course's name under {COURSES_DIRECTORY}/ (default: its directory's)",
     )
     link.add_argument(
         "--workshops",
         help="its workshops directory, relative to it (default: workshops)",
     )
-    _add_project_target_arguments(link)
-    link.set_defaults(func=command_project_link)
-    unlink = project_commands.add_parser(
-        "unlink", help="remove a linked project's link, leaving its files"
+    _add_course_target_arguments(link)
+    link.set_defaults(func=command_course_link)
+    unlink = course_commands.add_parser(
+        "unlink", help="remove a linked course's link, leaving its files"
     )
-    unlink.add_argument("name", help="the project's name under projects/")
-    _add_project_target_arguments(unlink)
-    unlink.set_defaults(func=command_project_unlink)
-    projects = project_commands.add_parser("list", help="list the projects")
-    projects.add_argument(
+    unlink.add_argument("name", help=f"the course's name under {COURSES_DIRECTORY}/")
+    _add_course_target_arguments(unlink)
+    unlink.set_defaults(func=command_course_unlink)
+    courses = course_commands.add_parser("list", help="list the courses")
+    courses.add_argument(
         "--json", action="store_true", help="print the listing as JSON"
     )
-    _add_project_target_arguments(projects)
-    projects.set_defaults(func=command_project_list)
+    _add_course_target_arguments(courses)
+    courses.set_defaults(func=command_course_list)
 
     kernels = commands.add_parser(
         "kernels",
@@ -1360,8 +1373,8 @@ def _add_library_target_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_project_target_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add the options that say which library a project command acts on."""
+def _add_course_target_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that say which library a course command acts on."""
 
     parser.add_argument(
         "--root",
@@ -1392,8 +1405,8 @@ def _library_target(args: argparse.Namespace) -> tuple[Path, str]:
     )
 
 
-def _project_library(args: argparse.Namespace) -> Path:
-    """The library a project command acts on: the default library unless
+def _course_library(args: argparse.Namespace) -> Path:
+    """The library a course command acts on: the default library unless
     --root or --directory name another."""
 
     if args.root is None and args.directory is None:
@@ -1430,8 +1443,10 @@ def command_library(args: argparse.Namespace) -> int:
             write_library(directory, ".", empty_library())
             print(f"created a workshop library at {directory}")
 
+        _offer_upgrade(directory, args.yes)
+
         for name in repair_links(directory):
-            print(f"relinked the project {name}")
+            print(f"relinked the course {name}")
     except (OSError, LibraryError) as error:
         raise CliError(str(error)) from error
 
@@ -1454,6 +1469,46 @@ def command_library(args: argparse.Namespace) -> int:
         return run_launch(options)
     except LaunchError as error:
         raise CliError(str(error)) from error
+
+
+def _offer_upgrade(directory: Path, yes: bool) -> None:
+    """Upgrade a library in the previous layout, asking first unless told
+    not to. Left as it is when declined, or when there is no terminal to
+    ask at; the workshop browser offers the upgrade again."""
+
+    plan = plan_upgrade(directory, ".")
+
+    if plan is None:
+        return
+
+    print(
+        f"the workshop library at {directory} was made by an earlier release "
+        "and keeps its workshops in the previous layout; upgrading moves:"
+    )
+
+    for move in plan.moves:
+        print(f"  {move.source}/ to {move.target}/ ({move.contents})")
+
+    if plan.environments:
+        print(
+            "and removes the isolated environments of these workshops, which "
+            "hold the paths they were made at and are made again on opening:"
+        )
+
+        for path in plan.environments:
+            print(f"  {path}")
+
+    if not yes and not (
+        sys.stdin.isatty()
+        and input("Upgrade the library now? [Y/n] ").strip().lower() in {"", "y", "yes"}
+    ):
+        print("left as it is; the workshop browser offers the upgrade")
+
+        return
+
+    upgrade_library(directory, ".")
+
+    print("upgraded the workshop library")
 
 
 def command_subscribe(args: argparse.Namespace) -> int:
@@ -1546,6 +1601,13 @@ def command_list(args: argparse.Namespace) -> int:
         print(f"workshops directory {location} (not a workshop library)")
     else:
         print(f"workshop library {location}")
+
+        if needs_upgrade(registry):
+            print(
+                "made by an earlier release, in the previous layout: its "
+                "workshops are listed once it is upgraded, which jupyter "
+                "workshop library offers"
+            )
 
         for key in ("collections", "catalogs"):
             listed = registry.get(key)
@@ -1648,20 +1710,20 @@ def command_remove(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_project_link(args: argparse.Namespace) -> int:
-    """Link a directory kept outside a library in as a project."""
+def command_course_link(args: argparse.Namespace) -> int:
+    """Link a repository kept outside a library in as a course."""
 
-    library = _project_library(args)
+    library = _course_library(args)
 
     try:
-        entry = link_project(library, args.path, args.name, args.workshops)
+        entry = link_course(library, args.path, args.name, args.workshops)
     except LibraryError as error:
         raise CliError(_not_a_library_hint(str(error))) from error
 
     target = Path(entry["target"])
     ignore = target / ".gitignore"
 
-    print(f"linked {library / 'projects' / entry['name']} to {target}")
+    print(f"linked {library / COURSES_DIRECTORY / entry['name']} to {target}")
 
     # A workshop records its progress in _workshop/ beside its pages,
     # which a repository should not commit.
@@ -1676,13 +1738,13 @@ def command_project_link(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_project_unlink(args: argparse.Namespace) -> int:
-    """Remove a linked project's link and registry entry."""
+def command_course_unlink(args: argparse.Namespace) -> int:
+    """Remove a linked course's link and registry entry."""
 
-    library = _project_library(args)
+    library = _course_library(args)
 
     try:
-        entry = unlink_project(library, args.name)
+        entry = unlink_course(library, args.name)
     except LibraryError as error:
         raise CliError(str(error)) from error
 
@@ -1691,33 +1753,33 @@ def command_project_unlink(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_project_list(args: argparse.Namespace) -> int:
-    """List a workshop library's projects."""
+def command_course_list(args: argparse.Namespace) -> int:
+    """List a workshop library's courses."""
 
-    library = _project_library(args)
+    library = _course_library(args)
 
     try:
-        projects = list_projects(library, ".")
+        courses = list_courses(library, ".")
     except CollectionError as error:
         raise CliError(str(error)) from error
 
     if args.json:
-        print(json.dumps({"projects": projects}, indent=2))
+        print(json.dumps({"courses": courses}, indent=2))
 
         return 0
 
-    if not projects:
-        print("no projects")
+    if not courses:
+        print("no courses")
 
-    for project in projects:
+    for course in courses:
         state = (
             "missing"
-            if project["missing"]
-            else ("linked" if project["linked"] else "cloned")
+            if course["missing"]
+            else ("linked" if course["linked"] else "kept")
         )
-        target = f" -> {project['target']}" if project["target"] else ""
+        target = f" -> {course['target']}" if course["target"] else ""
 
-        print(f"{project['name']} ({state}){target}")
+        print(f"{course['name']} ({state}){target}")
 
     return 0
 

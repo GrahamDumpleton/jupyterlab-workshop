@@ -360,11 +360,11 @@ class TestFetchWorkshop:
         self, tmp_path: Path
     ) -> None:
         library = tmp_path / "workshops"
-        own = library / "personal" / "mine"
+        own = library / "personal" / "workshops" / "mine"
 
         own.mkdir(parents=True)
         (own / "workshop.yaml").write_text(MANIFEST)
-        (library / "library.json").write_text('{"version": 1}\n')
+        (library / "library.json").write_text('{"version": 2}\n')
 
         # Sent to the top of the library, as where libraries are switched
         # off, a workshop called personal still cannot take its place.

@@ -269,4 +269,4 @@ it runs on.
   learners.
 
 - [Workshop libraries](library.md) keep your installed workshops, your
-  own and your projects in one directory.
+  own and your courses in one directory.

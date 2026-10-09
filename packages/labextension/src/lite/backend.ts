@@ -86,9 +86,18 @@ export class LiteBackend implements IWorkshopBackend {
     return removeInstalled(this._contents, path);
   }
 
-  async unlinkProject(): Promise<void> {
+  async unlinkCourse(): Promise<void> {
     // A site's files live in the browser, where nothing is linked in.
-    throw new Error('JupyterLite has no linked projects to unlink');
+    throw new Error('JupyterLite has no linked courses to unlink');
+  }
+
+  async libraryUpgrade(): Promise<null> {
+    // A site is built with a library in the current layout, or none.
+    return null;
+  }
+
+  async upgradeLibrary(): Promise<never> {
+    throw new Error('JupyterLite cannot upgrade a workshop library');
   }
 
   async checkpoint(

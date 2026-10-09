@@ -277,13 +277,13 @@ the exit status is 1 when any download failed, so a build stops on a
 missing archive. See [Installing a whole collection](collections.md#installing-a-whole-collection).
 
 In a [workshop library](library.md), each workshop goes in its
-collection's own directory under `collections/`, and the library is
-subscribed to the collection.
+collection's own directory under `installed/collections/`, and the
+library is subscribed to the collection.
 
 ## library
 
 ```
-jupyter workshop library [DIR] [--init-only] [--collection URL...] [--trust LEVEL] [--port PORT] [--no-browser] [--fresh] [--token TOKEN] [-- ARGS...]
+jupyter workshop library [DIR] [--init-only] [--yes] [--collection URL...] [--trust LEVEL] [--port PORT] [--no-browser] [--fresh] [--token TOKEN] [-- ARGS...]
 ```
 
 Starts JupyterLab with a [workshop library](library.md) as its root,
@@ -291,10 +291,13 @@ creating the library the first time. `DIR` defaults to the
 `JUPYTER_WORKSHOP_LIBRARY` environment variable when it is set, and
 otherwise to `~/Workshops`. The library's registry is `library.json` in
 `DIR`, and `workshopsDirectory` is set to `.` for the session, so the
-root is the library. A linked project whose link has gone while its
-repository is still there is relinked first. `--init-only` creates the
-library and stops; the other options are those of [launch](#launch),
-and arguments after `--` go to `jupyter lab`.
+root is the library. A library made before 0.28.0, which keeps its
+workshops in the [previous layout](library.md#upgrading-a-library-from-an-earlier-release),
+is offered an upgrade first, which `--yes` accepts without asking; a
+linked course whose link has gone while its repository is still there
+is relinked. `--init-only` creates the library and stops; the other
+options are those of [launch](#launch), and arguments after `--` go to
+`jupyter lab`.
 
 ## subscribe and unsubscribe
 
@@ -320,7 +323,7 @@ jupyter workshop list [--json] [--root ROOT] [--directory DIR | --library]
 
 Lists the installed workshops, with where each is, its version and its
 progress, and in a library its subscriptions. In a library each
-workshop has its kind: `installed`, `personal` or `project`. `--json`
+workshop has its kind: `installed`, `personal` or `course`. `--json`
 prints an object with `directory`, `library` (whether it is one),
 `collections` and `catalogs` (the registry's lists, or null when the
 settings apply) and `workshops`, the records the browser reads; the
@@ -349,30 +352,30 @@ jupyter workshop remove NAME... [--delete] [--yes] [--root ROOT] [--directory DI
 
 Removes installed workshops as the browser's Remove button does: a
 downloaded workshop is deleted, and any other, a local directory, a
-library's own workshop or a project's, loses only its recorded
+library's own workshop or a course's, loses only its recorded
 progress, `_workshop/`, keeping its files. `--delete` deletes the
 directory of such a workshop as well, as the browser's Delete does for
 one of your own. It lists what it will do and asks first unless given
 `--yes`.
 
-## project
+## course
 
 ```
-jupyter workshop project link PATH [--name NAME] [--workshops DIR] [--root ROOT] [--directory DIR]
-jupyter workshop project unlink NAME [--root ROOT] [--directory DIR]
-jupyter workshop project list [--json] [--root ROOT] [--directory DIR]
+jupyter workshop course link PATH [--name NAME] [--workshops DIR] [--root ROOT] [--directory DIR]
+jupyter workshop course unlink NAME [--root ROOT] [--directory DIR]
+jupyter workshop course list [--json] [--root ROOT] [--directory DIR]
 ```
 
-Manages the [projects](library.md#projects) of a workshop library. A
-repository cloned under the library's `projects/` is a project without
-any of these; `link` brings in one kept elsewhere, as a symbolic link,
-or a directory junction on Windows, at `projects/NAME` (the
-repository's directory name by default), recorded in the registry.
-`--workshops` names its workshops directory when it is not
-`workshops`. `unlink` removes a linked project's link and entry, never
-its files, and works when the repository has gone. `list` shows each
-project as cloned, linked or missing; `--json` prints them as an
-object with a `projects` list. These commands act on the default
+Manages the [courses](library.md#courses) of a workshop library. A
+repository kept under the library's `personal/courses/` is a course
+without any of these; `link` brings in one kept elsewhere, as a
+symbolic link, or a directory junction on Windows, at
+`personal/courses/NAME` (the repository's directory name by default),
+recorded in the registry. `--workshops` names its workshops directory
+when it is not `workshops`. `unlink` removes a linked course's link and
+entry, never its files, and works when the repository has gone. `list`
+shows each course as kept, linked or missing; `--json` prints them as
+an object with a `courses` list. These commands act on the default
 library unless `--root` or `--directory` name another.
 
 ## kernels

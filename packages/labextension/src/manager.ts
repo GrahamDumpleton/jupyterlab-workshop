@@ -37,7 +37,7 @@ import {
   assignCollectionDirectory,
   ILibrary,
   COLLECTIONS_DIRECTORY,
-  STANDALONE_DIRECTORY,
+  INSTALLED_WORKSHOPS_DIRECTORY,
   isOwnLibraryPath,
   isPersonalLibraryPath,
   joinLibraryPath,
@@ -2700,10 +2700,11 @@ export class WorkshopManager implements IWorkshopManager {
    */
   /**
    * Where a download goes in a workshop library: a collection's workshop
-   * into the collection's own directory under `collections/`, chosen
-   * from its id the first time and recorded in the registry, and any
-   * other under `standalone/`, named for its source. Outside a library,
-   * or where libraries are switched off, a request is left as it is.
+   * into the collection's own directory under `installed/collections/`,
+   * chosen from its id the first time and recorded in the registry, and
+   * any other under `installed/workshops/`, named for its source.
+   * Outside a library, or where libraries are switched off, a request is
+   * left as it is.
    */
   private async _libraryDestination(
     request: IFetchRequest
@@ -2725,12 +2726,12 @@ export class WorkshopManager implements IWorkshopManager {
       return request;
     }
 
-    // A workshop from a URL of its own goes under standalone/, named for
-    // its source by whichever backend downloads it.
+    // A workshop from a URL of its own goes under installed/workshops/,
+    // named for its source by whichever backend downloads it.
     if (!collection) {
       return {
         ...request,
-        directory: joinLibraryPath(directory, STANDALONE_DIRECTORY),
+        directory: joinLibraryPath(directory, INSTALLED_WORKSHOPS_DIRECTORY),
         standalone: true
       };
     }
@@ -2810,7 +2811,7 @@ export class WorkshopManager implements IWorkshopManager {
       return decision('trusted');
     }
 
-    // In a workshop library, the owner's own workshops and projects are
+    // In a workshop library, the owner's own workshops and courses are
     // trusted by where they are, when nothing was downloaded there. This
     // is not the authored marker, which would also open them for editing.
     if (

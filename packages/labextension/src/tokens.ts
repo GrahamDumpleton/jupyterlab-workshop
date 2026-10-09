@@ -592,30 +592,31 @@ export interface IInstalledWorkshop {
 
   /**
    * Where in a workshop library it lives: `installed` for a download,
-   * `personal` for the owner's own, `project` for one in a project, or
-   * null for a local directory at the top. Absent outside a library.
+   * `personal` for one of the owner's own single workshops, `course` for
+   * one in a course, or null for a local directory at the top. Absent
+   * outside a library.
    */
   kind?: WorkshopKind | null;
 
-  /** The project it belongs to, for a workshop of kind `project`. */
-  project?: string;
+  /** The course it belongs to, for a workshop of kind `course`. */
+  course?: string;
 
   /**
-   * Where a project's workshop appears in the project: once for each
-   * section listing it, in the order of the project's own index.
+   * Where a course's workshop appears in the course: once for each
+   * section listing it, in the order of the course's own index.
    */
-  sections?: IProjectSectionPlace[];
+  sections?: ICourseSectionPlace[];
 }
 
-/** One place a workshop appears among its project's sections. */
-export interface IProjectSectionPlace {
+/** One place a workshop appears among its course's sections. */
+export interface ICourseSectionPlace {
   /**
-   * The section's title, a collection's in the project's index, or null
-   * for a project without one and for workshops no index lists yet.
+   * The section's title, a collection's in the course's index, or null
+   * for a course without one and for workshops no index lists yet.
    */
   title: string | null;
 
-  /** The section's place among the project's sections. */
+  /** The section's place among the course's sections. */
   index: number;
 
   /** The workshop's place in the section. */
@@ -623,7 +624,7 @@ export interface IProjectSectionPlace {
 }
 
 /** Where in a workshop library a workshop lives. */
-export type WorkshopKind = 'installed' | 'personal' | 'project';
+export type WorkshopKind = 'installed' | 'personal' | 'course';
 
 /**
  * Whether the extension downloaded an installed workshop, as opposed to
@@ -843,9 +844,9 @@ export interface IWorkshopManager {
   ): Promise<void>;
 
   /**
-   * Whether the open workshop is one of the library owner's own under
-   * `personal/`, so removing it may delete its directory even though it
-   * was not downloaded.
+   * Whether the open workshop is one of the library owner's own single
+   * workshops under `personal/workshops/`, so removing it may delete its
+   * directory even though it was not downloaded.
    */
   isPersonal(): Promise<boolean>;
 
@@ -1022,9 +1023,32 @@ export interface IFetchRequest {
 
   /**
    * Name the directory for its source, appending a short hash of where
-   * the workshop comes from, as a library's `standalone/` does.
+   * the workshop comes from, as a library's `installed/workshops/` does.
    */
   standalone?: boolean;
+}
+
+/** One tree the upgrade of a workshop library's layout moves. */
+export interface ILibraryUpgradeMove {
+  /** The tree's path before the upgrade, relative to the root. */
+  from: string;
+
+  /** Its path afterwards. */
+  to: string;
+
+  /** What it holds, in a few words: how many workshops or courses. */
+  contents: string;
+}
+
+/**
+ * What upgrading a workshop library from the previous layout does: the
+ * trees it moves, and the workshops whose isolated environments it
+ * removes, since an environment holds the paths it was made at and is
+ * rebuilt when the workshop is next opened.
+ */
+export interface ILibraryUpgradePlan {
+  moves: ILibraryUpgradeMove[];
+  environments: string[];
 }
 
 /** What a download produced. */
@@ -1145,10 +1169,19 @@ export interface IWorkshopBackend {
   removeInstalled(path: string): Promise<void>;
 
   /**
-   * Remove a workshop library's linked project: the link under
-   * `projects/` and its registry entry, never what it links to.
+   * Remove a workshop library's linked course: the link under
+   * `personal/courses/` and its registry entry, never what it links to.
    */
-  unlinkProject(directory: string, name: string): Promise<void>;
+  unlinkCourse(directory: string, name: string): Promise<void>;
+
+  /**
+   * What upgrading a workshop library from the previous layout would do,
+   * or null when the library is in the current layout already.
+   */
+  libraryUpgrade(directory: string): Promise<ILibraryUpgradePlan | null>;
+
+  /** Upgrade a workshop library from the previous layout to this one. */
+  upgradeLibrary(directory: string): Promise<ILibraryUpgradePlan>;
 
   /** Snapshot a workshop's files and variables under a name. */
   checkpoint(

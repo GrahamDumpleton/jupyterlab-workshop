@@ -20,6 +20,9 @@ from jupyterlab_workshop.library import (
     choose_collection_directory,
     collection_title,
     collection_workshops,
+    course_entry,
+    course_path,
+    course_workshops,
     default_library,
     download_key,
     empty_library,
@@ -27,22 +30,22 @@ from jupyterlab_workshop.library import (
     is_link,
     is_own_library_path,
     library_file,
-    link_project,
-    linked_project_path,
+    link_course,
+    linked_course_path,
     may_replace_download,
+    needs_upgrade,
     normalize_workshops_directory,
     parse_library,
-    project_entry,
-    project_path,
-    project_workshops,
+    plan_upgrade,
     read_library,
     recorded_directory,
     repair_links,
     serialize_library,
     slugify_collection_id,
     standalone_directory,
-    unlink_project,
+    unlink_course,
     update_library,
+    upgrade_library,
     write_library,
 )
 
@@ -94,14 +97,14 @@ def test_standalone_directories_agree_with_the_browser(
     assert standalone_directory(name, kind, url, subdir) == directory
 
 
-@pytest.mark.parametrize(("base", "target", "resolved"), VECTORS["projectPaths"])
-def test_project_paths_agree_with_the_browser(
+@pytest.mark.parametrize(("base", "target", "resolved"), VECTORS["coursePaths"])
+def test_course_paths_agree_with_the_browser(
     base: str, target: str, resolved: str | None
 ) -> None:
-    assert project_path(base, target) == resolved
+    assert course_path(base, target) == resolved
 
 
-def test_a_project_index_is_read_for_what_is_inside_the_project() -> None:
+def test_a_course_index_is_read_for_what_is_inside_the_course() -> None:
     catalog = {
         "collections": [
             {"url": "collections/a/collection.json", "title": "Part A"},
@@ -194,43 +197,171 @@ def test_assign_collection_directory_records_once_and_keeps_it() -> None:
 
 
 def test_parse_library_accepts_what_the_schema_does_and_refuses_the_rest() -> None:
-    assert parse_library({"version": 1}) == {"version": 1}
+    assert parse_library({"version": 2}) == {"version": 2}
     assert parse_library(
         {
-            "version": 1,
+            "version": 2,
             "collections": [],
             "directories": {"c.json": "c"},
-            "projects": [{"name": "repo", "workshops": "examples"}],
+            "courses": [{"name": "repo", "workshops": "examples"}],
         }
     ) == {
-        "version": 1,
+        "version": 2,
         "collections": [],
         "directories": {"c.json": "c"},
-        "projects": [{"name": "repo", "workshops": "examples"}],
+        "courses": [{"name": "repo", "workshops": "examples"}],
     }
 
     for bad, message in [
         ([], "must contain an object"),
-        ({"version": 2}, "unsupported version"),
-        ({"version": 1, "colour": "red"}, "unknown keys colour"),
-        ({"version": 1, "collections": [""]}, "list of locations"),
-        ({"version": 1, "directories": {"a": "../x"}}, "lower case name"),
-        ({"version": 1, "projects": [{"name": ".hidden"}]}, 'valid "name"'),
-        ({"version": 1, "projects": [{"name": "p", "path": "x"}]}, "unknown keys"),
-        ({"version": 1, "projects": [{"name": "p", "target": ""}]}, '"target"'),
+        ({"version": 3}, "unsupported version"),
+        ({"version": 2, "colour": "red"}, "unknown keys colour"),
+        ({"version": 2, "projects": []}, "unknown keys projects"),
+        ({"version": 1, "courses": []}, "unknown keys courses"),
+        ({"version": 2, "collections": [""]}, "list of locations"),
+        ({"version": 2, "directories": {"a": "../x"}}, "lower case name"),
+        ({"version": 2, "courses": [{"name": ".hidden"}]}, 'valid "name"'),
+        ({"version": 2, "courses": [{"name": "p", "path": "x"}]}, "unknown keys"),
+        ({"version": 2, "courses": [{"name": "p", "target": ""}]}, '"target"'),
     ]:
         with pytest.raises(LibraryError, match=message):
             parse_library(bad)
 
 
+def test_a_registry_of_the_previous_version_is_read_but_never_written(
+    tmp_path: Path,
+) -> None:
+    legacy = parse_library(
+        {
+            "version": 1,
+            "collections": ["c.json"],
+            "projects": [{"name": "repo", "target": "/src/repo"}],
+        }
+    )
+
+    # Its projects are read as courses, and its version kept, so the
+    # library can be seen to need upgrading.
+    assert legacy == {
+        "version": 1,
+        "collections": ["c.json"],
+        "courses": [{"name": "repo", "target": "/src/repo"}],
+    }
+    assert needs_upgrade(legacy)
+    assert not needs_upgrade(empty_library())
+
+    with pytest.raises(LibraryError, match="needs upgrading|previous layout"):
+        serialize_library(legacy)
+
+    (tmp_path / "library.json").write_text('{"version": 1}\n')
+
+    with pytest.raises(LibraryError, match="previous layout"):
+        update_library(tmp_path, ".", lambda library: library)
+
+    assert read_library(tmp_path, ".") == {"version": 1}
+
+
+def test_upgrade_moves_the_trees_of_the_previous_layout(tmp_path: Path) -> None:
+    library = tmp_path / "lib"
+    outside = tmp_path / "outside" / "course-repo"
+
+    def workshop(path: Path, name: str) -> None:
+        path.mkdir(parents=True)
+        (path / "workshop.yaml").write_text(
+            f"apiVersion: jupyterlab-workshop/v1alpha1\nname: {name}\n"
+            f"title: {name}\npages: [pages/01.md]\n"
+        )
+
+    # Every tree of the previous layout, with a course linked from
+    # outside, a course kept in the library, a workshop whose name is
+    # that of the tree it moves into, and one with an environment.
+    workshop(library / "personal" / "mine", "mine")
+    workshop(library / "personal" / "workshops", "workshops")
+    workshop(library / "standalone" / "beta-89abcde", "beta")
+    workshop(library / "collections" / "c-1234567" / "alpha", "alpha")
+    workshop(library / "projects" / "kept" / "workshops" / "draft", "draft")
+    workshop(outside / "workshops" / "linked-draft", "linked-draft")
+    (library / "projects" / "linked").symlink_to(outside, target_is_directory=True)
+    (library / "personal" / "mine" / "_workshop").mkdir()
+    (library / "personal" / "mine" / "_workshop" / "state.json").write_text("{}")
+    (library / "personal" / "mine" / "_workshop" / "environment.json").write_text(
+        json.dumps({"kernel": "nothing-registered-00000000"})
+    )
+    (library / "library.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "collections": ["c.json"],
+                "directories": {"c.json": "c-1234567"},
+                "projects": [{"name": "linked", "target": outside.as_posix()}],
+            }
+        )
+    )
+
+    plan = plan_upgrade(tmp_path, "lib")
+
+    assert plan is not None
+    assert [(move.source, move.target, move.contents) for move in plan.moves] == [
+        ("lib/personal", "lib/personal/workshops", "2 workshops"),
+        ("lib/projects", "lib/personal/courses", "2 courses"),
+        ("lib/standalone", "lib/installed/workshops", "1 workshop"),
+        ("lib/collections", "lib/installed/collections", "1 collection"),
+    ]
+    assert plan.environments == ["lib/personal/mine"]
+
+    # Nothing moves while something is in the way of a tree.
+    (library / "installed" / "workshops").mkdir(parents=True)
+
+    with pytest.raises(LibraryError, match="in the way"):
+        upgrade_library(tmp_path, "lib")
+
+    assert (library / "personal" / "mine" / "workshop.yaml").is_file()
+
+    (library / "installed" / "workshops").rmdir()
+    (library / "installed").rmdir()
+
+    assert upgrade_library(tmp_path, "lib") == plan
+
+    # Each tree is where this release keeps it, progress and links and
+    # all, the environment is gone, and the registry is current.
+    assert (library / "personal" / "workshops" / "mine" / "workshop.yaml").is_file()
+    moved = library / "personal" / "workshops" / "mine"
+
+    assert (moved / "_workshop" / "state.json").is_file()
+    assert not (moved / "_workshop" / "environment.json").exists()
+    assert (library / "personal" / "workshops" / "workshops").is_dir()
+    assert (library / "installed" / "workshops" / "beta-89abcde").is_dir()
+    assert (
+        library / "installed" / "collections" / "c-1234567" / "alpha" / "workshop.yaml"
+    ).is_file()
+    assert (library / "personal" / "courses" / "kept" / "workshops" / "draft").is_dir()
+    assert is_link(library / "personal" / "courses" / "linked")
+    assert (
+        library / "personal" / "courses" / "linked" / "workshops" / "linked-draft"
+    ).is_dir()
+
+    for old in ("personal/mine", "standalone", "collections", "projects"):
+        assert not (library / old).exists()
+
+    assert read_library(tmp_path, "lib") == {
+        "version": 2,
+        "collections": ["c.json"],
+        "directories": {"c.json": "c-1234567"},
+        "courses": [{"name": "linked", "target": outside.as_posix()}],
+    }
+    assert plan_upgrade(tmp_path, "lib") is None
+
+    with pytest.raises(LibraryError, match="not a workshop library in the previous"):
+        upgrade_library(tmp_path, "lib")
+
+
 def test_serialize_library_matches_the_browser_layout() -> None:
     text = serialize_library(
-        {"projects": [{"name": "p"}], "collections": ["ü.json"], "version": 1}
+        {"courses": [{"name": "p"}], "collections": ["ü.json"], "version": 2}
     )
 
     assert text == (
-        '{\n  "version": 1,\n  "collections": [\n    "ü.json"\n  ],\n'
-        '  "projects": [\n    {\n      "name": "p"\n    }\n  ]\n}\n'
+        '{\n  "version": 2,\n  "collections": [\n    "ü.json"\n  ],\n'
+        '  "courses": [\n    {\n      "name": "p"\n    }\n  ]\n}\n'
     )
 
 
@@ -238,11 +369,11 @@ def test_a_directory_is_a_library_only_with_its_registry(tmp_path: Path) -> None
     assert not is_library(tmp_path, "workshops")
     assert read_library(tmp_path, "workshops") is None
 
-    write_library(tmp_path, "workshops", {"version": 1, "collections": ["c.json"]})
+    write_library(tmp_path, "workshops", {"version": 2, "collections": ["c.json"]})
 
     assert is_library(tmp_path, "workshops")
     assert read_library(tmp_path, "workshops") == {
-        "version": 1,
+        "version": 2,
         "collections": ["c.json"],
     }
 
@@ -262,12 +393,12 @@ def test_a_directory_is_a_library_only_with_its_registry(tmp_path: Path) -> None
 def test_write_library_refuses_an_invalid_registry_and_keeps_the_old_one(
     tmp_path: Path,
 ) -> None:
-    write_library(tmp_path, "w", {"version": 1, "catalogs": ["k.json"]})
+    write_library(tmp_path, "w", {"version": 2, "catalogs": ["k.json"]})
 
     with pytest.raises(LibraryError):
-        write_library(tmp_path, "w", {"version": 1, "catalogs": [""]})
+        write_library(tmp_path, "w", {"version": 2, "catalogs": [""]})
 
-    assert read_library(tmp_path, "w") == {"version": 1, "catalogs": ["k.json"]}
+    assert read_library(tmp_path, "w") == {"version": 2, "catalogs": ["k.json"]}
 
 
 def test_read_library_reports_a_broken_file(tmp_path: Path) -> None:
@@ -281,11 +412,11 @@ def test_update_library_rereads_before_writing(tmp_path: Path) -> None:
     with pytest.raises(LibraryError, match="not a workshop library"):
         update_library(tmp_path, ".", lambda library: library)
 
-    write_library(tmp_path, ".", {"version": 1, "collections": ["a.json"]})
+    write_library(tmp_path, ".", {"version": 2, "collections": ["a.json"]})
 
     # Something else adds a catalog after this caller last looked.
     write_library(
-        tmp_path, ".", {"version": 1, "collections": ["a.json"], "catalogs": ["k"]}
+        tmp_path, ".", {"version": 2, "collections": ["a.json"], "catalogs": ["k"]}
     )
 
     updated = update_library(
@@ -295,7 +426,7 @@ def test_update_library_rereads_before_writing(tmp_path: Path) -> None:
     )
 
     assert updated == {
-        "version": 1,
+        "version": 2,
         "collections": ["a.json", "b"],
         "catalogs": ["k"],
     }
@@ -320,14 +451,14 @@ def test_default_library_prefers_the_environment(tmp_path: Path) -> None:
     assert default_library({LIBRARY_VARIABLE: "~/lib"}) == Path("~/lib").expanduser()
 
 
-def test_projects_default_their_workshops_directory() -> None:
+def test_courses_default_their_workshops_directory() -> None:
     library = parse_library(
-        {"version": 1, "projects": [{"name": "repo", "workshops": "examples"}]}
+        {"version": 2, "courses": [{"name": "repo", "workshops": "examples"}]}
     )
 
-    assert project_workshops(project_entry(library, "repo")) == "examples"
-    assert project_entry(library, "other") == {"name": "other"}
-    assert project_workshops({"name": "other"}) == "workshops"
+    assert course_workshops(course_entry(library, "repo")) == "examples"
+    assert course_entry(library, "other") == {"name": "other"}
+    assert course_workshops({"name": "other"}) == "workshops"
 
 
 def _linked_library(tmp_path: Path) -> tuple[Path, Path]:
@@ -348,63 +479,65 @@ def _linked_library(tmp_path: Path) -> tuple[Path, Path]:
     return root, repo
 
 
-def test_link_project_links_and_records_the_target(tmp_path: Path) -> None:
+def test_link_course_links_and_records_the_target(tmp_path: Path) -> None:
     root, repo = _linked_library(tmp_path)
     library = root / "lib"
 
-    entry = link_project(library, repo, workshops="workshops")
+    entry = link_course(library, repo, workshops="workshops")
 
     assert entry == {
         "name": "my-repo",
         "target": repo.resolve().as_posix(),
         "workshops": "workshops",
     }
-    assert is_link(library / "projects" / "my-repo")
-    assert (library / "projects" / "my-repo" / "notes.txt").read_text() == "keep me\n"
-    assert read_library(library, "")["projects"] == [entry]
+    assert is_link(library / "personal" / "courses" / "my-repo")
+    linked = library / "personal" / "courses" / "my-repo"
+
+    assert (linked / "notes.txt").read_text() == "keep me\n"
+    assert read_library(library, "")["courses"] == [entry]
 
     # Linking again is harmless; linking another directory under the
     # same name is refused.
-    link_project(library, repo, workshops="workshops")
+    link_course(library, repo, workshops="workshops")
 
     other = tmp_path / "other"
     other.mkdir()
 
     with pytest.raises(LibraryError, match="already links"):
-        link_project(library, other, name="my-repo")
+        link_course(library, other, name="my-repo")
 
     with pytest.raises(LibraryError, match="not a directory"):
-        link_project(library, tmp_path / "missing")
+        link_course(library, tmp_path / "missing")
 
-    with pytest.raises(LibraryError, match="not a usable project name"):
-        link_project(library, other, name="../up")
+    with pytest.raises(LibraryError, match="not a usable course name"):
+        link_course(library, other, name="../up")
 
 
-def test_unlink_project_removes_only_the_link(tmp_path: Path) -> None:
+def test_unlink_course_removes_only_the_link(tmp_path: Path) -> None:
     root, repo = _linked_library(tmp_path)
     library = root / "lib"
 
-    link_project(library, repo)
-    unlink_project(library, "my-repo")
+    link_course(library, repo)
+    unlink_course(library, "my-repo")
 
-    assert not (library / "projects" / "my-repo").exists()
-    assert not is_link(library / "projects" / "my-repo")
+    assert not (library / "personal" / "courses" / "my-repo").exists()
+    assert not is_link(library / "personal" / "courses" / "my-repo")
     assert (repo / "notes.txt").read_text() == "keep me\n"
-    assert read_library(library, "")["projects"] == []
+    assert read_library(library, "")["courses"] == []
 
-    # A cloned project is not a link and is never removed by unlinking.
-    (library / "projects" / "cloned").mkdir()
+    # A course kept in the library is not a link and is never removed by unlinking.
+    (library / "personal" / "courses" / "cloned").mkdir()
 
-    with pytest.raises(LibraryError, match="not a linked project"):
-        unlink_project(library, "cloned")
+    with pytest.raises(LibraryError, match="not a linked course"):
+        unlink_course(library, "cloned")
 
 
 def test_unlink_and_repair_cope_with_a_target_that_has_gone(tmp_path: Path) -> None:
     root, repo = _linked_library(tmp_path)
     library = root / "lib"
-    link = library / "projects" / "my-repo"
+    link = library / "personal" / "courses" / "my-repo"
 
-    link_project(library, repo)
+    link_course(library, repo)
 
     # The link went but its target is still there: it comes back.
     link.unlink()
@@ -418,53 +551,62 @@ def test_unlink_and_repair_cope_with_a_target_that_has_gone(tmp_path: Path) -> N
 
     assert repair_links(library) == []
 
-    unlink_project(library, "my-repo")
+    unlink_course(library, "my-repo")
 
     assert not is_link(link)
-    assert read_library(library, "")["projects"] == []
+    assert read_library(library, "")["courses"] == []
 
 
-def test_linked_project_path_lets_through_only_a_registered_link(
+def test_linked_course_path_lets_through_only_a_registered_link(
     tmp_path: Path,
 ) -> None:
     root, repo = _linked_library(tmp_path)
     library = root / "lib"
-    parts = ["lib", "projects", "my-repo", "workshops", "draft"]
+    parts = ["lib", "personal", "courses", "my-repo", "workshops", "draft"]
 
-    link_project(library, repo)
+    link_course(library, repo)
 
     resolved_root = root.resolve()
-    linked = linked_project_path(resolved_root, parts)
+    linked = linked_course_path(resolved_root, parts)
 
     assert linked == resolved_root.joinpath(*parts)
-    assert _resolve_inside(root, "lib/projects/my-repo/workshops/draft") == linked
-    assert _relative(root, linked) == "lib/projects/my-repo/workshops/draft"
+    through = "lib/personal/courses/my-repo/workshops/draft"
+
+    assert _resolve_inside(root, through) == linked
+    assert _relative(root, linked) == through
 
     # A link the registry does not list, or one pointing somewhere other
     # than its recorded target, is refused.
     stray = tmp_path / "stray"
     stray.mkdir()
-    (library / "projects" / "unlisted").symlink_to(stray, target_is_directory=True)
+    (library / "personal" / "courses" / "unlisted").symlink_to(
+        stray, target_is_directory=True
+    )
 
-    assert linked_project_path(resolved_root, ["lib", "projects", "unlisted"]) is None
+    assert (
+        linked_course_path(resolved_root, ["lib", "personal", "courses", "unlisted"])
+        is None
+    )
 
     with pytest.raises(FetchError, match="outside"):
-        _resolve_inside(root, "lib/projects/unlisted")
+        _resolve_inside(root, "lib/personal/courses/unlisted")
 
-    (library / "projects" / "my-repo").unlink()
-    (library / "projects" / "my-repo").symlink_to(stray, target_is_directory=True)
+    (library / "personal" / "courses" / "my-repo").unlink()
+    (library / "personal" / "courses" / "my-repo").symlink_to(
+        stray, target_is_directory=True
+    )
 
-    assert linked_project_path(resolved_root, parts[:3]) is None
+    assert linked_course_path(resolved_root, parts[:4]) is None
 
 
-def test_remove_workshop_refuses_a_workshop_in_a_linked_project(
+def test_remove_workshop_refuses_a_workshop_in_a_linked_course(
     tmp_path: Path,
 ) -> None:
     root, repo = _linked_library(tmp_path)
 
-    link_project(root / "lib", repo)
+    link_course(root / "lib", repo)
 
-    with pytest.raises(FetchError, match="linked project"):
-        remove_workshop(root, "lib/projects/my-repo/workshops/draft")
+    with pytest.raises(FetchError, match="linked course"):
+        remove_workshop(root, "lib/personal/courses/my-repo/workshops/draft")
 
     assert (repo / "workshops" / "draft" / "workshop.yaml").is_file()
