@@ -92,14 +92,17 @@ jupyter-workshop library
 starts JupyterLab on `~/Workshops`, or the directory
 `JUPYTER_WORKSHOP_LIBRARY` names, creating it the first time. The
 library keeps what you install by collection, the workshops you make
-for yourself, and the repositories you write workshops in, with your
-subscriptions in the library rather than your JupyterLab settings.
+for yourself, and your courses, the repositories you write workshops in
+to publish, with your subscriptions in the library rather than your
+JupyterLab settings.
 
 With the `ai` extra as well, `uv tool install "jupyterlab-workshop[lab,ai]"`,
 a library also offers [Workshop Author](authoring.md#workshop-author),
-an AI agent that writes workshops for you to learn from: describe what
-you want to learn, and it writes the workshop under My workshops, using
-the Claude Code login on your machine.
+an AI agent that writes workshops for you to learn from, and courses for
+you to publish: describe what you want to learn, and it writes the
+workshop under My workshops; describe a course, and it sets up the
+repository under My courses and designs it with you, using the Claude
+Code login on your machine.
 
 The Workshop panel is the tab with the graduation cap icon in the right
 sidebar. On a fresh install it says "No workshop is open" and offers

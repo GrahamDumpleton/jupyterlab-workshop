@@ -4,8 +4,14 @@ A finished workshop reaches learners in one of three shapes: an archive
 listed in a collection that the workshop browser installs from, a git
 repository that holds one or more workshops and its own collection
 index, or a JupyterLite site that runs in the browser with nothing
-installed. This page covers building each, and building a catalog that
-points learners at several collections. [Finding and installing
+installed. This page covers building each, the course repository that
+`jupyter workshop course init` writes with everything a repository of
+workshops needs, putting a repository or a single workshop on GitHub,
+and building a catalog that points learners at several collections.
+Each publishing step is also a button in a [workshop
+library](library.md), on the workshop's card or the course's group, and
+something [Workshop Author](authoring.md#workshop-author) does when
+asked; none of it happens without your say so. [Finding and installing
 workshops](collections.md) describes what learners see.
 
 ## An archive and a collection entry

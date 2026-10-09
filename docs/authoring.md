@@ -104,9 +104,9 @@ It needs three things:
   uv tool install "jupyterlab-workshop[lab,ai]"
   ```
 
-- A [workshop library](library.md), since the workshops it writes are
-  your own and go under `personal/workshops/`. `jupyter workshop library` opens
-  one.
+- A [workshop library](library.md), since what it writes is your own:
+  workshops go under `personal/workshops/` and courses under
+  `personal/courses/`. `jupyter workshop library` opens one.
 
 - Claude Code logged in on the machine. Workshop Author uses whatever
   Claude Code is logged in with, your Claude subscription, or
@@ -268,7 +268,9 @@ says where the conversation stands:
   [Attaching files](#attaching-files).
 
 - Open workshop opens the workshop in the instructions panel, in author
-  mode, and Continue in terminal carries the conversation on in a
+  mode (a course has no one workshop to open, so its conversation has no
+  such button; the agent opens a workshop of the course with its live
+  tools), and Continue in terminal carries the conversation on in a
   terminal.
 
 - The model the conversation answers with, chosen from the models Claude
@@ -296,9 +298,9 @@ says where the conversation stands:
 
 The account the agent answers on, a Claude plan or an API key, is shown
 at the top of the panel, beside New conversation, which, once confirmed,
-starts the workshop's conversation over: the agent forgets what was
-said and the conversation is cleared, while the workshop itself is left
-as it is.
+starts the conversation over: the agent forgets what was said and the
+conversation is cleared, while the workshop or course itself is left as
+it is.
 
 A message starting with `/` goes to Claude Code as one of its own
 commands: `/compact` with instructions of your own compacts with them

@@ -146,16 +146,18 @@ collections, catalogs, launch links and deployments such as Binder.
 Everything the extension records about a workshop lives in a
 `_workshop` directory inside it, which git ignores:
 
-| Path                        | Holds                                                                      |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `state.json`                | Page progress, action results, captured variables and the action log.      |
-| `source.json`               | Where a downloaded workshop came from and its hash.                        |
-| `env.sh` and its siblings   | The variables as environment variables and the prompt, one file per shell, |
-|                             | loaded by the workshop terminals.                                          |
-| `snapshots/`                | Checkpoints of the workspace.                                              |
-| `events.jsonl`              | [Progress events](analytics.md), one per line.                             |
-| `environment.json`, `venv/` | An [isolated environment](environment.md), when the workshop asks for one. |
-| `recordings/`               | Sessions recorded in author mode.                                          |
+| Path                         | Holds                                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state.json`                 | Page progress, action results, captured variables and the action log.                                                                                                     |
+| `source.json`                | Where a downloaded workshop came from and its hash.                                                                                                                       |
+| `env.sh` and its siblings    | The variables as environment variables and the prompt, one file per shell,                                                                                                |
+|                              | loaded by the workshop terminals.                                                                                                                                         |
+| `snapshots/`                 | Checkpoints of the workspace.                                                                                                                                             |
+| `events.jsonl`               | [Progress events](analytics.md), one per line.                                                                                                                            |
+| `environment.json`, `venv/`  | An [isolated environment](environment.md), when the workshop asks for one.                                                                                                |
+| `recordings/`                | Sessions recorded in author mode.                                                                                                                                         |
+| `gist.json`                  | The [gist](publishing.md#a-workshop-in-a-gist) the workshop was published to, so a later publish updates it.                                                              |
+| `agent.json`, `attachments/` | [Workshop Author](authoring.md#workshop-author)'s conversation about the workshop and the files attached to it; a course keeps these in `.workshop/` at its root instead. |
 
 A [workshop library](library.md) adds one file of its own,
 `library.json`, at its root, holding its subscriptions and where each

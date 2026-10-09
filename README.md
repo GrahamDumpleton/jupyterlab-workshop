@@ -34,7 +34,13 @@ to run workshops without a project of your own, as a tool with
 walks through the setup, runs an example workshop and scaffolds one of
 your own; the `jupyter workshop` command that comes with the package
 lints, self-tests and publishes workshops, and author mode in JupyterLab
-edits them in place.
+edits them in place. A
+[workshop library](https://jupyterlab-workshop.readthedocs.io/en/latest/library.html)
+keeps what you install, the workshops you write and the courses you
+publish in one place, and with the `ai` extra
+[Workshop Author](https://jupyterlab-workshop.readthedocs.io/en/latest/authoring.html#workshop-author),
+an AI agent inside JupyterLab, writes workshops and designs courses with
+you.
 
 ## Learn more
 
