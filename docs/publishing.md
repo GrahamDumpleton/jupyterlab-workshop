@@ -158,6 +158,39 @@ release of the extension, rewriting the generated files that have not
 been edited and reporting the ones that have; `just bump <version>`
 runs it. See [course](cli.md#course) for every option.
 
+## A repository on GitHub
+
+A workshop or a course made with the tooling is a git repository from
+the start, with nothing committed, and the way to publish one is to put
+that repository on GitHub. `jupyter workshop github` does it through the
+[`gh` command](https://cli.github.com), signed in to your account with
+the `repo` scope, and so does [Workshop
+Author](authoring.md#workshop-author) when asked, after asking you to
+confirm:
+
+```
+jupyter workshop github ~/Workshops/personal/courses/wrapt-workshops
+jupyter workshop github ~/Workshops/personal/workshops/git-basics --public
+```
+
+With no `origin` remote it creates the repository, private unless you
+ask for a public one, with the directory as its source, adds the remote
+and pushes; with one it pushes the current branch, and makes a private
+repository public when asked. Everything must be committed first: the
+command refuses an uncommitted tree, so what is published is what was
+committed. Private is the default because nothing should become public
+without a second choice; a private repository can still be shared with
+collaborators, and `--public` later opens it up. A course scaffolded
+before it had a repository carries a placeholder address in its
+`Justfile`, `README.md` and launch configuration, and creating the
+repository rewrites those files with the real one, where they are still
+as generated; commit them and publish again. The Binder and Codespaces
+links in a course's README then work, and a course written for
+JupyterLite publishes its site from its Pages workflow once GitHub Pages
+is set to build from GitHub Actions in the repository's settings (which
+on a private repository needs a paid plan). See [github](cli.md#github)
+for the options.
+
 ## A workshop in a gist
 
 A small workshop, instructions and inline actions with a few files

@@ -779,6 +779,55 @@ in postBuild to fetch the workshops at build time.
 The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;
 add `%3Fworkshop%3Dworkshops%2F<name>` to open one workshop directly.
 
+## Git and GitHub
+
+A workshop or course made with the tooling is a git repository from the
+start, with nothing committed; a workshop added to a course joins the
+course's repository. Version control is for the author's benefit (what
+changed, undo a bad edit, a history to publish) and costs nothing, so
+keep it: do not remove `.git`, and do not nest a repository inside one.
+
+- Commit only when the user says to. Finish a piece of work, say what
+  changed, and wait. Permission to commit covers that work alone, not
+  later steps.
+
+- Write the message as what changed and why, in the imperative. Never
+  add a `Co-Authored-By` line or any other trailer naming an agent or a
+  tool.
+
+- Before the first commit in a repository, check `git config user.name`
+  and `git config user.email`. If either is unset, ask the user what to
+  use and set it with `git config --local`, never `--global` unless they
+  say so.
+
+- Never push, add a remote, or publish anything unasked. When a version
+  is ready it is fine to say, once, that it can be published when asked.
+
+- Commands that would wait for input, `git commit` without `-m`, `git
+rebase -i`, a pager, cannot be used; pass `-m`, and `--no-pager` or
+  `GIT_PAGER=cat` where output is read.
+
+Publishing goes through two tools, both of which ask the user to confirm
+before anything leaves the machine. `publish_gist` (`jupyter workshop
+gist`) puts one small workshop in a gist, secret unless the user asks for
+public; see the workflow above. `publish_github` (`jupyter workshop
+github`) publishes a repository, a workshop's or a course's: with no
+`origin` it creates a GitHub repository through the `gh` command,
+private unless the user asks for public, and pushes; with one it pushes
+the current branch, and `public` makes a private repository public when
+the user asks. It refuses an uncommitted tree or one with no commits, so
+ask the user to commit first rather than publishing silently. `gh` must
+be signed in with the `repo` scope (`gh auth login`, or `gh auth refresh
+-s repo`). A course scaffolded before it had a repository carries a
+placeholder address in its Justfile, README and launch configuration;
+creating the repository rewrites those files where they are still as
+generated, and the tool says so: commit them and publish again. A course
+with a JupyterLite site publishes it from the Pages workflow once GitHub
+Pages is set to build from GitHub Actions in the repository's settings,
+which on a private repository needs a paid plan; pass the tool's note on
+to the user. Private does not stop the user sharing the link by other
+means, and a repository or gist is made public later on request.
+
 ## Author mode and live tools
 
 In JupyterLab, "Workshop: Author Mode" adds a toolbar to the panel
@@ -789,8 +838,8 @@ runs into draft pages (`jupyter workshop record` turns a saved recording
 into pages). Edits to the files re-render the panel as they are saved.
 
 Over MCP (`jupyter workshop mcp`), `lint`, `render`, `pages`, `test`,
-`init`, `publish`, `publish_gist`, `index`, `catalog`, `draft`,
-`get_schema`, `list_collection` and `list_catalog`
+`init`, `publish`, `publish_gist`, `publish_github`, `index`, `catalog`,
+`draft`, `get_schema`, `list_collection` and `list_catalog`
 work on directories; `open_workshop`, `session_status`, `run_action`, `run_page`,
 `run_workshop`, `run_progress` and `reset_workshop` act on a running
 JupyterLab that has the workshop open in author mode. A `run_workshop`

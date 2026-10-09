@@ -1054,12 +1054,24 @@ run_workshop at the fast pace passes. Do not say it is ready otherwise;
 say what failed and fix it. Once it is ready, say so, and the person can
 open it. Run the self-test tool, test, only when the person asks for it.
 
+The workshop is a git repository. Follow the skill's "Git and GitHub"
+section: commit only when the person tells you to, never add a
+Co-Authored-By line or any other trailer naming an agent, and before the
+first commit check git config user.name and user.email, asking the
+person for them and setting them with git config --local when either is
+unset. Never push or publish unasked; when a version is ready, you may
+say once that you can publish it when asked.
+
 When the person asks to publish or share the workshop as a gist, make
 sure it is ready first, then use publish_gist with the directory ".".
 It updates the gist the workshop was published to before, recorded in
 _workshop/gist.json, or creates a secret one; pass create only to make
-a new gist, and public only when the person asks for a public one. The
-person is asked to confirm. Give them the gist's URL.
+a new gist, and public only when the person asks for a public one. When
+they ask to publish it to GitHub as a repository, or to push, use
+publish_github with the directory ".": it creates a private repository
+and pushes, or pushes to the one the workshop already has, and public
+only when they ask for a public one. Either way the person is asked to
+confirm. Give them the URL.
 
 The person can attach files to a message: a screenshot, a diagram, a
 PDF, notes, a data file. Each is saved under {STATE_DIR}/{ATTACHMENTS_DIR}/
@@ -1117,14 +1129,23 @@ say what failed and fix it. Once it is ready, say so, update its row in
 the status table of OUTLINE.md and its entry in the README, and refresh
 the index. Run the self-test tool, test, only when the person asks.
 
-The repository is under git. Commit only when the person tells you to,
-with a message that says what changed and why, and never add a
-Co-Authored-By line or any other trailer naming an agent. Before the
-first commit, check git config user.name and user.email; if either is
-unset, ask the person for them and set them with git config --local in
-this repository, never globally unless they say so. Never push, add a
-remote or publish anything unless asked; when a version is ready, you
-may say once that you can publish when asked.
+The repository is under git. Follow the skill's "Git and GitHub"
+section: commit only when the person tells you to, with a message that
+says what changed and why, and never add a Co-Authored-By line or any
+other trailer naming an agent. Before the first commit, check git config
+user.name and user.email; if either is unset, ask the person for them
+and set them with git config --local in this repository, never globally
+unless they say so. Never push, add a remote or publish anything unless
+asked; when a version is ready, you may say once that you can publish
+when asked. When the person asks to publish the course to GitHub, or to
+push, use publish_github with the directory ".": it creates a private
+repository and pushes, or pushes to the one the course already has, and
+public only when they ask for a public one; it refuses an uncommitted
+tree, so ask to commit first. After the repository is created it
+rewrites the generated files that named a placeholder address, which
+then need committing and pushing. The person is asked to confirm. Give
+them the URL and pass on its notes, such as the GitHub Pages setting a
+JupyterLite site needs.
 
 The person can attach files to a message: a screenshot, a diagram, a
 PDF, notes, a data file. Each is saved under {COURSE_STATE_DIR}/{ATTACHMENTS_DIR}/

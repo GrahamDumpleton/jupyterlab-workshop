@@ -169,6 +169,73 @@ def test_publish_gist_tool_creates_then_updates_the_recorded_gist(
     assert len(calls) == 4
 
 
+def test_publish_github_tool_creates_the_repository_through_gh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    from jupyterlab_workshop.scaffold import initialize_repository
+
+    repository = tmp_path / "demo"
+
+    repository.mkdir()
+    (repository / "README.md").write_text("# Demo\n")
+
+    assert initialize_repository(repository)
+
+    for command in (
+        ["git", "-C", str(repository), "config", "user.email", "t@example.org"],
+        ["git", "-C", str(repository), "config", "user.name", "Test"],
+        ["git", "-C", str(repository), "add", "."],
+        ["git", "-C", str(repository), "commit", "-q", "-m", "Start"],
+    ):
+        subprocess.run(command, check=True, capture_output=True)
+
+    # git runs for real; gh is answered by rule.
+    gh_calls: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if not command[0].endswith("gh"):
+            return subprocess.run(command, **kwargs)
+
+        gh_calls.append(command[1:])
+
+        if command[1:3] == ["auth", "status"]:
+            return subprocess.CompletedProcess(
+                command, 0, "", "  - Token scopes: 'gist', 'repo'\n"
+            )
+
+        return subprocess.CompletedProcess(
+            command, 0, "https://github.com/ada/demo\n", ""
+        )
+
+    monkeypatch.setattr("jupyterlab_workshop.github.shutil.which", lambda name: name)
+
+    server = create_server(lambda: None, base=tmp_path, run=run)
+
+    async def scenario() -> list[Any]:
+        async with Client(server) as client:
+            created = await client.call_tool("publish_github", {"directory": "demo"})
+
+            # An uncommitted change is refused before anything is sent.
+            (repository / "README.md").write_text("# Demo, changed\n")
+
+            dirty = await client.call_tool("publish_github", {"directory": "demo"})
+
+            return [json.loads(_text(result)) for result in (created, dirty)]
+
+    created, dirty = _run(scenario())
+
+    assert created["url"] == "https://github.com/ada/demo"
+    assert created["created"] is True
+    assert created["public"] is False
+    assert gh_calls[0] == ["auth", "status"]
+    assert gh_calls[1][:4] == ["repo", "create", "demo", "--private"]
+    assert "--push" in gh_calls[1]
+    assert "uncommitted changes" in dirty["error"]
+    assert len(gh_calls) == 2
+
+
 def test_index_tool_writes_a_collection(tmp_path: Path) -> None:
     server = create_server(lambda: None)
 

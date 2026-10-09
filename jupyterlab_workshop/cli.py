@@ -62,6 +62,7 @@ from .gist import (
     send_gist,
     write_flat,
 )
+from .github import GitHubError, publish_repository
 from .install import (
     DEFAULT_DIRECTORY,
     apply_update,
@@ -747,6 +748,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="frontend to lint for (default jupyterlab)",
     )
     gist.set_defaults(func=command_gist)
+
+    github = commands.add_parser(
+        "github",
+        help="publish a workshop or course repository to GitHub, or push to it",
+    )
+    github.add_argument(
+        "directory",
+        type=Path,
+        nargs="?",
+        default=Path("."),
+        help="the top of the repository (default the current directory)",
+    )
+    github.add_argument(
+        "--name",
+        default="",
+        help="the repository to create, OWNER/NAME or NAME under your account "
+        "(default the directory's name)",
+    )
+    github.add_argument(
+        "--public",
+        action="store_true",
+        help="create the repository public, or make an existing one public "
+        "(default private)",
+    )
+    github.add_argument(
+        "--description", default="", help="the new repository's description"
+    )
+    github.set_defaults(func=command_github)
 
     test = commands.add_parser(
         "test",
@@ -2170,6 +2199,37 @@ def command_gist(args: argparse.Namespace) -> int:
 
     print(f"{'created' if result.created else 'updated'} {result.url}")
     print(f"recorded in {directory / STATE_DIR / RECORD_FILE}")
+
+    return 0
+
+
+def command_github(args: argparse.Namespace) -> int:
+    """Publish a repository to GitHub through gh, or push to the one it has."""
+
+    try:
+        result = publish_repository(
+            args.directory,
+            name=args.name,
+            public=args.public,
+            description=args.description,
+        )
+    except GitHubError as error:
+        raise CliError(str(error)) from error
+
+    visibility = "public" if result.public else "private"
+
+    if result.created:
+        print(f"created {result.url} ({visibility}) and pushed")
+    elif result.made_public:
+        print(f"pushed to {result.url}, now public")
+    else:
+        print(f"pushed to {result.url} ({visibility})")
+
+    for path in result.refreshed:
+        print(f"refreshed {path}")
+
+    for note in result.notes:
+        print(f"\n{note}")
 
     return 0
 

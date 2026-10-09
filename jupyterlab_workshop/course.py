@@ -324,20 +324,29 @@ def write_record(
     )
 
 
-def update_course(directory: Path, version: str | None = None) -> UpdateReport:
-    """Bring a course's generated files up to a release of the extension.
+def update_course(
+    directory: Path, version: str | None = None, repository: str | None = None
+) -> UpdateReport:
+    """Bring a course's generated files up to a release of the extension,
+    and to its repository once it has one.
 
     The pin moves in ``pyproject.toml`` and ``binder/requirements.txt``
     whatever else is in them. Every other generated file is written
     again when it is still as the scaffold last wrote it, added when it
     is missing, and left alone and reported when the author has edited
-    it. The record is rewritten with the new hashes.
+    it. With ``repository``, the record takes that address and the
+    files that name it, the Justfile, the README and the launch
+    configuration, are rewritten the same way. The record is rewritten
+    with the new hashes.
     """
 
     record = read_record(directory)
 
     if record is None:
         raise CourseError(f"{directory} is not a course made by jupyter workshop")
+
+    if repository is not None:
+        record["repository"] = repository
 
     previous = str(record.get("jupyterlab-workshop") or "")
     options = CourseOptions.from_dict(record, version or __version__)

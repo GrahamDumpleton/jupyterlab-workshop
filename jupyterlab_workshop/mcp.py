@@ -2,7 +2,8 @@
 
 ``jupyter workshop mcp`` serves the tools over stdio. Lint, render, test,
 init, publish and draft work on directories and need nothing running;
-publish_gist sends a workshop to GitHub.
+publish_gist sends a workshop to GitHub as a gist, and publish_github
+sends a workshop's or course's repository there.
 The live tools (opening a workshop, running actions and checks against
 the session) reach a running JupyterLab through the server extension's
 bridge, and need the workshop open there in author mode.
@@ -59,6 +60,7 @@ from .gist import (
     send_gist,
     write_flat,
 )
+from .github import GitHubError, Runner, publish_repository
 from .publish import PublishError, publish_workshop
 from .scaffold import slug, write_scaffold
 from .skill import skill_directory
@@ -217,6 +219,7 @@ def create_server(
     session_factory: Callable[[], LiveSession | None] = discover_session,
     base: Path | None = None,
     github: Requester | None = None,
+    run: Runner | None = None,
 ) -> MCPServer:
     """Build the MCP server with every tool and resource registered.
 
@@ -224,7 +227,8 @@ def create_server(
     the current directory by default. An agent running inside Jupyter
     Server works in a workshop directory that is not the server's own
     current directory, so it is given that directory as the base.
-    `github` sends the gist tool's requests to the GitHub API, for tests.
+    `github` sends the gist tool's requests to the GitHub API, and `run`
+    runs the git and gh commands of the repository tool, for tests.
     """
 
     server = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS)
@@ -508,6 +512,42 @@ def create_server(
             "renamed": flat.renames,
             "left_out": flat.left_out,
         }
+
+    @server.tool()
+    def publish_github(
+        directory: str = ".",
+        name: str = "",
+        public: bool = False,
+        description: str = "",
+    ) -> Any:
+        """Publish a workshop or course repository to GitHub, or push to the
+        repository it already has.
+
+        The directory must be the top of a git repository with everything
+        committed; an uncommitted tree or one with no commits is refused,
+        so commit first, when the person agrees. Without an origin remote
+        a repository called name, the directory's name by default, is
+        created through the gh command, private unless public, and
+        pushed; with one, the current branch is pushed, and public makes
+        a private repository public. gh must be signed in with the repo
+        scope; the person is asked to confirm. Returns the repository's
+        URL and notes: a course's generated files rewritten to name the
+        repository, to commit and push, and GitHub Pages for a course
+        with a JupyterLite site.
+        """
+
+        try:
+            result = publish_repository(
+                Path(place(directory)),
+                name=name,
+                public=public,
+                description=description,
+                run=run,
+            )
+        except GitHubError as error:
+            return {"error": str(error)}
+
+        return result.to_dict()
 
     @server.tool()
     def index(

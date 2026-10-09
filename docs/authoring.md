@@ -231,6 +231,27 @@ token is found where JupyterLab runs, from `GH_TOKEN`, `GITHUB_TOKEN` or
 with `jupyter workshop gist --update GIST` has its gist recorded the
 same way.
 
+Every workshop and course the agent makes is a git repository, and the
+agent follows the skill's rules for it: it commits only when you tell it
+to, with a message saying what changed and why and no trailer naming an
+agent, and before the first commit it checks that git has a name and
+email, asking you for them and setting them in that repository alone
+when it does not. It never pushes or publishes unasked. Ask it to
+publish the workshop or course to GitHub, or to push, and it uses
+`publish_github`, which always asks: with no remote it creates a
+repository through the `gh` command, private unless you ask for a public
+one, and pushes; with one it pushes the current branch, and makes a
+private repository public when you ask. It refuses an uncommitted tree,
+so the agent asks to commit first rather than publishing silently. `gh`
+must be signed in where JupyterLab runs, with the `repo` scope; the
+agent never sees the token. A course scaffolded before it had a
+repository names a placeholder address in its Justfile, README and
+launch configuration; creating the repository rewrites those files
+where they are still as generated, and the agent asks to commit and
+publish again. For a course with a JupyterLite site the tool passes on
+the GitHub Pages setting the site needs. See [A repository on
+GitHub](publishing.md#a-repository-on-github).
+
 The agent runs with none of your own Claude Code configuration: your
 settings, plugins, hooks and MCP servers are not loaded, so it behaves
 the same on every machine.
@@ -355,9 +376,11 @@ JupyterLab at all. Each takes a `directory` argument on every call:
 page list with ids and requirements), `init`, `publish`,
 `publish_gist` (as `jupyter workshop gist`: it creates a gist, or
 updates the one recorded for the workshop, with a GitHub token found
-where the server runs), `index`, `catalog`, `draft` (pages from a saved
-recording), `list_collection`, `list_catalog`, `get_schema` and
-`test`. The server keeps no notion of
+where the server runs), `publish_github` (as `jupyter workshop github`:
+it creates a GitHub repository for a workshop or course through the
+`gh` command and pushes, or pushes to the one it has), `index`,
+`catalog`, `draft` (pages from a saved recording), `list_collection`,
+`list_catalog`, `get_schema` and `test`. The server keeps no notion of
 a current workshop, so the agent names the directory each time, as an
 absolute path or one relative to where the client started it.
 

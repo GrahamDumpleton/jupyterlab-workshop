@@ -7,8 +7,9 @@ the web, and asks before anything else. Workshops downloaded into the library,
 from a collection or a URL of their own, are never touched, since they
 are someone else's and may be replaced by an update. Bash runs freely
 only where the agent's sandbox confines it.
-Publishing to a gist is the one workshop tool that always asks, since it
-puts the workshop on GitHub.
+Publishing to a gist or to a GitHub repository always asks, since it
+puts the workshop or course on GitHub; creating a repository, or making
+one public, asks every time.
 
 While a new workshop is being drafted nothing exists to work on, so a
 read-only policy refuses every change to files and every command: the
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..gist import read_record
+from ..github import recorded_remote
 
 Verdict = Literal["allow", "deny", "ask"]
 
@@ -60,8 +62,9 @@ FREE_TOOLS: frozenset[str] = frozenset(
 # The prefix the agent sees on the workshop tools.
 WORKSHOP_TOOL_PREFIX = "mcp__workshop__"
 
-# The workshop tool that sends the workshop to GitHub.
+# The workshop tools that send the workshop or course to GitHub.
 PUBLISH_GIST_TOOL = f"{WORKSHOP_TOOL_PREFIX}publish_gist"
+PUBLISH_GITHUB_TOOL = f"{WORKSHOP_TOOL_PREFIX}publish_github"
 
 # What Claude Code asks for when a sandboxed command reaches the network.
 NETWORK_TOOL = "SandboxNetworkAccess"
@@ -114,6 +117,9 @@ class PermissionPolicy:
         if tool == PUBLISH_GIST_TOOL:
             return self._publish_decision(data)
 
+        if tool == PUBLISH_GITHUB_TOOL:
+            return self._github_decision(data)
+
         if tool.startswith(WORKSHOP_TOOL_PREFIX) or tool in FREE_TOOLS:
             return Decision("allow")
 
@@ -153,6 +159,32 @@ class PermissionPolicy:
         return Decision(
             "ask",
             f"Publishes {directory.name} to a new {kind} GitHub gist",
+            rememberable=False,
+        )
+
+    def _github_decision(self, data: dict[str, Any]) -> Decision:
+        # Pushing to the repository already published may be allowed for
+        # the rest of the conversation; creating a repository, or making
+        # one public, is asked about every time.
+        directory = self._resolve(str(data.get("directory") or "."))
+        remote = recorded_remote(directory)
+
+        if remote is not None and not data.get("public"):
+            return Decision("ask", f"Pushes {directory.name} to {remote}")
+
+        if remote is not None:
+            return Decision(
+                "ask",
+                f"Pushes {directory.name} to {remote} and makes it public",
+                rememberable=False,
+            )
+
+        kind = "public" if data.get("public") else "private"
+
+        return Decision(
+            "ask",
+            f"Creates a new {kind} GitHub repository for {directory.name} and "
+            "pushes it",
             rememberable=False,
         )
 

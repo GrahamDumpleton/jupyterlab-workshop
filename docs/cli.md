@@ -191,6 +191,40 @@ the `gist` scope, from `--token`, else `GH_TOKEN` or `GITHUB_TOKEN`,
 else `gh auth token` for someone signed in to the `gh` command. See [A
 workshop in a gist](publishing.md#a-workshop-in-a-gist).
 
+## github
+
+```
+jupyter workshop github [DIRECTORY] [--name OWNER/NAME] [--public] [--description TEXT]
+```
+
+Publishes a workshop's or a course's repository to GitHub, or pushes to
+the one it already has, through the [`gh`
+command](https://cli.github.com), which must be signed in (`gh auth
+login`) with the `repo` scope (`gh auth refresh -s repo` adds it to a
+classic token). The directory, the current one by default, must be the
+top of a git repository with everything committed: an uncommitted tree
+or one with no commits is refused, so what is published is what was
+committed, and a workshop inside a course is published with the course.
+
+Without an `origin` remote the command creates a repository, called by
+`--name`, as `OWNER/NAME` or as `NAME` under your account, or by the
+directory's name, private unless `--public`, with `--description` as
+its description; adds it as `origin`; and pushes. With an `origin` it
+pushes the current branch there, and `--public` makes a private
+repository public. Either way it prints the repository's address.
+
+A course scaffolded by [course init](#course) before it had a
+repository names a placeholder address in its `Justfile`, `README.md`
+and launch configuration; once the repository exists the command
+rewrites those files, where they are still as generated, with the real
+address and records it in `course.json`, and prints each file
+refreshed. Commit them and run the command again to push them. A course
+written with `--lite` publishes its JupyterLite site from its Pages
+workflow once GitHub Pages is set to build from GitHub Actions in the
+repository's settings, which the command says; on a private repository
+Pages needs a paid plan. See [A repository on
+GitHub](publishing.md#a-repository-on-github).
+
 ## collection
 
 ```

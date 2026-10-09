@@ -112,6 +112,41 @@ def test_policy_asks_before_publishing_a_gist(tmp_path: Path) -> None:
     assert not policy.decide(tool, {"directory": ".", "create": True}).rememberable
 
 
+def test_policy_asks_before_publishing_to_github(tmp_path: Path) -> None:
+    policy = _policy(tmp_path)
+    tool = "mcp__workshop__publish_github"
+
+    # Creating a repository asks every time, and says it is private.
+    first = policy.decide(tool, {"directory": "."})
+
+    assert first.verdict == "ask"
+    assert "new private GitHub repository" in first.reason
+    assert not first.rememberable
+    public = policy.decide(tool, {"directory": ".", "public": True})
+
+    assert "new public" in public.reason
+
+    # With a remote recorded, pushing names it and may be remembered;
+    # making it public may not.
+    (policy.workshop / ".git").mkdir()
+    (policy.workshop / ".git" / "config").write_text(
+        '[core]\n\tbare = false\n[remote "origin"]\n'
+        "\turl = git@github.com:ada/demo.git\n"
+        "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    )
+
+    push = policy.decide(tool, {"directory": "."})
+
+    assert push.verdict == "ask"
+    assert push.reason == "Pushes demo to https://github.com/ada/demo"
+    assert push.rememberable
+
+    opened = policy.decide(tool, {"directory": ".", "public": True})
+
+    assert "makes it public" in opened.reason
+    assert not opened.rememberable
+
+
 def test_policy_lets_bash_run_only_in_the_sandbox(tmp_path: Path) -> None:
     unsandboxed = _policy(tmp_path)
     sandboxed = _policy(tmp_path, sandboxed=True)
