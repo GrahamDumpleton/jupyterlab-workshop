@@ -779,6 +779,120 @@ in postBuild to fetch the workshops at build time.
 The launch URL is `https://mybinder.org/v2/gh/<org>/<repo>/<branch>?urlpath=lab`;
 add `%3Fworkshop%3Dworkshops%2F<name>` to open one workshop directly.
 
+## Designing a course
+
+A course is a repository of workshops in parts: each part is a
+collection with an index of its own under
+`collections/<name>/collection.json`, `catalog.json` at the root names
+them all, and every workshop sits flat under `workshops/` whatever part
+it belongs to, since the extension lists only the directories directly
+under one directory. `jupyter workshop course init`, or Create Course
+with AI, writes the whole repository: `AGENTS.md` with the conventions,
+`OUTLINE.md` with the sections of the design in place and nothing
+designed yet, the empty indexes and catalog, the Justfile, and the
+Binder, Codespaces and CI files. Never write those files by hand, and
+move them to a new release with `jupyter workshop course update`, not
+by editing. The work of a course is the design and the workshops.
+
+### The outline comes first
+
+`OUTLINE.md` is the design, written with the user before the first
+workshop of a part is, and kept true afterwards. Read it before adding
+or changing a workshop, follow the name and scope it gives, and update
+it when the work is done. It is long by design: an entry is detailed
+enough that a workshop can be written from it without asking what it is
+for. Its sections, in order:
+
+- What the course is: each part in a paragraph, what it teaches, what
+  it assumes, how it relates to the other parts, and what is out of
+  scope.
+
+- Source material: the documentation, source and other material the
+  workshops draw on, part by part, and what each is used for.
+  Everything the workshops say about the subject comes from here,
+  never from memory.
+
+- For each part: its shape (how the workshops group into movements,
+  with a sentence on what the learner can do after each, the length of
+  each workshop and the total, whether each is self-contained); one
+  entry per workshop, in order; and the topics it leaves out, with why,
+  so they are not proposed again.
+
+- Naming, later parts, the decisions that cut across the workshops (the
+  frontend and Python version, the format, shipped code, whether
+  learners type code, prediction before execution, checks, a running
+  example, timing, platforms, and what "done" means), the extension
+  features the workshops use, known blockers in the extension and the
+  release that fixed each, open questions, and the status table.
+
+A workshop entry carries its number in the part's order, its directory
+name in backticks and its title, then one line on the question it
+answers, two to four paragraphs on where it starts, what the learner
+does page by page, what they see, the surprise it builds to and how it
+closes or hands on, naming the exact functions, values and outputs,
+and then its format (notebook, notebook with a code pane, terminal and
+files), what it requires beyond the extension, its sources and its
+length. The number changes when workshops are inserted; the directory
+name never does. Once the workshop is written, keep the entry true: if
+writing it changed the design, change the entry.
+
+Design every workshop of a part before writing the first, and write in
+the part's order. The first workshop settles the manifest, the
+environment step, the layout and the checks, and each later one adds
+one idea to a format that already works. Write paired workshops
+together, where one answers what the other leaves open. Before any
+code goes into a cell or a page, run it against a real interpreter on
+the Python the learner gets; widely repeated claims turn out wrong this
+way, and the entry records what was checked.
+
+### Naming and numbering
+
+Directory names are short kebab-case phrases naming the question a
+workshop answers, not the mechanism, with no numeric prefix, unique
+across the whole course since every workshop shares one directory.
+Titles are sentence case and read as what the learner will do.
+
+Numbering follows what the learner sees. The browser numbers an ordered
+collection from 1, each collection on its own, and a learner may take
+one part and never see the others, so workshops are numbered from 1
+within each part, in arabic numerals, in the outline, the README and
+the browser alike; the parts are numbered in catalog order with roman
+numerals, Part I, Part II; a cross-reference to another part is
+"II.3", within a part just "3"; and a course with one part has no Part
+I. A workshop's `finish` text names the next workshop by title, and
+points across to the next part only from the last workshop of a part.
+The order of a part lives in one place, the Justfile's variable for it,
+which `just index` writes the index from; `OUTLINE.md` and the README
+follow it.
+
+Collection ids are `<prefix>/<course>/<collection>`, where the prefix
+is a domain or forge account the author controls, such as
+`github.com/<account>`. An id is the collection's identity to
+subscribers and to analytics, so it is chosen before the first
+workshop is written and never changed.
+
+### Adding and keeping
+
+To add a workshop to a part: write its entry in `OUTLINE.md` first,
+scaffold it with `init` at `workshops/<name>` (or `just new <name>`),
+write it from the entry, add its name to the part's order in the
+Justfile in its place, refresh the index (`index` with the part's
+workshop directories in order, or `just index`), add it to the README's
+list, and update the status table. A workshop of the user's own that
+belongs in the course is moved in with `jupyter workshop course
+promote` or the browser's Move to course, which does the entry, the
+index and the order for you.
+
+The status table uses three words: planned (designed in the outline,
+not written), written (the pages exist and lint is clean) and done
+(`just test <name>` is green and the workshop is in the index and the
+README). After a part ships, list in the status section every file
+adding it touched, so the next part has a checklist. Record extension
+problems as known blockers when they are found, and fix them in the
+extension rather than working around them in the workshops where that
+is practical. Remove an open question when it is settled, recording the
+answer in the section it belongs to.
+
 ## Git and GitHub
 
 A workshop or course made with the tooling is a git repository from the

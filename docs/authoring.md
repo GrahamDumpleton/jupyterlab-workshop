@@ -563,9 +563,12 @@ that session, as it does when you turn it on by hand.
 `skills/jupyterlab-workshop-authoring/SKILL.md` in the repository, shipped in the
 package and served as the `workshop://skill` resource, explains the
 format to an agent: the manifest, page syntax, the actions and checks,
-the rules that keep lint and the self-test green, and how to read test
-output. Its `references/` hold the full action table, a style guide and
-a page template. Point an agent at it (Claude Code loads skills from a
+the rules that keep lint and the self-test green, how to read test
+output, how a [course](publishing.md#a-course-repository) is designed
+from its outline, named, numbered and kept true, and the git and GitHub
+rules it works by. Its `references/` hold the full action table, a
+style guide and a page template. Point an agent at it (Claude Code
+loads skills from a
 `skills/` directory; other clients read the resource) and ask for a
 workshop; the loop it follows is init, write, lint, test, fix, where the
 test step waits for your go-ahead unless the workshop is contained to

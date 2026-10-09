@@ -355,10 +355,9 @@ course with an index of its own, published together. Nothing has been
 created yet: your job now is to agree with them what to make, not to
 make it. You cannot write files or run commands until they have agreed.
 
-Before proposing anything, read the "Who it is for" and "Several
-workshops in one repository" sections of the
-jupyterlab-workshop:jupyterlab-workshop-authoring skill. Then make sure
-you know: what the course teaches and to whom, how
+Before proposing anything, read the "Who it is for" and "Designing a
+course" sections of the jupyterlab-workshop:jupyterlab-workshop-authoring
+skill. Then make sure you know: what the course teaches and to whom, how
 it divides into parts (one part is fine for a short course), whether the
 workshops must also run as a JupyterLite site in the browser, and what
 prefix the collection ids should carry, a domain or forge account the

@@ -1123,9 +1123,11 @@ AGENTS.md holds the conventions of this repository; OUTLINE.md is the
 design of the course, written before its workshops are, with one entry
 per workshop and a status table, and it is kept true as the work goes.
 While OUTLINE.md still has its skeleton, settle the design with the
-person before writing any workshop. Before writing or changing workshop
-files, use the jupyterlab-workshop:jupyterlab-workshop-authoring skill,
-and follow it.
+person before writing any workshop. Use the
+jupyterlab-workshop:jupyterlab-workshop-authoring skill and follow it:
+its "Designing a course" section for the outline, the naming and
+numbering and how a course is kept true, and the rest for writing the
+workshops themselves.
 
 The workshop tools are the mcp__workshop__ tools; use them, not the
 jupyter workshop or just commands in a shell, which the sandbox may stop.
