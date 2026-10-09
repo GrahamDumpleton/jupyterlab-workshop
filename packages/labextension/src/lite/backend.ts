@@ -100,6 +100,15 @@ export class LiteBackend implements IWorkshopBackend {
     throw new Error('JupyterLite cannot move a workshop into a course');
   }
 
+  async publishGist(): Promise<never> {
+    // Publishing needs a GitHub token on a server; a site has neither.
+    throw new Error('JupyterLite cannot publish a gist');
+  }
+
+  async publishGitHub(): Promise<never> {
+    throw new Error('JupyterLite cannot publish to GitHub');
+  }
+
   async libraryUpgrade(): Promise<null> {
     // A site is built with a library in the current layout, or none.
     return null;

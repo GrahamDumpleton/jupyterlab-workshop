@@ -268,8 +268,12 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
     });
 
     app.commands.addCommand(CommandIDs.editWithAI, {
-      label: 'Edit with AI',
-      caption: 'Revise this workshop in a conversation with Workshop Author',
+      label: args =>
+        kindOf(args.kind) === 'course' ? 'Edit course with AI' : 'Edit with AI',
+      caption: args =>
+        kindOf(args.kind) === 'course'
+          ? 'Design and revise this course in a conversation with Workshop Author'
+          : 'Revise this workshop in a conversation with Workshop Author',
       isVisible: enabled,
       isEnabled: args => enabled() && typeof args.path === 'string',
       execute: async args => {
@@ -281,6 +285,13 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
         await checked;
 
         if (!path || !enabled()) {
+          return;
+        }
+
+        // A course's own conversation, from Edit course with AI.
+        if (kindOf(args.kind) === 'course') {
+          await openPanel(path, '', 'course');
+
           return;
         }
 

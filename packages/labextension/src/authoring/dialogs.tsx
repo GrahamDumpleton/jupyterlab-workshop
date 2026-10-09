@@ -807,6 +807,123 @@ export async function showPublishResult(result: {
   });
 }
 
+/** Where a workshop or course can be published to. */
+export type PublishTarget = 'archive' | 'gist' | 'github';
+
+/** What the person chose in the publish dialog. */
+export interface IPublishChoice {
+  target: PublishTarget;
+
+  /** Whether a new gist or repository is public; secret or private otherwise. */
+  public: boolean;
+}
+
+/**
+ * Ask where to publish, and whether publicly. Only the targets offered
+ * are shown; with one target the dialog only confirms it. Nothing leaves
+ * the machine until the person presses Publish.
+ */
+export async function showPublishDialog(options: {
+  /** What is being published, for the title: a workshop's or course's name. */
+  subject: string;
+  targets: PublishTarget[];
+}): Promise<IPublishChoice | null> {
+  const descriptions: Record<PublishTarget, [string, string]> = {
+    archive: [
+      'An archive under dist/',
+      'The archive, its hash and a collection entry, for hosting yourself; nothing is sent anywhere.'
+    ],
+    gist: [
+      'A GitHub gist',
+      'The workshop laid out flat in a gist, secret unless public; the gist it was published to before is updated.'
+    ],
+    github: [
+      'A GitHub repository',
+      'The repository pushed to GitHub through the gh command, created private unless public, or pushed to the one it already has. Everything must be committed first.'
+    ]
+  };
+  const initial: IPublishChoice = {
+    target: options.targets[0] ?? 'archive',
+    public: false
+  };
+  const body = new ValueBody<IPublishChoice>(initial, (value, update) => (
+    <div className="jp-WorkshopAuthor-form">
+      {options.targets.length > 1 ? (
+        <Field label="Publish to">
+          <select
+            className="jp-mod-styled"
+            value={value.target}
+            onChange={event =>
+              update({
+                ...value,
+                target: event.target.value as PublishTarget
+              })
+            }
+          >
+            {options.targets.map(target => (
+              <option key={target} value={target}>
+                {descriptions[target][0]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      <p className="jp-WorkshopAuthor-fieldHint">
+        {descriptions[value.target][1]}
+      </p>
+      {value.target === 'archive' ? null : (
+        <label className="jp-WorkshopAuthor-check">
+          <input
+            type="checkbox"
+            checked={value.public}
+            onChange={event =>
+              update({ ...value, public: event.target.checked })
+            }
+          />
+          {value.target === 'gist'
+            ? 'Public gist (a secret gist is still readable by anyone with the link)'
+            : 'Public repository (a private one can be made public later)'}
+        </label>
+      )}
+    </div>
+  ));
+  const result = await showDialog<IPublishChoice>({
+    title: `Publish ${options.subject}`,
+    body,
+    buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Publish' })]
+  });
+
+  return result.button.accept && result.value ? result.value : null;
+}
+
+/** Say where a gist or repository went, and what to know next. */
+export async function showPublishedDialog(result: {
+  title: string;
+  url: string;
+  lead: string;
+  notes?: string[];
+}): Promise<void> {
+  await showDialog({
+    title: result.title,
+    body: new ValueBody<null>(null, () => (
+      <div className="jp-WorkshopAuthor-form">
+        <p>
+          {result.lead}{' '}
+          <a href={result.url} target="_blank" rel="noopener noreferrer">
+            {result.url}
+          </a>
+        </p>
+        {(result.notes ?? []).map((note, index) => (
+          <p key={index} className="jp-WorkshopAuthor-fieldHint">
+            {note}
+          </p>
+        ))}
+      </div>
+    )),
+    buttons: [Dialog.okButton()]
+  });
+}
+
 function slugify(title: string): string {
   return title
     .toLowerCase()

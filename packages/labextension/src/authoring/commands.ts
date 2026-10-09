@@ -5,11 +5,13 @@ import {
   addManifestCapability,
   appendBlock,
   applyFix,
+  courseOfPath,
   directiveExtent,
   draftBlocks,
   draftFromRecording,
   draftManifest,
   insertBlock,
+  isOwnLibraryPath,
   joinLibraryPath,
   newPagePath,
   normalizeWorkshopsDirectory,
@@ -29,6 +31,7 @@ import { ILabShell, JupyterFrontEnd } from '@jupyterlab/application';
 import {
   Dialog,
   InputDialog,
+  MainAreaWidget,
   Notification,
   showDialog,
   showErrorMessage
@@ -37,6 +40,7 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { FileEditor, IEditorTracker } from '@jupyterlab/fileeditor';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
+import { Terminal } from '@jupyterlab/terminal';
 import { ReadonlyJSONObject, ReadonlyJSONValue } from '@lumino/coreutils';
 
 import { readTextFile, writeTextFile } from '../actions/contents';
@@ -63,6 +67,10 @@ import {
   showCaptureDialog,
   showNewWorkshopDialog,
   showPageManagerDialog,
+  IPublishChoice,
+  PublishTarget,
+  showPublishDialog,
+  showPublishedDialog,
   showPublishResult,
   showRecordingDialog
 } from './dialogs';
@@ -765,9 +773,39 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
     }
   });
 
+  // A terminal in a workshop's or course's directory, for git and the
+  // command line tools; only a server has terminals.
+  commands.addCommand(CommandIDs.openTerminal, {
+    label: 'Workshop: Open in Terminal',
+    caption: "Open a terminal in the workshop's or course's directory",
+    isEnabled: args =>
+      manager.backend.kind === 'server' &&
+      app.serviceManager.terminals.isAvailable() &&
+      (typeof args.path === 'string' || manager.workshop !== null),
+    execute: async args => {
+      const path =
+        typeof args.path === 'string' ? args.path : manager.workshop?.path;
+
+      if (!path) {
+        return;
+      }
+
+      const session = await app.serviceManager.terminals.startNew({
+        cwd: path
+      });
+      const widget = new MainAreaWidget({ content: new Terminal(session, {}) });
+
+      widget.title.label = `Terminal: ${PathExt.basename(path)}`;
+      widget.title.closable = true;
+      shell.add(widget, 'main');
+      shell.activateById(widget.id);
+    }
+  });
+
   commands.addCommand(CommandIDs.publish, {
     label: 'Workshop: Publish…',
-    caption: 'Build the archive, its hash and a registry entry under dist/',
+    caption:
+      'Build the archive under dist/, or publish your own workshop as a gist or to GitHub',
     isEnabled: isOpen,
     execute: async (args): Promise<ReadonlyJSONValue> => {
       const workshop = manager.workshop;
@@ -776,7 +814,70 @@ export function addAuthoringCommands(context: IAuthoringContext): void {
         return null;
       }
 
+      // Where it may go: the archive always; a gist and a GitHub
+      // repository when the workshop is the owner's own in a library on
+      // a server, which holds the GitHub login. A workshop in a course
+      // is published with the course, so the gist is not offered there.
+      const library =
+        (manager as { library?: LibraryService | null }).library ?? null;
+      const workshopsDirectory = library
+        ? await library.workshopsDirectory()
+        : '';
+      const own =
+        library !== null &&
+        manager.backend.kind === 'server' &&
+        isOwnLibraryPath(workshopsDirectory, workshop.path);
+      const course = own
+        ? courseOfPath(workshopsDirectory, workshop.path)
+        : null;
+      const targets: PublishTarget[] = !own
+        ? ['archive']
+        : course
+          ? ['archive', 'github']
+          : ['archive', 'gist', 'github'];
+      const choice: IPublishChoice | null =
+        args.silent === true || targets.length === 1
+          ? { target: 'archive', public: false }
+          : await showPublishDialog({
+              subject: `"${workshop.manifest.title}"`,
+              targets
+            });
+
+      if (!choice) {
+        return null;
+      }
+
       try {
+        if (choice.target === 'gist') {
+          const result = await manager.backend.publishGist(workshop.path, {
+            public: choice.public
+          });
+
+          await showPublishedDialog({
+            title: result.created ? 'Gist created' : 'Gist updated',
+            url: result.url,
+            lead: `${workshop.manifest.title} is a ${result.public ? 'public' : 'secret'} gist at`
+          });
+
+          return result as unknown as ReadonlyJSONValue;
+        }
+
+        if (choice.target === 'github') {
+          const target = course ? course.course : workshop.path;
+          const result = await manager.backend.publishGitHub(target, {
+            public: choice.public
+          });
+
+          await showPublishedDialog({
+            title: result.created ? 'Repository created' : 'Pushed',
+            url: result.url,
+            lead: `${course ? 'The course' : workshop.manifest.title} is ${result.public ? 'public' : 'private'} at`,
+            notes: result.notes
+          });
+
+          return result as unknown as ReadonlyJSONValue;
+        }
+
         const result = await requestAPI<{
           archive: string;
           sha256: string;

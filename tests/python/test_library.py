@@ -68,30 +68,13 @@ def test_own_paths_agree_with_the_browser(directory: str, path: str, own: bool) 
     assert is_own_library_path(directory, path) is own
 
 
-@pytest.mark.parametrize(
-    ("directory", "path", "course"),
-    [
-        (
-            "workshops",
-            "workshops/personal/courses/repo",
-            ("workshops/personal/courses/repo", ""),
-        ),
-        (
-            "workshops",
-            "workshops/personal/courses/repo/workshops/x",
-            ("workshops/personal/courses/repo", "workshops/x"),
-        ),
-        (".", "personal/courses/repo/", ("personal/courses/repo", "")),
-        (".", "personal/workshops/mine", None),
-        (".", "personal/courses", None),
-        (".", "personal/courses/../x", None),
-        ("workshops", "personal/courses/repo", None),
-    ],
-)
-def test_course_of_path_names_the_course_and_what_is_inside(
-    directory: str, path: str, course: tuple[str, str] | None
+@pytest.mark.parametrize(("directory", "path", "course"), VECTORS["courseOf"])
+def test_course_of_path_agrees_with_the_browser(
+    directory: str, path: str, course: list[str] | None
 ) -> None:
-    assert course_of_path(directory, path) == course
+    assert course_of_path(directory, path) == (
+        tuple(course) if course is not None else None
+    )
 
 
 @pytest.mark.parametrize(("location", "digest"), VECTORS["hashes"])

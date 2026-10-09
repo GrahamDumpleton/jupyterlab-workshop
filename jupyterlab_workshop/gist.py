@@ -701,6 +701,63 @@ def resolve_token(
     )
 
 
+#: Lints a directory and returns the report, as the Node bundle's `--json`
+#: gives it; a report with a count of zero `errors` is clean.
+Linter = Callable[[Path], Any]
+
+
+def publish_to_gist(
+    directory: Path,
+    lint: Linter,
+    create: bool = False,
+    public: bool = False,
+    token: str = "",
+    request: Requester | None = None,
+) -> GistResult:
+    """Lint, flatten, check and send a workshop to a gist, in one step.
+
+    The workshop is linted, laid out flat, put back together as a
+    download would be and linted again before anything is sent, and the
+    gist recorded in the workshop updates unless ``create`` asks for a
+    new one, secret unless ``public``. The token is found as
+    ``resolve_token`` finds it when none is given. Workshop Author's
+    tool and the browser's Publish share this.
+    """
+
+    import tempfile
+
+    from .tree import restore_tree
+
+    def clean(report: Any) -> bool:
+        return isinstance(report, dict) and report.get("errors") == 0
+
+    if not clean(lint(directory)):
+        raise GistError("The workshop does not lint clean")
+
+    flat = flatten_workshop(directory)
+
+    with tempfile.TemporaryDirectory(prefix="workshop-gist-") as tmp:
+        written = write_flat(flat, Path(tmp) / "flat")
+        restored = Path(tmp) / "restored" / flat.name
+
+        restore_tree(written, restored)
+
+        if not clean(lint(restored)):
+            raise GistError("The flat copy does not lint clean once restored")
+
+    try:
+        token = resolve_token(token)
+    except GistError as error:
+        raise GistError(
+            "There is no GitHub token where JupyterLab runs: sign in with gh "
+            "auth login in a terminal, or set GH_TOKEN before starting JupyterLab"
+        ) from error
+
+    return send_gist(
+        directory, flat, token, create=create, public=public, request=request
+    )
+
+
 def github_request(
     method: str, url: str, body: Mapping[str, Any] | None, token: str
 ) -> dict[str, Any]:

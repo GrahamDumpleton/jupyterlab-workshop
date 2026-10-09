@@ -11,6 +11,7 @@ import {
   collectionTitle,
   collectionWorkshops,
   courseEntry,
+  courseOfPath,
   coursePath,
   courseWorkshops,
   downloadKey,
@@ -35,6 +36,7 @@ interface IVectors {
   slugs: [string, string | null][];
   hashes: [string, string][];
   ownPaths: [string, string, boolean][];
+  courseOf: [string, string, [string, string] | null][];
   downloadKeys: [string, string, string, string][];
   standalone: [string, string, string, string, string][];
   collectionDirectories: [string, string | null, string][];
@@ -412,6 +414,17 @@ describe('isPersonalLibraryPath', () => {
       )
     ).toBe(false);
   });
+});
+
+describe('courseOfPath', () => {
+  it.each(VECTORS.courseOf)(
+    'agrees with the server for %s and %s',
+    (directory, target, expected) => {
+      expect(courseOfPath(directory, target)).toEqual(
+        expected === null ? null : { course: expected[0], inside: expected[1] }
+      );
+    }
+  );
 });
 
 describe('isOwnLibraryPath', () => {

@@ -622,6 +622,105 @@ async def test_library_endpoint_reports_and_upgrades_the_previous_layout(
     assert error.value.code == 404
 
 
+async def test_gist_and_github_endpoints_publish_through_the_shared_code(
+    jp_fetch, jp_root_dir, monkeypatch
+):
+    from tornado.httpclient import HTTPClientError
+
+    from jupyterlab_workshop import handlers
+    from jupyterlab_workshop.gist import GistResult
+    from jupyterlab_workshop.github import GitHubError, GitHubResult
+
+    workshop = jp_root_dir / "personal" / "workshops" / "demo"
+
+    (workshop / "pages").mkdir(parents=True)
+    (workshop / "workshop.yaml").write_text(
+        "apiVersion: jupyterlab-workshop/v1alpha1\nname: demo\ntitle: Demo\n"
+        "pages: [pages/01.md]\n"
+    )
+    (workshop / "pages" / "01.md").write_text("# One\n")
+
+    # The endpoints hand the work to the functions the command line and
+    # the agent's tools use; here those are stood in for, so nothing is sent.
+    calls: list[tuple[object, ...]] = []
+
+    def fake_gist(directory, lint, create=False, public=False, **_):  # type: ignore[no-untyped-def]
+        calls.append(("gist", directory.name, create, public))
+
+        return GistResult(
+            id="abc", url="https://gist.github.com/ada/abc", created=True, public=public
+        )
+
+    def fake_repository(directory, name="", public=False, description="", **_):  # type: ignore[no-untyped-def]
+        calls.append(("github", directory.name, name, public))
+
+        if name == "taken/name":
+            raise GitHubError("gh repo create failed: name already exists")
+
+        return GitHubResult(
+            url="https://github.com/ada/demo",
+            created=True,
+            public=public,
+            notes=("A note.",),
+        )
+
+    monkeypatch.setattr(handlers, "publish_to_gist", fake_gist)
+    monkeypatch.setattr(handlers, "publish_repository", fake_repository)
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "gist",
+        method="POST",
+        body=json.dumps({"workshop": "personal/workshops/demo", "public": True}),
+    )
+
+    assert json.loads(response.body) == {
+        "url": "https://gist.github.com/ada/abc",
+        "created": True,
+        "public": True,
+    }
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "github",
+        method="POST",
+        body=json.dumps({"path": "personal/workshops/demo", "name": "ada/demo"}),
+    )
+    published = json.loads(response.body)
+
+    assert published["url"] == "https://github.com/ada/demo"
+    assert published["public"] is False
+    assert published["notes"] == ["A note."]
+    assert calls == [
+        ("gist", "demo", False, True),
+        ("github", "demo", "ada/demo", False),
+    ]
+
+    # A directory that is not a workshop cannot be a gist, and a failure
+    # from gh is the endpoint's error.
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "gist",
+            method="POST",
+            body=json.dumps({"workshop": "personal/workshops"}),
+        )
+
+    assert error.value.code == 400
+    assert "has no workshop.yaml" in str(error.value.response.body)
+
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "github",
+            method="POST",
+            body=json.dumps({"path": "personal/workshops/demo", "name": "taken/name"}),
+        )
+
+    assert error.value.code == 400
+    assert "already exists" in str(error.value.response.body)
+
+
 async def test_courses_endpoint_promotes_a_workshop_into_a_course(
     jp_fetch, jp_root_dir
 ):

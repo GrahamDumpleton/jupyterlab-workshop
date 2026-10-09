@@ -847,6 +847,26 @@ test.describe('Workshop Author and courses', () => {
     ).toBe(false);
   });
 
+  test('opens the course conversation from the course group', async ({
+    page
+  }) => {
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-group', { hasText: 'big-course' })
+      .getByRole('button', { name: 'Edit course with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent');
+
+    await expect(author.locator('.jp-WorkshopAgent-path')).toHaveText(
+      `${LIBRARY}/personal/courses/big-course`
+    );
+    await expect(author.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await expect(
+      author.getByRole('button', { name: 'Open workshop' })
+    ).toHaveCount(0);
+  });
+
   test('edits a workshop of a course in the course conversation', async ({
     page
   }) => {

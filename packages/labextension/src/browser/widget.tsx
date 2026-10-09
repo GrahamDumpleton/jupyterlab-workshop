@@ -30,6 +30,7 @@ import { CommandRegistry } from '@lumino/commands';
 import { ISignal, Signal } from '@lumino/signaling';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
+import { showPublishDialog, showPublishedDialog } from '../authoring/dialogs';
 import { workshopIcon } from '../icons';
 import { ILibraryCourseInfo } from '../library/scan';
 import { LibraryService } from '../library/service';
@@ -606,6 +607,19 @@ function BrowserContent(props: IContentProps): JSX.Element {
             ? () => void moveToCourse(item)
             : undefined
         }
+        onOpenTerminal={
+          item.kind === 'personal' && canOpenTerminal(item.path)
+            ? () =>
+                void commands.execute(CommandIDs.openTerminal, {
+                  path: item.path
+                })
+            : undefined
+        }
+        onPublish={
+          item.kind === 'personal' && !isDownloaded(item) && canPublish
+            ? () => void publishWorkshop(item)
+            : undefined
+        }
         onEditWithAI={
           (item.kind === 'personal' || item.kind === 'course') &&
           commands.isVisible(CommandIDs.editWithAI)
@@ -759,6 +773,80 @@ function BrowserContent(props: IContentProps): JSX.Element {
         'Unable to move the workshop',
         errorMessage(error)
       );
+    }
+  };
+
+  // Publishing goes through the server, which holds the GitHub login;
+  // every publish asks first, and nothing is public without asking.
+  const canPublish = manager.backend.kind === 'server' && !upgradeNeeded;
+  const canOpenTerminal = (path: string): boolean =>
+    manager.backend.kind === 'server' &&
+    commands.isEnabled(CommandIDs.openTerminal, { path });
+
+  const publishWorkshop = async (item: IInstalledWorkshop): Promise<void> => {
+    const choice = await showPublishDialog({
+      subject: `"${item.title}"`,
+      targets: ['gist', 'github']
+    });
+
+    if (!choice) {
+      return;
+    }
+
+    try {
+      if (choice.target === 'gist') {
+        const result = await manager.backend.publishGist(item.path, {
+          public: choice.public
+        });
+
+        await showPublishedDialog({
+          title: result.created ? 'Gist created' : 'Gist updated',
+          url: result.url,
+          lead: `${item.title} is a ${result.public ? 'public' : 'secret'} gist at`,
+          notes: [
+            'The address is the source for Open Workshop from URL and for a launch link; the gist is recorded in the workshop, so publishing again updates it.'
+          ]
+        });
+      } else {
+        const result = await manager.backend.publishGitHub(item.path, {
+          public: choice.public
+        });
+
+        await showPublishedDialog({
+          title: result.created ? 'Repository created' : 'Pushed',
+          url: result.url,
+          lead: `${item.title} is ${result.public ? 'public' : 'private'} at`,
+          notes: result.notes
+        });
+      }
+    } catch (error) {
+      await showErrorMessage('Unable to publish', errorMessage(error));
+    }
+  };
+
+  const publishCourse = async (course: ILibraryCourseInfo): Promise<void> => {
+    const choice = await showPublishDialog({
+      subject: `the course "${course.name}"`,
+      targets: ['github']
+    });
+
+    if (!choice) {
+      return;
+    }
+
+    try {
+      const result = await manager.backend.publishGitHub(course.path, {
+        public: choice.public
+      });
+
+      await showPublishedDialog({
+        title: result.created ? 'Repository created' : 'Pushed',
+        url: result.url,
+        lead: `The course ${course.name} is ${result.public ? 'public' : 'private'} at`,
+        notes: result.notes
+      });
+    } catch (error) {
+      await showErrorMessage('Unable to publish', errorMessage(error));
     }
   };
 
@@ -1149,15 +1237,59 @@ function BrowserContent(props: IContentProps): JSX.Element {
                       : undefined
                 }
                 headerActions={
-                  course.missing && course.linked ? (
-                    <button
-                      type="button"
-                      className="jp-Button jp-mod-styled jp-mod-warn"
-                      onClick={() => void unlink(course)}
-                    >
-                      Unlink
-                    </button>
-                  ) : null
+                  course.missing ? (
+                    course.linked ? (
+                      <button
+                        type="button"
+                        className="jp-Button jp-mod-styled jp-mod-warn"
+                        onClick={() => void unlink(course)}
+                      >
+                        Unlink
+                      </button>
+                    ) : null
+                  ) : (
+                    <>
+                      {commands.isVisible(CommandIDs.editWithAI) ? (
+                        <button
+                          type="button"
+                          className="jp-Button jp-mod-styled"
+                          title="Design and revise this course in a conversation with Workshop Author, an AI agent"
+                          onClick={() =>
+                            void commands.execute(CommandIDs.editWithAI, {
+                              path: course.path,
+                              kind: 'course'
+                            })
+                          }
+                        >
+                          Edit course with AI
+                        </button>
+                      ) : null}
+                      {canOpenTerminal(course.path) ? (
+                        <button
+                          type="button"
+                          className="jp-Button jp-mod-styled"
+                          title="Open a terminal in the course's directory"
+                          onClick={() =>
+                            void commands.execute(CommandIDs.openTerminal, {
+                              path: course.path
+                            })
+                          }
+                        >
+                          Open in terminal
+                        </button>
+                      ) : null}
+                      {canPublish ? (
+                        <button
+                          type="button"
+                          className="jp-Button jp-mod-styled"
+                          title="Push the course to GitHub, creating a private repository the first time; asks first"
+                          onClick={() => void publishCourse(course)}
+                        >
+                          Publish to GitHub…
+                        </button>
+                      ) : null}
+                    </>
+                  )
                 }
               >
                 {renderCourseCards(items, item =>
@@ -1999,6 +2131,8 @@ function InstalledCard({
   onRestart,
   onRemove,
   onMove,
+  onOpenTerminal,
+  onPublish,
   onEditWithAI,
   update
 }: {
@@ -2041,6 +2175,12 @@ function InstalledCard({
 
   /** Move one of the owner's own workshops into one of their courses. */
   onMove?: () => void;
+
+  /** Open a terminal in the workshop's directory, for the owner's own. */
+  onOpenTerminal?: () => void;
+
+  /** Publish one of the owner's own workshops, as a gist or to GitHub. */
+  onPublish?: () => void;
 
   /** Revise the workshop with Workshop Author, for the owner's own. */
   onEditWithAI?: () => void;
@@ -2180,6 +2320,26 @@ function InstalledCard({
             onClick={onMove}
           >
             Move to course…
+          </button>
+        ) : null}
+        {onOpenTerminal ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Open a terminal in the workshop's directory"
+            onClick={onOpenTerminal}
+          >
+            Open in terminal
+          </button>
+        ) : null}
+        {onPublish ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Publish this workshop as a gist or to a GitHub repository; asks first, secret or private unless you say otherwise"
+            onClick={onPublish}
+          >
+            Publish…
           </button>
         ) : null}
         {onRemove ? (

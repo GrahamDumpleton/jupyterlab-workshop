@@ -61,6 +61,8 @@ from .fetch import (
     parse_source,
     remove_workshop,
 )
+from .gist import GistError, publish_to_gist
+from .github import GitHubError, publish_repository
 from .library import (
     COURSES_DIRECTORY,
     DEFAULT_COURSE_WORKSHOPS,
@@ -78,6 +80,7 @@ from .platform import current_platform, has_web_proxy
 from .promotion import PromotionError, promote_workshop
 from .publish import PublishError, publish_workshop
 from .scaffold import TEMPLATES, initialize_repository, slug, write_scaffold
+from .tree import TreeError
 
 API_NAMESPACE = "jupyterlab-workshop"
 
@@ -707,6 +710,80 @@ class PublishHandler(WorkshopHandler):
         self.finish(json.dumps(result.to_dict(relative_to=self.root_dir)))
 
 
+class GistHandler(WorkshopHandler):
+    """Publish one of the library owner's workshops as a GitHub gist.
+
+    The browser's Publish asks the person first; here the workshop is
+    linted, laid out flat, checked and sent, updating the gist recorded
+    in it unless a new one is asked for, secret unless public. The token
+    is found where the server runs, as the gist command finds it.
+    """
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        workshop = str(body.get("workshop") or "").strip().strip("/")
+        directory = self.under_root(workshop, "workshop")
+
+        if not (directory / "workshop.yaml").is_file():
+            raise tornado.web.HTTPError(400, f"{workshop} has no workshop.yaml")
+
+        from .cli import CliError, run_node
+
+        def lint(path: Path) -> Any:
+            completed = run_node(["lint", str(path), "--json"])
+
+            try:
+                return json.loads(completed.stdout.strip() or "{}")
+            except ValueError:
+                return {"error": completed.stderr.strip()}
+
+        try:
+            result = await IOLoop.current().run_in_executor(
+                None,
+                lambda: publish_to_gist(
+                    directory,
+                    lint,
+                    create=bool(body.get("create")),
+                    public=bool(body.get("public")),
+                ),
+            )
+        except (GistError, TreeError, CliError) as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(
+            json.dumps(
+                {"url": result.url, "created": result.created, "public": result.public}
+            )
+        )
+
+
+class GitHubHandler(WorkshopHandler):
+    """Publish a workshop's or course's repository to GitHub through gh,
+    or push to the one it has; the browser's Publish asks the person first."""
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        body = self.body_json()
+        path = str(body.get("path") or "").strip().strip("/")
+        directory = self.under_root(path, "repository")
+
+        try:
+            result = await IOLoop.current().run_in_executor(
+                None,
+                lambda: publish_repository(
+                    directory,
+                    name=str(body.get("name") or ""),
+                    public=bool(body.get("public")),
+                    description=str(body.get("description") or ""),
+                ),
+            )
+        except GitHubError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(json.dumps(result.to_dict()))
+
+
 class BridgeHandler(WorkshopHandler):
     """Run a workshop command in the frontend on behalf of a tool."""
 
@@ -1133,6 +1210,8 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "environment"), EnvironmentHandler),
         (url_path_join(base_url, API_NAMESPACE, "init"), InitHandler),
         (url_path_join(base_url, API_NAMESPACE, "publish"), PublishHandler),
+        (url_path_join(base_url, API_NAMESPACE, "gist"), GistHandler),
+        (url_path_join(base_url, API_NAMESPACE, "github"), GitHubHandler),
         (url_path_join(base_url, API_NAMESPACE, "bridge"), BridgeHandler),
         (url_path_join(base_url, API_NAMESPACE, "agent", "status"), AgentStatusHandler),
         (

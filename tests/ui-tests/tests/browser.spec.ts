@@ -497,7 +497,7 @@ test.describe('workshop browser', () => {
 
     // Opening from the installed card shows the trust dialog and the panel,
     // and the card shows it is busy until then.
-    await installed.getByRole('button', { name: 'Open' }).click();
+    await installed.getByRole('button', { name: 'Open', exact: true }).click();
 
     const dialog = page.locator('.jp-Dialog');
 
@@ -923,7 +923,7 @@ test.describe('workshop browser', () => {
     // Open starts the installed workshop from its card.
     await installed
       .filter({ hasText: 'Git, the other way' })
-      .getByRole('button', { name: 'Open' })
+      .getByRole('button', { name: 'Open', exact: true })
       .click();
     await trustWorkshop(page, 'Git, the other way');
   });
@@ -1425,7 +1425,7 @@ test.describe('workshop browser', () => {
     // Opening a workshop closes the browser and reveals the instructions.
     await browser
       .locator('.jp-WorkshopBrowser-card', { hasText: WORKSHOPS_DIR })
-      .getByRole('button', { name: 'Open' })
+      .getByRole('button', { name: 'Open', exact: true })
       .click();
 
     await trustWorkshop(page, 'Git from the command line');
@@ -1775,7 +1775,7 @@ test.describe('locked-down browser', () => {
     const installed = cards.filter({ hasText: WORKSHOPS_DIR });
 
     await expect(installed).toHaveCount(1);
-    await installed.getByRole('button', { name: 'Open' }).click();
+    await installed.getByRole('button', { name: 'Open', exact: true }).click();
 
     const dialog = page.locator('.jp-Dialog');
 
@@ -2223,6 +2223,68 @@ test.describe('workshop library', () => {
     ).toBe(false);
   });
 
+  test('opens a terminal in one of the owner’s workshops and offers to publish it and a course', async ({
+    page
+  }) => {
+    await page.contents.uploadContent(
+      JSON.stringify({ version: 2 }),
+      'text',
+      `${WORKSHOPS_DIR}/library.json`
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/personal/workshops/termi`,
+      'termi',
+      'At the terminal'
+    );
+    await uploadWorkshop(
+      page,
+      `${WORKSHOPS_DIR}/personal/courses/shelf/workshops/one`,
+      'one',
+      'On the shelf'
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const card = browser.locator('.jp-WorkshopBrowser-card', {
+      hasText: 'At the terminal'
+    });
+
+    // A terminal opens in the workshop's directory.
+    await card.getByRole('button', { name: 'Open in terminal' }).click();
+    await expect(page.locator('.jp-Terminal')).toBeVisible();
+    await page.locator('.lm-TabBar-tab', { hasText: 'Workshops' }).click();
+
+    // Publish asks where, a gist or a repository, and whether publicly;
+    // nothing is sent until Publish is pressed, so Cancel sends nothing.
+    await card.getByRole('button', { name: 'Publish…' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText('Publish "At the terminal"');
+    await expect(dialog.locator('select option')).toHaveText([
+      'A GitHub gist',
+      'A GitHub repository'
+    ]);
+    await expect(dialog.locator('input[type="checkbox"]')).not.toBeChecked();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    // A course group offers a terminal and GitHub, with no gist.
+    const group = browser.locator('.jp-WorkshopBrowser-group', {
+      hasText: 'shelf'
+    });
+
+    await expect(
+      group.getByRole('button', { name: 'Open in terminal' })
+    ).toBeVisible();
+    await group.getByRole('button', { name: 'Publish to GitHub…' }).click();
+    await expect(dialog).toContainText('Publish the course "shelf"');
+    await expect(dialog.locator('select')).toHaveCount(0);
+    await expect(dialog).toContainText('through the gh command');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test('shows its own sections, installs into a collection directory and trusts its own workshops', async ({
     page
   }) => {
@@ -2304,7 +2366,7 @@ test.describe('workshop library', () => {
     // The owner's workshop opens without asking about trust.
     await browser
       .locator('.jp-WorkshopBrowser-card', { hasText: 'My own workshop' })
-      .getByRole('button', { name: 'Open' })
+      .getByRole('button', { name: 'Open', exact: true })
       .click();
     await expect(
       page.locator('#jupyterlab-workshop-panel .jp-WorkshopPanel-title')
@@ -2865,7 +2927,7 @@ test.describe('ordered collection', () => {
     ).toHaveCount(0);
 
     // Finishing the first names the second and opens it.
-    await first.getByRole('button', { name: 'Open' }).click();
+    await first.getByRole('button', { name: 'Open', exact: true }).click();
     await trustWorkshop(page, 'First steps');
     await page
       .locator('#jupyterlab-workshop-panel')

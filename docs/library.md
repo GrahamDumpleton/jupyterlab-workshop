@@ -175,6 +175,16 @@ personal workshop offers the same choice, and `jupyter workshop remove
 the workshops it creates there too, and works on the workshops under
 `personal/workshops/` and on courses, never on downloaded ones.
 
+A card of your own also has Open in terminal, which opens a JupyterLab
+terminal in the workshop's directory, Move to course…, which moves the
+workshop into one of your [courses](#courses), and Publish…, which asks
+whether to publish it as a [gist](publishing.md#a-workshop-in-a-gist) or
+to a [GitHub repository](publishing.md#a-repository-on-github) and
+whether publicly, and sends nothing until you press Publish; a new gist
+is secret and a new repository private unless you say otherwise. A
+course's group has Edit course with AI, Open in terminal and Publish to
+GitHub… in its heading.
+
 ## Courses
 
 A course is a repository whose workshops the library shows, typically

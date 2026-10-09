@@ -12,7 +12,7 @@
     ["Example.org//Course__One", "example.org-course-one"],
     ["--weird--", "weird"],
     ["x.y.", "x.y"],
-    ["ünïcode/kurs", "n-code-kurs"],
+    ["\u00fcn\u00efcode/kurs", "n-code-kurs"],
     [
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -160,5 +160,22 @@
     ["", "https://example.org/collection.json", null],
     ["", "/etc/passwd", null],
     ["", "workshops/../../x", null]
+  ],
+  "courseOf": [
+    [
+      "workshops",
+      "workshops/personal/courses/repo",
+      ["workshops/personal/courses/repo", ""]
+    ],
+    [
+      "workshops",
+      "workshops/personal/courses/repo/workshops/x",
+      ["workshops/personal/courses/repo", "workshops/x"]
+    ],
+    [".", "personal/courses/repo/", ["personal/courses/repo", ""]],
+    [".", "personal/workshops/mine", null],
+    [".", "personal/courses", null],
+    [".", "personal/courses/../x", null],
+    ["workshops", "personal/courses/repo", null]
   ]
 }

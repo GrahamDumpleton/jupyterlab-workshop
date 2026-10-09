@@ -51,20 +51,12 @@ from .collection import (
     load_collection,
     parse_collection,
 )
-from .gist import (
-    RECORD_FILE,
-    GistError,
-    Requester,
-    flatten_workshop,
-    resolve_token,
-    send_gist,
-    write_flat,
-)
+from .gist import RECORD_FILE, GistError, Requester, publish_to_gist
 from .github import GitHubError, Runner, publish_repository
 from .publish import PublishError, publish_workshop
 from .scaffold import slug, write_scaffold
 from .skill import skill_directory
-from .tree import STATE_DIR, TreeError, restore_tree
+from .tree import STATE_DIR, TreeError
 
 SERVER_NAME = "jupyterlab-workshop"
 
@@ -455,62 +447,34 @@ def create_server(
         the gist's URL, or the lint report or error that stopped it.
         """
 
-        def clean(report: Any) -> bool:
-            # A workshop lint cannot read reports an error, not a count.
-            return isinstance(report, dict) and report.get("errors") == 0
-
         source = Path(place(directory))
-        report = node_json(["lint", str(source)])
+        reports: list[Any] = []
 
-        if not clean(report):
-            return {"error": "The workshop does not lint clean", "lint": report}
+        def lint_json(path: Path) -> Any:
+            # The lint reports are kept so a failure carries the findings.
+            report = node_json(["lint", str(path)])
+
+            reports.append(report)
+
+            return report
 
         try:
-            flat = flatten_workshop(source)
-
-            # The flat copy must come back as the same workshop for a
-            # learner who downloads it.
-            with tempfile.TemporaryDirectory(prefix="workshop-gist-") as tmp:
-                written = write_flat(flat, Path(tmp) / "flat")
-                restored = Path(tmp) / "restored" / flat.name
-
-                restore_tree(written, restored)
-
-                check = node_json(["lint", str(restored)])
-
-                if not clean(check):
-                    return {
-                        "error": "The flat copy does not lint clean once restored",
-                        "lint": check,
-                    }
-
-            try:
-                token = resolve_token()
-            except GistError:
-                return {
-                    "error": "There is no GitHub token where JupyterLab runs: "
-                    "sign in with gh auth login in a terminal, or set GH_TOKEN "
-                    "before starting JupyterLab"
-                }
-
-            result = send_gist(
-                source,
-                flat,
-                token,
-                create=create,
-                public=public,
-                request=github,
+            result = publish_to_gist(
+                source, lint_json, create=create, public=public, request=github
             )
         except (GistError, TreeError) as error:
-            return {"error": str(error)}
+            failed: dict[str, Any] = {"error": str(error)}
+
+            if "lint clean" in str(error) and reports:
+                failed["lint"] = reports[-1]
+
+            return failed
 
         return {
             "url": result.url,
             "created": result.created,
             "public": result.public,
             "record": str(source / STATE_DIR / RECORD_FILE),
-            "renamed": flat.renames,
-            "left_out": flat.left_out,
         }
 
     @server.tool()

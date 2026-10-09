@@ -469,6 +469,42 @@ export function isOwnLibraryPath(
 }
 
 /**
+ * The course a path, relative to the root, is or lies in: for a path at
+ * or under `personal/courses/<name>`, the course's own path and the rest
+ * of the path within it, empty for the course itself; null otherwise.
+ * Lexical only, like `isOwnLibraryPath`, and the same rule as the
+ * server's `course_of_path`.
+ */
+export function courseOfPath(
+  workshopsDirectory: string,
+  path: string
+): { course: string; inside: string } | null {
+  const base = normalizeWorkshopsDirectory(workshopsDirectory);
+  const target = normalizeWorkshopsDirectory(path);
+
+  if (target.split('/').includes('..')) {
+    return null;
+  }
+
+  const prefix = base
+    ? `${base}/${COURSES_DIRECTORY}/`
+    : `${COURSES_DIRECTORY}/`;
+
+  if (!target.startsWith(prefix) || target.length === prefix.length) {
+    return null;
+  }
+
+  const rest = target.slice(prefix.length);
+  const slash = rest.indexOf('/');
+  const name = slash < 0 ? rest : rest.slice(0, slash);
+
+  return {
+    course: prefix + name,
+    inside: slash < 0 ? '' : rest.slice(slash + 1)
+  };
+}
+
+/**
  * Whether a workshop path is one of the library owner's own single
  * workshops under `personal/workshops/`. Such a workshop has no other
  * copy, but it is the owner's to delete, so removing it may take the

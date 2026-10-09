@@ -166,7 +166,9 @@ that repository on GitHub. `jupyter workshop github` does it through the
 [`gh` command](https://cli.github.com), signed in to your account with
 the `repo` scope, and so does [Workshop
 Author](authoring.md#workshop-author) when asked, after asking you to
-confirm:
+confirm, as do Publish… on a workshop's card and Publish to GitHub… on a
+course's group in a [library](library.md), which ask whether the
+repository is to be private or public first:
 
 ```
 jupyter workshop github ~/Workshops/personal/courses/wrapt-workshops
@@ -257,7 +259,9 @@ the files of an existing one, as a new revision in the gist's history;
 see [gist](cli.md#gist) for the token it needs. The gist is recorded in
 the workshop's `_workshop/gist.json`, so a later `--update` with no gist
 named goes to the same one, and so does [Workshop
-Author](authoring.md#workshop-author) when asked to publish again.
+Author](authoring.md#workshop-author) when asked to publish again, and
+Publish… on the workshop's card in a [library](library.md), which asks
+whether the gist is to be secret or public first.
 
 A file's content can be edited on the gist page, but a file added or
 renamed there is not in the tree and is left out, so make such changes

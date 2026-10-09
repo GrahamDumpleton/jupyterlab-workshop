@@ -10,6 +10,8 @@ import {
   IFetchResult,
   IInstalledWorkshop,
   ICourseCollectionInfo,
+  IGistPublishResult,
+  IGitHubPublishResult,
   ILibraryUpgradePlan,
   IPromotionReport,
   IPlatformInfo,
@@ -123,6 +125,26 @@ export class ServerBackend implements IWorkshopBackend {
     return requestAPI<IPromotionReport>('courses', this._settings, {
       method: 'POST',
       body: JSON.stringify({ directory, workshop, course, collection })
+    });
+  }
+
+  async publishGist(
+    workshop: string,
+    options: { create?: boolean; public?: boolean }
+  ): Promise<IGistPublishResult> {
+    return requestAPI<IGistPublishResult>('gist', this._settings, {
+      method: 'POST',
+      body: JSON.stringify({ workshop, ...options })
+    });
+  }
+
+  async publishGitHub(
+    path: string,
+    options: { name?: string; public?: boolean }
+  ): Promise<IGitHubPublishResult> {
+    return requestAPI<IGitHubPublishResult>('github', this._settings, {
+      method: 'POST',
+      body: JSON.stringify({ path, ...options })
     });
   }
 

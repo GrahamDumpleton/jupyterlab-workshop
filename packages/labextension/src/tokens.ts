@@ -1058,6 +1058,35 @@ export interface ICourseCollectionInfo {
   title: string;
 }
 
+/** What publishing a workshop as a gist produced. */
+export interface IGistPublishResult {
+  /** The gist's page. */
+  url: string;
+
+  /** Whether a gist was created, as against the recorded one updated. */
+  created: boolean;
+  public: boolean;
+}
+
+/** What publishing a repository to GitHub produced. */
+export interface IGitHubPublishResult {
+  /** The repository's page. */
+  url: string;
+
+  /** Whether the repository was created, as against pushed to. */
+  created: boolean;
+  public: boolean;
+
+  /** Whether a private repository was just made public. */
+  made_public: boolean;
+
+  /** A course's generated files rewritten to name the repository. */
+  refreshed: string[];
+
+  /** What the person should know next, such as GitHub Pages. */
+  notes: string[];
+}
+
 /** What promoting a workshop into a course did. */
 export interface IPromotionReport {
   /** The workshop's new path, relative to the JupyterLab root. */
@@ -1219,6 +1248,25 @@ export interface IWorkshopBackend {
   ): Promise<IPromotionReport>;
 
   /**
+   * Publish one of the owner's workshops as a GitHub gist: the one
+   * recorded in it is updated unless a new one is asked for, secret
+   * unless public.
+   */
+  publishGist(
+    workshop: string,
+    options: { create?: boolean; public?: boolean }
+  ): Promise<IGistPublishResult>;
+
+  /**
+   * Publish a workshop's or course's repository to GitHub through the
+   * gh command, private unless public, or push to the one it has.
+   */
+  publishGitHub(
+    path: string,
+    options: { name?: string; public?: boolean }
+  ): Promise<IGitHubPublishResult>;
+
+  /**
    * What upgrading a workshop library from the previous layout would do,
    * or null when the library is in the current layout already.
    */
@@ -1328,6 +1376,7 @@ export namespace CommandIDs {
   export const applyFix = 'workshop:apply-fix';
   export const trustPreview = 'workshop:trust-preview';
   export const publish = 'workshop:publish';
+  export const openTerminal = 'workshop:open-terminal';
   export const record = 'workshop:record';
   export const recordPageBreak = 'workshop:record-page-break';
   export const bridgeOpen = 'workshop:bridge-open';

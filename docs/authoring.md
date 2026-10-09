@@ -13,19 +13,19 @@ workshop as your own, so it is trusted at every hash from then on and
 saving a page never brings the trust dialog back, and it adds a toolbar
 to the panel:
 
-| Button                  | What it does                                                                                                                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Edit page               | Opens the page source in the editor beside the panel. Saving re-renders the panel.                                                                                        |
-| New page                | Adds a page after the last one and lists it in the manifest.                                                                                                              |
-| Pages                   | Reorders, renames, adds and removes pages, and sets `optional` and `requires` in their front matter. Removed pages stay on disk.                                          |
-| Manifest                | Opens `workshop.yaml` in the editor. Saving reloads the workshop.                                                                                                         |
-| Insert                  | A form for an action: pick the type, fill in its options, write the body. The block goes at the cursor of the page open in the editor, or at the end of the current page. |
-| Capture                 | Adds what you just did in the session, the last terminal commands, files saved and cells run, to the page as actions.                                                     |
-| Run actions, Run checks | Run the current page's steps or its checks in order, as the self-test would. [Attempts](checks.md#attempt) are left to a full run.                                        |
-| Lint                    | Opens the lint panel: every finding with its file and line, and a Fix button for the mechanical ones (declare or remove a capability, drop an unknown option).            |
-| Trust                   | Shows the dialog learners will see for this manifest.                                                                                                                     |
-| Publish                 | Builds the archive, its SHA-256 and a collection entry under `dist/` in the workshop.                                                                                     |
-| Record                  | Records the session into draft pages; see below.                                                                                                                          |
+| Button                  | What it does                                                                                                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edit page               | Opens the page source in the editor beside the panel. Saving re-renders the panel.                                                                                                                                                             |
+| New page                | Adds a page after the last one and lists it in the manifest.                                                                                                                                                                                   |
+| Pages                   | Reorders, renames, adds and removes pages, and sets `optional` and `requires` in their front matter. Removed pages stay on disk.                                                                                                               |
+| Manifest                | Opens `workshop.yaml` in the editor. Saving reloads the workshop.                                                                                                                                                                              |
+| Insert                  | A form for an action: pick the type, fill in its options, write the body. The block goes at the cursor of the page open in the editor, or at the end of the current page.                                                                      |
+| Capture                 | Adds what you just did in the session, the last terminal commands, files saved and cells run, to the page as actions.                                                                                                                          |
+| Run actions, Run checks | Run the current page's steps or its checks in order, as the self-test would. [Attempts](checks.md#attempt) are left to a full run.                                                                                                             |
+| Lint                    | Opens the lint panel: every finding with its file and line, and a Fix button for the mechanical ones (declare or remove a capability, drop an unknown option).                                                                                 |
+| Trust                   | Shows the dialog learners will see for this manifest.                                                                                                                                                                                          |
+| Publish                 | Builds the archive, its SHA-256 and a collection entry under `dist/` in the workshop; for one of your own workshops in a [library](library.md) it asks first whether to make the archive, a gist or a GitHub repository, and whether publicly. |
+| Record                  | Records the session into draft pages; see below.                                                                                                                                                                                               |
 
 ```{figure} _static/author-mode.png
 :alt: The Workshop panel in author mode
