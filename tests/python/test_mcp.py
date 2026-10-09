@@ -236,6 +236,47 @@ def test_publish_github_tool_creates_the_repository_through_gh(
     assert len(gh_calls) == 2
 
 
+def test_check_gitignore_tool_reports_and_fixes(tmp_path: Path) -> None:
+    server = create_server(lambda: None, base=tmp_path)
+
+    async def scenario() -> list[Any]:
+        async with Client(server) as client:
+            await client.call_tool("init", {"directory": "demo", "template": "blank"})
+
+            # A workshop as scaffolded lacks nothing; one with its file
+            # cut down does, until fixed.
+            fresh = await client.call_tool("check_gitignore", {"directory": "demo"})
+
+            (tmp_path / "demo" / ".gitignore").write_text("_workshop/\n")
+
+            cut = await client.call_tool("check_gitignore", {"directory": "demo"})
+            fixed = await client.call_tool(
+                "check_gitignore", {"directory": "demo", "fix": True}
+            )
+            nothing = await client.call_tool(
+                "check_gitignore", {"directory": "elsewhere"}
+            )
+
+            results = (fresh, cut, fixed, nothing)
+
+            return [json.loads(_text(result)) for result in results]
+
+    fresh, cut, fixed, nothing = _run(scenario())
+
+    assert fresh["kind"] == "workshop"
+    assert fresh["missing"] == []
+    assert [item["pattern"] for item in cut["missing"]] == [
+        "dist/",
+        "work/",
+        "scratch/",
+        ".ipynb_checkpoints/",
+        ".claude/",
+    ]
+    assert cut["added"] == []
+    assert fixed["added"] == [item["pattern"] for item in cut["missing"]]
+    assert "neither a workshop nor a course" in nothing["error"]
+
+
 def test_index_tool_writes_a_collection(tmp_path: Path) -> None:
     server = create_server(lambda: None)
 

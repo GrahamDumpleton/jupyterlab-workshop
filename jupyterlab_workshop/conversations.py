@@ -1079,8 +1079,11 @@ section: commit only when the person tells you to, never add a
 Co-Authored-By line or any other trailer naming an agent, and before the
 first commit check git config user.name and user.email, asking the
 person for them and setting them with git config --local when either is
-unset. Never push or publish unasked; when a version is ready, you may
-say once that you can publish it when asked.
+unset. Before a commit, run check_gitignore with the directory ".": if
+it reports missing entries, say what the commit would take in that it
+should not, and offer to add them, with fix, before committing. Never
+push or publish unasked; when a version is ready, you may say once that
+you can publish it when asked.
 
 When the person asks to publish or share the workshop as a gist, make
 sure it is ready first, then use publish_gist with the directory ".".
@@ -1157,9 +1160,13 @@ says what changed and why, and never add a Co-Authored-By line or any
 other trailer naming an agent. Before the first commit, check git config
 user.name and user.email; if either is unset, ask the person for them
 and set them with git config --local in this repository, never globally
-unless they say so. Never push, add a remote or publish anything unless
-asked; when a version is ready, you may say once that you can publish
-when asked. When the person asks to publish the course to GitHub, or to
+unless they say so. Before a commit, run check_gitignore with the
+directory ".": a repository brought in from elsewhere may not ignore
+what a course should, and if it reports missing entries, say what the
+commit would take in that it should not, and offer to add them, with
+fix, before committing. Never push, add a remote or publish anything
+unless asked; when a version is ready, you may say once that you can
+publish when asked. When the person asks to publish the course to GitHub, or to
 push, use publish_github with the directory ".": it creates a private
 repository and pushes, or pushes to the one the course already has, and
 public only when they ask for a public one; it refuses an uncommitted

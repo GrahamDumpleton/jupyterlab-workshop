@@ -383,7 +383,10 @@ page list with ids and requirements), `init`, `publish`,
 updates the one recorded for the workshop, with a GitHub token found
 where the server runs), `publish_github` (as `jupyter workshop github`:
 it creates a GitHub repository for a workshop or course through the
-`gh` command and pushes, or pushes to the one it has), `index`,
+`gh` command and pushes, or pushes to the one it has), `check_gitignore`
+(as `jupyter workshop gitignore`: what a workshop's or course's
+`.gitignore` lacks of what it should never commit, and the fix, which
+the agent offers before a commit), `index`,
 `catalog`, `draft` (pages from a saved recording), `list_collection`,
 `list_catalog`, `get_schema` and `test`. The server keeps no notion of
 a current workshop, so the agent names the directory each time, as an

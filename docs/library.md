@@ -293,10 +293,14 @@ These commands use the default library unless `--root` or `--directory`
 name another.
 
 A course's workshops record their progress in `_workshop/` beside their
-pages, inside the repository, so the repository should ignore that
-directory; `course link` mentions it when the repository's `.gitignore`
-does not. Remove on a course's workshop clears only that progress,
-never the repository's files.
+pages, inside the repository, and Workshop Author keeps its conversation
+in `.workshop/` at the root, so the repository should ignore both, as
+one written by `course init` does. `course link` checks the repository's
+`.gitignore` against what a course should never commit and says what is
+missing; [`jupyter workshop gitignore --fix`](cli.md#gitignore) adds it,
+and Workshop Author offers the same before a commit. Remove on a
+course's workshop clears only that progress, never the repository's
+files.
 
 When a linked repository is deleted or moved, the course is shown as
 missing in the browser, with its recorded path and an Unlink button,

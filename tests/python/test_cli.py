@@ -69,6 +69,45 @@ def test_init_writes_a_workshop_and_refuses_to_overwrite(
     assert "initialized" not in capsys.readouterr().out
 
 
+def test_gitignore_reports_what_is_missing_and_fixes_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "demo"
+
+    assert cli.main(["init", str(target)]) == 0
+    capsys.readouterr()
+
+    # As scaffolded, nothing is missing.
+    assert cli.main(["gitignore", str(target)]) == 0
+    assert "ignores everything it should" in capsys.readouterr().out
+
+    # Cut down, the missing patterns are listed with their reasons, and
+    # the status says so; --fix adds them.
+    (target / ".gitignore").write_text("_workshop/\nwork/\n")
+
+    assert cli.main(["gitignore", str(target)]) == 1
+
+    out = capsys.readouterr().out
+
+    assert "missing: dist/" in out
+    assert "Published archives" in out
+    assert "missing: .claude/" in out
+    assert "--fix" in out
+
+    assert cli.main(["gitignore", str(target), "--fix"]) == 0
+
+    out = capsys.readouterr().out
+
+    assert "added: dist/" in out
+    assert "wrote" in out
+    assert (target / ".gitignore").read_text().endswith(".claude/\n")
+    assert cli.main(["gitignore", str(target)]) == 0
+
+    # Neither a workshop nor a course is an error.
+    assert cli.main(["gitignore", str(tmp_path)]) == 2
+    assert "neither a workshop nor a course" in capsys.readouterr().err
+
+
 @needs_node
 def test_lint_pages_and_render_use_the_node_bundle(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]

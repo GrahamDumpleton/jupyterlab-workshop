@@ -225,6 +225,29 @@ repository's settings, which the command says; on a private repository
 Pages needs a paid plan. See [A repository on
 GitHub](publishing.md#a-repository-on-github).
 
+## gitignore
+
+```
+jupyter workshop gitignore [DIRECTORY] [--fix]
+```
+
+Compares a workshop's or a course's `.gitignore` with what one written
+by [init](#init) or [course init](#course) ignores: for a workshop the
+`_workshop/` progress, `work/`, `dist/`, `scratch/`, JupyterLab's
+`.ipynb_checkpoints/` and Claude Code's `.claude/`; for a course
+`.workshop/`, the same state under `workshops/*/`, `.venv/`, the skill
+link and Claude Code's local files, and the JupyterLite site when the
+course has one. A repository brought into a [library](library.md) from
+elsewhere, or made before an entry existed, may lack some. The command
+lists each missing pattern with why it matters and exits with status 1;
+`--fix` appends them to the file, comments and all, and exits with 0.
+Each pattern is tried against git itself, so a pattern written another
+way counts as present; without git, or outside a repository, the file's
+own lines are read instead and the command says so. [course
+link](#course) runs the check on the repository it links, and
+[Workshop Author](authoring.md#workshop-author) runs it before a commit
+and offers the fix.
+
 ## collection
 
 ```

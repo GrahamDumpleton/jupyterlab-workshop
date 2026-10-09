@@ -63,6 +63,7 @@ from .gist import (
     write_flat,
 )
 from .github import GitHubError, publish_repository
+from .ignores import check_ignores
 from .install import (
     DEFAULT_DIRECTORY,
     apply_update,
@@ -797,6 +798,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--description", default="", help="the new repository's description"
     )
     github.set_defaults(func=command_github)
+
+    gitignore = commands.add_parser(
+        "gitignore",
+        help="check a workshop's or course's .gitignore against what it "
+        "should never commit, and add what is missing",
+    )
+    gitignore.add_argument(
+        "directory",
+        type=Path,
+        nargs="?",
+        default=Path("."),
+        help="the workshop or course (default the current directory)",
+    )
+    gitignore.add_argument(
+        "--fix",
+        action="store_true",
+        help="append the missing entries to .gitignore",
+    )
+    gitignore.set_defaults(func=command_gitignore)
 
     test = commands.add_parser(
         "test",
@@ -2053,19 +2073,23 @@ def command_course_link(args: argparse.Namespace) -> int:
         raise CliError(_not_a_library_hint(str(error))) from error
 
     target = Path(entry["target"])
-    ignore = target / ".gitignore"
 
     print(f"linked {library / COURSES_DIRECTORY / entry['name']} to {target}")
 
-    # A workshop records its progress in _workshop/ beside its pages,
-    # which a repository should not commit.
-    if (target / ".git").exists() and (
-        not ignore.is_file() or "_workshop" not in ignore.read_text("utf-8")
-    ):
-        print(
-            "note: the repository's .gitignore does not ignore _workshop/, "
-            "where workshops record progress"
-        )
+    # A repository made elsewhere may not ignore what a course should,
+    # such as the _workshop/ progress its workshops record beside their
+    # pages; say what is missing and how to add it.
+    if (target / ".git").exists():
+        missing = [
+            pattern for pattern, _ in check_ignores(target, kind="course").missing
+        ]
+
+        if missing:
+            print(
+                "note: the repository's .gitignore does not ignore "
+                f"{', '.join(missing)}; `jupyter workshop gitignore --fix "
+                f"{target}` adds them"
+            )
 
     return 0
 
@@ -2285,6 +2309,44 @@ def command_github(args: argparse.Namespace) -> int:
         print(f"\n{note}")
 
     return 0
+
+
+def command_gitignore(args: argparse.Namespace) -> int:
+    """Report what a repository's .gitignore lacks, and add it with --fix."""
+
+    try:
+        report = check_ignores(args.directory, fix=args.fix)
+    except ValueError as error:
+        raise CliError(str(error)) from error
+
+    if report.note:
+        print(f"note: {report.note}")
+
+    if not report.missing:
+        print(f"the {report.kind}'s .gitignore ignores everything it should")
+
+        return 0
+
+    # Each pattern with its reason, grouped as the file groups them.
+    reasons: dict[str, list[str]] = {}
+
+    for pattern, why in report.missing:
+        reasons.setdefault(why, []).append(pattern)
+
+    verb = "added" if report.added else "missing"
+
+    for why, patterns in reasons.items():
+        print(f"{verb}: {', '.join(patterns)}")
+        print(f"    {why.splitlines()[0]}")
+
+    if report.added:
+        print(f"wrote {args.directory / '.gitignore'}")
+
+        return 0
+
+    print("run again with --fix to add them")
+
+    return 1
 
 
 def _lint(directory: Path, options: list[str]) -> int:

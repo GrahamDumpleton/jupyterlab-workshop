@@ -28,6 +28,8 @@ from string import Template
 from typing import Any
 from urllib.parse import urlsplit
 
+from .ignores import render_ignores
+
 try:
     from ._version import __version__
 except ImportError:  # pragma: no cover - a source checkout without a build
@@ -511,54 +513,10 @@ def _toml_string(text: str) -> str:
 
 
 def gitignore(options: CourseOptions) -> str:
-    """What a course repository never commits."""
+    """What a course repository never commits; the entries live in
+    :mod:`ignores`, which also checks a repository against them."""
 
-    lite = (
-        """
-# The JupyterLite site, built by `just site`
-dist/
-.jupyterlite.doit.db
-"""
-        if options.lite
-        else ""
-    )
-
-    return _fill(
-        """# Python environment managed by uv
-.venv/
-__pycache__/
-*.py[cod]
-.ipynb_checkpoints/
-
-# The authoring skill is a symlink into the installed package, made by
-# `just install`, so it always matches the pinned release
-.claude/skills/jupyterlab-workshop-authoring
-
-# Claude Code's local state: the permissions granted in this checkout
-# and its own bookkeeping. The repository's .mcp.json and AGENTS.md are
-# committed; these are local.
-.claude/settings.local.json
-.claude/.cc-writes/
-
-# Workshop Author's conversation about this course
-.workshop/
-
-# State and outputs left behind by opening, running or publishing a workshop
-workshops/*/_workshop/
-workshops/*/work/
-workshops/*/dist/
-workshops/*/scratch/
-results-*.xml
-test-results/
-§lite
-# Temporary working files for agents, never referenced from committed files
-scratch/
-
-# Editors and OS
-.DS_Store
-""",
-        lite=lite,
-    )
+    return render_ignores("course", lite=options.lite)
 
 
 def mcp_config() -> str:

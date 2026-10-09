@@ -917,6 +917,21 @@ keep it: do not remove `.git`, and do not nest a repository inside one.
 - Never push, add a remote, or publish anything unasked. When a version
   is ready it is fine to say, once, that it can be published when asked.
 
+- Before a commit, run `check_gitignore` on the repository (`jupyter
+workshop gitignore` at the command line). It compares `.gitignore`
+  with what a workshop or a course should never commit, as the scaffold
+  writes it for a new one: for a workshop its `_workshop/` progress,
+  `work/`, `dist/`, `scratch/`, JupyterLab's `.ipynb_checkpoints/` and
+  Claude Code's `.claude/`; for a course `.workshop/`, the same state
+  under `workshops/*/`, `.venv/`, the skill link and Claude Code's local
+  files. A repository brought in from elsewhere, or made before an entry
+  existed, may lack some, and a commit would then take in progress,
+  checkpoints or local settings. If anything is missing, tell the user
+  what the commit would take in that it should not, offer to add the
+  entries, and add them with `fix` once they agree, in the same commit.
+  Never commit over the gap silently, and never change `.gitignore`
+  unasked.
+
 - Commands that would wait for input, `git commit` without `-m`, `git
 rebase -i`, a pager, cannot be used; pass `-m`, and `--no-pager` or
   `GIT_PAGER=cat` where output is read.

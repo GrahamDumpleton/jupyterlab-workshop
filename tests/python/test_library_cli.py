@@ -350,7 +350,11 @@ def test_course_commands_link_list_and_unlink(
     monkeypatch.setenv(LIBRARY_VARIABLE, str(library))
 
     assert cli.main(["course", "link", str(repo), "--workshops", "examples"]) == 0
-    assert "does not ignore _workshop/" in capsys.readouterr().out
+    note = capsys.readouterr().out
+
+    assert "does not ignore" in note
+    assert "workshops/*/_workshop/" in note
+    assert "gitignore --fix" in note
 
     assert cli.main(["course", "list", "--json"]) == 0
 

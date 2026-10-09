@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .ignores import render_ignores
+
 TEMPLATES = ("starter", "blank", "notebook")
 
 PLATFORMS = ("linux", "macos", "windows")
@@ -346,27 +348,11 @@ Workshop name: `{name}`.
 
 
 def gitignore() -> str:
-    """Ignore what running the workshop creates."""
+    """Ignore what running, editing and authoring the workshop creates;
+    the entries live in :mod:`ignores`, which also checks a repository
+    against them."""
 
-    return """# Runtime state written by the workshop extension
-_workshop/
-
-# Published archives
-dist/
-
-# The learner's workspace, filled from files/ when the workshop opens
-work/
-
-# Temporary working files, never referred to from the workshop
-scratch/
-
-# Checkpoints JupyterLab keeps beside a file saved from its editor
-.ipynb_checkpoints/
-
-# Claude Code's local state: the permissions granted in this checkout
-# and its own bookkeeping, none of it meant for anyone else
-.claude/
-"""
+    return render_ignores("workshop")
 
 
 def initialize_repository(directory: Path) -> bool:

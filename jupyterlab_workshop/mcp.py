@@ -53,6 +53,7 @@ from .collection import (
 )
 from .gist import RECORD_FILE, GistError, Requester, publish_to_gist
 from .github import GitHubError, Runner, publish_repository
+from .ignores import check_ignores
 from .publish import PublishError, publish_workshop
 from .scaffold import slug, write_scaffold
 from .skill import skill_directory
@@ -512,6 +513,30 @@ def create_server(
             return {"error": str(error)}
 
         return result.to_dict()
+
+    @server.tool()
+    def check_gitignore(directory: str = ".", fix: bool = False) -> Any:
+        """Compare a workshop's or course's .gitignore with what one should
+        never commit, and add what is missing when asked.
+
+        Returns the patterns the repository does not ignore, each with
+        why it matters, such as a workshop's _workshop/ progress or
+        .claude/ state, as the scaffold for a new workshop or course
+        writes them; a repository brought in from elsewhere or made
+        before an entry existed may lack some. Run it before a commit:
+        if anything is missing, tell the person what the commit would
+        take in that it should not and offer to add the entries, then
+        call again with fix once they agree, which appends them to the
+        file and lists them as added. Each pattern is tried against git
+        itself, so one written another way counts as present.
+        """
+
+        try:
+            report = check_ignores(Path(place(directory)), fix=fix)
+        except ValueError as error:
+            return {"error": str(error)}
+
+        return report.to_dict()
 
     @server.tool()
     def index(
