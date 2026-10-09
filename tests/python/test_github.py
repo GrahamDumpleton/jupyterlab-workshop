@@ -243,7 +243,7 @@ def test_publish_pushes_to_the_remote_it_has_and_can_make_it_public(
     assert opened.made_public is True
     assert opened.public is True
     assert gh.calls[-1][:2] == ["repo", "edit"]
-    assert gh.calls[-1][2].endswith("/remote")
+    assert gh.calls[-1][2].replace("\\", "/").endswith("/remote")
     assert "--visibility" in gh.calls[-1]
 
     gh.visibility = "PUBLIC"
