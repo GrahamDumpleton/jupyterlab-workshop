@@ -2321,11 +2321,22 @@ test.describe('workshop library', () => {
       'Available'
     ]);
 
-    // The owner's workshop and the course's are in their sections, and
-    // the local git-basics is still matched to the collection.
+    // The owner's workshop and the course's are in their sections, counted
+    // as workshops rather than installs, and the local git-basics is still
+    // matched to the collection.
     await expect(
       browser.locator('.jp-WorkshopBrowser-group', { hasText: 'repo' })
     ).toContainText('A draft in a course');
+    await expect(
+      browser
+        .locator('.jp-WorkshopBrowser-group', { hasText: 'repo' })
+        .locator('.jp-WorkshopBrowser-groupCount')
+    ).toHaveText('1 workshop');
+    await expect(
+      browser
+        .locator('.jp-WorkshopBrowser-group', { hasText: 'Your own workshops' })
+        .locator('.jp-WorkshopBrowser-groupCount')
+    ).toHaveText('1 workshop');
     await expect(
       browser
         .locator('.jp-WorkshopBrowser-group', {

@@ -1732,12 +1732,17 @@ function InstalledGroup({
   };
 
   // "n of m installed" tells a learner the collection has more; without
-  // a readable index there is no m to give.
+  // a readable index there is no m to give. The owner's own workshops
+  // and courses were made, not installed, so they are counted plainly.
   const total = collection?.error
     ? undefined
     : collection?.index?.workshops.length;
-  const countText =
-    total !== undefined
+  const own = section === 'personal' || section === 'course';
+  const countText = own
+    ? count === 1
+      ? '1 workshop'
+      : `${count} workshops`
+    : total !== undefined
       ? `${count} of ${total} installed`
       : count === 1
         ? '1 installed'
