@@ -48,6 +48,7 @@ from .conversations import (
     Conversation,
     ConversationError,
     ConversationManager,
+    mentor_path,
 )
 from .environment import (
     EnvironmentSetupError,
@@ -64,14 +65,16 @@ from .fetch import (
 )
 from .gist import GistError, publish_to_gist
 from .github import GitHubError, publish_repository
-from .journal import record_events
+from .journal import Journal, JournalError, record_events, reset_journal
 from .library import (
     COURSES_DIRECTORY,
     DEFAULT_COURSE_WORKSHOPS,
     PERSONAL_WORKSHOPS_DIRECTORY,
     LibraryError,
     course_of_path,
+    is_library,
     is_own_library_path,
+    library_directory,
     linked_course_path,
     plan_upgrade,
     read_library,
@@ -328,6 +331,44 @@ class CoursesHandler(WorkshopHandler):
             raise tornado.web.HTTPError(400, str(error)) from error
 
         self.finish(json.dumps({"unlinked": removed}))
+
+
+class JournalHandler(WorkshopHandler):
+    """Move a workshop library's learning journal, or only its profile,
+    aside to a dated directory beside it, as `jupyter workshop journal
+    --reset` does; nothing is deleted."""
+
+    @tornado.web.authenticated
+    async def delete(self) -> None:
+        directory = self.get_argument("directory", DEFAULT_WORKSHOPS_DIRECTORY)
+        profile_only = self.get_argument("profile", "") in {"1", "true"}
+
+        if not is_library(self.root_dir, directory):
+            raise tornado.web.HTTPError(
+                400, f"{directory or '.'} is not a workshop library"
+            )
+
+        # The mentor's conversation lives in the journal, so it ends, and
+        # whoever is watching is told, before the directory moves.
+        manager = self.settings.get(CONVERSATIONS_KEY)
+
+        if isinstance(manager, ConversationManager):
+            conversation = manager.get(mentor_path(directory))
+
+            if conversation is not None:
+                await conversation.announce({"type": "closed"})
+                await manager.close(conversation.path)
+
+        library = library_directory(self.root_dir, directory)
+
+        try:
+            archive = reset_journal(Journal(library), profile_only)
+        except JournalError as error:
+            raise tornado.web.HTTPError(400, str(error)) from error
+
+        self.finish(
+            json.dumps({"archive": archive.relative_to(self.root_dir).as_posix()})
+        )
 
 
 class LibraryHandler(WorkshopHandler):
@@ -1238,6 +1279,7 @@ def setup_handlers(server_app: Any) -> None:
         (url_path_join(base_url, API_NAMESPACE, "workshops"), WorkshopsHandler),
         (url_path_join(base_url, API_NAMESPACE, "courses"), CoursesHandler),
         (url_path_join(base_url, API_NAMESPACE, "library"), LibraryHandler),
+        (url_path_join(base_url, API_NAMESPACE, "journal"), JournalHandler),
         (url_path_join(base_url, API_NAMESPACE, "verify"), VerifyHandler),
         (url_path_join(base_url, API_NAMESPACE, "checkpoints"), CheckpointsHandler),
         (url_path_join(base_url, API_NAMESPACE, "preflight"), PreflightHandler),

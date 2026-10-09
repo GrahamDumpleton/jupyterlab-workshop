@@ -235,10 +235,15 @@ is yours to edit. Its absence is how the extension knows no agent has
 met you yet.
 
 The journal is yours, so it is plain files you may edit or delete, one
-entry or all of them. To start afresh, `jupyter workshop journal
---reset` moves the whole directory to `journal-archive-<stamp>/` beside
-it, and `--reset --profile` moves only the profile, keeping the history;
-nothing is deleted, and moving the directory back undoes it. See
+entry or all of them. To start afresh, Start over… in the mentor's panel,
+or "Workshop: Start the Learning Journal Over…" in the command palette,
+asks whether to move the whole journal or only the profile, and for the
+library directory's name typed to confirm, then moves it to
+`journal-archive-<stamp>/` beside the journal; the mentor's panel closes,
+since its conversation lived there, and opening the mentor again starts
+afresh. `jupyter workshop journal --reset` does the same from the command
+line, and `--reset --profile` moves only the profile, keeping the
+history. Nothing is deleted, and moving the directory back undoes it. See
 [journal](cli.md#journal). A deployment can remove the Journal button
 with `journal` in `disabledFeatures`; the record is still written.
 

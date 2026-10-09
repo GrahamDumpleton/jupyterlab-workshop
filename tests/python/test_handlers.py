@@ -375,6 +375,53 @@ async def test_events_of_a_library_workshop_are_kept_in_its_journal(
     assert "- [x] A" in history
 
 
+async def test_journal_endpoint_moves_the_journal_or_the_profile_aside(
+    jp_fetch, jp_root_dir
+):
+    from tornado.httpclient import HTTPClientError
+
+    # Not a library: nothing to move.
+    with pytest.raises(HTTPClientError) as error:
+        await jp_fetch(
+            "jupyterlab-workshop",
+            "journal",
+            method="DELETE",
+            params={"directory": ".", "profile": "0"},
+        )
+
+    assert error.value.code == 400
+
+    (jp_root_dir / "library.json").write_text('{"version": 2}\n')
+    (jp_root_dir / "journal").mkdir()
+    (jp_root_dir / "journal" / "settings.yaml").write_text("version: 1\n")
+    (jp_root_dir / "journal" / "profile.md").write_text("# Me\n")
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "journal",
+        method="DELETE",
+        params={"directory": ".", "profile": "1"},
+    )
+    archive = json.loads(response.body)["archive"]
+
+    assert archive.startswith("journal-archive-")
+    assert (jp_root_dir / archive / "profile.md").read_text() == "# Me\n"
+    assert not (jp_root_dir / "journal" / "profile.md").exists()
+    assert (jp_root_dir / "journal" / "settings.yaml").is_file()
+
+    response = await jp_fetch(
+        "jupyterlab-workshop",
+        "journal",
+        method="DELETE",
+        params={"directory": ".", "profile": "0"},
+    )
+    whole = json.loads(response.body)["archive"]
+
+    assert whole != archive
+    assert (jp_root_dir / whole / "settings.yaml").is_file()
+    assert not (jp_root_dir / "journal").exists()
+
+
 async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
     response = await jp_fetch(
         "jupyterlab-workshop",

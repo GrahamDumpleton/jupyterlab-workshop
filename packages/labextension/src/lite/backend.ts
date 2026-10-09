@@ -91,6 +91,11 @@ export class LiteBackend implements IWorkshopBackend {
     throw new Error('JupyterLite has no linked courses to unlink');
   }
 
+  async resetJournal(): Promise<string> {
+    // A site has no server to keep a journal, so there is none to move.
+    throw new Error('JupyterLite keeps no learning journal');
+  }
+
   async courseCollections(): Promise<never[]> {
     // Courses are not written in a site, so there is nothing to join.
     return [];

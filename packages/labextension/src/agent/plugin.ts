@@ -17,6 +17,7 @@ import {
   WidgetTracker
 } from '@jupyterlab/apputils';
 import { PathExt } from '@jupyterlab/coreutils';
+import { IDefaultFileBrowser } from '@jupyterlab/filebrowser';
 import { ILauncher } from '@jupyterlab/launcher';
 import type { Contents } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -24,16 +25,19 @@ import { Terminal } from '@jupyterlab/terminal';
 import { UUID } from '@lumino/coreutils';
 
 import { BRIDGE_CLIENT_ID } from '../authoring/bridge';
+import { showResetJournalDialog } from '../authoring/dialogs';
 import { BROWSER_ID, WorkshopBrowser } from '../browser/widget';
 import type { LibraryService } from '../library/service';
 import { PANEL_ID } from '../panel/widget';
 import { requestAPI } from '../request';
 import { PANEL_PLUGIN_ID, readSetting } from '../settings';
+import { serverRoot } from '../statedb';
 import {
   CommandIDs,
   IFeaturePolicy,
   IPlatformInfo,
-  IWorkshopManager
+  IWorkshopManager,
+  errorMessage
 } from '../tokens';
 import type { ConversationKind } from './connection';
 import { AUTHOR_TITLE, AuthorPanel, MENTOR_TITLE } from './panel';
@@ -58,7 +62,13 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
   description: 'Write and revise your own workshops with an AI agent.',
   autoStart: true,
   requires: [IWorkshopManager, IFeaturePolicy, ILabShell],
-  optional: [ILayoutRestorer, ILauncher, ISettingRegistry, ICommandPalette],
+  optional: [
+    ILayoutRestorer,
+    ILauncher,
+    ISettingRegistry,
+    ICommandPalette,
+    IDefaultFileBrowser
+  ],
   activate: (
     app: JupyterFrontEnd,
     manager: IWorkshopManager,
@@ -67,7 +77,8 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
     restorer: ILayoutRestorer | null,
     launcher: ILauncher | null,
     settingRegistry: ISettingRegistry | null,
-    palette: ICommandPalette | null
+    palette: ICommandPalette | null,
+    fileBrowser: IDefaultFileBrowser | null
   ): void => {
     const serverSettings = app.serviceManager.serverSettings;
     const tracker = new WidgetTracker<AuthorPanel>({
@@ -219,6 +230,10 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
         contents: app.serviceManager.contents,
         createWithAI: (kind, topic) =>
           void app.commands.execute(CommandIDs.createWithAI, { kind, topic }),
+        resetJournal: () =>
+          void app.commands.execute(CommandIDs.resetJournal, {
+            directory: directoryCache
+          }),
         reveal: () => {
           if (!panel.isAttached) {
             shell.add(panel, 'main');
@@ -384,6 +399,94 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    // Starting the journal over moves it, or only the profile, aside on
+    // the server, after the library's name is typed to confirm. The
+    // mentor's conversation lives in the journal, so its panel closes;
+    // opening the mentor again starts afresh. The command needs no agent,
+    // only a library and the journal feature.
+    app.commands.addCommand(CommandIDs.resetJournal, {
+      label: 'Workshop: Start the Learning Journal Over…',
+      caption:
+        "Move the library's learning journal, or only your profile, aside to a dated directory beside it; nothing is deleted",
+      isVisible: () =>
+        features.enabled('journal') && features.enabled('library'),
+      isEnabled: () =>
+        features.enabled('journal') && features.enabled('library'),
+      execute: async args => {
+        if (!features.enabled('journal') || !features.enabled('library')) {
+          return;
+        }
+
+        if (!(await inLibrary())) {
+          await showErrorMessage(
+            'Learning journal',
+            'A learning journal is kept in a workshop library. Start one with `jupyter workshop library`.'
+          );
+
+          return;
+        }
+
+        const directory =
+          typeof args.directory === 'string'
+            ? args.directory
+            : await workshopsDirectory();
+        const name = PathExt.basename(
+          normalizeWorkshopsDirectory(directory) || serverRoot()
+        );
+        const choice = await showResetJournalDialog(name);
+
+        if (!choice) {
+          return;
+        }
+
+        // The file browser cannot show a directory that has moved, so when
+        // it is inside the journal it goes up to the library first.
+        const journal = joinLibraryPath(
+          normalizeWorkshopsDirectory(directory),
+          JOURNAL_DIRECTORY
+        );
+        const shown = fileBrowser?.model.path ?? '';
+
+        if (
+          !choice.profileOnly &&
+          fileBrowser &&
+          (shown === journal || shown.startsWith(`${journal}/`))
+        ) {
+          await fileBrowser.model.cd(
+            `/${normalizeWorkshopsDirectory(directory)}`
+          );
+        }
+
+        let archive: string;
+
+        try {
+          archive = await manager.backend.resetJournal(
+            directory,
+            choice.profileOnly
+          );
+        } catch (error) {
+          await showErrorMessage(
+            'Unable to start the journal over',
+            errorMessage(error)
+          );
+
+          return;
+        }
+
+        for (const panel of tracker.filter(
+          panel => !panel.isDisposed && panel.kind === 'mentor'
+        )) {
+          panel.dispose();
+        }
+
+        refreshBrowser();
+        Notification.success(
+          `${choice.profileOnly ? 'Your profile' : 'The journal'} moved to ${archive}. Open the mentor to start afresh.`,
+          { autoClose: 8000 }
+        );
+      }
+    });
+
     // Restores a workshop's or course's panel by its path, and a draft's
     // by its id, each with its kind.
     app.commands.addCommand(RESTORE_COMMAND, {
@@ -436,6 +539,10 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       });
       palette?.addItem({
         command: CommandIDs.openMentor,
+        category: 'Workshop'
+      });
+      palette?.addItem({
+        command: CommandIDs.resetJournal,
         category: 'Workshop'
       });
     });

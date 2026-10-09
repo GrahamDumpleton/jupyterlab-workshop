@@ -896,6 +896,87 @@ export async function showPublishDialog(options: {
   return result.button.accept && result.value ? result.value : null;
 }
 
+/** What a reset of the learning journal moves aside. */
+export interface IResetJournalChoice {
+  /** Only the profile, keeping the history; else the whole journal. */
+  profileOnly: boolean;
+
+  /** What was typed to confirm. */
+  typed: string;
+}
+
+/**
+ * Ask whether to move the whole learning journal aside or only the
+ * profile, and for the library's name typed to confirm, so that a reset
+ * is never a slip. Returns null when cancelled or when the name typed
+ * is not the library's.
+ */
+export async function showResetJournalDialog(
+  expected: string
+): Promise<{ profileOnly: boolean } | null> {
+  const body = new ValueBody<IResetJournalChoice>(
+    { profileOnly: false, typed: '' },
+    (value, update) => (
+      <div className="jp-WorkshopAuthor-form">
+        <p>
+          Nothing is deleted: what you choose moves to a dated journal-archive
+          directory beside the journal, and moving it back undoes this.
+        </p>
+        <Field label="Move aside">
+          <select
+            className="jp-mod-styled"
+            value={value.profileOnly ? 'profile' : 'all'}
+            onChange={event =>
+              update({
+                ...value,
+                profileOnly: event.target.value === 'profile'
+              })
+            }
+          >
+            <option value="all">The whole journal: history and profile</option>
+            <option value="profile">
+              Only the profile, keeping the history
+            </option>
+          </select>
+        </Field>
+        <Field
+          label={`Type ${expected} to confirm`}
+          hint="The name of the library directory"
+        >
+          <input
+            type="text"
+            className="jp-mod-styled"
+            value={value.typed}
+            autoFocus
+            onChange={event => update({ ...value, typed: event.target.value })}
+          />
+        </Field>
+      </div>
+    )
+  );
+  const result = await showDialog<IResetJournalChoice>({
+    title: 'Start the learning journal over?',
+    body,
+    buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Move aside' })]
+  });
+
+  if (!result.button.accept || !result.value) {
+    return null;
+  }
+
+  if (result.value.typed.trim() !== expected) {
+    await showDialog({
+      title: 'Nothing moved',
+      body: `The name typed was not ${expected}, so the journal is as it was.`,
+      buttons: [Dialog.okButton()]
+    });
+
+    return null;
+  }
+
+  return { profileOnly: result.value.profileOnly };
+}
+
 /** Say where a gist or repository went, and what to know next. */
 export async function showPublishedDialog(result: {
   title: string;

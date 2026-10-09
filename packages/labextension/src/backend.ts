@@ -103,6 +103,16 @@ export class ServerBackend implements IWorkshopBackend {
     );
   }
 
+  async resetJournal(directory: string, profileOnly: boolean): Promise<string> {
+    const response = await requestAPI<{ archive: string }>(
+      `journal?directory=${encodeURIComponent(directory)}&profile=${profileOnly ? '1' : '0'}`,
+      this._settings,
+      { method: 'DELETE' }
+    );
+
+    return response.archive;
+  }
+
   async courseCollections(
     directory: string,
     name: string

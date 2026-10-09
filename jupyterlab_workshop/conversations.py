@@ -619,6 +619,13 @@ class ConversationManager:
         async with lock:
             existing = self._conversations.get(path)
 
+            # A journal moved aside, by the command line while JupyterLab
+            # runs, takes the conversation's record with it; what is open
+            # ends, and the next visit starts afresh.
+            if existing is not None and not existing.directory.is_dir():
+                await self.close(path)
+                existing = None
+
             if existing is not None:
                 return existing
 

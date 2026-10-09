@@ -327,6 +327,11 @@ export class AuthorPanel extends ReactWidget {
                 ? (kind, topic) => this._options.createWithAI?.(kind, topic)
                 : undefined
             }
+            onResetJournal={
+              this._options.resetJournal
+                ? () => this._options.resetJournal?.()
+                : undefined
+            }
             onContinueInTerminal={() => this._connection.requestTerminal()}
             onConfigure={(model, effort) =>
               this._connection.configure(model, effort)
@@ -586,6 +591,9 @@ export namespace AuthorPanel {
      * what the mentor's offer hands over to when Create is pressed.
      */
     createWithAI?: (kind: 'workshop' | 'course', topic: string) => void;
+
+    /** Start the learning journal over, for the mentor's Start over button. */
+    resetJournal?: () => void;
   }
 }
 
@@ -601,6 +609,7 @@ function AuthorContent({
   onOpenWorkshop,
   onOpenPath,
   onCreateWithAI,
+  onResetJournal,
   onContinueInTerminal,
   onConfigure,
   onCompact,
@@ -624,6 +633,9 @@ function AuthorContent({
 
   /** Hand an offer of the mentor's over to Workshop Author; see AuthorPanel.IOptions. */
   onCreateWithAI?: (kind: 'workshop' | 'course', topic: string) => void;
+
+  /** Start the learning journal over; see AuthorPanel.IOptions. */
+  onResetJournal?: () => void;
   onContinueInTerminal: () => void;
   onConfigure: (model: string, effort: string) => void;
   onCompact: () => void;
@@ -900,6 +912,17 @@ function AuthorContent({
                 >
                   {kind === 'mentor' ? 'Show journal' : 'Show files'}
                 </button>
+                {kind === 'mentor' && onResetJournal ? (
+                  <button
+                    type="button"
+                    className="jp-WorkshopAgent-barButton"
+                    title="Move the journal, or only your profile, aside and start afresh; nothing is deleted"
+                    disabled={model.running}
+                    onClick={onResetJournal}
+                  >
+                    Start over…
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="jp-WorkshopAgent-barButton"

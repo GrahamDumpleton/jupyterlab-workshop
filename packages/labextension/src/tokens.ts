@@ -1229,6 +1229,13 @@ export interface IWorkshopBackend {
   unlinkCourse(directory: string, name: string): Promise<void>;
 
   /**
+   * Move a workshop library's learning journal, or only its profile,
+   * aside to a dated archive directory beside it; nothing is deleted.
+   * Returns the archive's path under the root.
+   */
+  resetJournal(directory: string, profileOnly: boolean): Promise<string>;
+
+  /**
    * The collections of one of a workshop library's courses, each with its
    * name and title, for a workshop to be promoted into.
    */
@@ -1363,6 +1370,7 @@ export namespace CommandIDs {
   export const editWithAI = 'workshop:edit-with-ai';
   export const showJournal = 'workshop:show-journal';
   export const openMentor = 'workshop:open-mentor';
+  export const resetJournal = 'workshop:reset-journal';
   export const applyLayout = 'workshop:apply-layout';
   export const editPage = 'workshop:edit-page';
   export const editManifest = 'workshop:edit-manifest';

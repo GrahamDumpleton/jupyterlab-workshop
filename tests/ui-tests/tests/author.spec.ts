@@ -308,6 +308,77 @@ test.describe('Mentor', () => {
     );
   });
 
+  test('starts the journal over from the mentor, after the library’s name is typed', async ({
+    page
+  }) => {
+    await page.contents.uploadContent(
+      'version: 1\n',
+      'text',
+      `${LIBRARY}/journal/settings.yaml`
+    );
+    await page.contents.uploadContent(
+      '# Me\n',
+      'text',
+      `${LIBRARY}/journal/profile.md`
+    );
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+
+    // A profile written means no welcome card.
+    await expect(
+      browser.getByRole('button', { name: 'Mentor…' })
+    ).toBeVisible();
+    await expect(browser.locator('.jp-WorkshopBrowser-welcome')).toHaveCount(0);
+    await browser.getByRole('button', { name: 'Mentor…' }).click();
+
+    const mentor = page.locator('.jp-WorkshopAgent');
+
+    await expect(mentor.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await mentor.getByRole('button', { name: 'Start over…' }).click();
+
+    const dialog = page.locator('.jp-Dialog');
+
+    // The wrong name moves nothing.
+    await dialog.locator('select').selectOption('profile');
+    await dialog.locator('input[type="text"]').fill('something-else');
+    await dialog.getByRole('button', { name: 'Move aside' }).click();
+    await expect(dialog).toContainText('Nothing moved');
+    await dialog.getByRole('button', { name: 'OK' }).click();
+    expect(
+      await page.contents.fileExists(`${LIBRARY}/journal/profile.md`)
+    ).toBe(true);
+
+    // The file browser is taken into the journal, as Show journal does.
+    await mentor.getByRole('button', { name: 'Show journal' }).click();
+    await expect(
+      page.locator('#filebrowser .jp-DirListing-item', {
+        hasText: 'profile.md'
+      })
+    ).toBeVisible();
+
+    // The right name moves the whole journal aside and closes the mentor's
+    // panel, since its conversation lived there; the file browser, which
+    // was inside the journal, is up in the library rather than lost.
+    await mentor.getByRole('button', { name: 'Start over…' }).click();
+    await dialog.locator('select').selectOption('all');
+    await dialog.locator('input[type="text"]').fill(LIBRARY);
+    await dialog.getByRole('button', { name: 'Move aside' }).click();
+    await expect(page.locator('.Toastify__toast')).toContainText(
+      'The journal moved to'
+    );
+    await expect(mentor).toHaveCount(0);
+    await expect(
+      page.locator('#filebrowser .jp-DirListing-item', {
+        hasText: 'library.json'
+      })
+    ).toBeVisible();
+    await expect(page.locator('.jp-Dialog')).toHaveCount(0);
+    expect(await page.contents.directoryExists(`${LIBRARY}/journal`)).toBe(
+      false
+    );
+  });
+
   test('records Don’t show again in the journal and keeps the card away', async ({
     page
   }) => {
