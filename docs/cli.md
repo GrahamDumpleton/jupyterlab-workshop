@@ -13,12 +13,17 @@ jupyter workshop init my-workshop [--name NAME] [--title TITLE] [--ci]
                                   [--template starter|blank|notebook]
                                   [--platform NAME]... [--frontend NAME]...
                                   [--capability NAME]... [--gating off|soft|strict]
+                                  [--no-git]
 ```
 
 Creates a directory with a `workshop.yaml`, starter pages, an empty
 `files/` for starter files (copied into the learner's `work/`
 [workspace](concepts.md#the-workspace) when the workshop opens), a
-README and a `.gitignore`. The `starter` template's pages show commands,
+README and a `.gitignore`, and makes it a git repository on `main`, with
+nothing committed yet, so the workshop's history starts with it. A
+directory inside a repository already, such as a course's `workshops/`,
+joins that repository instead, and `--no-git` leaves a new directory
+as a plain one. The `starter` template's pages show commands,
 a check,
 a file write and a quiz; `blank` is one page of prose; `notebook`
 creates a notebook, runs its cells and checks a value in its kernel. The
@@ -361,22 +366,71 @@ one of your own. It lists what it will do and asks first unless given
 ## course
 
 ```
+jupyter workshop course init DIRECTORY [--name NAME] [--title TITLE] [--description TEXT]
+                                       [--collection NAME[=TITLE]]... [--id-prefix PREFIX]
+                                       [--repo URL] [--lite] [--python X.Y] [--no-git]
+                                       [--link [--root ROOT] [--directory DIR]]
+jupyter workshop course update [DIRECTORY] [--version X.Y.Z]
 jupyter workshop course link PATH [--name NAME] [--workshops DIR] [--root ROOT] [--directory DIR]
 jupyter workshop course unlink NAME [--root ROOT] [--directory DIR]
 jupyter workshop course list [--json] [--root ROOT] [--directory DIR]
 ```
 
-Manages the [courses](library.md#courses) of a workshop library. A
-repository kept under the library's `personal/courses/` is a course
-without any of these; `link` brings in one kept elsewhere, as a
-symbolic link, or a directory junction on Windows, at
-`personal/courses/NAME` (the repository's directory name by default),
-recorded in the registry. `--workshops` names its workshops directory
-when it is not `workshops`. `unlink` removes a linked course's link and
-entry, never its files, and works when the repository has gone. `list`
-shows each course as kept, linked or missing; `--json` prints them as
-an object with a `courses` list. These commands act on the default
-library unless `--root` or `--directory` name another.
+`init` writes a [course repository](publishing.md#a-course-repository):
+a uv project pinning this release of the extension, `AGENTS.md` and
+`CLAUDE.md` for agents, `OUTLINE.md` with the sections of the design
+in place and nothing designed yet, a `README.md`, a `Justfile` holding
+every common task and the order of each collection, `.mcp.json`,
+`jupyter_lab_config.py`, an empty `workshops/`, a collection index for
+each part of the course with `catalog.json` over them, the Binder and
+Codespaces files, and a test workflow; with `--lite` the JupyterLite
+site files and a Pages workflow as well, and lint and tests on both
+frontends. Each `--collection` is a part of the course, with an index of
+its own, named `NAME` and titled `TITLE`; with none, the course is one
+collection named after it. Collection ids are
+`PREFIX/<course>/<collection>`, where `--id-prefix` defaults to the
+repository's forge and owner when `--repo` is given, as
+`github.com/owner`, and otherwise to the course's name; an id is the
+collection's identity to subscribers and to analytics, so set it before
+the first workshop is written and never change it. The directory
+becomes a git repository on `main`, with nothing committed, unless
+`--no-git` says otherwise, and `--link` links it into a workshop
+library as well, the default library unless `--root` and `--directory`
+name another. What was written, and the hash of each file, is recorded
+in `course.json`.
+
+`update` brings a course up to a release, this installation's unless
+`--version` names one: it moves the pin in `pyproject.toml` and
+`binder/requirements.txt` whatever else is in them, writes again every
+generated file that is still as the scaffold last wrote it, adds any
+the scaffold now writes, and leaves alone, and reports, the files edited
+since they were generated, which stay edited files to every later
+update. Run `just requirements` afterwards to relock.
+
+`link`, `unlink` and `list` manage the [courses](library.md#courses) of
+a workshop library. A repository kept under the library's
+`personal/courses/` is a course without any of these; `link` brings in
+one kept elsewhere, as a symbolic link, or a directory junction on
+Windows, at `personal/courses/NAME` (the repository's directory name by
+default), recorded in the registry. `--workshops` names its workshops
+directory when it is not `workshops`. `unlink` removes a linked course's
+link and entry, never its files, and works when the repository has gone.
+`list` shows each course as kept, linked or missing; `--json` prints
+them as an object with a `courses` list. These commands act on the
+default library unless `--root` or `--directory` name another.
+
+## skill
+
+```
+jupyter workshop skill [--link [DIR]]
+```
+
+Prints where this installation keeps the `jupyterlab-workshop-authoring`
+skill, the guide an AI agent follows to write workshops. `--link` makes
+`.claude/skills/jupyterlab-workshop-authoring` in `DIR` (the current
+directory by default) a symbolic link to it, so Claude Code working in
+a repository has the skill that matches the installed release and
+nothing is copied; a course's `just skill` and `just install` run it.
 
 ## kernels
 

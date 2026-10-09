@@ -626,6 +626,9 @@ async def test_a_workshop_is_drafted_and_created_from_the_plan(
 
     manifest = (library / "personal/workshops/git-basics/workshop.yaml").read_text()
 
+    # The workshop is the person's own, so it starts as a repository.
+    assert (library / "personal/workshops/git-basics/.git").is_dir()
+
     assert "title: Git basics" in manifest
     assert "gating: soft" in manifest
 

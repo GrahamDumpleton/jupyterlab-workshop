@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 TEMPLATES = ("starter", "blank", "notebook")
@@ -354,7 +356,49 @@ dist/
 
 # The learner's workspace, filled from files/ when the workshop opens
 work/
+
+# Temporary working files, never referred to from the workshop
+scratch/
+
+# Claude Code's per-checkout permissions, written as they are granted
+.claude/settings.local.json
 """
+
+
+def initialize_repository(directory: Path) -> bool:
+    """Make a new directory a git repository, so its history starts with
+    it, unless it is inside a repository already, as a workshop added to
+    a course is, or git is not installed. Nothing is committed: the
+    first commit is the author's, or the agent's when told. Returns
+    whether a repository was made."""
+
+    git = shutil.which("git")
+
+    if git is None:
+        return False
+
+    inside = subprocess.run(
+        [git, "-C", str(directory), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if inside.returncode == 0 and inside.stdout.strip() == "true":
+        return False
+
+    # The branch is named up front where git allows, so the repository
+    # starts on main whatever the user's default is.
+    for command in (
+        [git, "init", "--quiet", "--initial-branch=main", str(directory)],
+        [git, "init", "--quiet", str(directory)],
+    ):
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+        if result.returncode == 0:
+            return True
+
+    return False
 
 
 def ci_workflow() -> str:

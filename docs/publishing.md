@@ -102,6 +102,62 @@ runs on, by installing packages or editing global configuration, should
 be self-tested, since each run gets a fresh runner; see the [warning
 under test](cli.md#test).
 
+## A course repository
+
+A course is that repository with everything else it needs already in
+place: the indexes, one per part of the course with a catalog over
+them, and around them what a repository needs to be written in with an
+agent, checked and hosted. `jupyter workshop course init` writes one:
+
+```
+jupyter workshop course init wrapt-workshops --title "wrapt workshops" \
+    --description "Guided workshops for wrapt." \
+    --collection decorators="Decorators with wrapt" \
+    --collection proxies="Object proxies with wrapt" \
+    --repo https://github.com/example/wrapt-workshops
+```
+
+```
+wrapt-workshops/
+  AGENTS.md, CLAUDE.md     guidance for agents writing workshops here
+  OUTLINE.md               the design: every section in place, nothing designed yet
+  README.md                for learners: launch links, the collections, running locally
+  Justfile                 every common task, and the order of each collection
+  pyproject.toml           the uv project: JupyterLab and the pinned extension
+  .mcp.json                the workshop MCP server, from the repository's environment
+  jupyter_lab_config.py    the local start, in the workshop browser with the catalog
+  catalog.json             names every collection
+  collections/<name>/collection.json   one empty, ordered index per part
+  workshops/               every workshop, flat, whatever collection it is in
+  binder/, .devcontainer/  the Binder image and the Codespaces container
+  .github/workflows/       lint and self-test every workshop on each push
+  course.json              what was written, for `course update`
+```
+
+The design comes first: `OUTLINE.md` has a part for each collection,
+with its shape, one entry per workshop and the topics it leaves out,
+and the cross-cutting decisions and status table, and is written before
+the first workshop is. Then `just install`, `just new <name>` for each
+workshop, `just lint` and `just test <name>`, and `just index` to write
+the indexes in the order the `Justfile` gives. Collection ids are
+`<prefix>/<course>/<collection>`, the prefix the repository's forge and
+owner by default, and are an identity to settle before the first
+workshop is written, since subscribers and analytics know a collection
+by it. The hosted launches switch off the library and authoring parts
+of the extension along with the usual features, so visitors are kept to
+the course's workshops. With `--lite` the course is written for
+JupyterLite as well: the site files, a Pages workflow that publishes
+the site once the tests pass, and lint and tests on both frontends.
+
+A course made this way is a repository from the start, with nothing
+committed. In a [workshop library](library.md#courses) it lives under
+`personal/courses/`, or is linked in with `--link`, and the browser
+shows its workshops under My courses in the order its indexes give.
+`jupyter workshop course update` later moves the course to a new
+release of the extension, rewriting the generated files that have not
+been edited and reporting the ones that have; `just bump <version>`
+runs it. See [course](cli.md#course) for every option.
+
 ## A workshop in a gist
 
 A small workshop, instructions and inline actions with a few files

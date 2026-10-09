@@ -42,6 +42,14 @@ from .collection import (
 from .collection import (
     load_collection as _load_collection_index,
 )
+from .course import (
+    CollectionSpec,
+    CourseError,
+    CourseOptions,
+    id_prefix_for,
+    update_course,
+    write_course,
+)
 from .fetch import FetchError
 from .gist import (
     BINDER_LAUNCHER,
@@ -84,7 +92,14 @@ from .library import (
 )
 from .lite import LiteBuildOptions, LiteError, build_lite_site, serve_directory
 from .publish import PublishError, publish_workshop
-from .scaffold import GATING, TEMPLATES, slug, write_scaffold
+from .scaffold import (
+    GATING,
+    TEMPLATES,
+    initialize_repository,
+    slug,
+    write_scaffold,
+)
+from .skill import SKILL_NAME, skill_directory
 from .tree import STATE_DIR, TreeError, restore_tree
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -204,6 +219,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init.add_argument(
         "--gating", choices=GATING, default="soft", help="page gating (default soft)"
+    )
+    init.add_argument(
+        "--no-git",
+        action="store_true",
+        help="do not make the new directory a git repository (one inside a "
+        "repository already, such as a course's workshops/, never is)",
     )
     init.set_defaults(func=command_init)
 
@@ -506,16 +527,97 @@ def build_parser() -> argparse.ArgumentParser:
 
     course = commands.add_parser(
         "course",
-        help="manage the courses of a workshop library",
+        help="make a course repository, keep it current, and manage a "
+        "library's courses",
         description=(
             "A course is a repository of workshops, with the indexes that "
-            "publish them, whose workshops the library shows. One kept under "
-            f"{COURSES_DIRECTORY}/ needs nothing; one kept elsewhere is linked "
-            "in. These commands use the default library unless --root or "
-            "--directory name another."
+            "publish them and everything a repository needs to be written in "
+            "with an agent, checked and hosted. init writes one and update "
+            "brings its generated files up to a release. In a workshop "
+            f"library, a course kept under {COURSES_DIRECTORY}/ needs nothing "
+            "more; one kept elsewhere is linked in. The library commands use "
+            "the default library unless --root or --directory name another."
         ),
     )
     course_commands = course.add_subparsers(dest="course_command", required=True)
+    course_init = course_commands.add_parser(
+        "init",
+        help="write a course repository",
+        description=(
+            "Write a course repository: a uv project pinning this release of "
+            "jupyterlab-workshop, agent guidance, OUTLINE.md, a Justfile, the "
+            "Binder and Codespaces files, a test workflow, and a collection "
+            "index for each part of the course with a catalog over them, all "
+            "recorded in course.json for course update. The directory becomes "
+            "a git repository, with nothing committed."
+        ),
+    )
+    course_init.add_argument(
+        "path", type=Path, metavar="DIRECTORY", help="the repository to write"
+    )
+    course_init.add_argument(
+        "--name", help="the course's name, kebab-case (default: the directory's)"
+    )
+    course_init.add_argument("--title", help="the course's title (default: the name)")
+    course_init.add_argument(
+        "--description", default="", help="a sentence on what the course teaches"
+    )
+    course_init.add_argument(
+        "--collection",
+        action="append",
+        default=[],
+        metavar="NAME[=TITLE]",
+        help="a collection, a part of the course with an index of its own; "
+        "repeat for several (default: one named after the course)",
+    )
+    course_init.add_argument(
+        "--id-prefix",
+        help="the prefix of every collection id, <prefix>/<course>/<collection> "
+        "(default: the repository's forge and owner, else the course's name)",
+    )
+    course_init.add_argument(
+        "--repo", default="", help="the repository's URL on GitHub, once it has one"
+    )
+    course_init.add_argument(
+        "--lite",
+        action="store_true",
+        help="write the course for JupyterLite as well: the site files, the "
+        "Pages workflow, and lint and tests on both frontends",
+    )
+    course_init.add_argument(
+        "--python",
+        default="3.14",
+        metavar="X.Y",
+        help="the Python version the course runs on (default 3.14)",
+    )
+    course_init.add_argument(
+        "--no-git", action="store_true", help="do not make the directory a repository"
+    )
+    course_init.add_argument(
+        "--link",
+        action="store_true",
+        help="also link the new course into a workshop library, the default "
+        "library unless --root or --directory name another",
+    )
+    _add_course_target_arguments(course_init)
+    course_init.set_defaults(func=command_course_init)
+    course_update = course_commands.add_parser(
+        "update",
+        help="bring a course's generated files up to a release",
+        description=(
+            "Move the jupyterlab-workshop pin in pyproject.toml and "
+            "binder/requirements.txt, write again every file course init wrote "
+            "that is still as generated, add any the scaffold now writes, and "
+            "leave alone, and report, the files edited since."
+        ),
+    )
+    course_update.add_argument(
+        "directory", nargs="?", type=Path, default=Path("."), help="the course"
+    )
+    course_update.add_argument(
+        "--version", help="the release to pin (default: this installation's)"
+    )
+    course_update.set_defaults(func=command_course_update)
     link = course_commands.add_parser(
         "link", help="link in a repository kept outside the library"
     )
@@ -940,6 +1042,27 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--title", help="title for a new workshop")
     record.set_defaults(func=command_record)
 
+    skill = commands.add_parser(
+        "skill",
+        help="where the authoring skill is, or link it into a repository",
+        description=(
+            "Print where this installation keeps the jupyterlab-workshop "
+            "authoring skill, or with --link make .claude/skills/"
+            f"{SKILL_NAME} in a repository a link to it, so an agent working "
+            "there has the skill that matches the installed release."
+        ),
+    )
+    skill.add_argument(
+        "--link",
+        nargs="?",
+        const=Path("."),
+        type=Path,
+        metavar="DIR",
+        help="link the skill into DIR's .claude/skills (default: the current "
+        "directory)",
+    )
+    skill.set_defaults(func=command_skill)
+
     mcp = commands.add_parser(
         "mcp", help="serve the workshop tools to AI agents over MCP (stdio)"
     )
@@ -976,6 +1099,11 @@ def command_init(args: argparse.Namespace) -> int:
 
     for path in written:
         print(f"wrote {path}")
+
+    # A workshop of one's own starts as a repository, unless it is being
+    # added to one, so its history begins with it.
+    if not args.no_git and initialize_repository(directory):
+        print(f"initialized a git repository in {directory}")
 
     print(f"\nNext: jupyter workshop lint {directory}")
 
@@ -1706,6 +1834,128 @@ def command_remove(args: argparse.Namespace) -> int:
             print(f"removed {remove_installed(root, record, args.delete)}")
         except FetchError as error:
             raise CliError(str(error)) from error
+
+    return 0
+
+
+def command_course_init(args: argparse.Namespace) -> int:
+    """Write a course repository."""
+
+    directory: Path = args.path
+    name = args.name or slug(directory.resolve().name)
+    title = args.title or name.replace("-", " ").capitalize()
+    collections = tuple(_collection_spec(item) for item in args.collection) or (
+        CollectionSpec(name=name, title=title, description=args.description),
+    )
+    options = CourseOptions(
+        name=name,
+        title=title,
+        description=args.description,
+        collections=collections,
+        id_prefix=args.id_prefix or id_prefix_for(args.repo, name),
+        repository=args.repo.rstrip("/"),
+        lite=args.lite,
+        python=args.python,
+    )
+
+    try:
+        written = write_course(directory, options)
+    except (CourseError, OSError) as error:
+        raise CliError(str(error)) from error
+
+    for path in written:
+        print(f"wrote {path}")
+
+    if not args.no_git and initialize_repository(directory):
+        print(f"initialized a git repository in {directory}")
+
+    if args.link:
+        library = _course_library(args)
+
+        try:
+            entry = link_course(library, directory, name)
+        except LibraryError as error:
+            raise CliError(_not_a_library_hint(str(error))) from error
+
+        print(f"linked {library / COURSES_DIRECTORY / entry['name']} to {directory}")
+
+    print(
+        f"\nNext: write the design in {directory / 'OUTLINE.md'}, then "
+        f"`just install` and `just new <name>` there"
+    )
+
+    return 0
+
+
+def _collection_spec(item: str) -> CollectionSpec:
+    # NAME, or NAME=TITLE, as given on the command line.
+    name, separator, title = item.partition("=")
+    name = name.strip()
+
+    return CollectionSpec(
+        name=name,
+        title=title.strip() if separator else name.replace("-", " ").capitalize(),
+    )
+
+
+def command_course_update(args: argparse.Namespace) -> int:
+    """Bring a course's generated files up to a release."""
+
+    try:
+        report = update_course(args.directory, args.version)
+    except (CourseError, OSError) as error:
+        raise CliError(str(error)) from error
+
+    if report.previous and report.previous != report.version:
+        print(f"pinned jupyterlab-workshop {report.version} (was {report.previous})")
+    else:
+        print(f"pinned jupyterlab-workshop {report.version}")
+
+    for label, paths in (
+        ("refreshed", report.refreshed),
+        ("added", report.added),
+        ("kept, edited since it was generated", report.kept),
+    ):
+        for path in paths:
+            print(f"{label}: {path}")
+
+    if (args.directory / "uv.lock").exists():
+        print("\nNext: just requirements, to relock and export binder/requirements.txt")
+
+    return 0
+
+
+def command_skill(args: argparse.Namespace) -> int:
+    """Print where the authoring skill is, or link it into a repository."""
+
+    source = skill_directory()
+
+    if source is None:
+        raise CliError("This installation has no authoring skill")
+
+    if args.link is None:
+        print(source)
+
+        return 0
+
+    link = args.link / ".claude" / "skills" / SKILL_NAME
+
+    try:
+        link.parent.mkdir(parents=True, exist_ok=True)
+
+        if link.is_symlink() or link.exists():
+            if link.is_symlink() and link.resolve() == source.resolve():
+                print(f"{link} already links to {source}")
+
+                return 0
+
+            raise CliError(f"{link} exists already and is not a link to the skill")
+
+        link.symlink_to(source, target_is_directory=True)
+    except OSError as error:
+        raise CliError(f"Unable to link {link} to {source}: {error}") from error
+
+    print(f"linked {link} to {source}")
 
     return 0
 

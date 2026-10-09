@@ -565,7 +565,7 @@ class ConversationManager:
                 "once it knows what to make"
             )
 
-        from .scaffold import write_scaffold
+        from .scaffold import initialize_repository, write_scaffold
 
         workshops_directory = conversation.workshops_directory
         library = library_directory(self._root, workshops_directory)
@@ -593,6 +593,10 @@ class ConversationManager:
             template="blank",
             gating="soft" if proposal.gating else "off",
         )
+
+        # The workshop is the person's own, so its history starts with it;
+        # the agent commits only when told.
+        initialize_repository(directory)
 
         # Files attached while drafting go to the workshop, where the
         # agent may use them.

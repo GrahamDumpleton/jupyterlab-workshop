@@ -149,6 +149,11 @@ extend-exclude = ["scratch", "jupyterlab_workshop/_version.py"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# The course scaffold's templates hold shell and Justfile lines that are
+# written out as they are, so they cannot be wrapped.
+"jupyterlab_workshop/course.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 packages = ["jupyterlab_workshop"]

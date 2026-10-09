@@ -341,6 +341,8 @@ async def test_init_and_publish_endpoints(jp_fetch, jp_root_dir):
 
     assert payload["path"] == "authored/my-workshop"
     assert "authored/my-workshop/pages/01-welcome.md" in payload["files"]
+    assert payload["git"] is True
+    assert (jp_root_dir / "authored" / "my-workshop" / ".git").is_dir()
 
     manifest = (jp_root_dir / "authored" / "my-workshop" / "workshop.yaml").read_text()
 

@@ -70,7 +70,7 @@ from .library import (
 )
 from .platform import current_platform, has_web_proxy
 from .publish import PublishError, publish_workshop
-from .scaffold import TEMPLATES, slug, write_scaffold
+from .scaffold import TEMPLATES, initialize_repository, slug, write_scaffold
 
 API_NAMESPACE = "jupyterlab-workshop"
 
@@ -606,6 +606,10 @@ class InitHandler(WorkshopHandler):
         except ValueError as error:
             raise tornado.web.HTTPError(400, str(error)) from error
 
+        # A workshop of one's own starts as a repository, unless it is
+        # being added to one, so its history begins with it.
+        repository = bool(body.get("git", True)) and initialize_repository(target)
+
         root = self.root_dir.resolve()
 
         self.finish(
@@ -613,6 +617,7 @@ class InitHandler(WorkshopHandler):
                 {
                     "path": target.relative_to(root).as_posix(),
                     "files": [path.relative_to(root).as_posix() for path in written],
+                    "git": repository,
                 }
             )
         )

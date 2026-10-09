@@ -51,7 +51,8 @@ workshop from the top keeps every edit to the pages and the manifest.
 scaffolds a directory from a template, `starter`, `blank` or
 `notebook`, with the platforms, capabilities and gating you choose, and
 opens it in author mode. It is the same scaffold as `jupyter workshop
-init`.
+init`, and like it makes the new directory a git repository, with
+nothing committed, unless the directory is inside a repository already.
 
 ## Recording a session
 

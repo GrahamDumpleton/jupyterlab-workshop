@@ -160,7 +160,10 @@ The workshops under `personal/workshops/` are yours, so they open
 trusted without the trust dialog, as long as they were not downloaded
 there. They open as a learner sees them; author mode is a button away
 as usual. In a library, the New Workshop dialog and a recording saved
-as a new workshop suggest a directory under `personal/workshops/`.
+as a new workshop suggest a directory under `personal/workshops/`, and
+each workshop made there, by the dialog, by Workshop Author or by
+`jupyter workshop init`, starts as a git repository of its own, with
+nothing committed until you, or the agent when you tell it, commit.
 
 Remove on one of them asks which you mean, since the directory has no
 other copy: Clean up deletes only the progress recorded in it, so the
@@ -176,10 +179,12 @@ the workshops it creates there too, and works on the workshops under
 
 A course is a repository whose workshops the library shows, typically
 one you are writing workshops in to publish. Cloning a repository into
-`personal/courses/` is enough:
+`personal/courses/` is enough, and so is writing a new one there with
+[`jupyter workshop course init`](publishing.md#a-course-repository):
 
 ```
 git clone https://github.com/example-org/course-workshops ~/Workshops/personal/courses/course-workshops
+jupyter workshop course init ~/Workshops/personal/courses/new-course --title "A new course"
 ```
 
 The library works out where a course's workshops are, taking the first

@@ -36,10 +36,29 @@ def test_init_writes_a_workshop_and_refuses_to_overwrite(
     assert (target / "pages" / "01-welcome.md").exists()
     assert (target / ".github" / "workflows" / "workshop.yml").exists()
     assert (target / "files" / ".gitkeep").exists()
-    assert "wrote" in capsys.readouterr().out
+
+    # A new workshop starts as a repository of its own, on main.
+    assert (target / ".git").is_dir()
+    assert (target / ".git" / "HEAD").read_text().strip() == "ref: refs/heads/main"
+
+    out = capsys.readouterr().out
+
+    assert "wrote" in out
+    assert "initialized a git repository" in out
 
     assert cli.main(["init", str(target)]) == 2
     assert "Refusing to overwrite" in capsys.readouterr().err
+
+    # One made inside a repository, as a course's workshop is, joins it;
+    # --no-git leaves a new directory as a plain one.
+    nested = target / "workshops" / "inner"
+    plain = tmp_path / "plain"
+
+    assert cli.main(["init", str(nested)]) == 0
+    assert not (nested / ".git").exists()
+    assert cli.main(["init", str(plain), "--no-git"]) == 0
+    assert not (plain / ".git").exists()
+    assert "initialized" not in capsys.readouterr().out
 
 
 @needs_node
