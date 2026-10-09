@@ -105,14 +105,18 @@ class PermissionPolicy:
     # Whether Bash runs inside the agent's sandbox.
     sandboxed: bool = False
 
-    # Whether nothing may be changed at all, while a workshop is drafted.
+    # Whether nothing may be changed at all, while a workshop is drafted,
+    # or in a conversation that writes through its own tools alone.
     read_only: bool = False
+
+    # Why a change is refused under `read_only`, as the agent reads it.
+    read_only_reason: str = DRAFTING_REASON
 
     def decide(self, tool: str, data: dict[str, Any]) -> Decision:
         """Whether a tool call may go ahead without asking."""
 
         if self.read_only and (tool in WRITE_TOOLS or tool == "Bash"):
-            return Decision("deny", DRAFTING_REASON, rememberable=False)
+            return Decision("deny", self.read_only_reason, rememberable=False)
 
         if tool == PUBLISH_GIST_TOOL:
             return self._publish_decision(data)

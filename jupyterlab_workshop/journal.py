@@ -77,6 +77,9 @@ ARCHIVE_PREFIX = "journal-archive-"
 #: The format version written to the settings and every history file.
 JOURNAL_VERSION = 1
 
+#: How many history entries a prompt lists in full; the rest are counted.
+PROMPT_RECENT = 12
+
 #: The marker ending the generated part of a history file.
 HISTORY_MARKER = (
     "<!-- Written by jupyterlab-workshop from the journal's events; what is "
@@ -335,6 +338,137 @@ def read_profile(journal: Journal) -> str | None:
         return None
 
     return journal.profile_file.read_text(encoding="utf-8")
+
+
+def profile_body(journal: Journal) -> str | None:
+    """The profile without its frontmatter, or None when there is none."""
+
+    profile = read_profile(journal)
+
+    if profile is None:
+        return None
+
+    _, body = _split(profile)
+
+    return body.strip()
+
+
+def save_profile(journal: Journal, text: str) -> None:
+    """Write the learner's profile whole, the one file an agent writes.
+
+    A frontmatter block with the date and the format version is put in
+    front when the text has none, so the file says when it was last
+    written.
+    """
+
+    _ensure(journal)
+
+    body = text.strip() + "\n"
+
+    if not body.startswith("---\n"):
+        head = _yaml({"updated": _now()[:10], "version": JOURNAL_VERSION})
+        body = f"---\n{head}---\n\n{body}"
+
+    journal.profile_file.write_text(body, encoding="utf-8")
+
+
+def ensure_journal(journal: Journal) -> None:
+    """Create the journal's directory and settings when they are not there."""
+
+    _ensure(journal)
+
+
+def render_for_prompt(journal: Journal, recent: int = PROMPT_RECENT) -> str:
+    """The journal as an agent's prompt carries it, within a budget.
+
+    The profile as written, then the history condensed to a line per
+    workshop or course, the most recently active first, with the older
+    ones counted rather than listed.
+    """
+
+    parts: list[str] = []
+    body = profile_body(journal)
+
+    if body is None:
+        parts.append(
+            "## Profile\n\nNo profile has been written yet: nothing is known "
+            "about the person as a learner beyond the history below."
+        )
+    else:
+        parts.append(f"## Profile\n\n{body}")
+
+    records = read_history(journal)
+
+    if not records:
+        parts.append(
+            "## History\n\nNothing has been recorded yet: no workshop has been "
+            "installed or opened in this library."
+        )
+    else:
+        lines = [
+            "## History",
+            "",
+            f"{len(records)} workshops or courses recorded, the most recently "
+            "active first:",
+            "",
+        ]
+        lines += [f"- {_history_line(facts)}" for facts in records[:recent]]
+
+        if len(records) > recent:
+            lines.append(
+                f"- and {len(records) - recent} more, older; the full journal "
+                "lists them."
+            )
+
+        parts.append("\n".join(lines))
+
+    return "\n\n".join(parts) + "\n"
+
+
+def _history_line(facts: Mapping[str, Any]) -> str:
+    # One workshop of the history, as the prompt lists it.
+    title = facts.get("title") or facts.get("name") or facts.get("path")
+    pieces = [f"{title} ({facts.get('path')})", str(facts.get("status") or "")]
+
+    if facts.get("collection_title"):
+        pieces.append(f"from {facts['collection_title']}")
+
+    if facts.get("created"):
+        pieces.append("made with Workshop Author")
+
+    if "pages_visible" in facts:
+        pieces.append(
+            f"{facts.get('pages_reached', 0)} of {facts['pages_visible']} pages"
+        )
+
+    checks = facts.get("checks")
+
+    if isinstance(checks, dict):
+        pieces.append(
+            f"checks {checks.get('passed', 0)} passed and {checks.get('failed', 0)} "
+            f"failing in {checks.get('attempts', 0)} attempts"
+        )
+
+    quizzes = facts.get("quizzes")
+
+    if isinstance(quizzes, dict):
+        pieces.append(
+            f"quizzes {quizzes.get('correct', 0)} right and {quizzes.get('wrong', 0)} "
+            "wrong"
+        )
+
+    if facts.get("hints_opened"):
+        pieces.append(f"{facts['hints_opened']} hints opened")
+
+    if facts.get("active_minutes"):
+        pieces.append(f"{facts['active_minutes']} minutes active")
+
+    if facts.get("finished"):
+        pieces.append(f"finished {facts['finished']}")
+
+    pieces.append(f"last active {facts.get('last_activity', '')}")
+
+    return "; ".join(piece for piece in pieces if piece)
 
 
 def read_settings(journal: Journal) -> dict[str, Any]:

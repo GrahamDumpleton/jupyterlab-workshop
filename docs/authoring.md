@@ -127,6 +127,12 @@ course](library.md#courses) while its conversation is open hands over
 the same way: its panel closes and the course's opens, with the workshop
 named.
 
+The same three things bring [the mentor](library.md#the-mentor), a
+conversation above workshops for the person who learns from them: it
+keeps a profile of you in the library's learning journal, which Workshop
+Author reads so that a workshop made for yourself is written for you,
+and it can hand a brief to Workshop Author to make one.
+
 ### Creating a workshop
 
 Create Workshop with AI opens Workshop Author on a new workshop that

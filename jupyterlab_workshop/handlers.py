@@ -44,6 +44,7 @@ from .collection import (
 )
 from .conversations import (
     CLEAR_COMMANDS,
+    MENTOR_KIND,
     Conversation,
     ConversationError,
     ConversationManager,
@@ -1095,6 +1096,13 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
 
             return
 
+        # The mentor's conversation belongs to the library, not to a path
+        # the panel names.
+        if str(data.get("kind") or "") == MENTOR_KIND:
+            await self._open_mentor(data, workshops_directory)
+
+            return
+
         if not path:
             raise ConversationError("A workshop or course path is required")
 
@@ -1139,6 +1147,26 @@ class ConversationHandler(JupyterHandler, websocket.WebSocketHandler):
             raise
         except Exception as error:
             self.log.exception("Unable to start drafting a workshop or course")
+
+            raise ConversationError(f"The agent could not start: {error}") from error
+
+        await self._attach(conversation, data)
+
+    async def _open_mentor(
+        self, data: dict[str, Any], workshops_directory: str
+    ) -> None:
+        await self._send({"type": "starting"})
+
+        try:
+            conversation = await self.manager.open_mentor(
+                workshops_directory,
+                str(data.get("model") or ""),
+                str(data.get("effort") or ""),
+            )
+        except ConversationError:
+            raise
+        except Exception as error:
+            self.log.exception("Unable to start the mentor")
 
             raise ConversationError(f"The agent could not start: {error}") from error
 

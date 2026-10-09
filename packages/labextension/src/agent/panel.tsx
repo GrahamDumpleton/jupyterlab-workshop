@@ -36,6 +36,7 @@ import {
   ICourseProposal,
   IProposal,
   IQuestion,
+  OFFER_TOOL,
   OPEN_WORKSHOP_TOOL,
   TranscriptItem
 } from './model';
@@ -60,6 +61,14 @@ export interface IAgentStatus {
 /** The name the panel goes by. */
 export const AUTHOR_TITLE = 'Workshop Author';
 
+/** The name of the conversation above workshops, which keeps the learning journal. */
+export const MENTOR_TITLE = 'Mentor';
+
+/** What a conversation of a kind is called. */
+export function titleFor(kind: ConversationKind): string {
+  return kind === 'mentor' ? MENTOR_TITLE : AUTHOR_TITLE;
+}
+
 /**
  * Workshop Author: a conversation with an AI agent about one of the
  * library owner's workshops, in the main area. The conversation lives in
@@ -77,6 +86,10 @@ export class AuthorPanel extends ReactWidget {
       this.id = AuthorPanel.idForDraft(options.draft);
       this.title.label = `${AUTHOR_TITLE}: New ${this.kind}`;
       this.title.caption = `${AUTHOR_TITLE}, drafting a new ${this.kind}`;
+    } else if (this.kind === 'mentor') {
+      this.id = AuthorPanel.idFor(options.path);
+      this.title.label = MENTOR_TITLE;
+      this.title.caption = `Your mentor, who keeps your learning journal in ${options.path}`;
     } else {
       this.id = AuthorPanel.idFor(options.path);
       this.title.label = `${AUTHOR_TITLE}: ${lastSegment(options.path)}`;
@@ -309,6 +322,11 @@ export class AuthorPanel extends ReactWidget {
             }}
             onOpenWorkshop={() => void this._options.openWorkshop()}
             onOpenPath={path => void this._options.openPath(path)}
+            onCreateWithAI={
+              this._options.createWithAI
+                ? (kind, topic) => this._options.createWithAI?.(kind, topic)
+                : undefined
+            }
             onContinueInTerminal={() => this._connection.requestTerminal()}
             onConfigure={(model, effort) =>
               this._connection.configure(model, effort)
@@ -562,6 +580,12 @@ export namespace AuthorPanel {
 
     /** The contents API, for files dragged in from the file browser. */
     contents?: Contents.IManager;
+
+    /**
+     * Open Workshop Author to draft a workshop or a course from a brief:
+     * what the mentor's offer hands over to when Create is pressed.
+     */
+    createWithAI?: (kind: 'workshop' | 'course', topic: string) => void;
   }
 }
 
@@ -576,6 +600,7 @@ function AuthorContent({
   onLogin,
   onOpenWorkshop,
   onOpenPath,
+  onCreateWithAI,
   onContinueInTerminal,
   onConfigure,
   onCompact,
@@ -596,6 +621,9 @@ function AuthorContent({
 
   /** Open a path under the root: a directory in the file browser, a file as a document. */
   onOpenPath: (path: string) => void;
+
+  /** Hand an offer of the mentor's over to Workshop Author; see AuthorPanel.IOptions. */
+  onCreateWithAI?: (kind: 'workshop' | 'course', topic: string) => void;
   onContinueInTerminal: () => void;
   onConfigure: (model: string, effort: string) => void;
   onCompact: () => void;
@@ -688,7 +716,7 @@ function AuthorContent({
     <div className="jp-WorkshopAgent-content">
       <div className="jp-WorkshopAgent-header">
         <div className="jp-WorkshopAgent-title">
-          <h2>{AUTHOR_TITLE}</h2>
+          <h2>{titleFor(kind)}</h2>
           {drafting ? (
             <span className="jp-WorkshopAgent-path">
               New {kind}, not created yet
@@ -697,7 +725,7 @@ function AuthorContent({
             <button
               type="button"
               className="jp-WorkshopAgent-path jp-WorkshopAgent-link"
-              title={`Show the ${kind}'s directory in the file browser`}
+              title={filesTitle(kind)}
               onClick={() => onOpenPath(panel.path)}
             >
               {panel.path}
@@ -754,6 +782,7 @@ function AuthorContent({
             onAnswer={onAnswer}
             onAnswerQuestion={onAnswerQuestion}
             onOpenPath={onOpenPath}
+            onCreateWithAI={onCreateWithAI}
             proposal={
               item.type === 'proposal'
                 ? {
@@ -853,7 +882,7 @@ function AuthorContent({
             </button>
             {drafting ? null : (
               <>
-                {kind === 'course' ? null : (
+                {kind === 'workshop' ? (
                   <button
                     type="button"
                     className="jp-WorkshopAgent-barButton"
@@ -862,19 +891,19 @@ function AuthorContent({
                   >
                     Open workshop
                   </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   className="jp-WorkshopAgent-barButton"
-                  title={`Show the ${kind}'s directory in the file browser`}
+                  title={filesTitle(kind)}
                   onClick={() => onOpenPath(panel.path)}
                 >
-                  Show files
+                  {kind === 'mentor' ? 'Show journal' : 'Show files'}
                 </button>
                 <button
                   type="button"
                   className="jp-WorkshopAgent-barButton"
-                  title={`Carry the conversation on in a terminal, in the ${kind}'s directory`}
+                  title={`Carry the conversation on in a terminal, in the ${kind === 'mentor' ? 'journal' : kind}'s directory`}
                   disabled={!ready || model.running}
                   onClick={onContinueInTerminal}
                 >
@@ -1175,6 +1204,7 @@ function Entry({
   onAnswer,
   onAnswerQuestion,
   onOpenPath,
+  onCreateWithAI,
   proposal
 }: {
   item: TranscriptItem;
@@ -1192,6 +1222,9 @@ function Entry({
 
   /** Open a path the conversation names; see AuthorPanel.IOptions. */
   onOpenPath: (path: string) => void;
+
+  /** Hand the mentor's offer to Workshop Author; absent where it cannot be. */
+  onCreateWithAI?: (kind: 'workshop' | 'course', topic: string) => void;
 
   /** For a proposed plan: where the conversation stands, and Create. */
   proposal?: IProposalState;
@@ -1235,6 +1268,12 @@ function Entry({
       );
 
     case 'tool': {
+      // The mentor's offer of a workshop or a course is a card with
+      // Create, which hands the brief to Workshop Author.
+      if (item.name === OFFER_TOOL) {
+        return <OfferCard item={item} onCreate={onCreateWithAI} />;
+      }
+
       const described = describeTool(item.name, item.input, workshop);
 
       return (
@@ -1517,7 +1556,69 @@ const AUDIENCES: Record<string, string> = {
 };
 
 /** What an empty conversation invites, by what it is about. */
+/** What the path button and Show files show, for a kind of conversation. */
+function filesTitle(kind: ConversationKind): string {
+  return kind === 'mentor'
+    ? 'Show your learning journal in the file browser'
+    : `Show the ${kind}'s directory in the file browser`;
+}
+
+/**
+ * An offer of the mentor's: a workshop or a course Workshop Author could
+ * make from a brief, with Create to hand it over. Nothing is made until
+ * Create is pressed, and Workshop Author then drafts it as usual.
+ */
+function OfferCard({
+  item,
+  onCreate
+}: {
+  item: Extract<TranscriptItem, { type: 'tool' }>;
+  onCreate?: (kind: 'workshop' | 'course', topic: string) => void;
+}): JSX.Element {
+  const kind = item.input.kind === 'course' ? 'course' : 'workshop';
+  const title = String(item.input.title ?? '');
+  const brief = String(item.input.brief ?? '');
+  const refused = item.result !== undefined && !item.result.ok;
+
+  return (
+    <div
+      className={`jp-WorkshopAgent-proposal jp-WorkshopAgent-offer${refused ? ' jp-mod-failed' : ''}`}
+    >
+      <h3>{title || `A ${kind}`}</h3>
+      <p className="jp-WorkshopAgent-offerKind">
+        {kind === 'course'
+          ? 'A course, a subject in parts, made for you by Workshop Author'
+          : 'A workshop, made for you by Workshop Author'}
+      </p>
+      <p>{brief}</p>
+      {refused ? (
+        <p className="jp-WorkshopAgent-error">{item.result?.summary}</p>
+      ) : (
+        <div className="jp-WorkshopAgent-setupActions">
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled jp-mod-accept"
+            title="Open Workshop Author with this brief; it proposes a plan, and nothing is created until you press Create on that"
+            disabled={!onCreate || item.result === undefined}
+            onClick={() => onCreate?.(kind, brief)}
+          >
+            Create with Workshop Author
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function hintFor(kind: ConversationKind, drafting: boolean): string {
+  if (kind === 'mentor') {
+    return (
+      'Say what you would like to learn, or ask what to do next. Your ' +
+      'mentor keeps your profile in your learning journal, and can have ' +
+      'Workshop Author make a workshop for you.'
+    );
+  }
+
   if (drafting) {
     return kind === 'course'
       ? 'Say what the course should teach and who it is for. Workshop ' +

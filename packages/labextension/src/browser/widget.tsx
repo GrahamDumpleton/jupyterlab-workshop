@@ -32,6 +32,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { showPublishDialog, showPublishedDialog } from '../authoring/dialogs';
 import { workshopIcon } from '../icons';
+import { dismissWelcome, welcomePending } from '../library/journal';
 import { ILibraryCourseInfo } from '../library/scan';
 import { LibraryService } from '../library/service';
 import { planMigration, runMigration } from '../library/migrate';
@@ -186,6 +187,13 @@ export namespace WorkshopBrowser {
   }
 }
 
+/**
+ * Whether the welcome to the mentor was put aside with Not now, or taken
+ * up, in this page: it then stays away until JupyterLab is next loaded,
+ * whatever the browser reloads meanwhile.
+ */
+let welcomeSkipped = false;
+
 interface IContentProps extends WorkshopBrowser.IOptions {
   refreshSignal: ISignal<WorkshopBrowser, void>;
 }
@@ -204,6 +212,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
   const [catalogs, setCatalogs] = useState<ILoadedCatalog[]>([]);
   const [installed, setInstalled] = useState<IInstalledWorkshop[]>([]);
   const [directory, setDirectory] = useState('workshops');
+  const [welcome, setWelcome] = useState(false);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -225,7 +234,8 @@ function BrowserContent(props: IContentProps): JSX.Element {
     ): void => {
       if (
         change.id === CommandIDs.createWithAI ||
-        change.id === CommandIDs.editWithAI
+        change.id === CommandIDs.editWithAI ||
+        change.id === CommandIDs.openMentor
       ) {
         setCommandsVersion(value => value + 1);
       }
@@ -284,6 +294,24 @@ function BrowserContent(props: IContentProps): JSX.Element {
         }
       }
 
+      // Whether to offer meeting the mentor: in a library whose journal
+      // has no profile yet and whose welcome has not been dismissed. The
+      // card itself waits on the mentor being available.
+      let offerMentor = false;
+
+      if (library && loadedRegistry && !needsUpgrade(loadedRegistry)) {
+        try {
+          offerMentor =
+            !welcomeSkipped &&
+            (await welcomePending(
+              library.contents,
+              settings.workshopsDirectory
+            ));
+        } catch (error) {
+          console.warn('Unable to read the learning journal', error);
+        }
+      }
+
       const [subscribedCollections, subscribedCatalogs] = await Promise.all([
         store.list('collection'),
         store.list('catalog')
@@ -328,6 +356,7 @@ function BrowserContent(props: IContentProps): JSX.Element {
         setRegistry(loadedRegistry);
         setCourses(loadedCourses);
         setLibraryError(loadedLibraryError);
+        setWelcome(offerMentor);
         setLoading(false);
       }
     };
@@ -859,11 +888,43 @@ function BrowserContent(props: IContentProps): JSX.Element {
     !upgradeNeeded &&
     commands.isVisible(CommandIDs.createWithAI);
 
-  // The journal is the library's own, so only a library offers it.
+  // The journal is the library's own, so only a library offers it, and
+  // the mentor, who keeps it, with it.
   const canShowJournal =
     registry !== null &&
     !upgradeNeeded &&
     commands.isEnabled(CommandIDs.showJournal, { directory });
+  const canMentor =
+    registry !== null &&
+    !upgradeNeeded &&
+    commands.isVisible(CommandIDs.openMentor);
+
+  const meetMentor = (): void => {
+    welcomeSkipped = true;
+    setWelcome(false);
+    void commands.execute(CommandIDs.openMentor);
+  };
+
+  const skipWelcome = (): void => {
+    welcomeSkipped = true;
+    setWelcome(false);
+  };
+
+  const dismissWelcomeForGood = async (): Promise<void> => {
+    if (library) {
+      try {
+        await dismissWelcome(library.contents, directory);
+      } catch (error) {
+        await showErrorMessage(
+          'Unable to write the learning journal',
+          errorMessage(error)
+        );
+      }
+    }
+
+    welcomeSkipped = true;
+    setWelcome(false);
+  };
 
   // A plain workshops directory on a server can become a library, unless
   // the subscriptions are locked, since the registry would hold them.
@@ -1136,6 +1197,16 @@ function BrowserContent(props: IContentProps): JSX.Element {
             Journal
           </button>
         ) : null}
+        {canMentor ? (
+          <button
+            type="button"
+            className="jp-Button jp-mod-styled"
+            title="Talk to your mentor, who keeps your learning journal and can have Workshop Author make a workshop for you"
+            onClick={() => void commands.execute(CommandIDs.openMentor)}
+          >
+            Mentor…
+          </button>
+        ) : null}
         {canAuthorWithAI ? (
           <>
             <button
@@ -1179,6 +1250,44 @@ function BrowserContent(props: IContentProps): JSX.Element {
           <refreshIcon.react tag="span" width="16px" height="16px" />
         </button>
       </div>
+      {welcome && canMentor ? (
+        <div className="jp-WorkshopBrowser-welcome">
+          <h2 className="jp-WorkshopBrowser-welcomeTitle">Meet your mentor</h2>
+          <p className="jp-WorkshopBrowser-welcomeText">
+            Your mentor is an AI agent that helps you choose what to learn next
+            and can have Workshop Author make a workshop for you. It keeps a
+            profile of you as a learner in your learning journal, the record
+            this library keeps of what you do in it, which is yours to read and
+            change and leaves your machine only when you talk to an agent. The
+            first conversation is a few questions, and you can skip any of them.
+          </p>
+          <div className="jp-WorkshopBrowser-welcomeActions">
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled jp-mod-accept"
+              onClick={meetMentor}
+            >
+              Start
+            </button>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled"
+              title="Hide this for now; the Mentor button is always here"
+              onClick={skipWelcome}
+            >
+              Not now
+            </button>
+            <button
+              type="button"
+              className="jp-Button jp-mod-styled"
+              title="Hide this for good, for this library; the Mentor button stays"
+              onClick={() => void dismissWelcomeForGood()}
+            >
+              Don’t show again
+            </button>
+          </div>
+        </div>
+      ) : null}
       {showAvailable && allTags.length > 0 ? (
         <div className="jp-WorkshopBrowser-tags">
           {allTags.map(tag => (

@@ -92,6 +92,7 @@ palette and the matching launch link parameter.
 | `personal`       | The My workshops section of a workshop library.                                                                                                                                                                                       |
 | `ai-authoring`   | [Workshop Author](authoring.md#workshop-author), the AI agent that writes and revises the workshops of a library's owner: its browser button and launcher card, Edit with AI on cards, and its commands.                              |
 | `journal`        | The Journal button of a workshop library and "Workshop: Show Learning Journal", which show the [learning journal](library.md#your-learning-journal) the library keeps of what its owner has done in it. The journal is still written. |
+| `mentor`         | [The mentor](library.md#the-mentor), the conversation above workshops that reads the learning journal, keeps the owner's profile and hands over to Workshop Author: its welcome card, its browser button and "Workshop: Open Mentor". |
 
 The workshops under `workshopsDirectory` stay openable with
 `open-directory` disabled, from the browser or a `workshop=<path>` launch

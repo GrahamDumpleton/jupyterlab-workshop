@@ -76,11 +76,18 @@ from .drafting import (
     create_draft_server,
     draft_instructions,
 )
-from .journal import record_creation
+from .journal import (
+    JOURNAL_DIRECTORY,
+    Journal,
+    ensure_journal,
+    profile_body,
+    record_creation,
+)
 from .library import (
     COURSES_DIRECTORY,
     INSTALLED_DIRECTORY,
     NEEDS_UPGRADE_MESSAGE,
+    PERSONAL_DIRECTORY,
     PERSONAL_WORKSHOPS_DIRECTORY,
     LibraryError,
     course_of_path,
@@ -99,8 +106,21 @@ AGENT_FILE = "agent.json"
 # A course's state directory, at its root; `_workshop/` is a workshop's.
 COURSE_STATE_DIR = ".workshop"
 
-# What a conversation can be about.
+# What a conversation can draft.
 KINDS = ("workshop", "course")
+
+# The conversation above workshops: the mentor, in the library's journal.
+MENTOR_KIND = "mentor"
+
+# The mentor's record sits in the journal directory itself.
+MENTOR_STATE_DIR = "."
+
+# Why the mentor may not write or run anything itself.
+MENTOR_REASON = (
+    "The mentor writes nothing but the profile, through write_profile, and "
+    "runs no commands. Offer a workshop with offer_workshop for Workshop "
+    "Author to write."
+)
 
 # The environment variable naming the provider, for tests.
 PROVIDER_VARIABLE = "JUPYTERLAB_WORKSHOP_AGENT_PROVIDER"
@@ -579,6 +599,39 @@ class ConversationManager:
 
         return conversation
 
+    async def open_mentor(
+        self, workshops_directory: str, model: str = "", effort: str = ""
+    ) -> Conversation:
+        """The library's conversation with the mentor, started or resumed.
+
+        There is one per library, kept in its journal directory, which is
+        made if it is not there yet.
+        """
+
+        if not is_library(self._root, workshops_directory):
+            raise ConversationError("The mentor works only in a workshop library")
+
+        self._check_upgraded(workshops_directory)
+
+        path = mentor_path(workshops_directory)
+        lock = self._opening.setdefault(path, asyncio.Lock())
+
+        async with lock:
+            existing = self._conversations.get(path)
+
+            if existing is not None:
+                return existing
+
+            conversation = await self._start_mentor(
+                path, workshops_directory, model, effort
+            )
+
+            self._conversations[path] = conversation
+
+        self._start_reaper()
+
+        return conversation
+
     async def create(self, conversation: Conversation) -> tuple[Conversation, str]:
         """Create the workshop or course a draft agreed on, and hand its
         conversation on.
@@ -857,12 +910,15 @@ class ConversationManager:
             forbidden=(library / INSTALLED_DIRECTORY,),
             sandboxed=provider.name == "claude" and sandbox_supported(),
         )
+        told = (
+            course_instructions(path, directory)
+            if kind == "course"
+            else instructions(path, directory)
+        )
         options = StartOptions(
             directory=directory,
             policy=policy,
-            instructions=course_instructions(path, directory)
-            if kind == "course"
-            else instructions(path, directory),
+            instructions=told + profile_note(library),
             tools=create_server(session_factory, base=directory),
             skill=self._skill,
             resume=resume,
@@ -949,7 +1005,7 @@ class ConversationManager:
         options = StartOptions(
             directory=directory,
             policy=policy,
-            instructions=told,
+            instructions=told + profile_note(library),
             tools=tools,
             skill=self._skill,
             resume=resume,
@@ -988,6 +1044,76 @@ class ConversationManager:
         holder.append(conversation)
 
         return conversation
+
+    async def _start_mentor(
+        self, path: str, workshops_directory: str, model: str, effort: str
+    ) -> Conversation:
+        from .mentor import create_mentor_server, mentor_instructions
+
+        provider = self.provider
+        library = library_directory(self._root, workshops_directory)
+        journal = Journal(library)
+
+        # The mentor works in the journal, which exists from its first visit.
+        ensure_journal(journal)
+
+        directory = journal.directory
+        record = _read_record(directory, MENTOR_STATE_DIR)
+        resume = (
+            str(record.get("session_id") or "") or None
+            if record.get("provider") == provider.name
+            else None
+        )
+
+        if "model" in record:
+            model = str(record.get("model") or "")
+
+        if "effort" in record:
+            effort = str(record.get("effort") or "")
+
+        # The mentor reads the journal and the person's own workshops, and
+        # writes nothing but the profile, through its own tool; what was
+        # downloaded is never read, as for Workshop Author.
+        readable = [library / PERSONAL_DIRECTORY]
+
+        if self._skill:
+            readable.append(self._skill)
+
+        policy = PermissionPolicy(
+            workshop=directory,
+            readable=tuple(readable),
+            forbidden=(library / INSTALLED_DIRECTORY,),
+            read_only=True,
+            read_only_reason=MENTOR_REASON,
+        )
+        options = StartOptions(
+            directory=directory,
+            policy=policy,
+            instructions=mentor_instructions(library, path, journal.has_profile()),
+            tools=create_mentor_server(journal, self._root, workshops_directory),
+            skill=self._skill,
+            resume=resume,
+            model=model,
+            effort=effort,
+        )
+
+        session = await provider.start(options)
+
+        return Conversation(
+            path=path,
+            directory=directory,
+            session=session,
+            provider=provider.name,
+            kind=MENTOR_KIND,
+            state_dir=MENTOR_STATE_DIR,
+            options=options,
+            model=model,
+            effort=effort,
+            cost=float(record.get("cost") or 0.0) if resume else 0.0,
+            history=list(record.get("history") or []) if resume else [],
+            created=str(record.get("created") or _now()) if resume else _now(),
+            workshops_directory=workshops_directory,
+        )
 
     def _prune_drafts(self) -> None:
         # Drafts nobody came back to are removed after a while, so the data
@@ -1206,6 +1332,36 @@ since {COURSE_STATE_DIR}/ is the conversation's state and not part of the course
 Stay inside the course directory. Anything outside it asks the person
 first; workshops downloaded into the library are never yours to read or
 change."""
+
+
+def mentor_path(workshops_directory: str) -> str:
+    """The path the mentor's conversation goes by: the library's journal,
+    relative to the JupyterLab root."""
+
+    return posixpath.normpath(
+        posixpath.join(workshops_directory or ".", JOURNAL_DIRECTORY)
+    )
+
+
+def profile_note(library: Path) -> str:
+    """What Workshop Author is told about the person, from the profile in
+    their journal; nothing when none has been written."""
+
+    body = profile_body(Journal(library))
+
+    if not body:
+        return ""
+
+    return f"""
+
+The person you work for keeps a learning journal in the library, and
+their mentor has written this profile of them as a learner, in their own
+words. When what they ask for is for themselves, write for this person:
+let the profile decide the depth, the pace and the examples where they
+have not said otherwise. When it is for others, use it only to know who
+you are talking to.
+
+{body}"""
 
 
 def command_line(parts: list[str]) -> str:

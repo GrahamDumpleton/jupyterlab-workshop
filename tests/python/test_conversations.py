@@ -928,3 +928,145 @@ async def test_a_draft_needs_a_library_and_a_proper_id(
     assert "Not something to draft" in (await _receive(socket, "error"))[-1]["message"]
 
     socket.close()
+
+
+async def test_the_mentor_keeps_the_profile_and_workshop_author_reads_it(
+    jp_serverapp, jp_ws_fetch, library
+) -> None:
+    from jupyterlab_workshop.handlers import CONVERSATIONS_KEY
+
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps(
+            {"type": "open", "kind": "mentor", "path": "journal", "directory": "."}
+        )
+    )
+
+    opened = (await _receive(socket, "opened"))[-1]
+
+    assert (opened["path"], opened["kind"]) == ("journal", "mentor")
+    assert (library / "journal" / "settings.yaml").is_file()
+
+    # The mentor works in the journal, is told the person is new, may read
+    # the person's own workshops but nothing downloaded, and writes only
+    # through its tool.
+    manager = jp_serverapp.web_app.settings[CONVERSATIONS_KEY]
+    conversation = manager.get("journal")
+    options = conversation.options
+    policy = options.policy
+
+    assert options.directory == library / "journal"
+    assert "has not met you before" in options.instructions
+    assert "not Workshop Author" in options.instructions
+
+    refused = policy.decide("Write", {"file_path": "profile.md"})
+
+    assert refused.verdict == "deny"
+    assert "write_profile" in refused.reason
+    assert policy.decide("Bash", {"command": "ls"}).verdict == "deny"
+    assert (
+        policy.decide(
+            "Read", {"file_path": "../personal/workshops/demo/workshop.yaml"}
+        ).verdict
+        == "allow"
+    )
+    assert (
+        policy.decide(
+            "Read", {"file_path": "../installed/collections/course/other/workshop.yaml"}
+        ).verdict
+        == "deny"
+    )
+
+    # Before anything is written the journal says so; the profile is
+    # written whole, with its date; an offer and the library listing work.
+    events = await _turn(socket, "/tool read_journal")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert "No profile has been written" in result["summary"]
+
+    events = await _turn(
+        socket,
+        '/tool write_profile {"text": "# Me\\n\\nI know Python and want async."}',
+    )
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert "profile.md" in result["summary"]
+
+    profile = (library / "journal" / "profile.md").read_text()
+
+    assert profile.startswith("---\nupdated: ")
+    assert profile.endswith("# Me\n\nI know Python and want async.\n")
+
+    events = await _turn(socket, '/tool write_profile {"text": "  "}')
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is False
+    assert "cannot be empty" in result["summary"]
+
+    events = await _turn(
+        socket,
+        '/tool offer_workshop {"kind": "workshop", "title": "Async", '
+        '"brief": "Teach asyncio."}',
+    )
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert "Offered" in result["summary"]
+
+    events = await _turn(socket, "/tool list_library")
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert "personal/workshops/demo" in result["summary"]
+
+    socket.close()
+
+    # The record lives in the journal itself.
+    assert (library / "journal" / AGENT_FILE).is_file()
+
+    # Workshop Author, on a workshop and while drafting, is told about the
+    # person from the profile.
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps(
+            {"type": "open", "path": "personal/workshops/demo", "directory": "."}
+        )
+    )
+    await _receive(socket, "opened")
+
+    told = manager.get("personal/workshops/demo").options.instructions
+
+    assert "I know Python and want async." in told
+    assert "write for this person" in told
+
+    socket.close()
+
+    socket = await _draft(jp_ws_fetch, draft="0123abcd-ef46")
+
+    assert (
+        "I know Python and want async."
+        in manager.get("draft:0123abcd-ef46").options.instructions
+    )
+
+    socket.close()
+
+    # The mentor is told differently once a profile exists.
+    await manager.close("journal")
+
+    socket = await jp_ws_fetch("jupyterlab-workshop", "agent", "conversation")
+
+    socket.write_message(
+        json.dumps({"type": "open", "kind": "mentor", "directory": "."})
+    )
+    await _receive(socket, "opened")
+
+    told = manager.get("journal").options.instructions
+
+    assert "Read the journal before anything else" in told
+    assert "has not met you before" not in told
+
+    socket.close()

@@ -232,6 +232,111 @@ test.describe('Workshop Author conversation', () => {
   });
 });
 
+test.describe('Mentor', () => {
+  const LIBRARY = 'test-mentor';
+
+  useLibrary(LIBRARY);
+
+  test('offers to meet the mentor, keeps the profile and hands a brief to Workshop Author', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const browser = page.locator('#jupyterlab-workshop-browser');
+    const card = browser.locator('.jp-WorkshopBrowser-welcome');
+
+    // A library with no profile yet offers to meet the mentor; Not now
+    // puts the card away.
+    await expect(card).toContainText('Meet your mentor');
+    await card.getByRole('button', { name: 'Not now' }).click();
+    await expect(card).toHaveCount(0);
+
+    // The Mentor button opens the one conversation of the library, kept
+    // in its journal.
+    await browser.getByRole('button', { name: 'Mentor…' }).click();
+
+    const mentor = page.locator('.jp-WorkshopAgent');
+    const input = mentor.locator('.jp-WorkshopAgent-input');
+
+    await expect(mentor.locator('.jp-WorkshopAgent-title h2')).toHaveText(
+      'Mentor'
+    );
+    await expect(mentor.locator('.jp-WorkshopAgent-path')).toHaveText(
+      `${LIBRARY}/journal`
+    );
+    await expect(
+      mentor.getByRole('button', { name: 'Show journal' })
+    ).toBeVisible();
+    await expect(
+      mentor.getByRole('button', { name: 'Open workshop' })
+    ).toHaveCount(0);
+    await expect(input).toBeEnabled();
+
+    // The profile is written through the mentor's own tool.
+    await input.fill(
+      '/tool write_profile {"text": "# Me\\n\\nI know Python and want async."}'
+    );
+    await input.press('Enter');
+    await expect(
+      mentor.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(1);
+    expect(
+      await page.contents.fileExists(`${LIBRARY}/journal/profile.md`)
+    ).toBe(true);
+
+    // An offer is a card with Create, which opens Workshop Author drafting
+    // with the brief as its first message.
+    await input.fill(
+      '/tool offer_workshop {"kind": "workshop", "title": "Async basics", "brief": "Teach asyncio to someone who knows Python."}'
+    );
+    await input.press('Enter');
+
+    const offer = mentor.locator('.jp-WorkshopAgent-offer');
+
+    await expect(offer).toContainText('Async basics');
+    await expect(offer).toContainText('A workshop, made for you');
+    await offer
+      .getByRole('button', { name: 'Create with Workshop Author' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent', {
+      hasText: 'New workshop, not created yet'
+    });
+
+    await expect(author.locator('.jp-WorkshopAgent-user')).toHaveText(
+      'Teach asyncio to someone who knows Python.'
+    );
+  });
+
+  test('records Don’t show again in the journal and keeps the card away', async ({
+    page
+  }) => {
+    await openBrowser(page);
+
+    const card = page.locator('.jp-WorkshopBrowser-welcome');
+
+    await card.getByRole('button', { name: 'Don’t show again' }).click();
+    await expect(card).toHaveCount(0);
+
+    const settings = await page.contents.getContentMetadata(
+      `${LIBRARY}/journal/settings.yaml`
+    );
+
+    expect(settings).not.toBeNull();
+
+    // The choice is in the library, so a fresh load respects it while
+    // the Mentor button stays.
+    await page.reload();
+    await openBrowser(page);
+    await expect(
+      page
+        .locator('#jupyterlab-workshop-browser')
+        .getByRole('button', { name: 'Mentor…' })
+    ).toBeVisible();
+    await expect(card).toHaveCount(0);
+  });
+});
+
 test.describe('Workshop Author paths', () => {
   const LIBRARY = 'test-author-paths';
 

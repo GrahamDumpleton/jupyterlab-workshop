@@ -11,6 +11,7 @@ from jupyterlab_workshop.journal import (
     Journal,
     JournalError,
     locate,
+    profile_body,
     read_history,
     read_profile,
     read_settings,
@@ -19,7 +20,9 @@ from jupyterlab_workshop.journal import (
     record_install,
     record_promotion,
     record_publication,
+    render_for_prompt,
     reset_journal,
+    save_profile,
     write_settings,
 )
 
@@ -413,6 +416,62 @@ def test_a_creation_and_a_promotion_carry_the_record_to_the_new_path(
         "personal/courses/python/workshops/loops",
         "personal/courses/python",
     }
+
+
+def test_the_profile_is_saved_whole_and_the_prompt_is_kept_short(
+    tmp_path: Path,
+) -> None:
+    write_library(tmp_path)
+
+    journal = Journal(tmp_path)
+    text = render_for_prompt(journal)
+
+    assert "No profile has been written" in text
+    assert "Nothing has been recorded" in text
+
+    # A profile written without frontmatter gets the date; one with it
+    # is kept as given.
+    save_profile(journal, "# Me\n\nI know Python.")
+
+    assert journal.profile_file.read_text().startswith("---\nupdated: ")
+    assert profile_body(journal) == "# Me\n\nI know Python."
+
+    save_profile(journal, "---\nupdated: 2026-01-01\n---\n\nKept as given.\n")
+
+    assert (
+        journal.profile_file.read_text()
+        == "---\nupdated: 2026-01-01\n---\n\nKept as given.\n"
+    )
+
+    # The history is one line per workshop, the most recent first, and
+    # older ones are counted rather than listed.
+    for number in range(14):
+        name = f"w{number:02d}"
+        workshop = tmp_path / "personal" / "workshops" / name
+
+        write_workshop(workshop, name, f"Workshop {number}")
+        record_events(
+            workshop,
+            [
+                event(
+                    "workshop-start",
+                    f"2026-10-{number + 1:02d}T09:00:00Z",
+                    pages=PAGES,
+                ),
+                event("page-enter", f"2026-10-{number + 1:02d}T09:00:01Z", page="01"),
+            ],
+        )
+
+    text = render_for_prompt(journal)
+
+    assert "## Profile\n\nKept as given." in text
+    assert "14 workshops or courses recorded" in text
+    assert (
+        "- Workshop 13 (personal/workshops/w13); in progress; from Python "
+        "workshops; 1 of 2 pages; last active 2026-10-14" in text
+    )
+    assert "Workshop 0 " not in text
+    assert "and 2 more, older" in text
 
 
 def test_settings_profile_and_reset(tmp_path: Path) -> None:

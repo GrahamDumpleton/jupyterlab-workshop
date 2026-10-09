@@ -242,6 +242,51 @@ nothing is deleted, and moving the directory back undoes it. See
 [journal](cli.md#journal). A deployment can remove the Journal button
 with `journal` in `disabledFeatures`; the record is still written.
 
+## The mentor
+
+Where [Workshop Author](authoring.md#workshop-author) is available, so
+is your mentor: an AI agent above the level of any one workshop, for the
+person who learns from workshops rather than writes them. It reads your
+learning journal before every conversation, helps you choose what to do
+next, and keeps your profile, `journal/profile.md`, the one file in the
+journal an agent writes. The Mentor… button at the top of the workshop
+browser opens it, as does "Workshop: Open Mentor" in the command
+palette; there is one conversation per library, kept in the journal
+directory, which "Show journal" in the panel takes you to.
+
+The first time, when the journal has no profile, the browser shows a
+card offering to meet the mentor, with Start, Not now and Don't show
+again. Not now hides it until JupyterLab is next loaded; Don't show
+again records the choice in `journal/settings.yaml`, so it travels with
+the library and a reset of the journal brings the card back. The first
+conversation is a few short questions, one or two at a time, about what
+you want to learn and why, what you already know, the tools you use, the
+time you have and how you like to learn. You can skip any of them, and
+the mentor writes the profile as it goes, so leaving halfway still
+leaves something. The profile is in plain words, as you said them, and
+it is yours to read and change in the file browser; the mentor rewrites
+it as it learns more, carrying forward what still holds.
+
+What the mentor suggests can be a workshop already to hand, among those
+installed or offered by the collections the library subscribes to, or
+something made for you: when you want one, it offers a workshop, or a
+course, a subject in parts, as a card with a brief and a Create with
+Workshop Author button. Nothing is made until you press it; Workshop
+Author then opens with the brief as its first message and proposes a
+plan as it always does, and nothing is created until you press Create
+on that. Workshop Author also reads the profile, for everything it
+writes in your library, so a workshop made for yourself is written for
+you: the profile decides the depth, the pace and the examples where you
+have not said otherwise.
+
+The mentor has no shell and writes nothing but the profile; the history
+in the journal is the extension's record, which it reads and never
+changes. What goes to the model when you talk to it is the profile, the
+condensed history and what you say, under your own Claude account as for
+Workshop Author, and nothing is sent when you do not. A deployment can
+remove the mentor, its card, button and command, with `mentor` in
+`disabledFeatures`.
+
 ## Courses
 
 A course is a repository whose workshops the library shows, typically

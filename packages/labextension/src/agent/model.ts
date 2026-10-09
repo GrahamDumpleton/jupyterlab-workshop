@@ -56,6 +56,9 @@ export const PROPOSE_COURSE_TOOL = 'mcp__workshop__propose_course';
 /** The live tool that opens a workshop in the person's session, by its path under the root. */
 export const OPEN_WORKSHOP_TOOL = 'mcp__workshop__open_workshop';
 
+/** The tool the mentor offers a workshop or a course with, shown as a card with Create. */
+export const OFFER_TOOL = 'mcp__workshop__offer_workshop';
+
 /** The tools whose run may close the workshop when it passes. */
 export const RUN_TOOLS: readonly string[] = [
   'mcp__workshop__run_workshop',

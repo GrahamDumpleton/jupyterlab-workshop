@@ -1,4 +1,9 @@
 import {
+  JOURNAL_DIRECTORY,
+  joinLibraryPath,
+  normalizeWorkshopsDirectory
+} from '@jupyterlab-workshop/core';
+import {
   ILabShell,
   ILayoutRestorer,
   JupyterFrontEnd,
@@ -31,11 +36,11 @@ import {
   IWorkshopManager
 } from '../tokens';
 import type { ConversationKind } from './connection';
-import { AUTHOR_TITLE, AuthorPanel } from './panel';
+import { AUTHOR_TITLE, AuthorPanel, MENTOR_TITLE } from './panel';
 
-/** The kind a command argument names; a workshop unless it says course. */
+/** The kind a command argument names; a workshop unless it says course or mentor. */
 function kindOf(value: unknown): ConversationKind {
-  return value === 'course' ? 'course' : 'workshop';
+  return value === 'course' || value === 'mentor' ? value : 'workshop';
 }
 
 /** The command the layout restorer reopens Workshop Author panels with. */
@@ -92,7 +97,14 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       .then(() => {
         app.commands.notifyCommandChanged(CommandIDs.createWithAI);
         app.commands.notifyCommandChanged(CommandIDs.editWithAI);
+        app.commands.notifyCommandChanged(CommandIDs.openMentor);
       });
+
+    // The mentor is the conversation above workshops, for the person who
+    // learns from them; it is offered under the same conditions, and can
+    // be turned off on its own.
+    const mentorEnabled = (): boolean =>
+      enabled() && features.enabled('mentor');
 
     const library = (): LibraryService | null =>
       (manager as { library?: LibraryService | null }).library ?? null;
@@ -205,6 +217,8 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
         openTerminal,
         openPath,
         contents: app.serviceManager.contents,
+        createWithAI: (kind, topic) =>
+          void app.commands.execute(CommandIDs.createWithAI, { kind, topic }),
         reveal: () => {
           if (!panel.isAttached) {
             shell.add(panel, 'main');
@@ -338,6 +352,38 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    app.commands.addCommand(CommandIDs.openMentor, {
+      label: 'Workshop: Open Mentor',
+      caption:
+        'Talk to your mentor, who keeps your learning journal and can have Workshop Author make a workshop for you',
+      isVisible: mentorEnabled,
+      isEnabled: mentorEnabled,
+      execute: async () => {
+        await checked;
+
+        if (!mentorEnabled()) {
+          return;
+        }
+
+        if (!(await inLibrary())) {
+          await showErrorMessage(
+            MENTOR_TITLE,
+            'Your mentor keeps your learning journal in a workshop library. Start one with `jupyter workshop library`.'
+          );
+
+          return;
+        }
+
+        // One conversation per library, going by its journal's path.
+        const path = joinLibraryPath(
+          normalizeWorkshopsDirectory(await workshopsDirectory()),
+          JOURNAL_DIRECTORY
+        );
+
+        await openPanel(path, '', 'mentor');
+      }
+    });
+
     // Restores a workshop's or course's panel by its path, and a draft's
     // by its id, each with its kind.
     app.commands.addCommand(RESTORE_COMMAND, {
@@ -388,11 +434,16 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
         category: 'Workshop',
         args: { kind: 'course' }
       });
+      palette?.addItem({
+        command: CommandIDs.openMentor,
+        category: 'Workshop'
+      });
     });
 
     features.changed.connect(() => {
       app.commands.notifyCommandChanged(CommandIDs.createWithAI);
       app.commands.notifyCommandChanged(CommandIDs.editWithAI);
+      app.commands.notifyCommandChanged(CommandIDs.openMentor);
     });
   }
 };

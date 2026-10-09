@@ -51,7 +51,7 @@ export interface IAgentInfo {
 }
 
 /** What a conversation is about: one workshop, or a whole course. */
-export type ConversationKind = 'workshop' | 'course';
+export type ConversationKind = 'workshop' | 'course' | 'mentor';
 
 /** A message from the server about the conversation. */
 export type IAgentMessage =

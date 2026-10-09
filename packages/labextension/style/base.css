@@ -1132,6 +1132,32 @@
   padding: 16px 24px 32px;
 }
 
+/* The card that offers meeting the mentor, shown in a library until a
+   profile is written or it is dismissed. */
+.jp-WorkshopBrowser-welcome {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--jp-border-color2);
+  border-left: 3px solid var(--jp-brand-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
+}
+
+.jp-WorkshopBrowser-welcomeTitle {
+  margin: 0 0 6px;
+  font-size: var(--jp-ui-font-size2);
+}
+
+.jp-WorkshopBrowser-welcomeText {
+  margin: 0 0 8px;
+}
+
+.jp-WorkshopBrowser-welcomeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* The search has a row of its own above the buttons, so the buttons wrap
    among themselves rather than squeezing the search or spilling one at a
    time onto a second line. */
@@ -2526,6 +2552,13 @@
 
 .jp-WorkshopAgent-proposal.jp-mod-failed {
   border-left-color: var(--jp-error-color1);
+}
+
+/* The mentor's offer of a workshop or a course, with Create. */
+.jp-WorkshopAgent-offerKind {
+  margin: 0 0 6px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
 }
 
 .jp-WorkshopAgent-proposal h3 {
