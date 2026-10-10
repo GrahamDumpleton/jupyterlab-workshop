@@ -24,23 +24,59 @@ JupyterLite site that runs entirely in the browser.
 
 ## Install
 
-The package is a prebuilt JupyterLab 4 extension with its server
-extension, installed into a virtual environment alongside JupyterLab
-with `uv add jupyterlab jupyterlab-workshop` or the pip equivalent, or,
-to run workshops without a project of your own, as a tool with
-`uv tool install "jupyterlab-workshop[lab]"` and then
-`jupyter-workshop launch --root ~/training --collection <url>`.
+The quickest way in is as a tool, which gives you a `jupyter-workshop`
+command with JupyterLab, the extension and a Python kernel in an
+environment of its own, and then to start your workshop library:
+
+```
+uv tool install "jupyterlab-workshop[lab]"
+jupyter-workshop library
+```
+
+That opens JupyterLab on your
+[workshop library](https://jupyterlab-workshop.readthedocs.io/en/latest/library.html),
+`~/Workshops` unless you say otherwise, creating it the first time. The
+library is one place for everything you have in the way of workshops:
+the ones you install from published collections, kept by collection;
+the ones you make for yourself; the courses you write to publish for
+others; your subscriptions, which belong to the library rather than to
+your JupyterLab settings; and a
+[learning journal](https://jupyterlab-workshop.readthedocs.io/en/latest/library.html#your-learning-journal),
+the record of what you install, start, finish and make, kept as files
+you can open and read. To try it without installing anything:
+
+```
+uvx --from "jupyterlab-workshop[lab]" jupyter-workshop library
+```
+
+If you use Claude, add the `ai` extra:
+
+```
+uv tool install "jupyterlab-workshop[lab,ai]"
+```
+
+With it a library offers two AI agents inside JupyterLab, working under
+the Claude Code login on your machine or an `ANTHROPIC_API_KEY`.
+[Workshop Author](https://jupyterlab-workshop.readthedocs.io/en/latest/authoring.html#workshop-author)
+writes workshops for you to learn from and designs courses with you.
+[The mentor](https://jupyterlab-workshop.readthedocs.io/en/latest/library.html#the-mentor)
+learns who you are as a learner in a few questions, keeps a profile in
+your journal that Workshop Author then writes for, reads the journal to
+see how you have been getting on, and can have a workshop made for you.
+Nothing in the journal leaves your machine unless you talk to an agent.
+
+The package is also a prebuilt JupyterLab 4 extension with its server
+extension, so in a project of your own it installs alongside JupyterLab:
+
+```
+uv add jupyterlab jupyterlab-workshop
+```
+
+or the pip equivalent, and the commands above run as `jupyter workshop`.
 [Getting started](https://jupyterlab-workshop.readthedocs.io/en/latest/getting-started.html)
 walks through the setup, runs an example workshop and scaffolds one of
-your own; the `jupyter workshop` command that comes with the package
-lints, self-tests and publishes workshops, and author mode in JupyterLab
-edits them in place. A
-[workshop library](https://jupyterlab-workshop.readthedocs.io/en/latest/library.html)
-keeps what you install, the workshops you write and the courses you
-publish in one place, and with the `ai` extra
-[Workshop Author](https://jupyterlab-workshop.readthedocs.io/en/latest/authoring.html#workshop-author),
-an AI agent inside JupyterLab, writes workshops and designs courses with
-you.
+your own; the `jupyter workshop` command lints, self-tests and publishes
+workshops, and author mode in JupyterLab edits them in place.
 
 ## Learn more
 
