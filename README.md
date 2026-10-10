@@ -49,10 +49,11 @@ you can open and read. To try it without installing anything:
 uvx --from "jupyterlab-workshop[lab]" jupyter-workshop library
 ```
 
-If you use Claude, add the `ai` extra:
+If you use Claude, add the `ai` extra, here in the form that runs
+straight away without installing, or to the tool install above:
 
 ```
-uv tool install "jupyterlab-workshop[lab,ai]"
+uvx --from "jupyterlab-workshop[lab,ai]" jupyter-workshop library
 ```
 
 With it a library offers two AI agents inside JupyterLab, working under
