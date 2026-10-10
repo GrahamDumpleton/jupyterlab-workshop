@@ -1564,6 +1564,54 @@ test.describe('workshop browser', () => {
     ).toContainText('from this session');
     await dialog.getByRole('button', { name: 'Close' }).click();
   });
+
+  test('does not put a removed workshop back when writing to it late', async ({
+    page
+  }) => {
+    await page
+      .evaluate((search: string) => {
+        window.location.assign(`${window.location.pathname}${search}`);
+      }, `?workshop=${WORKSHOPS_DIR}/${WORKSHOP}`)
+      .catch(() => undefined);
+
+    await trustWorkshop(page, 'Git from the command line');
+    await expect
+      .poll(() =>
+        page.contents.fileExists(
+          `${WORKSHOPS_DIR}/${WORKSHOP}/_workshop/state.json`
+        )
+      )
+      .toBe(true);
+
+    // The workshop goes while it is open, as a removal from another
+    // window or the clean-up after a test takes it.
+    await page.contents.deleteDirectory(`${WORKSHOPS_DIR}/${WORKSHOP}`);
+
+    // Turning the page saves the progress, and a variable set by hand
+    // rewrites the environment files; each would have created the state
+    // directory and, with it, the workshop directory again.
+    await page.evaluate(() => {
+      const exposed = window as unknown as IExposedApp;
+
+      void exposed.jupyterapp.commands.execute('workshop:next-page', {});
+      void exposed.jupyterapp.commands.execute('workshop:variables', {});
+    });
+
+    const dialog = page.locator('.jp-Dialog');
+
+    await expect(dialog).toContainText('Workshop variables');
+    await dialog
+      .locator('.jp-WorkshopVariables-row', { hasText: 'user_name' })
+      .locator('input')
+      .fill('Late Writer');
+    await dialog.getByRole('button', { name: 'Apply' }).click();
+
+    // Both writes are debounced; give them time to have happened.
+    await page.waitForTimeout(2000);
+    expect(
+      await page.contents.directoryExists(`${WORKSHOPS_DIR}/${WORKSHOP}`)
+    ).toBe(false);
+  });
 });
 
 test.describe('welcome message', () => {

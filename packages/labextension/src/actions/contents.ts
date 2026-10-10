@@ -148,6 +148,34 @@ export async function ensureDirectory(
 }
 
 /**
+ * Create a directory whose parent is already there, returning whether it
+ * is. When the parent has gone nothing is created and false is returned.
+ *
+ * This is for what is written late and on timers, such as a workshop's
+ * progress and its environment files: a write that lands after the
+ * workshop was removed must not put an empty shell of it back, where it
+ * would be in the way of the next install.
+ */
+export async function ensureDirectoryWithin(
+  contents: Contents.IManager,
+  path: string
+): Promise<boolean> {
+  const parent = PathExt.dirname(path);
+
+  if (parent !== '' && parent !== '.') {
+    const existing = await getIfExists(contents, parent, false);
+
+    if (!existing || existing.type !== 'directory') {
+      return false;
+    }
+  }
+
+  await ensureDirectory(contents, path);
+
+  return true;
+}
+
+/**
  * Read a text file through the contents API, returning null when it does
  * not exist.
  */

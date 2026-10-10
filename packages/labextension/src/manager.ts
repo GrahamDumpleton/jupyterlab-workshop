@@ -57,10 +57,10 @@ import {
   deleteChildrenExcept,
   deleteTree,
   ensureDirectory,
+  ensureDirectoryWithin,
   getIfExists,
   readIfExists,
-  readTextFile,
-  writeTextFile
+  readTextFile
 } from './actions/contents';
 import { leaveDirectory } from './cleanup';
 import { listLibrary } from './library/scan';
@@ -2490,12 +2490,19 @@ export class WorkshopManager implements IWorkshopManager {
     };
 
     try {
+      // The write is debounced, so the workshop may have gone by now;
+      // creating the directory and its parents would put an empty shell
+      // of it back, in the way of the next install.
+      if (!(await ensureDirectoryWithin(this._contents, directory))) {
+        return;
+      }
+
       for (const [file, text] of Object.entries(files)) {
-        await writeTextFile(
-          this._contents,
-          PathExt.join(directory, file),
-          text
-        );
+        await this._contents.save(PathExt.join(directory, file), {
+          type: 'file',
+          format: 'text',
+          content: text
+        });
       }
     } catch (error) {
       console.warn('Unable to write workshop environment files', error);

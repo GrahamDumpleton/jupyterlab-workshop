@@ -2,7 +2,7 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { Contents } from '@jupyterlab/services';
 import { Debouncer } from '@lumino/polling';
 
-import { ensureDirectory, readIfExists } from './actions/contents';
+import { ensureDirectoryWithin, readIfExists } from './actions/contents';
 import { TrustLevel } from '@jupyterlab-workshop/core';
 
 import {
@@ -215,7 +215,16 @@ export class StateStore {
     }
 
     try {
-      await ensureDirectory(this._contents, PathExt.dirname(this._path));
+      // A save lands late, on a timer, so the workshop may have gone by
+      // now; writing on would put an empty shell of it back.
+      const directory = PathExt.dirname(this._path);
+
+      if (!(await ensureDirectoryWithin(this._contents, directory))) {
+        console.warn(`Not saving ${this._path}: the workshop has gone`);
+
+        return;
+      }
+
       await this._contents.save(this._path, {
         type: 'file',
         format: 'text',
