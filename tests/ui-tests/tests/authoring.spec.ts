@@ -177,6 +177,22 @@ test.describe('author mode', () => {
     // Leaving author mode hides the toolbar; reopening does not prompt.
     await execute('workshop:author-mode', {});
     await expect(panel.locator('.jp-WorkshopPanel-author')).toHaveCount(0);
+
+    // Author mode is never on when a workshop opens: marked as the
+    // author's own it is trusted without asking, but it comes up as a
+    // learner's, and editing is turned on again by hand.
+    await execute('workshop:author-mode', {});
+    await expect(panel.locator('.jp-WorkshopPanel-author')).toBeVisible();
+    await execute('workshop:close', {});
+    await expect(page.locator(`${PANEL} .jp-WorkshopPanel-title`)).toHaveCount(
+      0
+    );
+    await execute('workshop:open', { path: workshopPath });
+    await expect(page.locator(`${PANEL} .jp-WorkshopPanel-title`)).toHaveText(
+      'Git from the command line'
+    );
+    await expect(dialog).toHaveCount(0);
+    await expect(panel.locator('.jp-WorkshopPanel-author')).toHaveCount(0);
   });
 });
 

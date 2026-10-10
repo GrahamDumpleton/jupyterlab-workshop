@@ -519,8 +519,12 @@ export class WorkshopManager implements IWorkshopManager {
         return;
       }
 
-      // A workshop marked as the learner's own reopens in author mode.
-      this._authoring = await this._trustStore.isAuthored(trust.sourceKey);
+      // Every open is a learner's, whoever wrote the workshop: author mode
+      // is turned on by hand, or by the agent for its own run, never by
+      // the authored marker, which decides trust alone. What the person
+      // does in author mode is not recorded, so an open that fell into it
+      // would leave their run out of the record.
+      this._authoring = false;
 
       // The workspace is created and filled from files/ before any
       // action can touch it; an existing one holds the learner's work
@@ -2843,8 +2847,8 @@ export class WorkshopManager implements IWorkshopManager {
     }
 
     // In a workshop library, the owner's own workshops and courses are
-    // trusted by where they are, when nothing was downloaded there. This
-    // is not the authored marker, which would also open them for editing.
+    // trusted by where they are, when nothing was downloaded there,
+    // without the authored marker.
     if (
       summary.source.kind === 'local' &&
       (await this._isOwnLibraryWorkshop(summary.source.url))

@@ -11,7 +11,11 @@ an external editor, git and an AI agent.
 the panel header) turns editing on for the open workshop. It marks the
 workshop as your own, so it is trusted at every hash from then on and
 saving a page never brings the trust dialog back, and it adds a toolbar
-to the panel:
+to the panel. Author mode is never on when a workshop opens: a workshop
+marked as your own comes up as a learner's, trusted without asking, and
+the pencil turns editing on again, so doing a workshop is always
+recorded as yours and editing it is always a choice made after it is
+open. The toolbar:
 
 | Button                  | What it does                                                                                                                                                                                                                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
