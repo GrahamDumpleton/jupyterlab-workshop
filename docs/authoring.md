@@ -43,7 +43,9 @@ While author mode is on, progress events are not recorded, strict
 [gating](checks.md#gating) is shown but not enforced, so every page can
 be reached without passing the checks before it, and edits to the files
 re-render the panel as they are saved, whether they were made in
-JupyterLab or elsewhere. Restart only ever refills the
+JupyterLab or elsewhere. Turning author mode off begins a run of your
+own from the page you are on, recorded from there, so a workshop left
+open in author mode can be done for real without closing it first. Restart only ever refills the
 [workspace](concepts.md#the-workspace), so restarting to try the
 workshop from the top keeps every edit to the pages and the manifest.
 
@@ -283,12 +285,16 @@ says where the conversation stands:
 - Attach chooses files to send with the message; see
   [Attaching files](#attaching-files).
 
-- Open workshop opens the workshop in the instructions panel, in author
-  mode (a course has no one workshop to open, so its conversation has no
-  such button; the agent opens a workshop of the course with its live
-  tools), Show files takes the file browser to the workshop's or
-  course's directory, and Continue in terminal carries the conversation
-  on in a terminal.
+- Open workshop opens the workshop in the instructions panel as a
+  learner, so what you do in it is recorded as yours, and turns author
+  mode off when the agent's own run left the workshop open in it; author
+  mode is a choice to make afterwards, with "Workshop: Author Mode", and
+  the agent opens the workshop in author mode itself when it runs it. (A
+  course has no one workshop to open, so its conversation has no such
+  button; the agent opens a workshop of the course with its live tools.)
+  Show files takes the file browser to the workshop's or course's
+  directory, and Continue in terminal carries the conversation on in a
+  terminal.
 
 - The model the conversation answers with, chosen from the models Claude
   Code offers your account; hovering over it names the model actually
@@ -404,7 +410,11 @@ it creates a GitHub repository for a workshop or course through the
 (as `jupyter workshop gitignore`: what a workshop's or course's
 `.gitignore` lacks of what it should never commit, and the fix, which
 the agent offers before a commit), `index`,
-`catalog`, `draft` (pages from a saved recording), `list_collection`,
+`catalog`, `draft` (pages from a saved recording), `progress` (how the
+person has got on with a workshop: its status, the pages reached and the
+time on each, every check's last result and attempts, every quiz answer
+and the hints opened, from the record the extension writes only outside
+author mode, so an agent's own runs are never in it), `list_collection`,
 `list_catalog`, `get_schema` and `test`. The server keeps no notion of
 a current workshop, so the agent names the directory each time, as an
 absolute path or one relative to where the client started it.

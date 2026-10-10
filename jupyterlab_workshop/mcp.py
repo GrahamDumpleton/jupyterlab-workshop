@@ -310,6 +310,29 @@ def create_server(
         return json.loads(completed.stdout)
 
     @server.tool()
+    def progress(directory: str = ".") -> Any:
+        """How the person has got on with a workshop, from its own record.
+
+        The status, the dates, pages reached of visible, checks and
+        quizzes, hints, sessions and time active, and under them the
+        current run page by page: what was reached and how long it took,
+        each check's last result and its attempts, each quiz answer and
+        the hints opened. Read this to say whether they have done the
+        workshop or how it went. It counts only what was done while the
+        workshop was open outside author mode, so your own runs are never
+        in it; the marks in _workshop/state.json may be yours and say
+        nothing about who made them.
+        """
+
+        from .journal import JournalError
+        from .journal import progress as read_progress
+
+        try:
+            return read_progress(Path(place(directory)))
+        except JournalError as error:
+            return {"error": str(error)}
+
+    @server.tool()
     def test(
         directory: str, trust: str = "trusted", timeout: float = 1200.0
     ) -> dict[str, Any]:

@@ -88,6 +88,9 @@ HISTORY_MARKER = (
 
 MANIFEST_FILE = "workshop.yaml"
 
+#: The state directory in a workshop, where its own events log lives.
+WORKSHOP_STATE_DIR = "_workshop"
+
 #: Events the extension makes itself, beside the progress events.
 INSTALLED = "workshop-installed"
 UPDATED = "workshop-updated"
@@ -423,6 +426,154 @@ def render_for_prompt(journal: Journal, recent: int = PROMPT_RECENT) -> str:
         parts.append("\n".join(lines))
 
     return "\n\n".join(parts) + "\n"
+
+
+def progress(directory: Path) -> dict[str, Any]:
+    """How a person has got on with one workshop, from the workshop's own
+    record.
+
+    The record is ``_workshop/events.jsonl`` in the workshop, which the
+    frontend writes only while the workshop is open outside author mode,
+    so the runs an authoring agent makes are never in it; the marks in
+    ``_workshop/state.json`` say nothing about who made them, this does.
+    The facts are those of :func:`summarize`, and under them the current
+    run itemised: each page with whether it was reached and the time spent
+    on it, each check's last result and attempts, each quiz answer and the
+    hints opened, placed on their pages. In a library the journal's history
+    file for the workshop is named too.
+    """
+
+    if not (directory / MANIFEST_FILE).is_file():
+        raise JournalError(f"{directory} is not a workshop directory")
+
+    manifest = _manifest(directory)
+    events = _workshop_events(directory)
+    facts: dict[str, Any] = {"note": PROGRESS_NOTE}
+
+    if events:
+        facts.update(summarize(events, manifest))
+        facts["runs"] = sum(1 for event in events if event["kind"] in _RUN_STARTS)
+        facts.update(_run_detail(events))
+    else:
+        for name in ("title", "name", "version"):
+            if manifest.get(name):
+                facts[name] = str(manifest[name])
+
+        facts["status"] = "not started"
+
+    located = locate(directory)
+
+    if located is not None:
+        history = _existing_history(located.journal, located.path)
+
+        if history is not None:
+            facts["journal"] = history.relative_to(located.journal.library).as_posix()
+
+    return facts
+
+
+#: What a workshop's own record is, said to the agent reading it.
+PROGRESS_NOTE = (
+    "The person's own record: nothing is recorded while the workshop is open "
+    "in author mode, so runs made by Workshop Author are never counted."
+)
+
+
+def _workshop_events(directory: Path) -> list[dict[str, Any]]:
+    # The workshop's own log, as the frontend posted it, in order.
+    file = directory / WORKSHOP_STATE_DIR / EVENTS_FILE
+
+    if not file.is_file():
+        return []
+
+    events = [_parse(line) for line in file.read_text(encoding="utf-8").splitlines()]
+
+    return [event for event in events if event is not None and event.get("kind")]
+
+
+def _run_detail(events: list[dict[str, Any]]) -> dict[str, Any]:
+    # The current run itemised: what summarize counts, page by page.
+    starts = [
+        index for index, event in enumerate(events) if event["kind"] in _RUN_STARTS
+    ]
+    run = events[starts[-1] :] if starts else []
+    pages = _pages(events)
+
+    # A check, quiz or hint is placed by the page whose directives list it.
+    placed: dict[str, str] = {}
+
+    for page in pages:
+        for directive in page.get("directives") or []:
+            if isinstance(directive, dict) and directive.get("id"):
+                placed[str(directive["id"])] = str(page.get("id"))
+
+    entered = {str(event.get("page")) for event in run if event["kind"] == "page-enter"}
+    active: dict[str, int] = {}
+
+    for event in run:
+        if event["kind"] == "page-leave":
+            left = str(event.get("page"))
+            active[left] = active.get(left, 0) + int(event.get("active_ms") or 0)
+
+    detail: dict[str, Any] = {"pages": []}
+
+    for page in pages:
+        page_id = str(page.get("id"))
+        entry: dict[str, Any] = {
+            "id": page_id,
+            "title": str(page.get("title") or ""),
+            "reached": page_id in entered,
+        }
+
+        if active.get(page_id):
+            entry["active_minutes"] = max(1, round(active[page_id] / 60000))
+
+        detail["pages"].append(entry)
+
+    # The last outcome of each check and quiz, with how many tries it took.
+    checks: dict[str, dict[str, Any]] = {}
+    quizzes: dict[str, dict[str, Any]] = {}
+    hints: list[dict[str, Any]] = []
+    gates: list[dict[str, Any]] = []
+
+    for event in run:
+        kind = event["kind"]
+        directive = str(event.get("id") or "")
+
+        if kind == "verify-result" and event.get("status") != "skipped":
+            entry = checks.setdefault(
+                directive,
+                {"id": directive, "page": placed.get(directive), "attempts": 0},
+            )
+            entry["status"] = str(event.get("status"))
+            entry["attempts"] += 1
+        elif kind == "quiz-answered":
+            entry = quizzes.setdefault(
+                directive,
+                {"id": directive, "page": placed.get(directive), "attempts": 0},
+            )
+            entry["correct"] = event.get("correct") is True
+            entry["attempts"] += 1
+        elif kind == "hint-opened" and directive not in {hint["id"] for hint in hints}:
+            hints.append({"id": directive, "page": placed.get(directive)})
+        elif kind == "gate-skipped":
+            gates.append(
+                {
+                    "page": str(event.get("page")),
+                    "requirements": list(event.get("requirements") or []),
+                }
+            )
+
+    for name, items in (
+        ("check_results", list(checks.values())),
+        ("quiz_answers", list(quizzes.values())),
+        ("hints", hints),
+        ("gates_skipped_on", gates),
+    ):
+        if items:
+            detail[name] = items
+
+    return detail
 
 
 def _history_line(facts: Mapping[str, Any]) -> str:

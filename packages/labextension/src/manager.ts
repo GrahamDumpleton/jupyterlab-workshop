@@ -644,14 +644,7 @@ export class WorkshopManager implements IWorkshopManager {
       };
       this._state.save();
 
-      // The page list carries each page's directives too, so a service
-      // can report what was never run against what was there to run.
-      const pages = visible.map(page => ({
-        id: page.id,
-        path: page.path,
-        title: page.title,
-        directives: pageInventory(page, manifest.defaults)
-      }));
+      const pages = this._pageList();
 
       if (resumed) {
         this._emit('workshop-resume', {
@@ -720,6 +713,16 @@ export class WorkshopManager implements IWorkshopManager {
 
     this._authoring = on;
     this._changed.emit();
+
+    // Nothing was recorded while author mode was on, so what the person
+    // does from here begins a run of their own, or the events that follow
+    // would belong to no run.
+    if (!on) {
+      this._emit('workshop-start', {
+        page: this._currentPageId,
+        pages: this._pageList()
+      });
+    }
   }
 
   async reload(): Promise<void> {
@@ -2040,6 +2043,22 @@ export class WorkshopManager implements IWorkshopManager {
       workshop?.manifest.environment?.kernel ??
       `workshop-${workshop?.manifest.name ?? 'unknown'}`
     );
+  }
+
+  /**
+   * The visible pages as a start or resume event lists them. Each carries
+   * its directives too, so a service can report what was never run against
+   * what was there to run.
+   */
+  private _pageList(): Record<string, unknown>[] {
+    const defaults = this._workshop?.manifest.defaults;
+
+    return this.visiblePages.map(page => ({
+      id: page.id,
+      path: page.path,
+      title: page.title,
+      directives: pageInventory(page, defaults)
+    }));
   }
 
   private _emit(kind: string, data: Record<string, unknown>): void {

@@ -986,6 +986,21 @@ async def test_the_mentor_keeps_the_profile_and_workshop_author_reads_it(
     assert result["ok"] is True
     assert "No profile has been written" in result["summary"]
 
+    # One workshop's record in detail, by the path the library gives, and
+    # a refusal for a path that is not a workshop.
+    events = await _turn(socket, '/tool progress {"path": "personal/workshops/demo"}')
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is True
+    assert '"status": "not started"' in result["summary"]
+    assert "author mode" in result["summary"]
+
+    events = await _turn(socket, '/tool progress {"path": "../elsewhere"}')
+    result = next(e for e in events if e["kind"] == "tool-result")
+
+    assert result["ok"] is False
+    assert "There is no workshop at ../elsewhere" in result["summary"]
+
     events = await _turn(
         socket,
         '/tool write_profile {"text": "# Me\\n\\nI know Python and want async."}',

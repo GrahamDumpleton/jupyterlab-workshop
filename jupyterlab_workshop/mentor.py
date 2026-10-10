@@ -24,12 +24,14 @@ from mcp.server.mcpserver import MCPServer
 from .collection import CollectionError, list_installed, load_collection
 from .journal import (
     JOURNAL_DIRECTORY,
+    MANIFEST_FILE,
     Journal,
     read_history,
     read_profile,
     render_for_prompt,
     save_profile,
 )
+from .journal import progress as read_progress
 from .library import LibraryError, read_library
 
 #: The tool the mentor offers a workshop or a course with; the panel shows
@@ -164,6 +166,36 @@ def create_mentor_server(
             "wait for them."
         )
 
+    @server.tool()
+    def progress(path: str) -> Any:
+        """How the person has got on with one workshop, in the detail the
+        journal's line does not give.
+
+        The status and dates, then the current run page by page: each
+        page reached and the time spent on it, each check's last result
+        and its attempts, each quiz answer and the hints opened. `path` is
+        the workshop's path as list_library and the journal give it. Only
+        what the person did themselves is in it: nothing is recorded while
+        a workshop is open in author mode, so Workshop Author's runs are
+        never counted.
+        """
+
+        # The path is one the journal or the library listing gave, under
+        # the library or the server root, and nowhere else.
+        for base in (journal.library, root_dir):
+            directory = (base / path).resolve()
+
+            if not directory.is_relative_to(base.resolve()):
+                continue
+
+            if (directory / MANIFEST_FILE).is_file():
+                return read_progress(directory)
+
+        raise ToolError(
+            f"There is no workshop at {path}; list_library and the journal give "
+            "the paths"
+        )
+
     return server
 
 
@@ -211,7 +243,11 @@ The history in the journal is the extension's record and is not yours to
 change; read it to see where they are: what is unfinished, what was left
 early, which checks failed repeatedly, which quizzes went wrong, what
 they made themselves. Draw on it when you suggest what next, and say what
-you are drawing on.
+you are drawing on. For how one workshop went, progress with its path
+gives the detail: each page reached and the time on it, each check's
+last result and attempts, each quiz answer, the hints opened. Only what
+the person did themselves is there; Workshop Author's runs are never
+counted.
 
 What next can be a workshop already to hand: list_library shows what is
 installed and what the library subscribes to, and list_collection shows

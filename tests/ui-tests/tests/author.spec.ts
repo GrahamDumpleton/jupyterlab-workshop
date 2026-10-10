@@ -664,12 +664,20 @@ test.describe('Workshop Author playing a workshop', () => {
       'Start'
     );
 
-    // The agent plays the workshop, as it does to check a version.
-    await input.fill('/tool run_workshop {}');
+    // The agent opens the workshop in author mode itself and plays it, as
+    // it does to check a version.
+    await input.fill(
+      `/tool open_workshop {"path": "${LIBRARY}/personal/workshops/demo"}`
+    );
     await input.press('Enter');
     await expect(
       author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
     ).toHaveCount(1, { timeout: 60000 });
+    await input.fill('/tool run_workshop {}');
+    await input.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(2, { timeout: 60000 });
 
     // It reached the end with nothing failed, so the workshop was left as
     // Finish leaves it, and the conversation is back in front.
@@ -695,6 +703,7 @@ test.describe('Workshop Author playing a workshop', () => {
     const state = `${LIBRARY}/personal/workshops/demo/_workshop`;
 
     expect(await page.contents.fileExists(`${state}/state.json`)).toBe(false);
+    expect(await page.contents.fileExists(`${state}/events.jsonl`)).toBe(false);
     expect(await page.contents.fileExists(`${state}/agent.json`)).toBe(true);
     await author.getByRole('button', { name: 'Open workshop' }).click();
     await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
@@ -702,6 +711,12 @@ test.describe('Workshop Author playing a workshop', () => {
     );
     await expect
       .poll(() => page.contents.fileExists(`${state}/state.json`))
+      .toBe(true);
+
+    // Opened by the person, as a learner, the run is recorded: the agent's
+    // runs in author mode never were.
+    await expect
+      .poll(() => page.contents.fileExists(`${state}/events.jsonl`))
       .toBe(true);
   });
 });
@@ -759,17 +774,24 @@ test.describe('Workshop Author following a run in the background', () => {
       'Start'
     );
 
-    // A long run is started in the background and answers at once; the
-    // report comes through run_progress once the run has closed the
-    // workshop.
+    // The agent opens the workshop in author mode itself; a long run is
+    // then started in the background and answers at once, and the report
+    // comes through run_progress once the run has closed the workshop.
     await page
       .locator('.lm-TabBar-tab', { hasText: 'Workshop Author: demo' })
       .click();
-    await input.fill('/tool run_workshop {"wait": false}');
+    await input.fill(
+      `/tool open_workshop {"path": "${LIBRARY}/personal/workshops/demo"}`
+    );
     await input.press('Enter');
     await expect(
       author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
     ).toHaveCount(1, { timeout: 60000 });
+    await input.fill('/tool run_workshop {"wait": false}');
+    await input.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(2, { timeout: 60000 });
     await expect
       .poll(
         () =>
@@ -800,7 +822,7 @@ test.describe('Workshop Author following a run in the background', () => {
     await input.dispatchEvent('keydown', { key: 'Enter', bubbles: true });
     await expect(
       author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
-    ).toHaveCount(2, { timeout: 60000 });
+    ).toHaveCount(3, { timeout: 60000 });
 
     // The report said the run closed the workshop, so the conversation
     // that asked comes back to the front.
@@ -1011,11 +1033,18 @@ test.describe('Workshop Author creating a workshop', () => {
     await expect(prompt).toBeEnabled();
     await author.getByRole('button', { name: 'Open workshop' }).click();
     await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toBeVisible();
-    await prompt.fill('/tool run_workshop {}');
+    await prompt.fill(
+      `/tool open_workshop {"path": "${LIBRARY}/personal/workshops/git-basics"}`
+    );
     await prompt.press('Enter');
     await expect(
       author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
     ).toHaveCount(1, { timeout: 60000 });
+    await prompt.fill('/tool run_workshop {}');
+    await prompt.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(2, { timeout: 60000 });
     await expect(page.locator('#jupyterlab-workshop-panel')).toBeHidden();
     await expect(
       page.locator('.lm-TabBar-tab.lm-mod-current', {

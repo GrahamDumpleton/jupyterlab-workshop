@@ -1214,6 +1214,12 @@ run_workshop at the fast pace passes. Do not say it is ready otherwise;
 say what failed and fix it. Once it is ready, say so, and the person can
 open it. Run the self-test tool, test, only when the person asks for it.
 
+When the person asks whether they have done the workshop, or how it
+went, use progress with the directory ".": it is their own record,
+written only while the workshop is open outside author mode, so your
+runs are never in it. The marks in {STATE_DIR}/state.json say nothing
+about who made them and may be yours; never work it out from timestamps.
+
 When a reply names a file or directory of the workshop, write it as a
 Markdown link whose text and target are both its path relative to the
 workshop directory, such as [pages/01-intro.md](pages/01-intro.md): the
@@ -1292,7 +1298,10 @@ true. The Justfile's index-<name> recipe lists each collection's
 workshops in order; keep it in step when a workshop is added or moved.
 The live tools act in the person's own browser tab: open_workshop with
 the path "{path}/workshops/<name>" opens a workshop there in author
-mode, and run_page, run_workshop and reset_workshop then run it.
+mode, and run_page, run_workshop and reset_workshop then run it. When
+the person asks whether they have done a workshop, or how it went,
+progress with its directory is their own record, written only outside
+author mode, so your runs are never in it.
 
 A version of a workshop is ready to show when lint reports no errors and
 run_workshop at the fast pace passes. Do not say it is ready otherwise;

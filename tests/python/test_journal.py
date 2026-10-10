@@ -12,6 +12,7 @@ from jupyterlab_workshop.journal import (
     JournalError,
     locate,
     profile_body,
+    progress,
     read_history,
     read_profile,
     read_settings,
@@ -509,3 +510,88 @@ def test_settings_profile_and_reset(tmp_path: Path) -> None:
     assert whole != archive
     assert (whole / "settings.yaml").is_file()
     assert not journal.exists()
+
+
+def test_progress_reads_the_workshops_own_record(tmp_path: Path) -> None:
+    write_library(tmp_path)
+
+    workshop = tmp_path / "personal" / "workshops" / "intro"
+
+    write_workshop(workshop, "intro", "Intro")
+
+    # Nothing recorded yet: not started, named from the manifest, and no
+    # history file to point at.
+    facts = progress(workshop)
+
+    assert facts["status"] == "not started"
+    assert facts["title"] == "Intro"
+    assert "author mode" in facts["note"]
+    assert "journal" not in facts
+
+    # A run: a check failed then passed, a quiz answered wrongly, a hint
+    # opened on the second page, and the workshop finished.
+    pages = [
+        {
+            **PAGES[0],
+            "directives": [
+                {"id": "c1", "type": "verify"},
+                {"id": "q1", "type": "quiz"},
+            ],
+        },
+        {**PAGES[1], "directives": [{"id": "h1", "type": "hint"}]},
+    ]
+    events = [
+        event("workshop-start", "2026-10-10T09:00:00Z", page="01", pages=pages),
+        event("page-enter", "2026-10-10T09:00:01Z", page="01"),
+        event(
+            "verify-result",
+            "2026-10-10T09:01:00Z",
+            id="c1",
+            status="error",
+            attempt=1,
+            trigger="click",
+        ),
+        event(
+            "verify-result",
+            "2026-10-10T09:02:00Z",
+            id="c1",
+            status="ok",
+            attempt=2,
+            trigger="click",
+        ),
+        event(
+            "quiz-answered", "2026-10-10T09:02:30Z", id="q1", correct=False, attempt=1
+        ),
+        event("page-leave", "2026-10-10T09:03:00Z", page="01", active_ms=180000),
+        event("page-enter", "2026-10-10T09:03:00Z", page="02"),
+        event("hint-opened", "2026-10-10T09:03:30Z", id="h1"),
+        event("workshop-finish", "2026-10-10T09:04:00Z", pages=2),
+    ]
+    state = workshop / "_workshop"
+
+    state.mkdir()
+    (state / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    record_events(workshop, events)
+
+    facts = progress(workshop)
+
+    assert facts["status"] == "finished"
+    assert facts["runs"] == 1
+    assert (facts["pages_reached"], facts["pages_visible"]) == (2, 2)
+    assert facts["checks"] == {"passed": 1, "failed": 0, "attempts": 2}
+    assert facts["pages"] == [
+        {"id": "01", "title": "Start", "reached": True, "active_minutes": 3},
+        {"id": "02", "title": "Finish", "reached": True},
+    ]
+    assert facts["check_results"] == [
+        {"id": "c1", "page": "01", "status": "ok", "attempts": 2}
+    ]
+    assert facts["quiz_answers"] == [
+        {"id": "q1", "page": "01", "correct": False, "attempts": 1}
+    ]
+    assert facts["hints"] == [{"id": "h1", "page": "02"}]
+    assert "gates_skipped_on" not in facts
+    assert facts["journal"] == "journal/history/intro.md"
+
+    with pytest.raises(JournalError, match="not a workshop directory"):
+        progress(tmp_path / "nowhere")

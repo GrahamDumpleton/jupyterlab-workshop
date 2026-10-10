@@ -242,10 +242,17 @@ export const agentPlugin: JupyterFrontEndPlugin<void> = {
           shell.activateById(panel.id);
         },
         openWorkshop: async () => {
-          await manager.open(path);
+          // The person's open is a learner's, so what they do is recorded
+          // as theirs, which nothing is in author mode. Author mode is a
+          // choice they make afterwards, and is turned off here when the
+          // agent's own open left the workshop in it.
+          if (manager.workshop?.path === path) {
+            await manager.setAuthoring(false);
+          } else {
+            await manager.open(path);
+          }
 
           if (manager.workshop?.path === path) {
-            await manager.setAuthoring(true);
             shell.activateById(PANEL_ID);
           }
         }

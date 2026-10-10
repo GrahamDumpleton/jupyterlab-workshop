@@ -286,9 +286,17 @@ have not said otherwise.
 
 The mentor has no shell and writes nothing but the profile; the history
 in the journal is the extension's record, which it reads and never
-changes. What goes to the model when you talk to it is the profile, the
-condensed history and what you say, under your own Claude account as for
-Workshop Author, and nothing is sent when you do not. A deployment can
+changes. Ask it how a workshop went and it reads that workshop's own
+record in detail: the pages reached and the time on each, every check's
+last result and attempts, every quiz answer, the hints opened. The
+record is yours alone: nothing is recorded while a workshop is open in
+author mode, so what Workshop Author runs while testing a workshop never
+counts as your doing, for the mentor or for Workshop Author, which reads
+the same record when asked whether you have done a workshop. What goes
+to the model when you talk to it is the profile, the condensed history,
+the record of a workshop you ask about and what you say, under your own
+Claude account as for Workshop Author, and nothing is sent when you do
+not. A deployment can
 remove the mentor, its card, button and command, with `mentor` in
 `disabledFeatures`.
 

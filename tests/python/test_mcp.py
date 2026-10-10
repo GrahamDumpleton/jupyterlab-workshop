@@ -55,6 +55,7 @@ def test_tools_and_resources_are_listed() -> None:
         "publish_gist",
         "index",
         "draft",
+        "progress",
         "run_action",
         "run_page",
         "run_workshop",
