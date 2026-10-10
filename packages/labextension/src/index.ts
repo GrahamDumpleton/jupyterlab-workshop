@@ -176,8 +176,11 @@ const PALETTE_CATEGORY = 'Workshop';
 interface ISelfTestStatus extends ISelfTestProgress {
   /** A run is in progress. */
   running: boolean;
-  /** The report of the run that finished last, until the next one starts. */
-  report: ISelfTestReport | null;
+  /**
+   * The report of the run that finished last, until the next one starts,
+   * with whether that run closed the workshop.
+   */
+  report: (ISelfTestReport & { closed: boolean }) | null;
 }
 
 /**
@@ -1585,8 +1588,17 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
               manager.finished &&
               report.failed === 0
             ) {
+              const path = manager.workshop?.path ?? '';
+
               await closeWorkshop();
               closed = true;
+
+              // The run left the progress at the last page with everything
+              // done, so the next open, the person's own, would start
+              // there; it starts from the first page instead.
+              if (path) {
+                await manager.clearProgress(path);
+              }
 
               // The instructions panel has nothing left to show, so its
               // sidebar folds away, unless it was showing something else.
@@ -1640,8 +1652,18 @@ const panelPlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.selfTestProgress, {
       label: 'Workshop: Self-test Progress',
       caption: 'Report how far the running self-test has got',
-      execute: (): ReadonlyJSONValue =>
-        selfTestProgress as unknown as ReadonlyJSONValue
+      execute: (): ReadonlyJSONValue => {
+        // Once there is a report, `closed` comes first here as it does in
+        // the report itself, so a conversation panel reading a shortened
+        // result of run_progress still sees whether the run closed the
+        // workshop.
+        const { report } = selfTestProgress;
+        const status = report
+          ? { closed: report.closed, ...selfTestProgress }
+          : selfTestProgress;
+
+        return status as unknown as ReadonlyJSONValue;
+      }
     });
 
     // Only the commands this plugin registers go in the palette; the

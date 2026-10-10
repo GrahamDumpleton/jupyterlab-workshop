@@ -825,10 +825,12 @@ def create_server(
 
         `close` leaves the workshop as Finish does once a run reaches the
         end with nothing failed: its documents, panes and terminals are
-        closed and the person is back where they were. It defaults to
-        true at the fast pace and false at the others, where the audience
-        may want to see the end; a run with a failure always stays open
-        where it stopped. The report's `closed` says which happened.
+        closed and the person is back where they were, and the progress
+        the run made is cleared, so that when they open the workshop
+        themselves it starts from the first page. It defaults to true at
+        the fast pace and false at the others, where the audience may
+        want to see the end; a run with a failure always stays open where
+        it stopped. The report's `closed` says which happened.
 
         Everything runs for real, as the user, on the machine JupyterLab
         is running on, and not on a copy. Read every page first, and

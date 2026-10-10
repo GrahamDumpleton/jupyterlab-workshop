@@ -134,12 +134,14 @@ const ENVIRONMENT_ENTRIES: ReadonlySet<string> = new Set([
 /**
  * State directory entries that are records about the workshop rather than
  * progress through it: where it was downloaded from, the Workshop Author
- * conversation, and the gist it was published to. Restart and Reset
- * Progress keep them; removing the workshop does not.
+ * conversation with the files attached to it, and the gist it was
+ * published to. Restart and Reset Progress keep them; removing the
+ * workshop does not.
  */
 const RECORD_ENTRIES: ReadonlySet<string> = new Set([
   'source.json',
   'agent.json',
+  'attachments',
   'gist.json'
 ]);
 
@@ -1232,7 +1234,16 @@ export class WorkshopManager implements IWorkshopManager {
     this.stopChain();
     await this._restoreSettings(settings);
     await this._state.unload();
+    await this.clearProgress(path);
 
+    this._workshop = null;
+    this._currentPageId = '';
+    this._store.load({}, []);
+
+    await this.open(path);
+  }
+
+  async clearProgress(path: string): Promise<void> {
     // Progress goes, the files stay, and so does the environment, which
     // is part of the workshop's setup rather than of its progress, and so
     // do the records about the workshop.
@@ -1241,12 +1252,6 @@ export class WorkshopManager implements IWorkshopManager {
       PathExt.join(path, WORKSHOP_STATE_DIR),
       new Set([...ENVIRONMENT_ENTRIES, ...RECORD_ENTRIES])
     );
-
-    this._workshop = null;
-    this._currentPageId = '';
-    this._store.load({}, []);
-
-    await this.open(path);
   }
 
   async restart(path?: string): Promise<void> {

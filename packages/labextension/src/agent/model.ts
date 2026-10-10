@@ -59,10 +59,15 @@ export const OPEN_WORKSHOP_TOOL = 'mcp__workshop__open_workshop';
 /** The tool the mentor offers a workshop or a course with, shown as a card with Create. */
 export const OFFER_TOOL = 'mcp__workshop__offer_workshop';
 
-/** The tools whose run may close the workshop when it passes. */
+/**
+ * The tools whose result may say a run closed the workshop on passing:
+ * the runs themselves, and the progress report a run started in the
+ * background is followed through.
+ */
 export const RUN_TOOLS: readonly string[] = [
   'mcp__workshop__run_workshop',
-  'mcp__workshop__run_page'
+  'mcp__workshop__run_page',
+  'mcp__workshop__run_progress'
 ];
 
 /** A file that was attached to a message, as the history keeps it. */
@@ -189,7 +194,8 @@ export class ConversationModel {
 
   /**
    * Whether the tool call with this id was a run of the workshop that
-   * closed it on passing. The report puts `closed` first, so it is read
+   * closed it on passing, or the progress report that said so of a run
+   * followed in the background. Both put `closed` first, so it is read
    * even from a shortened result.
    */
   closedWorkshop(id: string): boolean {

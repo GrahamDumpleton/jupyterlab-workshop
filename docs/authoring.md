@@ -430,10 +430,14 @@ followed through `run_progress`, which carries the report once the run
 finishes. At the `fast` pace, a run that reaches the end with nothing
 failed then leaves the workshop as Finish does, closing its documents,
 panes and terminals and folding away the instructions panel, so the
-session is left as it was found and the conversation the run was asked
-from comes back to the front, whichever other conversations are open;
-a run with a failure stays open where it stopped. `close` turns this on or off for
-any pace. The same pacing is available to
+session is left as it was found, and the conversation the run was asked
+from comes back to the front, whichever other conversations are open,
+whether the report came from the run itself or through `run_progress`.
+The progress the run made is cleared as well, keeping the environment
+and the records about the workshop, so that when you open the workshop
+yourself it starts from the first page rather than where the run ended;
+a run with a failure stays open where it stopped. `close` turns this on
+or off for any pace. The same pacing is available to
 [`jupyter workshop test`](cli.md#pacing-a-run-for-an-audience) for a
 recording that needs no agent.
 

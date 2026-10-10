@@ -890,6 +890,14 @@ export interface IWorkshopManager {
   reset(): Promise<void>;
 
   /**
+   * Forget the progress of a workshop that is not open, so its next open
+   * starts from the first page. The workshop's files, its environment and
+   * the records about it (its source, its conversation and attachments,
+   * its gist) are kept, as Reset Progress keeps them.
+   */
+  clearProgress(path: string): Promise<void>;
+
+  /**
    * Put the workshop's files back as they were when it was first opened,
    * forget its progress and, when it is the open workshop, reopen it from
    * the first page. Without a path the open workshop restarts.

@@ -688,6 +688,128 @@ test.describe('Workshop Author playing a workshop', () => {
     ).toHaveCount(1);
     await expect(input).toBeVisible();
     await expect(other).toBeHidden();
+
+    // The run's progress is cleared, so the workshop opened by the person
+    // starts from the first page rather than finished on the last; the
+    // conversation's record stays.
+    const state = `${LIBRARY}/personal/workshops/demo/_workshop`;
+
+    expect(await page.contents.fileExists(`${state}/state.json`)).toBe(false);
+    expect(await page.contents.fileExists(`${state}/agent.json`)).toBe(true);
+    await author.getByRole('button', { name: 'Open workshop' }).click();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Start'
+    );
+    await expect
+      .poll(() => page.contents.fileExists(`${state}/state.json`))
+      .toBe(true);
+  });
+});
+
+// A library of its own: the conversations of the previous library stay
+// open on the server with their history, and this test counts tool calls.
+test.describe('Workshop Author following a run in the background', () => {
+  const LIBRARY = 'test-author-progress';
+
+  useLibrary(LIBRARY);
+
+  test('a run followed through run_progress returns to the conversation too', async ({
+    page
+  }) => {
+    test.setTimeout(120000);
+
+    await page.contents.uploadContent(
+      MANIFEST.replace('name: demo', 'name: other').replace(
+        'My demo',
+        'My other'
+      ),
+      'text',
+      `${LIBRARY}/personal/workshops/other/workshop.yaml`
+    );
+    await page.contents.uploadContent(
+      '# Other\n',
+      'text',
+      `${LIBRARY}/personal/workshops/other/pages/01.md`
+    );
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My other' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const other = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/workshops/other'
+    });
+
+    await expect(other.locator('.jp-WorkshopAgent-input')).toBeEnabled();
+    await openBrowser(page);
+    await page
+      .locator('.jp-WorkshopBrowser-card', { hasText: 'My demo' })
+      .getByRole('button', { name: 'Edit with AI' })
+      .click();
+
+    const author = page.locator('.jp-WorkshopAgent', {
+      hasText: 'personal/workshops/demo'
+    });
+    const input = author.locator('.jp-WorkshopAgent-input');
+
+    await expect(input).toBeEnabled();
+    await author.getByRole('button', { name: 'Open workshop' }).click();
+    await expect(page.locator('.jp-WorkshopPanel-pageTitle')).toHaveText(
+      'Start'
+    );
+
+    // A long run is started in the background and answers at once; the
+    // report comes through run_progress once the run has closed the
+    // workshop.
+    await page
+      .locator('.lm-TabBar-tab', { hasText: 'Workshop Author: demo' })
+      .click();
+    await input.fill('/tool run_workshop {"wait": false}');
+    await input.press('Enter');
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(1, { timeout: 60000 });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const exposed = window as unknown as IExposedApp;
+            const status = (await exposed.jupyterapp.commands.execute(
+              'workshop:self-test-progress',
+              {}
+            )) as { running: boolean };
+
+            return status.running;
+          }),
+        { timeout: 60000 }
+      )
+      .toBe(false);
+
+    // The report is asked for while another conversation is in front: the
+    // message is typed, the other tab chosen, and Enter sent to the input
+    // behind it.
+    await page
+      .locator('.lm-TabBar-tab', { hasText: 'Workshop Author: demo' })
+      .click();
+    await input.fill('/tool run_progress {}');
+    await page
+      .locator('.lm-TabBar-tab', { hasText: 'Workshop Author: other' })
+      .click();
+    await expect(other).toBeVisible();
+    await input.dispatchEvent('keydown', { key: 'Enter', bubbles: true });
+    await expect(
+      author.locator('.jp-WorkshopAgent-tool.jp-mod-ok')
+    ).toHaveCount(2, { timeout: 60000 });
+
+    // The report said the run closed the workshop, so the conversation
+    // that asked comes back to the front.
+    await expect(
+      page.locator('.lm-TabBar-tab.lm-mod-current', {
+        hasText: 'Workshop Author: demo'
+      })
+    ).toHaveCount(1);
+    await expect(other).toBeHidden();
   });
 });
 
